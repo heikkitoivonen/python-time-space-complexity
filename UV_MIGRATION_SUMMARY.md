@@ -121,7 +121,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ### 2. Setup Project
 ```bash
-git clone https://github.com/yourusername/python-time-space-complexity.git
+git clone https://github.com/heikkitoivonen/python-time-space-complexity.git
 cd python-time-space-complexity
 uv sync
 ```

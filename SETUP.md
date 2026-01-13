@@ -14,7 +14,7 @@
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # 2. Clone the repository
-git clone https://github.com/yourusername/python-time-space-complexity.git
+git clone https://github.com/heikkitoivonen/python-time-space-complexity.git
 cd python-time-space-complexity
 
 # 3. Install dependencies with uv
@@ -169,7 +169,7 @@ git config user.name "Your Name"
 git add .
 git commit -m "Initial commit: Documentation structure and content"
 git branch -M main
-git remote add origin https://github.com/yourusername/python-time-space-complexity.git
+git remote add origin https://github.com/heikkitoivonen/python-time-space-complexity.git
 git push -u origin main
 ```
 

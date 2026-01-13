@@ -98,7 +98,7 @@ markdown_extensions:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/yourusername/python-time-space-complexity
+      link: https://github.com/heikkitoivonen/python-time-space-complexity
   analytics:
     provider: google
     property: G_YOUR_GOOGLE_ANALYTICS_ID

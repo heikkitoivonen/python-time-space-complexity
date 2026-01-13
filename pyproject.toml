@@ -44,10 +44,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/python-time-space-complexity"
+Homepage = "https://github.com/heikkitoivonen/python-time-space-complexity"
 Documentation = "https://pythoncomplexity.com"
-Repository = "https://github.com/yourusername/python-time-space-complexity.git"
-Issues = "https://github.com/yourusername/python-time-space-complexity/issues"
+Repository = "https://github.com/heikkitoivonen/python-time-space-complexity.git"
+Issues = "https://github.com/heikkitoivonen/python-time-space-complexity/issues"
 
 # uv dependency groups configuration
 [dependency-groups]

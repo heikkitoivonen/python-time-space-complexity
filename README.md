@@ -58,7 +58,7 @@ Visit the documentation at: [pythoncomplexity.com](https://pythoncomplexity.com)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Clone and set up
-git clone https://github.com/yourusername/python-time-space-complexity.git
+git clone https://github.com/heikkitoivonen/python-time-space-complexity.git
 cd python-time-space-complexity
 
 # Install dependencies

@@ -14,7 +14,7 @@ This guide covers development workflow, testing, and quality standards for this 
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Clone and setup
-git clone https://github.com/yourusername/python-time-space-complexity.git
+git clone https://github.com/heikkitoivonen/python-time-space-complexity.git
 cd python-time-space-complexity
 
 # Install all dependencies (including dev tools)
