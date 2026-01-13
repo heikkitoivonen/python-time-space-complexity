@@ -4,31 +4,6 @@ import json
 from pathlib import Path
 
 
-def test_data_files_exist():
-    """Test that all required data files exist."""
-    data_dir = Path(__file__).parent.parent / "data"
-    assert (data_dir / "builtins.json").exists(), "builtins.json not found"
-    assert (data_dir / "stdlib.json").exists(), "stdlib.json not found"
-
-
-def test_builtins_json_valid():
-    """Test that builtins.json is valid JSON."""
-    data_file = Path(__file__).parent.parent / "data" / "builtins.json"
-    with open(data_file) as f:
-        data = json.load(f)
-    assert isinstance(data, dict), "builtins.json should contain a dict"
-    assert len(data) > 0, "builtins.json should not be empty"
-
-
-def test_stdlib_json_valid():
-    """Test that stdlib.json is valid JSON."""
-    data_file = Path(__file__).parent.parent / "data" / "stdlib.json"
-    with open(data_file) as f:
-        data = json.load(f)
-    assert isinstance(data, dict), "stdlib.json should contain a dict"
-    assert len(data) > 0, "stdlib.json should not be empty"
-
-
 def test_documentation_files_exist():
     """Test that required documentation files exist."""
     docs_dir = Path(__file__).parent.parent / "docs"
@@ -79,3 +54,91 @@ def test_mkdocs_yml_exists():
     assert len(content) > 0, "mkdocs.yml is empty"
     assert "site_name" in content, "mkdocs.yml missing site_name"
     assert "theme" in content, "mkdocs.yml missing theme"
+
+
+def test_audit_report_exists():
+    """Test that documentation audit report exists."""
+    audit_file = Path(__file__).parent.parent / "data" / "documentation_audit.json"
+    assert audit_file.exists(), f"Audit report not found at {audit_file}"
+
+
+def test_audit_report_structure():
+    """Test that audit report has correct structure."""
+    audit_file = Path(__file__).parent.parent / "data" / "documentation_audit.json"
+    with open(audit_file) as f:
+        report = json.load(f)
+
+    # Check top-level keys
+    assert "builtins" in report
+    assert "stdlib" in report
+    assert "summary" in report
+
+    # Check builtins structure
+    assert "total" in report["builtins"]
+    assert "documented" in report["builtins"]
+    assert "coverage_percent" in report["builtins"]
+    assert "missing" in report["builtins"]
+
+    # Check stdlib structure
+    assert "total" in report["stdlib"]
+    assert "documented" in report["stdlib"]
+    assert "coverage_percent" in report["stdlib"]
+    assert "missing" in report["stdlib"]
+
+
+def test_documented_files_match_mkdocs_nav():
+    """Test that all documented files are in mkdocs.yml navigation."""
+    docs_dir = Path(__file__).parent.parent / "docs"
+    mkdocs_file = Path(__file__).parent.parent / "mkdocs.yml"
+
+    # Get documented files
+    documented_builtins = {
+        f.stem
+        for f in (docs_dir / "builtins").glob("*.md")
+        if f.stem != "index"
+    }
+    documented_stdlib = {
+        f.stem for f in (docs_dir / "stdlib").glob("*.md") if f.stem != "index"
+    }
+
+    # Read mkdocs.yml
+    mkdocs_content = mkdocs_file.read_text()
+
+    # Check that all documented files are referenced
+    for builtin in documented_builtins:
+        assert builtin in mkdocs_content, (
+            f"Builtin '{builtin}' documented but not in mkdocs.yml nav"
+        )
+
+    for stdlib_mod in documented_stdlib:
+        assert stdlib_mod in mkdocs_content, (
+            f"Stdlib module '{stdlib_mod}' documented but not in mkdocs.yml nav"
+        )
+
+
+def test_minimum_builtin_coverage():
+    """Test that minimum builtin coverage is maintained."""
+    audit_file = Path(__file__).parent.parent / "data" / "documentation_audit.json"
+    with open(audit_file) as f:
+        report = json.load(f)
+
+    # Coverage should not decrease below current level
+    min_coverage = 5.0  # Current: 5.3%
+    current = report["builtins"]["coverage_percent"]
+    assert current >= min_coverage, (
+        f"Builtin coverage dropped: {current}% < {min_coverage}%"
+    )
+
+
+def test_minimum_stdlib_coverage():
+    """Test that minimum stdlib coverage is maintained."""
+    audit_file = Path(__file__).parent.parent / "data" / "documentation_audit.json"
+    with open(audit_file) as f:
+        report = json.load(f)
+
+    # Coverage should not decrease below current level
+    min_coverage = 2.5  # Current: 3.6%
+    current = report["stdlib"]["coverage_percent"]
+    assert current >= min_coverage, (
+        f"Stdlib coverage dropped: {current}% < {min_coverage}%"
+    )

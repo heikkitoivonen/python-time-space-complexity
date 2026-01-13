@@ -31,13 +31,10 @@ Visit the documentation at: [pythoncomplexity.com](https://pythoncomplexity.com)
 │   ├── stdlib/               # Standard library modules
 │   ├── implementations/       # Python implementation details
 │   └── versions/             # Version-specific guides
-├── data/                      # Data files and specs
-│   ├── builtins.json         # Built-in operations data
-│   └── stdlib.json           # Standard library data
-├── scripts/                   # Data generation and processing
-│   ├── generate_docs.py      # Generate documentation
-│   └── validate_data.py      # Validate complexity data
 ├── tests/                     # Test suite
+├── scripts/                   # Utility scripts
+│   ├── generate_docs.py      # Documentation generation template
+│   └── validate_data.py      # Data validation template
 ├── pyproject.toml            # Project metadata and dependencies
 ├── mkdocs.yml                # MkDocs configuration
 ├── Makefile                  # Development commands
