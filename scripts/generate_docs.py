@@ -6,9 +6,6 @@ This script can be expanded to automatically generate complexity tables
 from structured data rather than manually writing markdown.
 """
 
-import json
-from pathlib import Path
-
 
 def generate_builtin_docs():
     """Generate docs for built-in types."""
@@ -25,6 +22,7 @@ def generate_stdlib_docs():
 
 
 def main():
+    """Run documentation generation."""
     print("Documentation generation placeholder")
     print("This script can be extended to automatically generate docs from data files")
 

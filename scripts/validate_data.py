@@ -8,14 +8,9 @@ This script can verify:
 - Required fields and formats
 """
 
-import json
-from pathlib import Path
-
 
 def validate_complexity_format(data):
     """Validate that complexity data has correct format."""
-    required_fields = ['operation', 'time_complexity', 'space_complexity']
-    
     # TODO: Implement validation logic
     pass
 
@@ -28,6 +23,7 @@ def validate_against_python():
 
 
 def main():
+    """Run data validation."""
     print("Data validation placeholder")
     print("This script can be extended to validate complexity claims")
 
