@@ -7,7 +7,7 @@ The `json` module provides JSON serialization and deserialization.
 | Function | Time | Space | Notes |
 |----------|------|-------|-------|
 | `json.dumps(obj)` | O(n) | O(n) | Serialize to string |
-| `json.dump(obj, fp)` | O(n) | O(1) streaming | Write to file |
+| `json.dump(obj, fp)` | O(n) | O(n) | Write to file (serialization buffer) |
 | `json.loads(s)` | O(n) | O(n) | Parse JSON string |
 | `json.load(fp)` | O(n) | O(n) | Read from file |
 | `JSONEncoder.encode()` | O(n) | O(n) | Custom encoder |

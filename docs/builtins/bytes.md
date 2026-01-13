@@ -13,7 +13,7 @@ The `bytes` type is an immutable sequence of bytes, while `bytearray` is the mut
 | `in` (membership) | O(n) | Linear search |
 | `index(x)` | O(n) | Linear search |
 | `count(x)` | O(n) | Linear scan |
-| `copy()` | O(n) | Shallow copy |
+| `copy()` | O(1) | Returns same object (immutable) |
 | `join()` | O(n) | Single pass |
 | `split()` | O(n) | Single pass |
 | `find(sub)` | O(n*m) | Substring search |
