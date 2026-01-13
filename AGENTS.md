@@ -134,9 +134,12 @@ uv add --dev package-name
 ### Adding Documentation
 1. Create markdown file in `/docs`
 2. Update navigation in `mkdocs.yml`
-3. Run `make serve` to preview
-4. Run `make check` to verify
-5. Commit with message: `Add: Topic name documentation`
+3. Run `make audit` to update `DOCUMENTATION_STATUS.md`
+4. Run `make serve` to preview
+5. Run `make check` to verify
+6. Commit with message: `Add: Topic name documentation`
+
+**Important:** Always update `DOCUMENTATION_STATUS.md` after adding new documentation files. Run `make audit` to regenerate the coverage report and gap analysis.
 
 ### Fixing Issues
 1. Identify the problem
