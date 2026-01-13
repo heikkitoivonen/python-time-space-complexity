@@ -30,32 +30,32 @@ theme:
         name: Switch to light mode
 
 nav:
-   - Home: index.md
-   - Built-in Types:
-     - Overview: builtins/index.md
-     - Lists: builtins/list.md
-     - Dictionaries: builtins/dict.md
-     - Sets: builtins/set.md
-     - Tuples: builtins/tuple.md
-     - Strings: builtins/str.md
-     - Bytes & Bytearray: builtins/bytes.md
-     - Frozenset: builtins/frozenset.md
-     - Range: builtins/range.md
-     - Integer: builtins/int.md
-     - Float: builtins/float.md
-     - Boolean: builtins/bool.md
-     - Length: builtins/len.md
-   - Standard Library:
-     - Overview: stdlib/index.md
-     - Collections: stdlib/collections.md
-     - Itertools: stdlib/itertools.md
-     - Functools: stdlib/functools.md
-     - Heapq: stdlib/heapq.md
-     - Bisect: stdlib/bisect.md
-     - JSON: stdlib/json.md
-     - OS: stdlib/os.md
-     - Regular Expressions: stdlib/re.md
-     - Datetime: stdlib/datetime.md
+  - Home: index.md
+  - Built-in Types:
+    - Overview: builtins/index.md
+    - Lists: builtins/list.md
+    - Dictionaries: builtins/dict.md
+    - Sets: builtins/set.md
+    - Tuples: builtins/tuple.md
+    - Strings: builtins/str.md
+    - Bytes & Bytearray: builtins/bytes.md
+    - Frozenset: builtins/frozenset.md
+    - Range: builtins/range.md
+    - Integer: builtins/int.md
+    - Float: builtins/float.md
+    - Boolean: builtins/bool.md
+    - Length: builtins/len.md
+  - Standard Library:
+    - Overview: stdlib/index.md
+    - Collections: stdlib/collections.md
+    - Itertools: stdlib/itertools.md
+    - Functools: stdlib/functools.md
+    - Heapq: stdlib/heapq.md
+    - Bisect: stdlib/bisect.md
+    - JSON: stdlib/json.md
+    - OS: stdlib/os.md
+    - Regular Expressions: stdlib/re.md
+    - Datetime: stdlib/datetime.md
   - Implementations:
     - Overview: implementations/index.md
     - CPython: implementations/cpython.md
