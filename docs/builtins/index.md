@@ -7,18 +7,27 @@ Python's built-in types have well-defined complexity characteristics for their o
 | Type | Use Case | Avg Access | Avg Insert | Avg Delete |
 |------|----------|-----------|-----------|-----------|
 | `list` | Ordered sequences | O(1) | O(n) | O(n) |
+| `tuple` | Immutable sequence | O(1) | - | - |
+| `range` | Numeric sequences | O(1) | - | - |
+| `str` | Text | O(1) | - | - |
+| `bytes` | Binary data | O(1) | - | - |
 | `dict` | Key-value mapping | O(1) | O(1) | O(1) |
 | `set` | Unique items | - | O(1) | O(1) |
-| `tuple` | Immutable sequence | O(1) | - | - |
-| `str` | Text | O(1) | - | - |
+| `frozenset` | Immutable unique items | - | - | - |
 
 ## Detailed Guides
 
+### Sequence Types
 - **[List](list.md)** - Most flexible sequence type
+- **[Tuple](tuple.md)** - Immutable sequences
+- **[Range](range.md)** - Lazy numeric sequences
+- **[String](str.md)** - Text and character sequences
+- **[Bytes & Bytearray](bytes.md)** - Binary data and mutable bytes
+
+### Mapping & Set Types
 - **[Dictionary](dict.md)** - Hash-based key-value storage
 - **[Set](set.md)** - Unordered unique items
-- **[Tuple](tuple.md)** - Immutable sequences
-- **[String](str.md)** - Text and character sequences
+- **[Frozenset](frozenset.md)** - Immutable unique items
 
 ## Key Concepts
 

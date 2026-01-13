@@ -5,9 +5,14 @@ The Python standard library provides highly optimized data structures and algori
 ## Core Collections
 
 - **[Collections](collections.md)** - `deque`, `namedtuple`, `defaultdict`, `OrderedDict`, `ChainMap`, `Counter`
+- **[Itertools](itertools.md)** - Efficient looping tools and iterators
 - **[Heapq](heapq.md)** - Heap queue operations
 - **[Bisect](bisect.md)** - Binary search and insertion
-- **[Array](array.md)** - Typed sequences for numeric data
+
+## Functional & Utilities
+
+- **[Functools](functools.md)** - Higher-order functions and memoization
+- **[JSON](json.md)** - JSON serialization and parsing
 
 ## Search & Sort
 

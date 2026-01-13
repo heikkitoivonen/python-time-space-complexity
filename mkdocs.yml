@@ -38,11 +38,17 @@ nav:
     - Sets: builtins/set.md
     - Tuples: builtins/tuple.md
     - Strings: builtins/str.md
+    - Bytes & Bytearray: builtins/bytes.md
+    - Frozenset: builtins/frozenset.md
+    - Range: builtins/range.md
   - Standard Library:
     - Overview: stdlib/index.md
     - Collections: stdlib/collections.md
+    - Itertools: stdlib/itertools.md
+    - Functools: stdlib/functools.md
     - Heapq: stdlib/heapq.md
     - Bisect: stdlib/bisect.md
+    - JSON: stdlib/json.md
   - Implementations:
     - Overview: implementations/index.md
     - CPython: implementations/cpython.md
