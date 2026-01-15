@@ -98,6 +98,13 @@ git commit -m "Your message"
 - Format: `Type: Brief description`
 - Types: Add, Fix, Update, Refactor, Docs, Test, Chore
 - Example: `Add: List complexity documentation`
+- **AI Agents MUST add Co-Authored-By trailer to identify the agent:**
+  ```
+  Add: List complexity documentation
+
+  Co-Authored-By: Amp <amp@example.com>
+  ```
+  Replace "Amp" with the actual AI agent name (Claude, Copilot, etc.)
 
 ## Testing Requirements
 
@@ -175,6 +182,7 @@ uv add --dev package-name
 - Always run quality checks before committing
 - Keep commits focused and minimal
 - Write clear commit messages
+- **Add Co-Authored-By trailer for agent identification**
 - Update documentation when changing functionality
 - Test locally before pushing
 - Review your changes before committing
