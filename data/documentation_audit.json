@@ -277,8 +277,8 @@
   },
   "stdlib": {
     "total": 188,
-    "documented": 38,
-    "coverage_percent": 20.2,
+    "documented": 39,
+    "coverage_percent": 20.7,
     "missing": [
       "aifc",
       "antigravity",
@@ -399,7 +399,6 @@
       "statistics",
       "string",
       "stringprep",
-      "struct",
       "sunau",
       "symtable",
       "sysconfig",
@@ -441,7 +440,7 @@
   },
   "summary": {
     "total_items": 337,
-    "total_documented": 79,
-    "overall_coverage_percent": 23.4
+    "total_documented": 80,
+    "overall_coverage_percent": 23.7
   }
 }
