@@ -97,6 +97,7 @@ nav:
     - Sqlite3: stdlib/sqlite3.md
     - Subprocess: stdlib/subprocess.md
     - Threading: stdlib/threading.md
+    - Queue: stdlib/queue.md
     - Socket: stdlib/socket.md
     - Unittest: stdlib/unittest.md
     - Array: stdlib/array.md
