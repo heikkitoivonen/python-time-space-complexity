@@ -77,37 +77,45 @@ nav:
     - Exceptions: builtins/exceptions.md
   - Standard Library:
     - Overview: stdlib/index.md
-    - Collections: stdlib/collections.md
-    - Itertools: stdlib/itertools.md
-    - Functools: stdlib/functools.md
-    - Heapq: stdlib/heapq.md
-    - Bisect: stdlib/bisect.md
-    - JSON: stdlib/json.md
-    - OS: stdlib/os.md
-    - Pathlib: stdlib/pathlib.md
-    - Random: stdlib/random.md
-    - Decimal: stdlib/decimal.md
-    - Urllib: stdlib/urllib.md
-    - Csv: stdlib/csv.md
-    - Hashlib: stdlib/hashlib.md
-    - Base64: stdlib/base64.md
-    - Typing: stdlib/typing.md
+    - ABC: stdlib/abc.md
     - Argparse: stdlib/argparse.md
-    - Logging: stdlib/logging.md
-    - Sqlite3: stdlib/sqlite3.md
-    - Subprocess: stdlib/subprocess.md
-    - Threading: stdlib/threading.md
-    - Queue: stdlib/queue.md
-    - Socket: stdlib/socket.md
-    - Unittest: stdlib/unittest.md
     - Array: stdlib/array.md
+    - Asyncio: stdlib/asyncio.md
+    - Base64: stdlib/base64.md
+    - Bisect: stdlib/bisect.md
+    - Collections: stdlib/collections.md
+    - Contextlib: stdlib/contextlib.md
+    - Copy: stdlib/copy.md
+    - Counter: stdlib/counter.md
+    - Csv: stdlib/csv.md
+    - Dataclasses: stdlib/dataclasses.md
+    - Datetime: stdlib/datetime.md
+    - Decimal: stdlib/decimal.md
     - Deque: stdlib/deque.md
     - Defaultdict: stdlib/defaultdict.md
-    - Counter: stdlib/counter.md
-    - OrderedDict: stdlib/ordereddict.md
+    - Enum: stdlib/enum.md
+    - Fractions: stdlib/fractions.md
+    - Functools: stdlib/functools.md
+    - Hashlib: stdlib/hashlib.md
+    - Heapq: stdlib/heapq.md
+    - Itertools: stdlib/itertools.md
+    - JSON: stdlib/json.md
+    - Logging: stdlib/logging.md
     - Namedtuple: stdlib/namedtuple.md
+    - OrderedDict: stdlib/ordereddict.md
+    - OS: stdlib/os.md
+    - Pathlib: stdlib/pathlib.md
+    - Queue: stdlib/queue.md
+    - Random: stdlib/random.md
     - Regular Expressions: stdlib/re.md
-    - Datetime: stdlib/datetime.md
+    - Socket: stdlib/socket.md
+    - Sqlite3: stdlib/sqlite3.md
+    - Struct: stdlib/struct.md
+    - Subprocess: stdlib/subprocess.md
+    - Threading: stdlib/threading.md
+    - Typing: stdlib/typing.md
+    - Unittest: stdlib/unittest.md
+    - Urllib: stdlib/urllib.md
   - Implementations:
     - Overview: implementations/index.md
     - CPython: implementations/cpython.md
