@@ -92,6 +92,13 @@ nav:
     - Hashlib: stdlib/hashlib.md
     - Base64: stdlib/base64.md
     - Typing: stdlib/typing.md
+    - Argparse: stdlib/argparse.md
+    - Logging: stdlib/logging.md
+    - Sqlite3: stdlib/sqlite3.md
+    - Subprocess: stdlib/subprocess.md
+    - Threading: stdlib/threading.md
+    - Socket: stdlib/socket.md
+    - Unittest: stdlib/unittest.md
     - Regular Expressions: stdlib/re.md
     - Datetime: stdlib/datetime.md
   - Implementations:

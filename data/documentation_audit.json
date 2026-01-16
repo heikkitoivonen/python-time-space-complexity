@@ -277,13 +277,12 @@
   },
   "stdlib": {
     "total": 188,
-    "documented": 17,
-    "coverage_percent": 9.0,
+    "documented": 24,
+    "coverage_percent": 12.8,
     "missing": [
       "abc",
       "aifc",
       "antigravity",
-      "argparse",
       "ast",
       "asynchat",
       "asyncio",
@@ -349,7 +348,6 @@
       "lib2to3",
       "linecache",
       "locale",
-      "logging",
       "lzma",
       "mailbox",
       "mailcap",
@@ -400,9 +398,7 @@
       "smtpd",
       "smtplib",
       "sndhdr",
-      "socket",
       "socketserver",
-      "sqlite3",
       "sre_compile",
       "sre_constants",
       "sre_parse",
@@ -412,7 +408,6 @@
       "string",
       "stringprep",
       "struct",
-      "subprocess",
       "sunau",
       "symtable",
       "sysconfig",
@@ -422,7 +417,6 @@
       "tempfile",
       "textwrap",
       "this",
-      "threading",
       "timeit",
       "tkinter",
       "token",
@@ -435,7 +429,6 @@
       "turtle",
       "turtledemo",
       "types",
-      "unittest",
       "uu",
       "uuid",
       "validate_data",
@@ -456,7 +449,7 @@
   },
   "summary": {
     "total_items": 337,
-    "total_documented": 58,
-    "overall_coverage_percent": 17.2
+    "total_documented": 65,
+    "overall_coverage_percent": 19.3
   }
 }
