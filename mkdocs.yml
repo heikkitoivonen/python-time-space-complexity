@@ -100,6 +100,7 @@ nav:
     - Socket: stdlib/socket.md
     - Unittest: stdlib/unittest.md
     - Array: stdlib/array.md
+    - Deque: stdlib/deque.md
     - Regular Expressions: stdlib/re.md
     - Datetime: stdlib/datetime.md
   - Implementations:
