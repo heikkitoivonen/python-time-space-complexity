@@ -277,8 +277,8 @@
   },
   "stdlib": {
     "total": 188,
-    "documented": 25,
-    "coverage_percent": 13.3,
+    "documented": 29,
+    "coverage_percent": 15.4,
     "missing": [
       "abc",
       "aifc",
@@ -449,7 +449,7 @@
   },
   "summary": {
     "total_items": 337,
-    "total_documented": 66,
-    "overall_coverage_percent": 19.6
+    "total_documented": 70,
+    "overall_coverage_percent": 20.8
   }
 }
