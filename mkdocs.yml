@@ -64,6 +64,8 @@ nav:
     - Reversed: builtins/reversed.md
     - Divmod: builtins/divmod.md
     - Slice: builtins/slice.md
+    - Iter: builtins/iter.md
+    - Format: builtins/format.md
     - Isinstance: builtins/isinstance.md
   - Standard Library:
     - Overview: stdlib/index.md

@@ -2,8 +2,8 @@
   "timestamp": null,
   "builtins": {
     "total": 149,
-    "documented": 31,
-    "coverage_percent": 20.8,
+    "documented": 33,
+    "coverage_percent": 22.1,
     "missing": [
       "ArithmeticError",
       "AssertionError",
@@ -96,7 +96,6 @@
       "eval",
       "exec",
       "exit",
-      "format",
       "getattr",
       "globals",
       "hasattr",
@@ -106,7 +105,6 @@
       "id",
       "input",
       "issubclass",
-      "iter",
       "license",
       "locals",
       "memoryview",
@@ -471,7 +469,7 @@
   },
   "summary": {
     "total_items": 337,
-    "total_documented": 42,
-    "overall_coverage_percent": 12.5
+    "total_documented": 44,
+    "overall_coverage_percent": 13.1
   }
 }
