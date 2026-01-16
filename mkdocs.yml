@@ -102,6 +102,7 @@ nav:
     - Array: stdlib/array.md
     - Deque: stdlib/deque.md
     - Defaultdict: stdlib/defaultdict.md
+    - Counter: stdlib/counter.md
     - Regular Expressions: stdlib/re.md
     - Datetime: stdlib/datetime.md
   - Implementations:
