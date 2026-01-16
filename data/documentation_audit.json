@@ -2,8 +2,8 @@
   "timestamp": null,
   "builtins": {
     "total": 149,
-    "documented": 34,
-    "coverage_percent": 22.8,
+    "documented": 35,
+    "coverage_percent": 23.5,
     "missing": [
       "ArithmeticError",
       "AssertionError",
@@ -110,7 +110,6 @@
       "next",
       "object",
       "oct",
-      "open",
       "print",
       "property",
       "quit",
@@ -283,8 +282,8 @@
   },
   "stdlib": {
     "total": 188,
-    "documented": 12,
-    "coverage_percent": 6.4,
+    "documented": 13,
+    "coverage_percent": 6.9,
     "missing": [
       "abc",
       "aifc",
@@ -316,7 +315,6 @@
       "copy",
       "copyreg",
       "crypt",
-      "csv",
       "ctypes",
       "curses",
       "dataclasses",
@@ -467,7 +465,7 @@
   },
   "summary": {
     "total_items": 337,
-    "total_documented": 46,
-    "overall_coverage_percent": 13.6
+    "total_documented": 48,
+    "overall_coverage_percent": 14.2
   }
 }
