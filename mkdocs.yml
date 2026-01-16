@@ -98,6 +98,7 @@ nav:
     - Enum: stdlib/enum.md
     - Fractions: stdlib/fractions.md
     - Functools: stdlib/functools.md
+    - Glob: stdlib/glob.md
     - Graphlib: stdlib/graphlib.md
     - Hashlib: stdlib/hashlib.md
     - Heapq: stdlib/heapq.md

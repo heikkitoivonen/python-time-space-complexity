@@ -277,8 +277,8 @@
   },
   "stdlib": {
     "total": 188,
-    "documented": 45,
-    "coverage_percent": 23.9,
+    "documented": 46,
+    "coverage_percent": 24.5,
     "missing": [
       "aifc",
       "antigravity",
@@ -321,7 +321,6 @@
       "getopt",
       "getpass",
       "gettext",
-      "glob",
       "gzip",
       "hmac",
       "html",
@@ -434,7 +433,7 @@
   },
   "summary": {
     "total_items": 337,
-    "total_documented": 86,
-    "overall_coverage_percent": 25.5
+    "total_documented": 87,
+    "overall_coverage_percent": 25.8
   }
 }
