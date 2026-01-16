@@ -103,6 +103,7 @@ nav:
     - Deque: stdlib/deque.md
     - Defaultdict: stdlib/defaultdict.md
     - Counter: stdlib/counter.md
+    - OrderedDict: stdlib/ordereddict.md
     - Namedtuple: stdlib/namedtuple.md
     - Regular Expressions: stdlib/re.md
     - Datetime: stdlib/datetime.md
