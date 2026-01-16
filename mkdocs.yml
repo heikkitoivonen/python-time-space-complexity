@@ -92,6 +92,7 @@ nav:
     - DBM: stdlib/dbm.md
     - Datetime: stdlib/datetime.md
     - Decimal: stdlib/decimal.md
+    - Difflib: stdlib/difflib.md
     - Deque: stdlib/deque.md
     - Defaultdict: stdlib/defaultdict.md
     - Enum: stdlib/enum.md
