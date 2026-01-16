@@ -101,6 +101,7 @@ nav:
     - Unittest: stdlib/unittest.md
     - Array: stdlib/array.md
     - Deque: stdlib/deque.md
+    - Defaultdict: stdlib/defaultdict.md
     - Regular Expressions: stdlib/re.md
     - Datetime: stdlib/datetime.md
   - Implementations:
