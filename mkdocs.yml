@@ -99,6 +99,7 @@ nav:
     - Threading: stdlib/threading.md
     - Socket: stdlib/socket.md
     - Unittest: stdlib/unittest.md
+    - Array: stdlib/array.md
     - Regular Expressions: stdlib/re.md
     - Datetime: stdlib/datetime.md
   - Implementations:
