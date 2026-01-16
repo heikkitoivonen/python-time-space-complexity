@@ -2,8 +2,8 @@
   "timestamp": null,
   "builtins": {
     "total": 149,
-    "documented": 35,
-    "coverage_percent": 23.5,
+    "documented": 36,
+    "coverage_percent": 24.2,
     "missing": [
       "ArithmeticError",
       "AssertionError",
@@ -99,7 +99,6 @@
       "getattr",
       "globals",
       "hasattr",
-      "hash",
       "help",
       "hex",
       "id",
@@ -282,8 +281,8 @@
   },
   "stdlib": {
     "total": 188,
-    "documented": 13,
-    "coverage_percent": 6.9,
+    "documented": 14,
+    "coverage_percent": 7.4,
     "missing": [
       "abc",
       "aifc",
@@ -444,7 +443,6 @@
       "types",
       "typing",
       "unittest",
-      "urllib",
       "uu",
       "uuid",
       "validate_data",
@@ -465,7 +463,7 @@
   },
   "summary": {
     "total_items": 337,
-    "total_documented": 48,
-    "overall_coverage_percent": 14.2
+    "total_documented": 50,
+    "overall_coverage_percent": 14.8
   }
 }

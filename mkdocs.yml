@@ -67,6 +67,7 @@ nav:
     - Iter: builtins/iter.md
     - Issubclass: builtins/issubclass.md
     - Open: builtins/open.md
+    - Hash: builtins/hash.md
     - Format: builtins/format.md
     - Isinstance: builtins/isinstance.md
   - Standard Library:
@@ -81,6 +82,7 @@ nav:
     - Pathlib: stdlib/pathlib.md
     - Random: stdlib/random.md
     - Decimal: stdlib/decimal.md
+    - Urllib: stdlib/urllib.md
     - Csv: stdlib/csv.md
     - Regular Expressions: stdlib/re.md
     - Datetime: stdlib/datetime.md
