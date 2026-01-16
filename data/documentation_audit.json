@@ -277,10 +277,9 @@
   },
   "stdlib": {
     "total": 188,
-    "documented": 34,
-    "coverage_percent": 18.1,
+    "documented": 35,
+    "coverage_percent": 18.6,
     "missing": [
-      "abc",
       "aifc",
       "antigravity",
       "ast",
@@ -445,7 +444,7 @@
   },
   "summary": {
     "total_items": 337,
-    "total_documented": 75,
-    "overall_coverage_percent": 22.3
+    "total_documented": 76,
+    "overall_coverage_percent": 22.6
   }
 }
