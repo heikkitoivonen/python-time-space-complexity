@@ -277,8 +277,8 @@
   },
   "stdlib": {
     "total": 188,
-    "documented": 37,
-    "coverage_percent": 19.7,
+    "documented": 38,
+    "coverage_percent": 20.2,
     "missing": [
       "aifc",
       "antigravity",
@@ -317,7 +317,6 @@
       "filecmp",
       "fileinput",
       "fnmatch",
-      "fractions",
       "ftplib",
       "generate_docs",
       "genericpath",
@@ -442,7 +441,7 @@
   },
   "summary": {
     "total_items": 337,
-    "total_documented": 78,
-    "overall_coverage_percent": 23.1
+    "total_documented": 79,
+    "overall_coverage_percent": 23.4
   }
 }
