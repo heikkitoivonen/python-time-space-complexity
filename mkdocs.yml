@@ -85,6 +85,7 @@ nav:
     - Bz2: stdlib/bz2.md
     - Bisect: stdlib/bisect.md
     - Collections: stdlib/collections.md
+    - Codecs: stdlib/codecs.md
     - Contextlib: stdlib/contextlib.md
     - Copy: stdlib/copy.md
     - Counter: stdlib/counter.md
