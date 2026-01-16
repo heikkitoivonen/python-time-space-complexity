@@ -2,8 +2,8 @@
   "timestamp": null,
   "builtins": {
     "total": 149,
-    "documented": 40,
-    "coverage_percent": 26.8,
+    "documented": 41,
+    "coverage_percent": 27.5,
     "missing": [
       "ArithmeticError",
       "AssertionError",
@@ -456,7 +456,7 @@
   },
   "summary": {
     "total_items": 337,
-    "total_documented": 57,
-    "overall_coverage_percent": 16.9
+    "total_documented": 58,
+    "overall_coverage_percent": 17.2
   }
 }

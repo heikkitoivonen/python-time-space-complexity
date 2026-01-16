@@ -74,6 +74,7 @@ nav:
     - Input: builtins/input.md
     - Id: builtins/id.md
     - Globals: builtins/globals.md
+    - Exceptions: builtins/exceptions.md
   - Standard Library:
     - Overview: stdlib/index.md
     - Collections: stdlib/collections.md
