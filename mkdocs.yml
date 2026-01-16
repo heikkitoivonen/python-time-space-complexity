@@ -110,6 +110,7 @@ nav:
     - Itertools: stdlib/itertools.md
     - JSON: stdlib/json.md
     - Logging: stdlib/logging.md
+    - Lzma: stdlib/lzma.md
     - Pickle: stdlib/pickle.md
     - Namedtuple: stdlib/namedtuple.md
     - OrderedDict: stdlib/ordereddict.md
