@@ -96,6 +96,7 @@ nav:
     - Deque: stdlib/deque.md
     - Defaultdict: stdlib/defaultdict.md
     - Enum: stdlib/enum.md
+    - Filecmp: stdlib/filecmp.md
     - Fnmatch: stdlib/fnmatch.md
     - Fractions: stdlib/fractions.md
     - Functools: stdlib/functools.md
