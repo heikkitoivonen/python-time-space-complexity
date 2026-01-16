@@ -54,6 +54,15 @@ nav:
     - Zip: builtins/zip.md
     - Sorted: builtins/sorted.md
     - Enumerate: builtins/enumerate.md
+    - All: builtins/all.md
+    - Any: builtins/any.md
+    - Absolute: builtins/abs.md
+    - Power: builtins/pow.md
+    - Round: builtins/round.md
+    - Ord: builtins/ord.md
+    - Chr: builtins/chr.md
+    - Reversed: builtins/reversed.md
+    - Divmod: builtins/divmod.md
   - Standard Library:
     - Overview: stdlib/index.md
     - Collections: stdlib/collections.md

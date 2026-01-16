@@ -2,8 +2,8 @@
   "timestamp": null,
   "builtins": {
     "total": 149,
-    "documented": 20,
-    "coverage_percent": 13.4,
+    "documented": 29,
+    "coverage_percent": 19.5,
     "missing": [
       "ArithmeticError",
       "AssertionError",
@@ -79,17 +79,13 @@
       "ValueError",
       "Warning",
       "ZeroDivisionError",
-      "abs",
       "aiter",
-      "all",
       "anext",
-      "any",
       "ascii",
       "bin",
       "breakpoint",
       "bytearray",
       "callable",
-      "chr",
       "classmethod",
       "compile",
       "complex",
@@ -97,7 +93,6 @@
       "credits",
       "delattr",
       "dir",
-      "divmod",
       "eval",
       "exec",
       "exit",
@@ -120,14 +115,10 @@
       "object",
       "oct",
       "open",
-      "ord",
-      "pow",
       "print",
       "property",
       "quit",
       "repr",
-      "reversed",
-      "round",
       "setattr",
       "slice",
       "staticmethod",
@@ -483,7 +474,7 @@
   },
   "summary": {
     "total_items": 337,
-    "total_documented": 30,
-    "overall_coverage_percent": 8.9
+    "total_documented": 39,
+    "overall_coverage_percent": 11.6
   }
 }
