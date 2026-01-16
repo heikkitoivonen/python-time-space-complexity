@@ -44,7 +44,16 @@ nav:
     - Integer: builtins/int.md
     - Float: builtins/float.md
     - Boolean: builtins/bool.md
+  - Built-in Functions:
     - Length: builtins/len.md
+    - Maximum: builtins/max.md
+    - Minimum: builtins/min.md
+    - Sum: builtins/sum.md
+    - Map: builtins/map.md
+    - Filter: builtins/filter.md
+    - Zip: builtins/zip.md
+    - Sorted: builtins/sorted.md
+    - Enumerate: builtins/enumerate.md
   - Standard Library:
     - Overview: stdlib/index.md
     - Collections: stdlib/collections.md

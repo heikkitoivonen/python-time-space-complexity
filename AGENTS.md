@@ -102,9 +102,10 @@ git commit -m "Your message"
   ```
   Add: List complexity documentation
 
-  Co-Authored-By: Amp <amp@example.com>
+  Co-Authored-By: Amp <amp@ampcode.com>
   ```
-  Replace "Amp" with the actual AI agent name (Claude, Copilot, etc.)
+  Replace "Amp <amp@ampcode.com>" with the actual AI agent name (Claude,
+  Copilot, etc.) and email.
 
 ## Testing Requirements
 

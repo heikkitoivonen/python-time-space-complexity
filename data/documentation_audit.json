@@ -304,9 +304,9 @@
     }
   },
   "stdlib": {
-    "total": 228,
-    "documented": 9,
-    "coverage_percent": 3.9,
+    "total": 230,
+    "documented": 10,
+    "coverage_percent": 4.3,
     "missing": [
       "abc",
       "aifc",
@@ -412,6 +412,7 @@
       "multiprocessing",
       "netrc",
       "nntplib",
+      "nodeenv",
       "ntpath",
       "nturl2path",
       "numbers",
@@ -420,7 +421,6 @@
       "optparse",
       "packaging",
       "paginate",
-      "pathlib",
       "pathspec",
       "pdb",
       "pickle",
@@ -445,6 +445,7 @@
       "pydoc_data",
       "pygments",
       "pymdownx",
+      "pyright",
       "pytest",
       "queue",
       "quopri",
@@ -531,8 +532,8 @@
     ]
   },
   "summary": {
-    "total_items": 377,
-    "total_documented": 21,
-    "overall_coverage_percent": 5.6
+    "total_items": 379,
+    "total_documented": 22,
+    "overall_coverage_percent": 5.8
   }
 }
