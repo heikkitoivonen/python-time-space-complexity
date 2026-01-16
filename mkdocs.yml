@@ -125,6 +125,7 @@ nav:
     - Typing: stdlib/typing.md
     - Unittest: stdlib/unittest.md
     - Urllib: stdlib/urllib.md
+    - Zipfile: stdlib/zipfile.md
   - Implementations:
     - Overview: implementations/index.md
     - CPython: implementations/cpython.md
