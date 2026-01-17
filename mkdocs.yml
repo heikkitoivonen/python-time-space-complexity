@@ -96,6 +96,7 @@ nav:
     - Copy: stdlib/copy.md
     - Counter: stdlib/counter.md
     - Calendar: stdlib/calendar.md
+    - Colorsys: stdlib/colorsys.md
     - Csv: stdlib/csv.md
     - Dataclasses: stdlib/dataclasses.md
     - DBM: stdlib/dbm.md
@@ -128,6 +129,7 @@ nav:
     - Locale: stdlib/locale.md
     - Logging: stdlib/logging.md
     - Lzma: stdlib/lzma.md
+    - Mimetypes: stdlib/mimetypes.md
     - Multiprocessing: stdlib/multiprocessing.md
     - Pickle: stdlib/pickle.md
     - Pkgutil: stdlib/pkgutil.md

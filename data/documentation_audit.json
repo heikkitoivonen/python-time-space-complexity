@@ -277,8 +277,8 @@
   },
   "stdlib": {
     "total": 188,
-    "documented": 96,
-    "coverage_percent": 51.1,
+    "documented": 98,
+    "coverage_percent": 52.1,
     "missing": [
       "aifc",
       "antigravity",
@@ -292,7 +292,6 @@
       "cmd",
       "code",
       "codeop",
-      "colorsys",
       "compileall",
       "concurrent",
       "copyreg",
@@ -317,7 +316,6 @@
       "linecache",
       "mailbox",
       "mailcap",
-      "mimetypes",
       "modulefinder",
       "netrc",
       "nntplib",
@@ -386,7 +384,7 @@
   },
   "summary": {
     "total_items": 337,
-    "total_documented": 137,
-    "overall_coverage_percent": 40.7
+    "total_documented": 139,
+    "overall_coverage_percent": 41.2
   }
 }
