@@ -82,6 +82,7 @@ nav:
     - Array: stdlib/array.md
     - Asyncio: stdlib/asyncio.md
     - Asynchat: stdlib/asynchat.md
+    - Asyncore: stdlib/asyncore.md
     - Base64: stdlib/base64.md
     - Bz2: stdlib/bz2.md
     - Bisect: stdlib/bisect.md
