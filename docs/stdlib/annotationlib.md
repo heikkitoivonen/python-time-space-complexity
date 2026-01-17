@@ -1,105 +1,24 @@
 # Annotationlib Module Complexity
 
-The `annotationlib` module provides tools for introspecting annotations on modules, classes, and functions. Added in Python 3.14.
+The `annotationlib` module provides tools for introspecting annotations. Added in Python 3.14.
 
 ## Operations
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `get_annotations(obj)` | O(n) | O(n) | n = number of annotations |
-| `get_annotations(obj, format=STRING)` | O(n) | O(n) | String format, no evaluation |
-| `get_annotations(obj, format=FORWARDREF)` | O(n) | O(n) | Returns ForwardRef for unresolved |
-| `call_annotate_function()` | O(n) | O(n) | Calls annotate with format |
-| `annotations_to_string()` | O(n) | O(n) | Convert annotations dict to strings |
-| `type_repr()` | O(1) | O(1) | String representation of type |
+| `get_annotations(obj)` | O(n) | O(n) | n = number of annotations; new dict each call |
+| `get_annotations(obj, format=STRING)` | O(n) | O(n) | Fastest: no evaluation |
+| `get_annotations(obj, format=FORWARDREF)` | O(n) | O(n) | Partial evaluation |
+| `get_annotations(obj, format=VALUE)` | O(n) | O(n) | Slowest: full evaluation, may import |
+| `call_annotate_function()` | O(n) | O(n) | Calls __annotate__ with format |
+| `annotations_to_string()` | O(n) | O(n) | Convert dict values to strings |
+| `ForwardRef.evaluate()` | O(1) | O(1) | Resolve single forward reference |
 
-## Format Enum
+## Performance Characteristics
 
-```python
-from annotationlib import Format
+### No Caching
 
-# Three formats for retrieving annotations
-Format.VALUE       # Evaluate annotations (may raise errors)
-Format.FORWARDREF  # Return ForwardRef for unresolved names
-Format.STRING      # Return as strings (like source code)
-```
-
-## get_annotations()
-
-### Time Complexity: O(n)
-
-Where n = number of annotations on the object.
-
-```python
-from annotationlib import get_annotations, Format
-
-def greet(name: str, count: int) -> str:
-    return name * count
-
-# Get evaluated annotations - O(n)
-annot = get_annotations(greet, format=Format.VALUE)
-# {'name': <class 'str'>, 'count': <class 'int'>, 'return': <class 'str'>}
-
-# Get as strings (no evaluation) - O(n)
-annot_str = get_annotations(greet, format=Format.STRING)
-# {'name': 'str', 'count': 'int', 'return': 'str'}
-```
-
-### Space Complexity: O(n)
-
-Returns a new dict on each call.
-
-## Forward References
-
-```python
-from annotationlib import get_annotations, Format, ForwardRef
-
-class Node:
-    # Self-reference before class is fully defined
-    def set_next(self, node: "Node") -> None:
-        pass
-
-# VALUE format may fail with undefined names
-# FORWARDREF returns ForwardRef objects instead
-annot = get_annotations(Node.set_next, format=Format.FORWARDREF)
-# {'node': ForwardRef('Node'), 'return': <class 'NoneType'>}
-```
-
-## ForwardRef Class
-
-```python
-from annotationlib import ForwardRef
-
-ref = ForwardRef("SomeClass")
-
-# Attributes
-ref.__forward_arg__   # 'SomeClass' - the string being referenced
-ref.__forward_module__  # Module where reference was created
-
-# Evaluate when the name is available
-ref.evaluate(globals={'SomeClass': MyClass})  # O(1)
-```
-
-## Deferred Evaluation (PEP 649)
-
-Python 3.14 changes annotation semantics:
-
-```python
-# Before 3.14: Annotations evaluated at definition time
-# Python 3.14+: Annotations evaluated lazily when accessed
-
-class Example:
-    value: UndefinedType  # No error until annotations accessed!
-
-# Accessing annotations triggers evaluation
-# get_annotations(Example)  # Would raise NameError
-```
-
-## Performance Considerations
-
-### Caching
-
-`get_annotations()` does NOT cache results:
+`get_annotations()` creates a new dict on every call:
 
 ```python
 from annotationlib import get_annotations
@@ -107,36 +26,52 @@ from annotationlib import get_annotations
 def func(x: int) -> int:
     return x
 
-# Each call creates new dict - O(n) each time
+# O(n) each call - no caching
 a1 = get_annotations(func)
 a2 = get_annotations(func)
-assert a1 is not a2  # Different objects
+assert a1 is not a2  # Different dict objects
 
-# Cache yourself if calling repeatedly
+# Cache if calling repeatedly
 _cache = {}
-def get_cached_annotations(obj):
+def cached_annotations(obj):
     if obj not in _cache:
         _cache[obj] = get_annotations(obj)
     return _cache[obj]
 ```
 
-### Format Performance
+### Format Performance Comparison
 
 ```python
 from annotationlib import get_annotations, Format
 
-# STRING is fastest (no evaluation)
-# FORWARDREF is middle (partial evaluation)
-# VALUE is slowest (full evaluation, may import modules)
+# Performance order (fastest to slowest):
+# 1. STRING - no evaluation, just string conversion
+# 2. FORWARDREF - partial evaluation, unresolved become ForwardRef
+# 3. VALUE - full evaluation, may trigger imports
 
-# Use STRING for display/documentation
-annot = get_annotations(func, format=Format.STRING)
+# For display/docs: use STRING (fastest)
+get_annotations(obj, format=Format.STRING)
 
-# Use FORWARDREF when names may not exist
-annot = get_annotations(func, format=Format.FORWARDREF)
+# For inspection with possible undefined names: use FORWARDREF
+get_annotations(obj, format=Format.FORWARDREF)
 
-# Use VALUE only when you need actual type objects
-annot = get_annotations(func, format=Format.VALUE)
+# Only when you need actual type objects: use VALUE (slowest)
+get_annotations(obj, format=Format.VALUE)
+```
+
+### Deferred Evaluation Impact (PEP 649)
+
+```python
+# Python 3.14+: Annotations NOT evaluated at definition
+# This means import time is faster for heavily-annotated modules
+
+class HeavilyAnnotated:
+    a: ComplexType1
+    b: ComplexType2
+    # ...100 more annotations...
+    
+# 3.13: All 100+ types evaluated at class definition (slow import)
+# 3.14: Evaluated only when get_annotations() called (fast import)
 ```
 
 ## Version Notes

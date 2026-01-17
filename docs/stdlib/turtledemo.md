@@ -1,49 +1,27 @@
 # Turtledemo Module Complexity
 
-The `turtledemo` package contains demonstration scripts for the `turtle` graphics module.
+The `turtledemo` package contains demonstration scripts for the `turtle` graphics module. Not intended for production use.
 
-## Overview
+## Operations
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| Import demo | O(1) | O(1) | Module load |
-| Run demo script | O(n) | O(n) | n = drawing operations |
-
-## Purpose
-
-`turtledemo` is a collection of example scripts demonstrating turtle graphics capabilities. It is not intended for production use.
-
-```python
-# Run the demo viewer
-python -m turtledemo
-
-# Or import specific demos
-from turtledemo import chaos
-from turtledemo import clock
-```
-
-## Available Demos
-
-Common demos included:
-
-- `bytedesign` - Byte logo design
-- `chaos` - Chaos theory visualization
-- `clock` - Analog clock
-- `forest` - Fractal trees
-- `fractalcurves` - Various fractal curves
-- `peace` - Peace symbol
-- `penrose` - Penrose tiling
-- `planet_and_moon` - Orbital simulation
-- `sorting_animate` - Sorting algorithm visualization
+| Import module | O(1) | O(1) | Module load |
+| Run demo | O(n) | O(n) | n = drawing operations |
 
 ## Complexity Notes
 
-Demo scripts have varying complexity based on their drawing algorithms:
+Demo complexity varies by algorithm:
 
 ```python
-# Fractal demos: O(branches^depth) operations
-# Simple drawings: O(n) where n = number of shapes
-# Animations: O(frames * operations_per_frame)
+# Fractal demos (forest, fractalcurves): O(b^d)
+# where b = branches, d = depth
+
+# Simple drawings (peace, bytedesign): O(n)
+# where n = number of shapes
+
+# Animations (clock, sorting_animate): O(f × k)
+# where f = frames, k = operations per frame
 ```
 
 ## Version Notes
@@ -53,4 +31,3 @@ Demo scripts have varying complexity based on their drawing algorithms:
 ## Related Documentation
 
 - [Turtle Module](turtle.md)
-- [Tkinter Module](tkinter.md)
