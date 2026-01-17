@@ -277,8 +277,8 @@
   },
   "stdlib": {
     "total": 188,
-    "documented": 79,
-    "coverage_percent": 42.0,
+    "documented": 87,
+    "coverage_percent": 46.3,
     "missing": [
       "aifc",
       "antigravity",
@@ -304,21 +304,17 @@
       "dis",
       "distutils",
       "doctest",
-      "email",
       "encodings",
       "ensurepip",
       "ftplib",
       "generate_docs",
       "getopt",
-      "getpass",
       "gettext",
-      "html",
       "http",
       "idlelib",
       "imaplib",
       "imghdr",
       "imp",
-      "importlib",
       "keyword",
       "lib2to3",
       "linecache",
@@ -338,7 +334,6 @@
       "pip",
       "pipes",
       "pkg_resources",
-      "pkgutil",
       "platform",
       "plistlib",
       "poplib",
@@ -379,7 +374,6 @@
       "tokenize",
       "tomllib",
       "trace",
-      "traceback",
       "tracemalloc",
       "tty",
       "turtle",
@@ -389,7 +383,6 @@
       "venv",
       "warnings",
       "wave",
-      "weakref",
       "webbrowser",
       "wsgiref",
       "xdrlib",
@@ -402,7 +395,7 @@
   },
   "summary": {
     "total_items": 337,
-    "total_documented": 120,
-    "overall_coverage_percent": 35.6
+    "total_documented": 128,
+    "overall_coverage_percent": 38.0
   }
 }

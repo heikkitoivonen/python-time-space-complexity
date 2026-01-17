@@ -97,6 +97,7 @@ nav:
     - Dataclasses: stdlib/dataclasses.md
     - DBM: stdlib/dbm.md
     - Datetime: stdlib/datetime.md
+    - Email: stdlib/email.md
     - Decimal: stdlib/decimal.md
     - Difflib: stdlib/difflib.md
     - Deque: stdlib/deque.md
@@ -108,20 +109,24 @@ nav:
     - Fractions: stdlib/fractions.md
     - Genericpath: stdlib/genericpath.md
     - Functools: stdlib/functools.md
+    - Getpass: stdlib/getpass.md
     - Glob: stdlib/glob.md
     - Graphlib: stdlib/graphlib.md
+    - Html: stdlib/html.md
     - Gzip: stdlib/gzip.md
     - Hashlib: stdlib/hashlib.md
     - Heapq: stdlib/heapq.md
     - Hmac: stdlib/hmac.md
     - IO: stdlib/io.md
     - Inspect: stdlib/inspect.md
+    - Importlib: stdlib/importlib.md
     - Itertools: stdlib/itertools.md
     - JSON: stdlib/json.md
     - Logging: stdlib/logging.md
     - Lzma: stdlib/lzma.md
     - Multiprocessing: stdlib/multiprocessing.md
     - Pickle: stdlib/pickle.md
+    - Pkgutil: stdlib/pkgutil.md
     - Namedtuple: stdlib/namedtuple.md
     - Ntpath: stdlib/ntpath.md
     - Operator: stdlib/operator.md
@@ -144,8 +149,10 @@ nav:
     - Sqlite3: stdlib/sqlite3.md
     - Struct: stdlib/struct.md
     - Subprocess: stdlib/subprocess.md
+    - Sys: stdlib/sys.md
     - Tarfile: stdlib/tarfile.md
     - Tempfile: stdlib/tempfile.md
+    - Traceback: stdlib/traceback.md
     - Textwrap: stdlib/textwrap.md
     - Threading: stdlib/threading.md
     - Types: stdlib/types.md
@@ -154,6 +161,7 @@ nav:
     - Unittest: stdlib/unittest.md
     - Uuid: stdlib/uuid.md
     - Urllib: stdlib/urllib.md
+    - Weakref: stdlib/weakref.md
     - Zlib: stdlib/zlib.md
     - Zipfile: stdlib/zipfile.md
   - Implementations:
