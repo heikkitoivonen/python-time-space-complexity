@@ -13,8 +13,8 @@ The `re` module provides regular expression matching operations.
 | `pattern.finditer(string)` | O(n) per match | O(1) per match | Lazy iteration |
 | `pattern.sub(repl, string)` | O(n*m) | O(m) | n = pattern, m = string |
 | `pattern.split(string)` | O(n*m) | O(m) | n = pattern, m = string |
-| `re.match(pattern, string)` | O(n + m) | O(m) | Compiles + matches (cached after ~512 patterns) |
-| `re.search(pattern, string)` | O(n + m) | O(m) | Compiles + matches (cached after ~512 patterns) |
+| `re.match(pattern, string)` | O(n + m) typical | O(m) | Compiles + matches; cached up to ~512; O(n*m) worst with backtracking |
+| `re.search(pattern, string)` | O(n + m) typical | O(m) | Compiles + matches; cached up to ~512; O(n*m) worst with backtracking |
 
 *Note: Worst case for catastrophic backtracking; typical cases are much better.
 

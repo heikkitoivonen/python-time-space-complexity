@@ -12,7 +12,7 @@ The `sys` module provides access to interpreter variables and functions related 
 | `sys.setrecursionlimit(n)` | O(1) | O(1) | Set limit |
 | `sys.getsizeof(obj)` | O(1) | O(1) | Get object size |
 | `len(sys.path)` | O(1) | O(1) | List length is cached |
-| `sys.modules` lookup | O(1) | O(n) | Dict lookup, n = modules |
+| `sys.modules` lookup | O(1) avg, O(n) worst | O(n) | Dict lookup; O(n) worst case due to hash collisions |
 
 ## Common Operations
 

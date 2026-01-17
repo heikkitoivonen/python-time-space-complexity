@@ -10,7 +10,7 @@ The `shutil` module provides high-level file operations like copying and removin
 | `copy2(src, dst)` | O(n) | O(1) | Copy with metadata |
 | `copytree(src, dst)` | O(d*n) | O(d) | Copy directory tree |
 | `rmtree(path)` | O(d) | O(d) | Remove directory tree |
-| `move(src, dst)` | O(1) or O(n) | O(1) | O(1) same filesystem, O(n) cross-filesystem |
+| `move(src, dst)` | O(1) or O(n) | O(1) | O(1) same filesystem (rename); O(n) cross-filesystem (copy+delete) |
 | `disk_usage(path)` | O(1) | O(1) | Single statvfs syscall |
 
 ## File Copying

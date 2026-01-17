@@ -8,7 +8,7 @@ The `tarfile` module provides tools for working with TAR archives.
 |-----------|------|-------|-------|
 | `TarFile.open(name)` | O(n) | O(n) | Open and read directory |
 | `TarFile.getmembers()` | O(n) | O(n) | Get all member info, n = file count |
-| `TarFile.getmember(name)` | O(n) | O(1) | Get single member info |
+| `TarFile.getmember(name)` | O(n) | O(1) | Linear search through headers |
 | `TarFile.extractfile(name)` | O(m) | O(m) | Extract single file, m = size |
 | `TarFile.extract(name)` | O(m) | O(m) | Extract to filesystem |
 | `TarFile.extractall()` | O(m) | O(m) | Extract all files |

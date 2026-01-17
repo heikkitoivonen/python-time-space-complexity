@@ -7,7 +7,7 @@ The `socket` module provides low-level network communication interfaces for clie
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `socket()` | O(1) | O(1) | Create socket |
-| `connect()` | O(1) + network | O(1) | Network latency dominates |
+| `connect()` | O(1) + network latency | O(1) | Network latency and handshake dominate |
 | `send()` | O(k) | O(1) | k = data size |
 | `recv()` | O(k) | O(k) | k = buffer size |
 

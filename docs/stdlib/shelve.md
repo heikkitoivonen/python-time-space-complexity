@@ -7,10 +7,10 @@ The `shelve` module provides persistent dictionary storage using the DBM databas
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `shelve.open()` | O(1) | O(1) | Open/create database |
-| `shelf[key] = value` | O(1) avg | O(k) | Store pickled value, k = size + O(k) pickle time |
-| `shelf[key]` | O(1) avg | O(k) | Retrieve and unpickle, k = value size |
-| `del shelf[key]` | O(1) avg | O(1) | Delete key |
-| `key in shelf` | O(1) avg | O(1) | Key lookup |
+| `shelf[key] = value` | O(1) avg, O(n) worst | O(k) | Store pickled value; O(n) worst case due to hash collisions |
+| `shelf[key]` | O(1) avg, O(n) worst | O(k) | Retrieve and unpickle; O(n) worst case due to hash collisions |
+| `del shelf[key]` | O(1) avg, O(n) worst | O(1) | Delete key; O(n) worst case due to hash collisions |
+| `key in shelf` | O(1) avg, O(n) worst | O(1) | Key lookup; O(n) worst case due to hash collisions |
 | `len(shelf)` | O(n) | O(1) | Scan all keys |
 | `shelf.keys()` | O(n) | O(n) | Get all keys |
 | `shelf.close()` | O(n) | O(1) | Flush and close |

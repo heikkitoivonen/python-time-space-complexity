@@ -6,7 +6,7 @@ The `subprocess` module enables spawning new processes, connecting to I/O pipes,
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `run()` / `Popen()` | O(1) + exec | O(1) | fork/exec overhead; not algorithmic |
+| `run()` / `Popen()` | O(1) + exec time | O(1) | fork/exec overhead; process execution time dominates |
 | `communicate()` | O(n) | O(n) | n = stdout + stderr size |
 | `wait()` | O(1) + process | O(1) | Blocks until process exits |
 

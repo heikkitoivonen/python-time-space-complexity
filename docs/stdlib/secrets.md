@@ -9,8 +9,8 @@ The `secrets` module provides cryptographically strong random number generation 
 | `token_bytes()` | O(n) | O(n) | n = number of bytes |
 | `token_hex()` | O(n) | O(n) | n = number of bytes |
 | `token_urlsafe()` | O(n) | O(n) | n = number of bytes |
-| `choice()` | O(1) | O(1) | Select from sequence |
-| `randbelow()` | O(1) | O(1) | Random int below k |
+| `choice()` | O(1) | O(1) | Cryptographically secure selection |
+| `randbelow()` | O(1) | O(1) | Cryptographically secure random int |
 
 ## Token Generation
 

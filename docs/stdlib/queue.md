@@ -13,7 +13,7 @@ The `queue` module provides thread-safe queue implementations for coordinating w
 | `Queue.qsize()` | O(1) | O(1) | Get approximate size |
 | `PriorityQueue.put()` | O(log n) | O(1) | Add with priority |
 | `PriorityQueue.get()` | O(log n) | O(1) | Get highest priority |
-| `LifoQueue.put()` | O(1) | O(1) | Add item (LIFO); uses list internally |
+| `LifoQueue.put()` | O(1) amortized | O(1) | Add item (LIFO); uses list internally |
 | `LifoQueue.get()` | O(1) | O(1) | Remove item (LIFO) |
 
 ## Basic Queue (FIFO)

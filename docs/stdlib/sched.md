@@ -8,7 +8,7 @@ The `sched` module provides a general-purpose event scheduler for scheduling fun
 |-----------|------|-------|-------|
 | `enter()` / `enterabs()` | O(log n) | O(1) | n = scheduled events |
 | `run()` | O(n log n) | O(n) | Process all events |
-| `cancel()` | O(n) | O(1) | Remove event; linear search in queue |
+| `cancel()` | O(n) | O(1) | Remove event; O(n) linear search then heapify |
 
 ## Scheduling Events
 

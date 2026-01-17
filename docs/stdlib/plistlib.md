@@ -6,8 +6,8 @@ The `plistlib` module reads and writes property list (.plist) files, commonly us
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `loads()` | O(n) | O(n) | n = data size |
-| `dumps()` | O(n) | O(n) | n = object size |
+| `loads()` | O(n) | O(n) | n = data size; XML parsing overhead |
+| `dumps()` | O(n) | O(n) | n = object size; XML generation |
 | `load()` | O(n) | O(n) | n = file size |
 | `dump()` | O(n) | O(n) | n = object size |
 

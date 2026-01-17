@@ -7,7 +7,7 @@ The `ssl` module wraps socket objects with TLS/SSL encryption, enabling secure c
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `wrap_socket()` | O(1) | O(1) | Wrap for TLS |
-| Handshake | O(1) | O(1) | Protocol overhead |
+| Handshake | O(1) + crypto | O(1) | TLS handshake; asymmetric cryptography overhead |
 | Send/receive | O(n) | O(n) | n = data size |
 
 ## Secure Socket Communication

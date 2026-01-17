@@ -7,7 +7,7 @@ The `profile` module provides a pure Python profiler for measuring program execu
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `profile.run()` | O(n) | O(n) | n = function calls |
-| Profiling overhead | ~20x | O(n) | Slower than cProfile |
+| Profiling overhead | ~20x slowdown | O(n) | Pure Python; use cProfile for ~2-3x overhead |
 
 ## Using profile Module
 

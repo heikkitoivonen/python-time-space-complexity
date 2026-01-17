@@ -7,7 +7,7 @@ The `pstats` module analyzes profiler output from cProfile or profile modules, p
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `Stats()` initialization | O(n) | O(n) | n = profile entries |
-| `sort_stats()` | O(n log n) | O(1) | In-place sorting |
+| `sort_stats()` | O(n log n) | O(n) | Sorting profile entries; may require O(n) space |
 | `print_stats()` | O(k) | O(k) | k = functions printed |
 
 ## Analyzing Profile Data

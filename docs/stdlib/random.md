@@ -10,7 +10,7 @@ The `random` module provides pseudo-random number generation for various probabi
 | `random.randint(a, b)` | O(1) | O(1) | Uniform integer |
 | `random.choice(seq)` | O(1) | O(1) | Random element |
 | `random.choices(seq, k)` | O(k) | O(k) | k items with replacement |
-| `random.sample(seq, k)` | O(k) | O(k) | k items without replacement; O(n) if k near n |
+| `random.sample(seq, k)` | O(k) typical, O(n) worst | O(k) | k items without replacement; O(n) when k is close to n |
 | `random.shuffle(list)` | O(n) | O(1) | In-place Fisher-Yates shuffle |
 | `random.uniform(a, b)` | O(1) | O(1) | Uniform float |
 | `random.gauss(mu, sigma)` | O(1) | O(1) | Gaussian distribution |

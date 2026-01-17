@@ -10,7 +10,7 @@ The `string` module provides string constants and utilities for string formattin
 | `string.digits` | O(1) | O(1) | Constant access |
 | `Formatter.format()` | O(n) | O(n) | Format string |
 | `Template.substitute()` | O(n) | O(n) | Template substitution |
-| `capwords(string)` | O(n) | O(n) | Capitalize words |
+| `capwords(string)` | O(n) | O(n) | Capitalize each word; splits on whitespace |
 
 ## String Constants
 

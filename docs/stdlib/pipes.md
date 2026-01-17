@@ -7,7 +7,7 @@ The `pipes` module provides a way to run shell pipelines from Python, managing c
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | Create template | O(1) | O(1) | Build command |
-| Execute pipeline | O(n) | O(n) | n = data size |
+| Execute pipeline | O(n) + subprocess | O(n) | n = data size; subprocess execution dominates |
 
 ## Building and Running Pipelines
 

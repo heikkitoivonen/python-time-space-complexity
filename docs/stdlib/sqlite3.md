@@ -7,7 +7,7 @@ The `sqlite3` module provides a lightweight embedded SQL database interface for 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `connect()` | O(1) | O(1) | Open database |
-| `execute()` | O(n) | O(n) | n = result rows; varies by query |
+| `execute()` | O(n) to O(n log n) | O(n) | Depends on query complexity, indexes, and sorting |
 | SELECT | O(n) or O(log n) | O(n) | O(log n) with index, O(n) full scan |
 | INSERT | O(log n) | O(1) | B-tree insert |
 | UPDATE/DELETE | O(n) or O(log n) | O(1) | O(log n) with index on WHERE clause |

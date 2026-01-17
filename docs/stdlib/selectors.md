@@ -9,7 +9,7 @@ The `selectors` module provides a high-level interface for multiplexed I/O, allo
 | `DefaultSelector()` | O(1) | O(1) | Create selector |
 | `selector.register(fileobj)` | O(1) | O(1) | Register socket/file |
 | `selector.unregister(fileobj)` | O(1) | O(1) | Unregister |
-| `selector.select(timeout)` | O(n) or O(k) | O(k) | select: O(n), epoll/kqueue: O(k); k = ready fds |
+| `selector.select(timeout)` | O(n) or O(k) | O(k) | select: O(n) scans all fds; epoll/kqueue: O(k) for ready fds |
 | `selector.modify(fileobj)` | O(1) | O(1) | Change registration |
 | `selector.get_map()` | O(1) | O(n) | Get all registrations |
 

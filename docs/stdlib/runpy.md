@@ -8,7 +8,7 @@ The `runpy` module provides tools to locate and execute Python modules without i
 |-----------|------|-------|-------|
 | `run_module()` | O(n) | O(n) | Execute module |
 | `run_path()` | O(n) | O(n) | Execute file/dir |
-| Module lookup | O(1) avg | O(1) | Hash-based sys.modules lookup |
+| Module lookup | O(1) avg, O(n) worst | O(1) | Hash-based; O(n) worst case due to hash collisions |
 
 ## Running Modules
 

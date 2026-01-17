@@ -6,8 +6,8 @@ The `pickletools` module provides tools for analyzing pickle files, showing the 
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `dis()` | O(n) | O(n) | n = pickle size |
-| Parse pickle | O(n) | O(n) | Sequential parse |
+| `dis()` | O(n) | O(n) | n = pickle size; sequential disassembly |
+| Parse pickle | O(n) | O(n) | Sequential parse through opcodes |
 
 ## Disassembling Pickle Data
 

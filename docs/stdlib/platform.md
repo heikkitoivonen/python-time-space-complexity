@@ -11,7 +11,7 @@ The `platform` module provides functions to access platform-specific information
 | `release()` | O(1) | O(1) | Cached after first call |
 | `version()` | O(1) | O(1) | Cached after first call |
 | `machine()` | O(1) | O(1) | Cached after first call |
-| `node()` | O(1) | O(1) | May involve syscall on first call |
+| `node()` | O(1) | O(1) | Cached after first call; first call may involve syscall |
 | `python_version()` | O(1) | O(1) | Static value |
 | `uname()` | O(1) | O(1) | Cached after first call |
 

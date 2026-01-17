@@ -9,7 +9,7 @@ The `pprint` module provides a way to pretty-print Python data structures with c
 | `pprint(obj)` | O(n) | O(n) | Pretty print object |
 | `pformat(obj)` | O(n) | O(n) | Format to string |
 | `PrettyPrinter()` | O(1) | O(1) | Create formatter |
-| `saferepr(obj)` | O(n) | O(n) | Safe repr |
+| `saferepr(obj)` | O(n) | O(n) | Safe repr; handles circular references |
 
 ## Pretty Printing
 

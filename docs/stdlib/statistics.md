@@ -7,10 +7,10 @@ The `statistics` module provides functions for calculating basic statistical pro
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `mean(data)` | O(n) | O(1) | Calculate average |
-| `median(data)` | O(n log n) | O(n) | Calculate median |
+| `median(data)` | O(n log n) | O(n) | Calculate median; requires sorting |
 | `mode(data)` | O(n) | O(n) | Find most common |
-| `stdev(data)` | O(n) | O(1) | Standard deviation |
-| `variance(data)` | O(n) | O(1) | Calculate variance |
+| `stdev(data)` | O(n) | O(1) | Standard deviation; two passes |
+| `variance(data)` | O(n) | O(1) | Calculate variance; two passes |
 | `quantiles(data)` | O(n log n) | O(n) | Calculate quantiles |
 
 ## Mean

@@ -6,9 +6,9 @@ The `tempfile` module provides utilities for creating and managing temporary fil
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `NamedTemporaryFile()` | O(1) | O(n) | Create named temporary file |
-| `TemporaryFile()` | O(1) | O(n) | Create unnamed temporary file |
-| `TemporaryDirectory()` | O(1) | O(n) | Create temporary directory |
+| `NamedTemporaryFile()` | O(1) | O(1) initial | Create file; O(n) for data written |
+| `TemporaryFile()` | O(1) | O(1) initial | Create file; O(n) for data written |
+| `TemporaryDirectory()` | O(1) | O(1) initial | Create dir; O(n) for files created |
 | `mktemp()` | O(1) | O(n) | Generate temp name (deprecated) |
 | `mkdtemp()` | O(1) | O(n) | Create temp directory safely |
 | `gettempdir()` | O(1) | O(1) | Get system temp directory |

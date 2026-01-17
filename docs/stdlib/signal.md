@@ -7,7 +7,7 @@ The `signal` module provides mechanisms to handle signals from the operating sys
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `signal.signal(signum, handler)` | O(1) | O(1) | Register signal handler |
-| `signal.alarm(seconds)` | O(1) | O(1) | Schedule alarm signal |
+| `signal.alarm(seconds)` | O(1) | O(1) | Schedule SIGALRM; Unix only |
 | `signal.pause()` | O(1) | O(1) | Wait for signal |
 | `signal.set_wakeup_fd(fd)` | O(1) | O(1) | Set event loop wakeup |
 | `signal.siginterrupt(signum, flag)` | O(1) | O(1) | Set signal interruption |

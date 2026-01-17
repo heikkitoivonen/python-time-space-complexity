@@ -8,7 +8,7 @@ The `pkgutil` module provides utilities for working with packages and module sea
 |-----------|------|-------|-------|
 | `iter_modules(path)` | O(n) | O(n) | n = modules in path |
 | `walk_packages()` | O(n) | O(n) | n = all subpackages |
-| `find_loader(name)` | O(1) | O(1) | Check sys.modules |
+| `find_loader(name)` | O(1) avg, O(n) worst | O(1) | Check sys.modules; O(n) worst case due to hash collisions |
 | `get_data(name)` | O(n) | O(n) | n = file size |
 | `extend_path()` | O(n) | O(n) | n = path entries |
 
