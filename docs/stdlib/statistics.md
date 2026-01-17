@@ -359,7 +359,8 @@ except StatisticsError:
 ## Version Notes
 
 - **Python 3.4+**: statistics module introduced
-- **Python 3.8+**: quantiles() function added
+- **Python 3.8+**: `quantiles()` function added
+- **Python 3.11+**: `mean()`, `variance()`, `stdev()` consume iterators in one pass (O(1) space vs O(n) when given an iterator instead of a list)
 
 ## Related Documentation
 

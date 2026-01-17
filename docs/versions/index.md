@@ -6,20 +6,55 @@ Different Python versions have made various optimizations and changes that affec
 
 | Version | Release | Status | Notes |
 |---------|---------|--------|-------|
-| 3.8 | Oct 2019 | Security fixes | Assignment expressions (walrus) |
+| 3.8 | Oct 2019 | EOL | Assignment expressions (walrus) |
 | 3.9 | Oct 2020 | Security fixes | Type hints, new parsers |
-| 3.10 | Oct 2021 | Bugfix | Pattern matching |
-| 3.11 | Oct 2022 | Current | Inline caching, 10-60% faster |
+| 3.10 | Oct 2021 | Security fixes | Pattern matching |
+| 3.11 | Oct 2022 | Bugfix | Inline caching, 10-60% faster |
 | 3.12 | Oct 2023 | Current | Better specialization |
+| 3.13 | Oct 2024 | Current | Free-threading (experimental) |
+| 3.14 | Oct 2025 | Current | Max-heap support, incremental GC |
 
 ## Quick Links
 
-- **[Python 3.12](py312.md)** - Latest version with new optimizations
+- **[Python 3.14](py314.md)** - Latest: max-heap functions, better GC pauses
+- **[Python 3.13](py313.md)** - Experimental free-threading, JIT compiler
+- **[Python 3.12](py312.md)** - Comprehension inlining, type parameters
 - **[Python 3.11](py311.md)** - Significant performance improvements (inline caching)
 - **[Python 3.10](py310.md)** - Pattern matching additions
 - **[Python 3.9](py39.md)** - Type hints and parser improvements
 
 ## Key Changes by Version
+
+### Python 3.14 (October 2025)
+
+New max-heap support and optimizations:
+
+```python
+import heapq
+
+# Native max-heap functions (new!)
+data = [3, 1, 4, 1, 5, 9]
+heapq.heapify_max(data)        # O(n) - max-heap transform
+heapq.heappush_max(data, 10)   # O(log n)
+max_val = heapq.heappop_max(data)  # O(log n)
+
+# Incremental GC: 10x better pause times for large heaps
+# uuid4(): ~30% faster
+```
+
+### Python 3.13 (October 2024)
+
+Experimental features and optimizations:
+
+```python
+# Experimental free-threading (no GIL)
+# Build with: --disable-gil
+
+# Experimental JIT compiler
+# Enable with: PYTHON_JIT=1
+
+# textwrap.indent(): 30% faster for large input
+```
 
 ### Python 3.12 (October 2023)
 
@@ -113,11 +148,13 @@ def func(x, /, y):
 
 | Version | EOL Date |
 |---------|----------|
-| 3.8 | Oct 2024 |
+| 3.8 | Oct 2024 (EOL) |
 | 3.9 | Oct 2025 |
 | 3.10 | Oct 2026 |
 | 3.11 | Oct 2027 |
 | 3.12 | Oct 2028 |
+| 3.13 | Oct 2029 |
+| 3.14 | Oct 2030 |
 
 Plan upgrades before EOL.
 
@@ -125,9 +162,11 @@ Plan upgrades before EOL.
 
 Generally minimal between minor versions, but check:
 
-- [Python 3.10 What's New](https://docs.python.org/3.10/whatsnew/)
-- [Python 3.11 What's New](https://docs.python.org/3.11/whatsnew/)
+- [Python 3.14 What's New](https://docs.python.org/3.14/whatsnew/)
+- [Python 3.13 What's New](https://docs.python.org/3.13/whatsnew/)
 - [Python 3.12 What's New](https://docs.python.org/3.12/whatsnew/)
+- [Python 3.11 What's New](https://docs.python.org/3.11/whatsnew/)
+- [Python 3.10 What's New](https://docs.python.org/3.10/whatsnew/)
 
 ## Performance Recommendations
 
@@ -138,9 +177,11 @@ Python 3.8 → Python 3.9    Incremental improvements
 Python 3.9 → Python 3.10   Minor improvements
 Python 3.10 → Python 3.11  10-60% faster (significant!)
 Python 3.11 → Python 3.12  5-10% faster
+Python 3.12 → Python 3.13  Similar (experimental features)
+Python 3.13 → Python 3.14  Better GC pauses, new heapq functions
 ```
 
-**Recommendation**: Use Python 3.11+ for performance.
+**Recommendation**: Use Python 3.11+ for performance, 3.14+ for new heapq max-heap functions.
 
 ## Feature by Version
 
@@ -151,7 +192,12 @@ Python 3.11 → Python 3.12  5-10% faster
 | Pattern matching | 3.10+ | Stable |
 | Inline caching | 3.11+ | Stable |
 | Exception groups | 3.11+ | Stable |
-| Type parameters | 3.12+ | New |
+| Type parameters | 3.12+ | Stable |
+| Comprehension inlining | 3.12+ | Stable |
+| Free-threading | 3.13+ | Experimental |
+| JIT compiler | 3.13+ | Experimental |
+| Max-heap (heapq) | 3.14+ | New |
+| Incremental GC | 3.14+ | New |
 
 ## Complexity Characteristics by Version
 

@@ -72,6 +72,8 @@ lst.insert(0, -1)  # Shifts 1,000,000 elements!
 ## Version Notes
 
 - **Python 3.8+**: Current behavior stable
+- **Python 3.11+**: `append()` ~15% faster, list comprehensions 20-30% faster
+- **Python 3.12+**: Comprehensions inlined (up to 2x faster)
 - **All versions**: Core complexity unchanged since early Python 3.x
 
 ## Implementation Comparison

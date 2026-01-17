@@ -1,8 +1,8 @@
 # Heapq Module Complexity
 
-The `heapq` module provides a min-heap implementation for priority queue operations.
+The `heapq` module provides heap implementations for priority queue operations.
 
-## Operations
+## Min-Heap Operations
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
@@ -14,6 +14,16 @@ The `heapq` module provides a min-heap implementation for priority queue operati
 | `nlargest(n, iterable)` | O(k log n) | O(n) | k = iterable length, maintains heap of n items |
 | `nsmallest(n, iterable)` | O(k log n) | O(n) | k = iterable length, maintains heap of n items |
 | `merge(*iterables)` | O(n log k) | O(k) | n = total items, k = count of iterables |
+
+## Max-Heap Operations (Python 3.14+)
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `heapify_max(x)` | O(n) | O(1) | In-place max-heap transformation |
+| `heappush_max(heap, item)` | O(log n) | O(1) | Add item to max-heap |
+| `heappop_max(heap)` | O(log n) | O(1) | Remove and return max item |
+| `heappushpop_max(heap, item)` | O(log n) | O(1) | Push then pop max |
+| `heapreplace_max(heap, item)` | O(log n) | O(1) | Pop max then push |
 
 ## Space Complexity Notes
 
@@ -204,8 +214,66 @@ Uses array-based binary heap, highly optimized.
 ### PyPy
 JIT compilation provides additional optimization for repeated operations.
 
+## Max-Heap Usage (Python 3.14+)
+
+```python
+import heapq
+
+# Create a max-heap
+data = [3, 1, 4, 1, 5, 9, 2, 6]
+heapq.heapify_max(data)  # O(n)
+
+# Peek at max
+print(data[0])  # 9 - maximum is always at root
+
+# Add and remove from max-heap
+heapq.heappush_max(data, 10)      # O(log n)
+max_val = heapq.heappop_max(data)  # O(log n), returns 10
+
+# Efficient combined operations
+heapq.heapreplace_max(data, 7)    # O(log n) - pop max, push 7
+heapq.heappushpop_max(data, 8)    # O(log n) - push 8, pop max
+```
+
+### Max-Heap Priority Queue
+
+```python
+import heapq
+
+# Priority queue returning highest priority first
+tasks = [(1, "low"), (5, "urgent"), (3, "medium")]
+heapq.heapify_max(tasks)
+
+while tasks:
+    priority, task = heapq.heappop_max(tasks)
+    print(f"{priority}: {task}")
+# Output: 5: urgent, 3: medium, 1: low
+```
+
+### Pre-3.14 Max-Heap Workaround
+
+```python
+import heapq
+
+# Before 3.14: Negate values for max-heap behavior
+data = [3, 1, 4, 1, 5]
+max_heap = [-x for x in data]  # O(n)
+heapq.heapify(max_heap)        # O(n)
+
+# Get max
+max_val = -heapq.heappop(max_heap)  # Negate back
+
+# Python 3.14+: Use native max-heap functions instead
+```
+
+## Version Notes
+
+- **Python 3.14+**: Native max-heap functions added
+- **All versions**: Min-heap functions available
+
 ## Related Documentation
 
 - [Collections Module](collections.md)
 - [Bisect Module](bisect.md)
+- [Python 3.14](../versions/py314.md)
 - [Sorted Builtin](../builtins/index.md)

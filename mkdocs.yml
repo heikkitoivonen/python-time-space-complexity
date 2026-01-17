@@ -327,6 +327,8 @@ nav:
     - Jython: implementations/jython.md
   - Versions:
     - Overview: versions/index.md
+    - Python 3.14: versions/py314.md
+    - Python 3.13: versions/py313.md
     - Python 3.12: versions/py312.md
     - Python 3.11: versions/py311.md
     - Python 3.10: versions/py310.md

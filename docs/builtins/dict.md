@@ -71,6 +71,7 @@ d['c'] = 3
 | Python 3.6+ | Insertion order preserved |
 | Python 3.9+ | Dict merge & update operators (`\|`, `\|=`) |
 | Python 3.10+ | Pattern matching with dicts |
+| Python 3.11+ | 23% smaller when all keys are Unicode strings |
 
 ## Implementation Comparison
 
