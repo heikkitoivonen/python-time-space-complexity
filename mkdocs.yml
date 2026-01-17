@@ -103,8 +103,10 @@ nav:
     - Defaultdict: stdlib/defaultdict.md
     - Enum: stdlib/enum.md
     - Filecmp: stdlib/filecmp.md
+    - Fileinput: stdlib/fileinput.md
     - Fnmatch: stdlib/fnmatch.md
     - Fractions: stdlib/fractions.md
+    - Genericpath: stdlib/genericpath.md
     - Functools: stdlib/functools.md
     - Glob: stdlib/glob.md
     - Graphlib: stdlib/graphlib.md
@@ -120,10 +122,13 @@ nav:
     - Multiprocessing: stdlib/multiprocessing.md
     - Pickle: stdlib/pickle.md
     - Namedtuple: stdlib/namedtuple.md
+    - Ntpath: stdlib/ntpath.md
     - OrderedDict: stdlib/ordereddict.md
     - OS: stdlib/os.md
     - Pathlib: stdlib/pathlib.md
+    - Posixpath: stdlib/posixpath.md
     - Queue: stdlib/queue.md
+    - Shutil: stdlib/shutil.md
     - Random: stdlib/random.md
     - Regular Expressions: stdlib/re.md
     - Selectors: stdlib/selectors.md
@@ -134,6 +139,7 @@ nav:
     - Struct: stdlib/struct.md
     - Subprocess: stdlib/subprocess.md
     - Tarfile: stdlib/tarfile.md
+    - Tempfile: stdlib/tempfile.md
     - Threading: stdlib/threading.md
     - Typing: stdlib/typing.md
     - Unittest: stdlib/unittest.md
