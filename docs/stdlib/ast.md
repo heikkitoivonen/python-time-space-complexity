@@ -8,7 +8,7 @@ The `ast` module provides classes for working with abstract syntax trees of Pyth
 |-----------|------|-------|-------|
 | `ast.parse()` | O(n) | O(n) | n = source code length |
 | `ast.literal_eval()` | O(n) | O(n) | Safe evaluation of literals |
-| Tree traversal | O(n) | O(h) | n = nodes, h = tree height |
+| Tree traversal | O(n) | O(h) | n = nodes, h = max recursion depth |
 | Node creation | O(1) | O(1) | Create single node |
 
 ## Parsing Python Code

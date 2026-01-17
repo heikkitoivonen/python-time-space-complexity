@@ -7,7 +7,7 @@ The `set()` function creates sets from iterables or creates empty sets.
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
 | Empty set | O(1) | O(1) | set() |
-| From iterable | O(n) | O(n) | n = iterable length |
+| From iterable | O(n) avg, O(n²) worst | O(n) | n = iterable length; worst case with hash collisions |
 | From string | O(n) | O(n) | n = string length |
 | Duplicate removal | O(n) | O(n) | Automatic deduplication |
 | Shallow copy | O(n) | O(n) | n = set size |

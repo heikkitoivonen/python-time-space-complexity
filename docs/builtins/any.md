@@ -31,12 +31,12 @@ result = any([0, False, None, "", []])  # False - checks all
 ### With Conditions
 
 ```python
-# O(n*k) where k = predicate time
+# O(k) where k = position of first match, each predicate is O(1)
 numbers = [1, 2, 3, 4, 5]
 result = any(x > 3 for x in numbers)  # True - stops at 4
 
 # Early exit when condition met
-result = any(x > 2 for x in numbers)  # True - stops at 3
+result = any(x > 2 for x in numbers)  # True - stops at 3 (index 2)
 ```
 
 ## Performance Patterns

@@ -7,10 +7,10 @@ The `defaultdict` class from `collections` provides a dictionary that returns a 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `defaultdict()` | O(1) | O(1) | Create dict |
-| Lookup existing key | O(1) avg | O(1) | Direct access |
-| Lookup missing key | O(1) avg | O(1) | Creates default |
-| Insert | O(1) avg | O(1) | Add key-value |
-| Delete | O(1) avg | O(1) | Remove key |
+| Lookup existing key | O(1) avg | O(1) | O(n) worst case due to hash collisions |
+| Lookup missing key | O(1) avg | O(1) | Creates default; O(n) worst case |
+| Insert | O(1) avg | O(1) | O(n) worst case due to hash collisions |
+| Delete | O(1) avg | O(1) | O(n) worst case due to hash collisions |
 
 ## Basic Usage
 

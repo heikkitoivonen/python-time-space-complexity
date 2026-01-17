@@ -7,7 +7,7 @@ The `array` module provides an efficient array type for storing homogeneous data
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `array.array()` | O(n) | O(n) | Create array |
-| `append()` | O(1) amortized | O(1) | Add element |
+| `append()` | O(1) amortized | O(1) | O(n) worst case when resizing |
 | `extend()` | O(k) | O(k) | Add multiple |
 | Indexing | O(1) | O(1) | Access by index |
 | Search | O(n) | O(1) | Linear search |

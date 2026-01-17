@@ -7,12 +7,12 @@ The `set` type is an unordered collection of unique items. It's implemented as a
 | Operation | Time | Notes |
 |-----------|------|-------|
 | `len()` | O(1) | Direct count |
-| `add(x)` | O(1)* | Hash insertion |
-| `remove(x)` | O(1)* | Hash lookup + delete |
-| `discard(x)` | O(1)* | Hash lookup + delete |
-| `pop()` | O(1)* | Remove arbitrary element |
+| `add(x)` | O(1) avg, O(n) worst | Amortized; hash collisions cause O(n) |
+| `remove(x)` | O(1) avg, O(n) worst | Hash lookup + delete |
+| `discard(x)` | O(1) avg, O(n) worst | Hash lookup + delete |
+| `pop()` | O(1) avg | Remove arbitrary element |
 | `clear()` | O(n) | Deallocate all |
-| `x in set` | O(1)* | Hash lookup |
+| `x in set` | O(1) avg, O(n) worst | Hash lookup; collisions cause O(n) |
 | `copy()` | O(n) | Shallow copy |
 | `union(other)` | O(n+m) | n, m = set lengths |
 | `intersection(other)` | O(min(n,m)) | Iterate smaller set |
@@ -26,7 +26,7 @@ The `set` type is an unordered collection of unique items. It's implemented as a
 
 | Operation | Space |
 |-----------|-------|
-| `add()` | O(1) amortized |
+| `add()` | O(1) amortized, O(n) worst |
 | `copy()` | O(n) |
 | `union()` | O(n+m) for result |
 | `intersection()` | O(min(n,m)) for result |

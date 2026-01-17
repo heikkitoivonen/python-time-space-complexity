@@ -7,8 +7,8 @@ The `filter()` function constructs an iterator from items that pass a predicate 
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
 | Filtering with function | O(n*k) | O(1)† | k = predicate time, † iterator only |
-| Consuming iterator | O(n*k) | O(m) | m = number of results |
-| Filtering with None | O(n) | O(1)† | Removes falsy values |
+| Consuming iterator | O(n*k) | O(m) | m = number of matching items |
+| Filtering with None | O(n) | O(1)† | Removes falsy values, k=1 for truthiness test |
 
 ## Basic Usage
 

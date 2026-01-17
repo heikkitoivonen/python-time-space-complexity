@@ -117,16 +117,14 @@ from statistics import mode
 data = [1, 1, 1, 2, 2, 3]
 most_common = mode(data)  # O(6) = 1
 
-# Multimodal: returns first
+# Multimodal: returns first mode found (Python 3.8+)
 data = [1, 1, 2, 2, 3, 3]
 m = mode(data)  # Returns 1 (first encountered)
 
-# No mode raises StatisticsError
-try:
-    data = [1, 2, 3]  # All equally common
-    m = mode(data)
-except StatisticsError:
-    print("No mode")
+# In Python 3.8+, mode() returns the first mode if multimodal
+# (In Python 3.7 and earlier, it raised StatisticsError for multimodal data)
+data = [1, 2, 3]  # All equally common
+m = mode(data)    # Returns 1 (first element)
 ```
 
 #### Space Complexity: O(n)

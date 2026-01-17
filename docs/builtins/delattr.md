@@ -6,11 +6,13 @@ The `delattr()` function removes a named attribute from an object. It's the prog
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| Attribute lookup | O(1) | O(1) | Find in instance dict |
-| Delete from dict | O(1) | O(1) | Hash table deletion |
-| Property deleter call | O(1) | O(1) | Call property __delete__ |
-| __delattr__ call | O(1) | O(1) | Custom implementation |
-| Total operation | O(1) | O(1) | Hash table deletion |
+| Attribute lookup | O(1) avg | O(1) | Find in instance dict |
+| Delete from dict | O(1) avg | O(1) | Hash table deletion |
+| Property deleter call | O(k) | O(1) | k = deleter method complexity |
+| __delattr__ call | O(k) | O(1) | k = custom implementation complexity |
+| Total operation | O(1) avg | O(1) | Hash table deletion for simple attrs |
+
+*Note: Deletion from instance `__dict__` is O(1) average case. Custom `__delattr__` or property deleters may have different complexity.*
 
 ## Basic Usage
 

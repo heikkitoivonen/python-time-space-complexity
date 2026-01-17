@@ -9,7 +9,7 @@ The `bz2` module provides BZIP2 compression and decompression functionality.
 | `bz2.open(filename)` | O(1) | O(1) | Open file handle |
 | `BZ2File.read()` | O(m) | O(m) | Decompress all, m = uncompressed size |
 | `BZ2File.write(data)` | O(n) | O(k) | Compress and write, n = input size |
-| `compress(data)` | O(n log n) | O(n) | Compress bytes |
+| `compress(data)` | O(n log n) | O(n) | BZIP2 uses BWT; may be O(n log²n) |
 | `decompress(data)` | O(m) | O(m) | Decompress bytes |
 
 ## Opening Files

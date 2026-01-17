@@ -12,7 +12,7 @@ The `OrderedDict` class from `collections` maintains insertion order of keys, gu
 | `OrderedDict()` | O(n) | O(n) | Create from dict/iterable |
 | `__getitem__` | O(1) | O(1) | Access by key |
 | `__setitem__` | O(1) | O(1) | Set/update item |
-| `__delitem__` | O(1) | O(1) | Delete item |
+| `__delitem__` | O(1) | O(1) | Delete item (uses doubly-linked list) |
 | `move_to_end()` | O(1) | O(1) | Move key to end |
 | `popitem()` | O(1) | O(1) | Remove last (LIFO) |
 | Iteration | O(n) | O(1) | Iterate in insertion order |

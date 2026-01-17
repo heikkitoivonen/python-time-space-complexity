@@ -11,7 +11,7 @@ The `os` module provides a way to use operating system-dependent functionality l
 | `os.path.isdir(path)` | O(1) | O(1) | Check if directory |
 | `os.listdir(path)` | O(n) | O(n) | List directory contents |
 | `os.scandir(path)` | O(n) | O(1) | Lazy directory iterator |
-| `os.walk(path)` | O(n) | O(d) | Walk directory tree, d = depth |
+| `os.walk(path)` | O(n) | O(d) | Walk directory tree, n = total entries, d = max depth for stack |
 | `os.stat(path)` | O(1) | O(1) | Get file statistics |
 | `os.lstat(path)` | O(1) | O(1) | Stat without following symlink |
 | `os.remove(path)` | O(1) | O(1) | Delete file |

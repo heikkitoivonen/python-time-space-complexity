@@ -8,7 +8,7 @@ The `pickle` module serializes and deserializes Python objects into bytes, enabl
 |-----------|------|-------|-------|
 | `pickle.dumps(obj)` | O(n) | O(n) | Serialize to bytes, n = object size |
 | `pickle.loads(data)` | O(n) | O(n) | Deserialize from bytes, n = data size |
-| `dump()` to file | O(n) | O(1) | n = object size, streaming |
+| `dump()` to file | O(n) | O(n) | n = object size, requires memoization for object graph |
 | `load()` from file | O(n) | O(n) | n = object size, loads all |
 | Circular reference handling | O(n) | O(n) | Memoization tracks visited objects |
 

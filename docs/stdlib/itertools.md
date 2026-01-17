@@ -38,7 +38,7 @@ The `itertools` module provides efficient looping tools for creating iterators a
 | `groupby(iterable, key)` | O(n) total | O(1) | Group consecutive |
 | `combinations(iterable, r)` | O(C(n,r)) total | O(r) per item | All r-combinations |
 | `permutations(iterable, r)` | O(P(n,r)) total | O(r) per item | All permutations |
-| `product(iter1, iter2, ...)` | O(n₁*n₂*...*nₖ) | O(k) per item | Cartesian product of k iterables |
+| `product(iter1, iter2, ...)` | O(n₁×n₂×...×nₖ) | O(k) per item | Cartesian product, exhausts all input iterables first |
 
 ## Memory Characteristics
 

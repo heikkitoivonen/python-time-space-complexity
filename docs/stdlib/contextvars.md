@@ -7,8 +7,8 @@ The `contextvars` module provides context variables for managing state in concur
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `ContextVar(name)` | O(1) | O(1) | Create context variable |
-| `ContextVar.set(value)` | O(1) | O(1) | Set value in context |
-| `ContextVar.get()` | O(1) | O(1) | Get value from context |
+| `ContextVar.set(value)` | O(1) | O(1) | Returns token for reset |
+| `ContextVar.get()` | O(1) | O(1) | Returns default if not set |
 | `copy_context()` | O(n) | O(n) | Copy context, n = variable count |
 | `Context.run(fn, *args)` | O(1) | O(1) | Run function in context |
 

@@ -7,8 +7,8 @@ The `reversed()` function returns a reverse iterator over a sequence.
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
 | Creating iterator | O(1) | O(1) | Just creates iterator |
-| Consuming iterator | O(n*k) | O(1)† | k = processing time, † iterator only |
-| Works with | O(n) | O(1) | Sequences with __reversed__ |
+| Consuming iterator | O(n) | O(1)† | † iterator only, no copy made |
+| Works with | O(n) total | O(1) per item | Sequences with __reversed__ or __getitem__ |
 | Unsupported types | N/A | N/A | Raises TypeError |
 
 ## Basic Usage
@@ -236,7 +236,7 @@ reversed(list(my_set))  # Convert first
 result = list(reversed([]))
 # []
 
-for item in reversed(():
+for item in reversed(()):
     print(item)  # Never executes
 ```
 

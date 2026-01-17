@@ -21,10 +21,10 @@ The `range` type is an immutable sequence of numbers used for iteration. It gene
 
 ## Space Complexity
 
-| Operation | Space |
-|-----------|-------|
-| Range object | O(1) | Fixed overhead |
-| Iteration | O(1) | No buffering |
+| Operation | Space | Notes |
+|-----------|-------|-------|
+| Range object | O(1) | Fixed overhead (stores start, stop, step) |
+| Iteration | O(1) | No buffering, yields values on demand |
 | `list()` conversion | O(n) | Creates list |
 | `reversed()` iterator | O(1) | No materialization |
 

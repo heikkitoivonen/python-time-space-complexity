@@ -6,8 +6,8 @@ The `locals()` function returns a dictionary containing the current local symbol
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `locals()` | O(n) | O(n) | n = local variables |
-| Access variable | O(1) | O(1) | Direct dictionary access |
+| `locals()` | O(n) | O(n) | Creates snapshot; n = local variables |
+| Access variable | O(1) avg | O(1) | Dict key lookup; O(n) worst case with collisions |
 
 ## Basic Usage
 

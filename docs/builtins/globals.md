@@ -6,20 +6,20 @@ The `globals()` and `locals()` functions return dictionary representations of th
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `globals()` | O(n) | O(n) | n = number of global vars |
-| `locals()` | O(m) | O(m) | m = number of local vars |
-| Accessing dict value | O(1) | O(1) | Dict key lookup |
+| `globals()` | O(1) | O(1) | Returns reference to existing global dict |
+| `locals()` | O(m) | O(m) | Creates snapshot copy; m = number of local vars |
+| Accessing dict value | O(1) avg | O(1) | Dict key lookup; O(n) worst case with collisions |
 
 ## Understanding Namespaces
 
 ### Global Namespace
 
 ```python
-# Access global namespace - O(n)
+# Access global namespace - O(1)
 x = 10
 y = 20
 
-global_vars = globals()  # O(n) - creates dict
+global_vars = globals()  # O(1) - returns reference to existing dict
 print(global_vars['x'])  # O(1) - access value
 print(global_vars['y'])  # O(1)
 
@@ -272,13 +272,13 @@ timeout = get_config('timeout')  # O(1)
 ### Frequency of calls
 
 ```python
-# Calling globals() repeatedly is inefficient - O(n) each
+# globals() returns same dict object - O(1) each call
 for i in range(1000):
-    d = globals()  # O(n) - recreates dict each time!
+    d = globals()  # O(1) - returns same dict reference
     value = d['x']
 
-# Better: cache result - O(n) once, then O(1)
-g = globals()  # O(n) once
+# Caching is not necessary for globals(), but good for clarity
+g = globals()  # O(1)
 for i in range(1000):
     value = g['x']  # O(1) each
 ```
@@ -373,7 +373,7 @@ def example():
 
 - **Python 2.x**: Same behavior
 - **Python 3.x**: Same behavior
-- **All versions**: O(n) for globals(), O(m) for locals()
+- **All versions**: O(1) for globals() (returns reference), O(m) for locals() (creates copy)
 
 ## Related Functions
 

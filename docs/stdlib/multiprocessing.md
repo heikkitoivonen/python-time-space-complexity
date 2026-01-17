@@ -10,8 +10,8 @@ The `multiprocessing` module provides process-based parallelism for CPU-bound ta
 | `process.start()` | O(w) | O(w) | Start process, w = process overhead |
 | `process.join()` | O(1) | O(1) | Wait for process |
 | `Queue()` | O(1) | O(1) | Create queue |
-| `queue.put(item)` | O(1) | O(1) | Add to queue |
-| `queue.get()` | O(1) | O(1) | Remove from queue |
+| `queue.put(item)` | O(n) | O(n) | Add to queue, n = serialized item size (pickling) |
+| `queue.get()` | O(n) | O(n) | Remove from queue, n = item size (unpickling) |
 | `Pool(processes)` | O(w) | O(w) | Create pool, w = process count |
 | `pool.map(fn, items)` | O(n) | O(n) | Map over items, n = item count |
 

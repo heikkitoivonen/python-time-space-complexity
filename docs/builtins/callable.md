@@ -62,11 +62,12 @@ callable(obj)              # True (has __call__)
 ### How callable() Works
 
 ```python
-# O(1) - checks for __call__ method or is a type
+# O(1) - checks for __call__ method in type hierarchy
+# Note: This is a simplified conceptual model; CPython has optimized checks
 def is_callable(obj):
-    return hasattr(obj, '__call__') or isinstance(obj, type)
+    return hasattr(type(obj), '__call__')
 
-# Equivalent to callable()
+# callable() is more efficient than this Python equivalent
 ```
 
 ### Attribute Lookup

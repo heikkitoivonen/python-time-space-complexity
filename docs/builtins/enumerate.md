@@ -6,9 +6,11 @@ The `enumerate()` function returns an iterator that produces tuples of (index, i
 
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
-| Creating iterator | O(1) | O(1) | Just creates iterator |
-| Consuming iterator | O(n*k) | O(1)† | k = processing time, † iterator only |
-| With custom start | O(n*k) | O(1)† | start parameter doesn't change complexity |
+| Creating iterator | O(1) | O(1) | Just creates iterator object |
+| Consuming iterator | O(n) | O(1) | n = items iterated; yields one at a time |
+| With custom start | O(n) | O(1) | start parameter doesn't change complexity |
+
+*Note: enumerate() returns an iterator that yields tuples lazily. Space is O(1) because it doesn't store all tuples in memory. Converting to list with `list(enumerate(x))` is O(n) space.*
 
 ## Basic Usage
 

@@ -11,7 +11,7 @@ The `concurrent.futures` module provides high-level interfaces for asynchronousl
 | `executor.submit(fn, *args)` | O(1) | O(1) | Submit task to queue |
 | `executor.map(fn, iterable)` | O(n) | O(n) | Submit all tasks, n = item count |
 | `Future.result()` | O(1) | O(r) | Get result, r = result size |
-| `as_completed(futures)` | O(n log n) | O(n) | Get futures as completed |
+| `as_completed(futures)` | O(n log n) | O(n) | Heap-based iteration; yields as each completes |
 | `wait(futures)` | O(n) | O(n) | Wait for futures |
 
 ## ThreadPoolExecutor

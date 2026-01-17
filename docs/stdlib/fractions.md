@@ -6,10 +6,10 @@ The `fractions` module provides support for rational number arithmetic, maintain
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `Fraction()` creation | O(log n) | O(log n) | GCD calculation, n = max numerator/denominator |
-| `Fraction` arithmetic | O(log n) | O(log n) | GCD for result simplification |
-| `Fraction` comparison | O(log n) | O(1) | Requires common denominator |
-| `Fraction` conversion | O(1) or O(log n) | O(log n) | From int/float/string |
+| `Fraction()` creation | O(log n) | O(1) | GCD calculation via Euclidean algorithm, n = max(numerator, denominator) |
+| `Fraction` arithmetic | O(log n) | O(1) | GCD for result simplification |
+| `Fraction` comparison | O(1) | O(1) | Cross-multiplication comparison |
+| `Fraction` conversion | O(log n) | O(1) | GCD for reduction |
 | `limit_denominator()` | O(k) | O(1) | k = max denominator |
 
 ## Basic Usage

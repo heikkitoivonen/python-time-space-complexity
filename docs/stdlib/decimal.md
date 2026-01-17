@@ -9,8 +9,8 @@ The `decimal` module provides support for decimal floating point arithmetic with
 | `Decimal(value)` | O(n) | O(n) | n = digits in value |
 | `Decimal.from_float(f)` | O(1) | O(1) | Convert from float |
 | Addition/Subtraction | O(n) | O(n) | n = max digits |
-| Multiplication | O(n²) | O(n) | Grade-school multiplication |
-| Division | O(n²) | O(n) | Long division |
+| Multiplication | O(n²) | O(n) | Grade-school; Python uses Karatsuba for large n |
+| Division | O(n²) | O(n) | Long division algorithm |
 | `quantize()` | O(n) | O(n) | Round to precision |
 | Comparison | O(n) | O(1) | n = digits to compare |
 

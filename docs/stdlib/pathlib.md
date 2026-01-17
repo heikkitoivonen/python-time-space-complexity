@@ -16,8 +16,8 @@ The `pathlib` module provides an object-oriented approach to filesystem path han
 | `Path.stat()` | O(1) | O(1) | Get file stats |
 | `Path.resolve()` | O(n) | O(n) | Resolve to absolute path |
 | `Path.iterdir()` | O(d) | O(d) | Iterate directory contents |
-| `Path.glob(pattern)` | O(d) | O(d) | Glob matching |
-| `Path.rglob(pattern)` | O(d) | O(d) | Recursive glob |
+| `Path.glob(pattern)` | O(n) | O(1) per item | n = directory entries checked, returns iterator |
+| `Path.rglob(pattern)` | O(n) | O(1) per item | n = total tree entries, returns iterator |
 | `Path.mkdir()` | O(1) | O(1) | Create directory |
 | `Path.rename(target)` | O(1) | O(1) | Rename path |
 | `Path.unlink()` | O(1) | O(1) | Delete file |

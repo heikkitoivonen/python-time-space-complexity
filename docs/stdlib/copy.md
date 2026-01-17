@@ -7,7 +7,7 @@ The `copy` module provides shallow and deep copy operations for creating copies 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `copy.copy(x)` | O(n) | O(n) | Shallow copy, n = top-level elements |
-| `copy.deepcopy(x)` | O(n*m) | O(n*m) | Deep copy, n = total objects, m = depth |
+| `copy.deepcopy(x)` | O(n) | O(n) | Deep copy, n = total objects; uses memo dict for cycles |
 | Shallow copy (list/dict) | O(n) | O(n) | Copies references only |
 | Deep copy (list/dict) | O(n*m) | O(n*m) | Recursively copies nested structures |
 

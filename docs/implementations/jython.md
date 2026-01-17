@@ -158,9 +158,9 @@ gc.collect()
 
 | Operation | Python Spec | Jython Impl | Notes |
 |---|---|---|---|
-| `list.append()` | O(1)* | O(1)* | Uses ArrayList |
-| `dict[key]` | O(1)* | O(1)* | Uses HashMap |
-| `set.add()` | O(1)* | O(1)* | Uses HashSet |
+| `list.append()` | O(1) amortized | O(1) amortized | Uses ArrayList |
+| `dict[key]` | O(1) avg, O(n) worst | O(1) avg, O(n) worst | Uses HashMap; hash collisions |
+| `set.add()` | O(1) avg, O(n) worst | O(1) avg, O(n) worst | Uses HashSet; hash collisions |
 
 All backed by Java collections with similar complexity.
 

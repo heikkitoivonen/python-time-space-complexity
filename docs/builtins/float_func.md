@@ -6,10 +6,10 @@ The `float()` function converts objects to floating-point numbers.
 
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
-| Convert int | O(1) | O(1) | Direct conversion |
+| Convert int | O(1) | O(1) | Direct conversion for small ints; O(n) for arbitrary precision |
 | Convert string | O(n) | O(1) | n = string length |
 | Convert bool | O(1) | O(1) | True→1.0, False→0.0 |
-| Special values | O(1) | O(1) | inf, -inf, nan |
+| Special values | O(n) | O(1) | Parses "inf", "-inf", "nan" strings |
 
 ## Basic Usage
 

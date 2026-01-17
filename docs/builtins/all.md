@@ -30,11 +30,11 @@ result = all([])  # True - all zero items are truthy
 ### With Conditions
 
 ```python
-# O(n*k) where k = predicate time
+# O(n) where each predicate is O(1)
 numbers = [1, 2, 3, 4, 5]
 result = all(x > 0 for x in numbers)  # True
 
-# Early exit
+# Early exit - O(k) where k = position of first failure
 result = all(x > 2 for x in numbers)  # False - stops at 1
 ```
 

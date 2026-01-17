@@ -8,7 +8,7 @@ The `frozenset` type is an immutable set that can be hashed and used as a dictio
 |-----------|------|-------|
 | `frozenset(iterable)` | O(n) | Create from iterable |
 | `len()` | O(1) | Direct count |
-| `in` (membership) | O(1)* | Hash lookup |
+| `in` (membership) | O(1) avg, O(n) worst | Hash lookup; worst case with hash collisions |
 | `union(\|)` | O(n+m) | Combine sets |
 | `intersection(&)` | O(min(n,m)) | Common elements |
 | `difference(-)` | O(n) | Elements in first |
@@ -17,7 +17,7 @@ The `frozenset` type is an immutable set that can be hashed and used as a dictio
 | `issuperset()` | O(m) | Check containment |
 | `isdisjoint()` | O(min(n,m)) | Check overlap |
 | `copy()` | O(1) | Shallow copy |
-| `hash()` | O(1) | Hash value |
+| `hash()` | O(n) first call, O(1) cached | Hash value computed once, then cached |
 | `frozenset(set)` | O(n) | Convert from set |
 
 ## Space Complexity

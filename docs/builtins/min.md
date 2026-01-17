@@ -8,7 +8,8 @@ The `min()` function returns the smallest item in an iterable or among multiple 
 |------|------|-------|-------|
 | Single iterable | O(n) | O(1) | Must compare all items |
 | Multiple arguments | O(n) | O(1) | n = number of arguments |
-| With key function | O(n*k) | O(1) | k = key function time |
+| With key function | O(n*k) | O(k) | k = key function time; stores key values for comparison |
+| Empty iterable | O(1) | O(1) | Raises ValueError unless default provided |
 
 ## Basic Usage
 

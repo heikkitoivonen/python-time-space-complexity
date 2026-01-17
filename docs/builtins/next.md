@@ -9,7 +9,7 @@ The `next()` function retrieves the next item from an iterator by calling its `_
 | `next(iterator)` | O(1)* | O(1) | Get next item from iterator |
 | `next(iterator, default)` | O(1)* | O(1) | Get next or return default |
 
-*Depends on iterator implementation; typically O(1) for built-in types
+*O(1) for list/tuple/range iterators; filter/map iterators may skip items (O(k) where k items filtered)
 
 ## Basic Usage
 

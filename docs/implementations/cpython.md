@@ -95,7 +95,7 @@ gc.collect()  # O(n) where n = tracked objects
 
 | Operation | CPython Notes |
 |-----------|---|
-| `append()` | Amortized O(1) with growth factor 1.125x |
+| `append()` | O(1) amortized with growth factor ~1.125x |
 | `insert(0)` | O(n) - no special optimization |
 | `pop()` | O(1) |
 | `pop(0)` | O(n) |
@@ -105,7 +105,7 @@ gc.collect()  # O(n) where n = tracked objects
 
 | Operation | CPython Notes |
 |-----------|---|
-| `d[key]` | O(1) average, O(n) worst case |
+| `d[key]` | O(1) avg, O(n) worst (hash collisions) |
 | Hash randomization | Prevents intentional DoS attacks |
 | `del` | O(1) leaves tombstones in hash table |
 

@@ -7,10 +7,10 @@ The `shelve` module provides persistent dictionary storage using the DBM databas
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `shelve.open()` | O(1) | O(1) | Open/create database |
-| `shelf[key] = value` | O(log n) | O(k) | Store pickled value, k = size |
-| `shelf[key]` | O(log n) | O(k) | Retrieve and unpickle |
-| `del shelf[key]` | O(log n) | O(1) | Delete key |
-| `key in shelf` | O(log n) | O(1) | Key lookup |
+| `shelf[key] = value` | O(1) avg | O(k) | Store pickled value, k = size; hash-based |
+| `shelf[key]` | O(1) avg | O(k) | Retrieve and unpickle; hash-based |
+| `del shelf[key]` | O(1) avg | O(1) | Delete key; hash-based |
+| `key in shelf` | O(1) avg | O(1) | Key lookup; hash-based |
 | `len(shelf)` | O(n) | O(1) | Scan all keys |
 | `shelf.keys()` | O(n) | O(n) | Get all keys |
 | `shelf.close()` | O(n) | O(1) | Flush and close |
@@ -25,7 +25,7 @@ import shelve
 # Open or create database - O(1)
 shelf = shelve.open('mydata.db')
 
-# Store objects - O(log n) each
+# Store objects - O(1) avg each (hash-based DBM)
 shelf['name'] = 'Alice'
 shelf['age'] = 30
 shelf['scores'] = [95, 87, 92]
@@ -43,16 +43,16 @@ import shelve
 # Open existing database - O(1)
 shelf = shelve.open('mydata.db')
 
-# Retrieve objects - O(log n) each
+# Retrieve objects - O(1) avg each (hash-based DBM)
 name = shelf['name']        # 'Alice'
 age = shelf['age']          # 30
 scores = shelf['scores']    # [95, 87, 92]
 
-# Check existence - O(log n)
+# Check existence - O(1) avg
 if 'name' in shelf:
     print(f"Hello {shelf['name']}")
 
-# Get with default - O(log n)
+# Get with default - O(1) avg
 email = shelf.get('email', 'no-email')
 
 shelf.close()
@@ -68,10 +68,10 @@ import shelve
 # Use with statement for automatic close - O(1) open/close
 with shelve.open('mydata.db') as shelf:
     
-    # Store data - O(log n)
+    # Store data - O(1) avg
     shelf['user'] = {'name': 'Bob', 'age': 25}
     
-    # Retrieve data - O(log n)
+    # Retrieve data - O(1) avg
     user = shelf['user']
     print(user)
 
@@ -87,7 +87,7 @@ import shelve
 
 with shelve.open('mydata.db') as shelf:
     
-    # Store multiple items - O(log n) each
+    # Store multiple items - O(1) avg each
     shelf['user1'] = {'name': 'Alice'}
     shelf['user2'] = {'name': 'Bob'}
     shelf['user3'] = {'name': 'Charlie'}
@@ -136,10 +136,10 @@ import shelve
 
 with shelve.open('mydata.db') as shelf:
     
-    # Store initial data - O(log n)
+    # Store initial data - O(1) avg
     shelf['counter'] = 0
     
-    # Modify in-place - need to reassign - O(log n)
+    # Modify in-place - need to reassign - O(1) avg
     counter = shelf['counter']
     counter += 1
     shelf['counter'] = counter  # Reassign required
@@ -149,7 +149,7 @@ with shelve.open('mydata.db') as shelf:
     shelf['scores'].append(4)  # Changes don't persist!
     shelf['scores'] = [1, 2, 3, 4]  # Must reassign
     
-    # Modify dictionary - need reassign - O(log n)
+    # Modify dictionary - need reassign - O(1) avg
     config = shelf['config']
     config['debug'] = False
     shelf['config'] = config  # Must reassign
@@ -167,11 +167,11 @@ with shelve.open('mydata.db') as shelf:
     shelf['temp2'] = 'data2'
     shelf['keep'] = 'data3'
     
-    # Delete key - O(log n)
+    # Delete key - O(1) avg
     del shelf['temp1']
     del shelf['temp2']
     
-    # Delete with check - O(log n)
+    # Delete with check - O(1) avg
     if 'temp1' in shelf:
         del shelf['temp1']
     
@@ -275,10 +275,10 @@ with shelve.open('people.db') as shelf:
 ## Performance Considerations
 
 ### Time Complexity
-- **Storage operations**: O(log n) for hash table + disk I/O
-- **Retrieval**: O(log n) + unpickling time
+- **Storage operations**: O(1) avg for hash-based DBM + disk I/O
+- **Retrieval**: O(1) avg + unpickling time
 - **Iteration**: O(n) to scan all keys
-- **Deletion**: O(log n) for hash table
+- **Deletion**: O(1) avg for hash-based DBM
 
 ### Space Complexity
 - **Database**: O(n) for n stored objects
@@ -291,7 +291,7 @@ import shelve
 
 shelf = shelve.open('data.db')
 
-# Store items - buffered - O(log n)
+# Store items - buffered - O(1) avg per item
 for i in range(1000):
     shelf[f'key{i}'] = f'value{i}'
 
@@ -322,7 +322,7 @@ class Cache:
     
     # Store with optional TTL
     def set(self, key, value, ttl=None):
-        """Cache value - O(log n)"""
+        """Cache value - O(1) avg"""
         entry = {
             'value': value,
             'time': time.time(),
@@ -333,7 +333,7 @@ class Cache:
     
     # Retrieve with expiration check
     def get(self, key, default=None):
-        """Get cached value - O(log n)"""
+        """Get cached value - O(1) avg"""
         if key not in self.shelf:
             return default
         
@@ -364,7 +364,7 @@ class SessionStore:
     def __init__(self, path='sessions.db'):
         self.shelf = shelve.open(path)
     
-    # Create session - O(log n)
+    # Create session - O(1) avg
     def create_session(self, session_id, data):
         self.shelf[session_id] = {
             'data': data,
@@ -372,13 +372,13 @@ class SessionStore:
         }
         self.shelf.sync()
     
-    # Get session - O(log n)
+    # Get session - O(1) avg
     def get_session(self, session_id):
         if session_id in self.shelf:
             return self.shelf[session_id]['data']
         return None
     
-    # Update session - O(log n)
+    # Update session - O(1) avg
     def update_session(self, session_id, data):
         if session_id in self.shelf:
             session = self.shelf[session_id]
@@ -386,7 +386,7 @@ class SessionStore:
             self.shelf[session_id] = session
             self.shelf.sync()
     
-    # Delete session - O(log n)
+    # Delete session - O(1) avg
     def delete_session(self, session_id):
         if session_id in self.shelf:
             del self.shelf[session_id]
@@ -409,12 +409,12 @@ class ConfigStore:
     def __init__(self, path='config.db'):
         self.shelf = shelve.open(path)
     
-    # Save config - O(log n)
+    # Save config - O(1) avg
     def save(self, key, value):
         self.shelf[key] = value
         self.shelf.sync()
     
-    # Load config - O(log n)
+    # Load config - O(1) avg
     def load(self, key, default=None):
         return self.shelf.get(key, default)
     
@@ -422,7 +422,7 @@ class ConfigStore:
     def load_all(self):
         return dict(self.shelf)
     
-    # Remove - O(log n)
+    # Remove - O(1) avg
     def remove(self, key):
         if key in self.shelf:
             del self.shelf[key]

@@ -6,7 +6,7 @@ The `print()` function outputs text to standard output.
 
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
-| Print single argument | O(n) | O(n) | n = string length |
+| Print single argument | O(n)* | O(n) | n = string length; * I/O dominates |
 | Print multiple arguments | O(n + m) | O(n + m) | n = total string length |
 | Print with formatting | O(n) | O(n) | String conversion cost |
 | Print to file | O(n) | O(n) | Same as stdout |

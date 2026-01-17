@@ -7,20 +7,22 @@ The `dict` type is a mutable mapping that stores key-value pairs. It's implement
 | Operation | Time | Notes |
 |-----------|------|-------|
 | `len()` | O(1) | Direct count |
-| `access[key]` | O(1)* | Hash lookup |
-| `set[key] = value` | O(1)* | Hash insertion |
-| `del[key]` | O(1)* | Hash deletion |
-| `key in dict` | O(1)* | Hash lookup |
-| `get(key)` | O(1)* | Hash lookup |
-| `pop(key)` | O(1)* | Hash deletion |
+| `access[key]` | O(1) avg, O(n) worst | Hash lookup; worst case with collisions |
+| `set[key] = value` | O(1) amortized | Hash insertion; may trigger resize |
+| `del[key]` | O(1) avg, O(n) worst | Hash deletion |
+| `key in dict` | O(1) avg, O(n) worst | Hash lookup |
+| `get(key)` | O(1) avg, O(n) worst | Hash lookup |
+| `pop(key)` | O(1) avg, O(n) worst | Hash deletion |
 | `clear()` | O(n) | Must deallocate all entries |
 | `keys()` | O(1) | View object (Python 3) |
 | `values()` | O(1) | View object (Python 3) |
 | `items()` | O(1) | View object (Python 3) |
 | `copy()` | O(n) | Shallow copy of all pairs |
-| `update(other)` | O(k) | k = len(other) |
-| `setdefault(key, val)` | O(1)* | Hash lookup + insert |
+| `update(other)` | O(k) | k = len(other), amortized |
+| `setdefault(key, val)` | O(1) avg | Hash lookup + insert |
 | `fromkeys(keys)` | O(k) | k = len(keys) |
+
+*Note: O(1) average case assumes good hash distribution. Worst case O(n) occurs with pathological hash collisions, which is rare with Python's randomized hashing.*
 
 ## Space Complexity
 

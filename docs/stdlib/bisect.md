@@ -9,8 +9,8 @@ The `bisect` module provides binary search operations for sorted lists.
 | `bisect_left(a, x)` | O(log n) | Find leftmost position |
 | `bisect_right(a, x)` | O(log n) | Find rightmost position |
 | `bisect(a, x)` | O(log n) | Alias for bisect_right |
-| `insort_left(a, x)` | O(n) | Insert at leftmost position |
-| `insort_right(a, x)` | O(n) | Insert at rightmost position |
+| `insort_left(a, x)` | O(n) | O(log n) search + O(n) insert |
+| `insort_right(a, x)` | O(n) | O(log n) search + O(n) insert |
 | `insort(a, x)` | O(n) | Alias for insort_right |
 
 ## Space Complexity

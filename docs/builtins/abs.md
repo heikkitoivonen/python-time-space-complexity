@@ -6,10 +6,10 @@ The `abs()` function returns the absolute value of a number.
 
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
-| Integer | O(1) | O(1) | Simple arithmetic |
-| Float | O(1) | O(1) | Simple arithmetic |
-| Complex | O(1) | O(1) | Returns magnitude |
-| Custom class | O(k) | O(1) | k = __abs__ time |
+| Integer | O(1) | O(1) | Simple sign check |
+| Float | O(1) | O(1) | IEEE 754 sign bit operation |
+| Complex | O(1) | O(1) | Returns magnitude: sqrt(real² + imag²) |
+| Custom class | O(k) | O(m) | Depends on `__abs__()` implementation |
 
 ## Basic Usage
 

@@ -8,8 +8,8 @@ The `functools` module provides higher-order functions and operations on callabl
 
 | Function | Time | Space | Notes |
 |----------|------|-------|-------|
-| `lru_cache(maxsize)` | O(1) hit, O(n) miss | O(min(n, maxsize)) | Decorator cache |
-| `cache()` | O(1) hit, O(n) miss | O(n) unbounded | Unlimited cache |
+| `lru_cache(maxsize)` | O(1) hit, O(f(n)) miss | O(min(n, maxsize)) | Hit is O(1), miss runs wrapped function f(n) |
+| `cache()` | O(1) hit, O(f(n)) miss | O(n) unbounded | Hit is O(1), miss runs wrapped function f(n) |
 | `cached_property` | O(1) after first call | O(1) per property | Descriptor cache |
 
 ### Function Composition

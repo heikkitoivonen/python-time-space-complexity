@@ -6,9 +6,9 @@ The `isinstance()` function checks whether an object is an instance of a class o
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `isinstance(obj, type)` | O(1) | O(1) | Single class check |
-| `isinstance(obj, (type1, type2, ...))` | O(k) | O(1) | k = number of types in tuple |
-| `isinstance(obj, abstract_base)` | O(1) to O(n) | O(1) | Depends on ABC implementation |
+| `isinstance(obj, type)` | O(d) | O(1) | d = MRO depth; effectively O(1) for typical hierarchies |
+| `isinstance(obj, (type1, type2, ...))` | O(k*d) | O(1) | k = number of types; short-circuits on first match |
+| `isinstance(obj, abstract_base)` | O(d) to O(n) | O(1) | Depends on ABC __subclasshook__ implementation |
 
 ## Basic Type Checking
 

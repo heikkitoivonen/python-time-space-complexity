@@ -6,9 +6,11 @@ The `bin()` function returns the binary representation of an integer.
 
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
-| Convert integer | O(log n) | O(log n) | n = integer value |
+| Convert integer | O(log n) | O(log n) | n = integer value; log n = number of bits |
 | Negative integer | O(log n) | O(log n) | Adds '-0b' prefix |
-| Large integer | O(log n) | O(log n) | Works with arbitrary precision |
+| Large integer | O(b) | O(b) | b = number of bits = log₂(n) |
+
+*Note: The complexity is O(log n) where n is the numeric value, which equals the number of bits needed to represent the number.*
 
 ## Basic Usage
 

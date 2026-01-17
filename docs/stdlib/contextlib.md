@@ -10,7 +10,7 @@ The `contextlib` module provides utilities for working with context managers and
 | Context manager exit | O(1) | O(1) | `__exit__()` call |
 | `@contextmanager` | O(1) | O(1) | Decorator application |
 | `ExitStack` add | O(1) | O(1) | Register callback |
-| `ExitStack` exit all | O(n) | O(1) | n = registered callbacks |
+| `ExitStack` exit all | O(n) | O(1) | LIFO order; n = registered callbacks |
 | `contextmanager` yield | O(1) | O(1) | Generator yield point |
 
 ## Context Managers Basics

@@ -6,8 +6,9 @@ The `id()` function returns a unique identifier for an object. In CPython, this 
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `id(object)` | O(1) | O(1) | Get object identity |
-| ID comparison | O(1) | O(1) | Compare two IDs |
+| `id(object)` | O(1) | O(1) | Get object identity (memory address in CPython) |
+| ID comparison | O(1) | O(1) | Compare two IDs (integer comparison) |
+| `is` operator | O(1) | O(1) | Equivalent to `id(a) == id(b)` but faster |
 
 ## Basic Usage
 

@@ -8,7 +8,7 @@ The `sum()` function returns the sum of all items in an iterable, optionally add
 |------|------|-------|-------|
 | Summing integers | O(n) | O(1) | Single pass, accumulation |
 | Summing floats | O(n) | O(1) | Same as integers |
-| Summing strings (concatenation) | O(n²) | O(n) | Each concatenation copies |
+| Summing strings (concatenation) | O(n²) | O(n) | Avoid! Each concatenation copies; use ''.join() |
 | With custom objects | O(n*k) | O(1) | k = __add__ time |
 
 ## Basic Usage
@@ -103,10 +103,10 @@ text = ""
 for word in ["a", "b", "c", "d", "e"]:
     text = text + word  # Creates new string each time
 
-# Better: O(n) with sum + start=""
-text = sum(["a", "b", "c", "d", "e"], "")
+# ❌ Still O(n²) - sum with strings is also quadratic!
+# text = sum(["a", "b", "c", "d", "e"], "")  # Don't use
 
-# Best: O(n) with join
+# ✅ Best: O(n) with join
 text = "".join(["a", "b", "c", "d", "e"])
 ```
 

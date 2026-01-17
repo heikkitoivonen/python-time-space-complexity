@@ -10,8 +10,8 @@ The `configparser` module provides facilities for reading and writing configurat
 | `read(file)` | O(n) | O(n) | n = file size |
 | `read_string(string)` | O(n) | O(n) | Parse string |
 | `write(file)` | O(n) | O(n) | n = config size |
-| `get(section, option)` | O(1) | O(1) | Lookup value |
-| `getint/getfloat/getboolean` | O(1) | O(1) | Get with conversion |
+| `get(section, option)` | O(1) | O(1) | Dict-based lookup; O(n) with interpolation |
+| `getint/getfloat/getboolean` | O(1) | O(1) | O(1) lookup + O(1) conversion |
 | `sections()` | O(n) | O(n) | n = section count |
 | `options(section)` | O(n) | O(n) | n = option count |
 

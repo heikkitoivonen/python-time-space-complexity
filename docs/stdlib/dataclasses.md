@@ -12,8 +12,8 @@ The `dataclasses` module provides a decorator to automatically generate special 
 | `__repr__()` | O(n) | O(n) | n = number of fields |
 | `__eq__()` | O(n) | O(1) | n = number of fields |
 | `replace()` | O(n) | O(n) | Creates new instance |
-| `asdict()` | O(n) | O(n) | n = fields + nested depth |
-| `astuple()` | O(n) | O(n) | n = fields + nested depth |
+| `asdict()` | O(n*m) | O(n*m) | n = fields, m = nesting depth; recursive |
+| `astuple()` | O(n*m) | O(n*m) | n = fields, m = nesting depth; recursive |
 
 ## Basic Dataclass
 

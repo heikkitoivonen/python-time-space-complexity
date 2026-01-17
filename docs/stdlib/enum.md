@@ -8,7 +8,7 @@ The `enum` module provides a way to define a set of symbolic names (members) bou
 |-----------|------|-------|-------|
 | `Enum()` class definition | O(n) | O(n) | n = number of members |
 | Access member by name | O(1) | O(1) | Direct attribute lookup |
-| Access member by value | O(n) | O(1) | Iteration to find value |
+| Access member by value | O(n) | O(1) | Linear search through members |
 | Iteration `for e in EnumClass` | O(n) | O(1) | n = number of members |
 | `len(EnumClass)` | O(1) | O(1) | Cached member count |
 | `name` / `value` access | O(1) | O(1) | Direct attribute |

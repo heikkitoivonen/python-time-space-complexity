@@ -6,9 +6,9 @@ The `hasattr()` function checks whether an object has a named attribute. It's th
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| Attribute lookup | O(d) | O(1) | d = MRO depth |
-| Catch AttributeError | O(1) | O(1) | Exception handling |
-| Total operation | O(d) | O(1) | d = inheritance depth |
+| Attribute lookup | O(d) | O(1) | d = MRO depth; typically small (<10) |
+| Catch AttributeError | O(1) | O(1) | Exception handling overhead |
+| Total operation | O(d) | O(1) | d = inheritance depth; effectively O(1) for flat hierarchies |
 
 ## Basic Usage
 

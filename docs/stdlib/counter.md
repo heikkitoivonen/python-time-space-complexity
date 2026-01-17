@@ -10,7 +10,7 @@ The `Counter` class from `collections` provides a convenient way to count occurr
 | `update()` | O(n) | O(n) | Add counts |
 | `most_common(k)` | O(n log k) | O(k) | k-largest sorted |
 | `subtract()` | O(n) | O(1) | Subtract counts |
-| Lookup | O(1) | O(1) | Get count |
+| Lookup | O(1) avg | O(1) | O(n) worst case due to hash collisions |
 
 ## Basic Usage
 

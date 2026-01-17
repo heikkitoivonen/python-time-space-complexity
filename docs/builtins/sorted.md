@@ -7,7 +7,7 @@ The `sorted()` function returns a new sorted list from the items in an iterable.
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
 | Basic sorting | O(n log n) | O(n) | Timsort algorithm |
-| With key function | O(n log n*k) | O(n) | k = key function time |
+| With key function | O(n log n + n*k) | O(n) | k = key function time; key computed once per element |
 | Reverse sorting | O(n log n) | O(n) | No extra overhead |
 | Already sorted | O(n) | O(n) | Best case for Timsort |
 
@@ -51,7 +51,8 @@ result = sorted(words, reverse=True)
 ### Custom Comparisons
 
 ```python
-# O(n log n * k) where k = key function time
+# O(n log n + n*k) where k = key function time
+# Key is computed once per element, then comparisons use cached keys
 words = ["apple", "pie", "cat", "banana"]
 result = sorted(words, key=len)  # Sort by length
 # ["pie", "cat", "apple", "banana"]

@@ -6,7 +6,8 @@ The `repr()` function returns a printable representation of an object.
 
 | Type | Time | Space | Notes |
 |------|------|-------|-------|
-| Primitive (int, float, str) | O(1) | O(1) | Direct conversion |
+| Primitive (int, float) | O(1) | O(1) | Direct conversion |
+| String | O(n) | O(n) | n = string length; escapes special chars |
 | Container (list, dict, set) | O(n) | O(n) | n = number of elements |
 | Nested container | O(n) | O(n) | Recursively converts all items |
 | String with escapes | O(n) | O(n) | n = string length |

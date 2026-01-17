@@ -8,7 +8,7 @@ The `list` type is a mutable, ordered sequence. It's implemented as a dynamic ar
 |-----------|------|-------|
 | `len()` | O(1) | Direct lookup |
 | `access[i]` | O(1) | Direct indexing |
-| `append(x)` | O(1)* | Amortized, may resize |
+| `append(x)` | O(1) amortized | May resize; worst case O(n) when reallocation needed |
 | `insert(0, x)` | O(n) | Must shift all elements |
 | `insert(i, x)` | O(n-i) | Shift elements from index i |
 | `remove(x)` | O(n) | Must search and shift |
@@ -30,8 +30,8 @@ The `list` type is a mutable, ordered sequence. It's implemented as a dynamic ar
 
 | Operation | Space |
 |-----------|-------|
-| `append()` | O(1) amortized |
-| `extend()` | O(k) for k items |
+| `append()` | O(1) amortized; O(n) worst case on resize |
+| `extend()` | O(k); may trigger O(n) resize |
 | `sort()` | O(n) auxiliary |
 | `copy()` | O(n) |
 | `slice` | O(k) for new list |

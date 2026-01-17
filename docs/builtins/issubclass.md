@@ -6,9 +6,9 @@ The `issubclass()` function checks whether a class is a subclass of another clas
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `issubclass(class, base)` | O(1) | O(1) | Single base class check |
-| `issubclass(class, (base1, base2, ...))` | O(k) | O(1) | k = number of base classes |
-| `issubclass(class, abc)` | O(1) | O(1) | Abstract base class check |
+| `issubclass(class, base)` | O(d) | O(1) | d = MRO depth; effectively O(1) for typical hierarchies |
+| `issubclass(class, (base1, base2, ...))` | O(k*d) | O(1) | k = number of bases; short-circuits on first match |
+| `issubclass(class, abc)` | O(d) | O(1) | May call __subclasshook__ for virtual subclass check |
 
 ## Basic Class Checking
 

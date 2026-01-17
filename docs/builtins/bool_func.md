@@ -7,9 +7,11 @@ The `bool()` function converts an object to a boolean value using truthiness eva
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
 | Convert primitive (int, str, etc) | O(1) | O(1) | Direct truth value |
-| Convert container | O(1) | O(1) | Checks if non-empty |
-| Call `__bool__()` | O(m) | O(m) | m = method complexity |
-| Call `__len__()` | O(n) | O(1) | n = container size |
+| Convert container | O(1) | O(1) | Checks if non-empty via `__len__()` |
+| Call `__bool__()` | O(k) | O(1) | k = method complexity (usually O(1)) |
+| Call `__len__()` | O(1) | O(1) | Built-in containers store length |
+
+*Note: For built-in types (list, dict, set, etc.), `__len__()` is O(1) because the length is cached. Custom containers with expensive `__len__()` implementations would be slower.*
 
 ## Basic Usage
 

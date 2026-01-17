@@ -14,7 +14,7 @@ The `tuple` type is an immutable, ordered sequence. Being immutable allows vario
 | `copy()` | O(1) | Just increments reference count |
 | `x + y` (concatenation) | O(m+n) | m, n are lengths |
 | `t * n` (repetition) | O(n*len(t)) | Creates new tuple |
-| `hash()` | O(n) | First call, cached after |
+| `hash()` | O(n) first, O(1) after | First call computes, then cached |
 | `reversed()` | O(1) | Iterator, not materialized |
 | `tuple()` constructor | O(n) | n = iterable length |
 | `slice [::2]` | O(k) | k = slice length |

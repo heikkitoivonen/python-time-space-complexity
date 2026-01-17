@@ -8,9 +8,9 @@ The `str` type is an immutable sequence of Unicode characters. Python strings ha
 |-----------|------|-------|
 | `len()` | O(1) | Direct lookup |
 | `access[i]` | O(1) | Direct indexing |
-| `in` (substring) | O(n*m) | Worst case, O(n) avg |
-| `count(sub)` | O(n*m) | n = string length |
-| `find(sub)` | O(n*m) | Worst case, typically better |
+| `in` (substring) | O(n*m) worst, O(n) avg | Uses fast skip algorithm in CPython |
+| `count(sub)` | O(n*m) worst | n = string, m = substring; uses fast algorithm |
+| `find(sub)` | O(n*m) worst, O(n) avg | Uses two-way or similar fast algorithm |
 | `replace(old, new)` | O(n) | Single pass |
 | `split(sep)` | O(n) | Single pass |
 | `join()` | O(n) | n = total chars |
@@ -80,8 +80,8 @@ result = "".join(str(i) for i in range(10000))
 
 | Method | Complexity | Notes |
 |--------|-----------|-------|
-| `str.find()` | O(n*m) worst | Often faster with optimizations |
-| `str.count()` | O(n*m) worst | Non-overlapping searches |
+| `str.find()` | O(n*m) worst, O(n) avg | CPython uses two-way algorithm |
+| `str.count()` | O(n*m) worst, O(n) avg | Non-overlapping searches |
 | `str.replace()` | O(n) | Single pass with copy |
 | `str.split()` | O(n) | Single pass |
 | `str.startswith()` | O(m) | m = prefix length |

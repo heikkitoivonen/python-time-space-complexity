@@ -8,7 +8,7 @@ The `hashlib` module provides cryptographic hash functions including MD5, SHA1, 
 |-----------|------|-------|-------|
 | `hashlib.sha256(data)` | O(n) | O(1) | n = data size |
 | `hash.update(data)` | O(n) | O(1) | n = new data size |
-| `hash.digest()` | O(1) | O(k) | k = digest size |
+| `hash.digest()` | O(1) | O(k) | k = digest size (fixed per algorithm) |
 | `hash.hexdigest()` | O(k) | O(k) | k = digest size |
 
 ## Creating Hash Objects

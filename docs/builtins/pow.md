@@ -8,7 +8,7 @@ The `pow()` function returns the power of a number with optional modulo operatio
 |------|------|-------|-------|
 | `pow(x, y)` small exponent | O(log y) | O(1) | Fast exponentiation |
 | `pow(x, y)` large exponent | O(log y) | O(1) | Still logarithmic |
-| `pow(x, y, z)` modular | O(log y * log z) | O(1) | Optimized for cryptography |
+| `pow(x, y, z)` modular | O(log y) | O(1) | Modular exponentiation; keeps intermediate values small |
 | Float exponentiation | O(1) | O(1) | Native operation |
 
 ## Basic Usage
@@ -105,7 +105,7 @@ pow(2, 32)     # 4294967296 (2^32)
 ### Cryptographic Operations
 
 ```python
-# O(log y * log z) - RSA-like operations
+# O(log y) - RSA-like operations, efficient modular exponentiation
 # Compute c = m^e mod n efficiently
 message = 42
 exponent = 65537
@@ -121,7 +121,7 @@ encrypted = (message ** exponent) % modulus  # Slower
 ### Modular Arithmetic
 
 ```python
-# O(log y * log z)
+# O(log y) - modular exponentiation
 a = pow(3, 100, 1000)  # 3^100 mod 1000
 b = pow(7, 200, 1000)  # 7^200 mod 1000
 
@@ -216,10 +216,10 @@ except ZeroDivisionError:
 # pow() is more efficient for modular exponentiation
 x, y, z = 2, 100, 1000
 
-# O(log y * log z) - fast
+# O(log y) - fast, keeps intermediate values small via modular reduction
 result1 = pow(x, y, z)
 
-# O(log y) exponentiation + O(log z) modulo - slower
+# O(log y) exponentiation but creates huge intermediate value - slower
 result2 = (x ** y) % z
 
 # O(y) - very slow

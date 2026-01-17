@@ -8,11 +8,11 @@ The `heapq` module provides a min-heap implementation for priority queue operati
 |-----------|------|-------|
 | `heapify(x)` | O(n) | Transform list into heap |
 | `heappush(heap, item)` | O(log n) | Add item to heap |
-| `heappop(heap)` | O(log n) | Remove min item |
+| `heappop(heap)` | O(log n) | Remove and return min item |
 | `heappushpop(heap, item)` | O(log n) | Push then pop |
 | `heapreplace(heap, item)` | O(log n) | Pop then push |
-| `nlargest(n, iterable)` | O(n log k) | k = iterable length |
-| `nsmallest(n, iterable)` | O(n log k) | k = iterable length |
+| `nlargest(n, iterable)` | O(k log n) | k = iterable length, maintains heap of n items |
+| `nsmallest(n, iterable)` | O(k log n) | k = iterable length, maintains heap of n items |
 | `merge(*iterables)` | O(n log k) | n = total items, k = count of iterables |
 
 ## Space Complexity

@@ -6,11 +6,11 @@ The `memoryview()` function creates memory views of bytes-like objects without c
 
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
-| Create memoryview | O(1) | O(1) | Just view, no copy |
+| Create memoryview | O(1) | O(1) | Just view, no copy of underlying data |
 | Index access | O(1) | O(1) | Direct memory access |
-| Slicing | O(1) | O(1) | Slice is just view |
-| Copy data | O(n) | O(n) | n = view size |
-| Modification | O(1) | O(1) | Only if underlying is mutable |
+| Slicing | O(1) | O(1) | Creates new view object, no data copy |
+| `bytes(mv)` conversion | O(n) | O(n) | n = view size; copies data |
+| Modification | O(1) | O(1) | Only if underlying buffer is mutable (e.g., bytearray) |
 
 ## Basic Usage
 

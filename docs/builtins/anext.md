@@ -6,8 +6,11 @@ The `anext()` function returns the next item from an asynchronous iterator.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `anext()` | O(n) | O(n) | n = time to compute next item |
-| With default | O(n) | O(n) | Returns default if exhausted |
+| `anext()` call | O(1) | O(1) | Iterator protocol call |
+| Awaiting result | O(k) | O(1) | k = async generator's computation time |
+| With default | O(k) | O(1) | Returns default if exhausted |
+
+<!-- Note: The complexity depends on what the async generator does internally, not anext() itself -->
 
 ## Basic Usage
 
@@ -119,7 +122,7 @@ def sync_gen():
 sync_iter = iter(sync_gen())
 print(next(sync_iter))  # Synchronous
 
-# anext() - asynchronous - O(n)
+# anext() - asynchronous - O(1) call, awaiting depends on generator
 async def async_gen():
     yield 1
     yield 2

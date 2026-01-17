@@ -8,8 +8,8 @@ The `int()` function converts objects to integers or creates integers from strin
 |------|------|-------|-------|
 | Convert int | O(1) | O(1) | Already integer |
 | Convert float | O(1) | O(1) | Truncate decimal |
-| Convert string (base 10) | O(n) | O(1) | n = string length |
-| Convert string (other base) | O(n) | O(1) | Parse digits in base |
+| Convert string (base 10) | O(n²) | O(n) | n = string length; quadratic for very large numbers |
+| Convert string (other base) | O(n²) | O(n) | Parse digits; quadratic due to arbitrary precision |
 | Convert bool | O(1) | O(1) | True→1, False→0 |
 
 ## Basic Usage
@@ -49,10 +49,13 @@ int("1A2B", 16)   # 6699 (hex)
 
 ### String Parsing
 
+!!! note "Complexity for Large Numbers"
+    For typical small numbers (< 1000 digits), parsing is effectively O(n). For very large numbers (thousands of digits), the complexity becomes O(n²) due to arbitrary precision arithmetic during accumulation.
+
 ```python
-# O(n) - linear in string length
-short = int("42")      # O(2)
-long = int("1" * 1000) # O(1000)
+# O(n) for typical numbers, O(n²) for very large numbers
+short = int("42")      # O(2) - effectively linear
+long = int("1" * 1000) # O(1000²) for very large - quadratic
 
 # Each character must be parsed
 x = 0

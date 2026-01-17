@@ -9,7 +9,7 @@ The `gzip` module provides GZIP compression and decompression functionality.
 | `gzip.open(filename)` | O(1) | O(1) | Open file handle |
 | `GzipFile.read()` | O(m) | O(m) | Decompress all, m = uncompressed size |
 | `GzipFile.write(data)` | O(n) | O(k) | Compress and write, n = input size, k = buffer |
-| `compress(data)` | O(n log n) | O(n) | Compress bytes |
+| `compress(data)` | O(n) | O(n) | Compress bytes (DEFLATE is linear in practice) |
 | `decompress(data)` | O(m) | O(m) | Decompress bytes |
 
 ## Opening Files
@@ -82,20 +82,20 @@ with gzip.open('file.gz', 'rb') as f:
 
 ## Writing (Compression)
 
-### Time Complexity: O(n log n)
+### Time Complexity: O(n)
 
-Where n = input size. Compression has logarithmic factor due to compression algorithm.
+Where n = input size. DEFLATE compression is linear in practice.
 
 ```python
 import gzip
 
-# Write compressed: O(n log n)
+# Write compressed: O(n)
 with gzip.open('output.gz', 'wb') as f:
-    f.write(data)  # O(n log n) with compression
+    f.write(data)  # O(n) with compression
     
-# Multiple writes: O(sum * log(sum))
+# Multiple writes: O(n) total
 with gzip.open('output.gz', 'wb') as f:
-    for chunk in chunks:  # O(n log n) total
+    for chunk in chunks:  # O(n) total
         f.write(chunk)
 ```
 
@@ -119,9 +119,9 @@ with gzip.open('output.gz', 'wb') as f:
 ```python
 import gzip
 
-# Compress entire data: O(n log n) time, O(n) space
+# Compress entire data: O(n) time, O(n) space
 data = b'Large data...' * 10000
-compressed = gzip.compress(data)  # O(n log n)
+compressed = gzip.compress(data)  # O(n)
 
 # Space: creates entire compressed result
 # O(n) space for output (compressed data smaller)
@@ -151,10 +151,10 @@ import gzip
 data = b'x' * 1000000
 compressed = gzip.compress(data, compresslevel=1)  # Fastest
 
-# Compression level 6 (default): O(n log n)
+# Compression level 6 (default): O(n)
 compressed = gzip.compress(data, compresslevel=6)  # Balanced
 
-# Compression level 9 (best): O(n log^2 n)
+# Compression level 9 (best): O(n) but with higher constant factor
 compressed = gzip.compress(data, compresslevel=9)  # Slowest, best ratio
 ```
 
@@ -167,10 +167,10 @@ import gzip
 fast = gzip.compress(data, compresslevel=1)  # O(n) time
 
 # Default balance
-default = gzip.compress(data)  # O(n log n) time
+default = gzip.compress(data)  # O(n) time
 
-# Best compression, slow
-best = gzip.compress(data, compresslevel=9)  # O(n log^2 n) time
+# Best compression, slower (higher constant factor)
+best = gzip.compress(data, compresslevel=9)  # O(n) time
 ```
 
 ## Streaming Decompression

@@ -6,13 +6,13 @@ The `int` type represents arbitrary precision integers. Python 3 has a single in
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `x + y` | O(n+m)* | O(n+m) | n, m = bit length |
-| `x - y` | O(n+m)* | O(n+m) | Subtraction |
-| `x * y` | O(n*m) to O(n²)* | O(n+m) | Karatsuba for large |
-| `x // y` | O(n²) to O(n*m)* | O(n) | Long division |
-| `x % y` | O(n²) to O(n*m)* | O(n) | Modulo |
-| `x ** y` | O(y*n²)* | O(n*y) | Binary exponentiation |
-| `divmod(x, y)` | O(n²)* | O(n) | Combined division |
+| `x + y` | O(n)* | O(n) | n = max bit length; O(1) for small ints |
+| `x - y` | O(n)* | O(n) | n = max bit length; O(1) for small ints |
+| `x * y` | O(n*m) to O(n^1.58)* | O(n+m) | Karatsuba for large numbers |
+| `x // y` | O(n*m)* | O(n) | Long division algorithm |
+| `x % y` | O(n*m)* | O(n) | Same as division |
+| `x ** y` | O(log y * n²)* | O(result digits) | Binary exponentiation |
+| `divmod(x, y)` | O(n*m)* | O(n) | Combined division |
 | `abs(x)` | O(1) | O(1) | Sign flip only |
 | `neg(x)` | O(1) | O(1) | Negate |
 | `-x` | O(1) | O(1) | Unary minus |

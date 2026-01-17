@@ -6,10 +6,12 @@ The `dir()` function returns a list of valid attributes for an object. It's esse
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| List attributes | O(n) | O(n) | n = number of attributes |
-| Filter inherited | O(n) | O(n) | Includes __mro__ traversal |
+| Collect attributes | O(n) | O(n) | n = number of attributes in MRO |
+| MRO traversal | O(d) | O(1) | d = inheritance depth |
 | Sort results | O(n log n) | O(n) | Results are sorted alphabetically |
-| Total operation | O(n log n) | O(n) | n = total accessible attributes |
+| Total operation | O(n log n) | O(n) | Dominated by sorting |
+
+*Note: dir() collects all attributes from the object's class hierarchy (MRO) and returns them sorted alphabetically.*
 
 ## Basic Usage
 

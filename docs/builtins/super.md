@@ -6,7 +6,7 @@ The `super()` function provides access to methods in a parent or sibling class i
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| Lookup in MRO | O(d) | O(1) | d = MRO depth |
+| Lookup in MRO | O(d) | O(1) | d = MRO depth; MRO is cached |
 | Bind method | O(1) | O(1) | Create bound method |
 | Call parent method | O(1) | O(1) | Method invocation |
 | MRO resolution | O(d) | O(d) | d = inheritance depth |

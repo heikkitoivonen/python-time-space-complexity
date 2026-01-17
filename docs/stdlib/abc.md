@@ -8,8 +8,8 @@ The `abc` module provides infrastructure for defining abstract base classes (ABC
 |-----------|------|-------|-------|
 | `@abstractmethod` decorator | O(1) | O(1) | Mark method abstract |
 | Class instantiation attempt | O(n) | O(n) | n = abstract methods |
-| `isinstance(obj, ABC)` | O(n) | O(1) | n = parent classes |
-| `issubclass(cls, ABC)` | O(n) | O(1) | n = parent classes |
+| `isinstance(obj, ABC)` | O(n) | O(1) | n = MRO length; may also check virtual subclasses |
+| `issubclass(cls, ABC)` | O(n) | O(1) | n = MRO length; may also check virtual subclasses |
 | Method resolution (MRO) | O(n) | O(n) | n = class hierarchy depth |
 | Register virtual subclass | O(1) | O(n) | n = registered classes |
 

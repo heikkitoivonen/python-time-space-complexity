@@ -6,9 +6,11 @@ The `divmod()` function returns the quotient and remainder of division as a tupl
 
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
-| Integer division | O(1) | O(1) | Single operation |
-| Float division | O(1) | O(1) | Single operation |
-| Large integers | O(n²) | O(1) | n = number of digits |
+| Integer division | O(1) | O(1) | Fixed-size integers |
+| Float division | O(1) | O(1) | IEEE 754 floats |
+| Large integers | O(n²) | O(n) | n = number of digits; arbitrary precision |
+
+*Note: For typical fixed-size integers that fit in machine words, divmod is O(1). The O(n²) complexity applies only to Python's arbitrary-precision integers with many digits.*
 
 ## Basic Usage
 

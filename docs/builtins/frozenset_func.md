@@ -7,10 +7,10 @@ The `frozenset()` function creates immutable sets from iterables.
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
 | Empty frozenset | O(1) | O(1) | frozenset() |
-| From iterable | O(n) | O(n) | n = iterable length |
-| From string | O(n) | O(n) | n = string length |
-| Duplicate removal | O(n) | O(n) | Automatic deduplication |
-| Shallow copy | O(n) | O(n) | n = frozenset size |
+| From iterable | O(n) avg | O(n) | n = iterable length; O(n²) worst case with hash collisions |
+| From string | O(n) avg | O(n) | n = string length; each char hashed |
+| Duplicate removal | O(n) avg | O(n) | Automatic deduplication via hashing |
+| Shallow copy | O(1) | O(1) | Returns same object (immutable) |
 
 ## Basic Usage
 

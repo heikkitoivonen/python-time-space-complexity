@@ -16,7 +16,7 @@ from collections import deque
 | `appendleft(x)` | O(1) |
 | `pop()` | O(1) |
 | `popleft()` | O(1) |
-| `access[i]` | O(n) in worst case, typically O(1) |
+| `access[i]` | O(n) | <!-- VERIFY: deque indexing may be O(n) for middle elements due to block structure -->
 | `extend(iterable)` | O(k) for k items |
 | `rotate(n)` | O(n) or O(k) for small rotations |
 | `clear()` | O(n) |
@@ -52,9 +52,9 @@ Same as `dict`:
 
 | Operation | Time |
 |-----------|------|
-| `d[key]` | O(1) - returns default if missing |
-| `d[key] = value` | O(1) |
-| `del d[key]` | O(1) |
+| `d[key]` | O(1) avg | Returns default if missing; O(n) worst case due to hash collisions |
+| `d[key] = value` | O(1) avg | O(n) worst case due to hash collisions |
+| `del d[key]` | O(1) avg | O(n) worst case due to hash collisions |
 | Other dict ops | Same as dict |
 
 ### Space Complexity
@@ -92,7 +92,7 @@ from collections import Counter
 | Operation | Time | Notes |
 |-----------|------|-------|
 | `Counter(iterable)` | O(n) | n = iterable length |
-| `c[item]` | O(1) | Returns 0 if missing |
+| `c[item]` | O(1) avg | Returns 0 if missing; O(n) worst case due to hash collisions |
 | `c.most_common(k)` | O(n log k) | Heap-based, k = count |
 | `c.update(iterable)` | O(n) | n = iterable length |
 | `c + c2` | O(n) | Combines counters |
@@ -191,9 +191,9 @@ from collections import ChainMap
 
 | Operation | Time | Notes |
 |-----------|------|-------|
-| `access[key]` | O(n) | n = number of maps |
-| `set[key]` | O(1) | Sets in first map |
-| `del[key]` | O(1) | Deletes from first map |
+| `access[key]` | O(n) | n = number of maps; searches until found |
+| `set[key]` | O(1) avg | Sets in first map; O(m) worst case where m = first map size |
+| `del[key]` | O(1) avg | Deletes from first map; O(m) worst case where m = first map size |
 | `len()` | O(n) | Must check all maps |
 | `in` | O(n) | Checks all maps |
 

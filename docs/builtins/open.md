@@ -6,11 +6,11 @@ The `open()` function opens a file and returns a file object, allowing reading, 
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `open(filename)` | O(1) | O(1) | Open file (system call) |
+| `open(filename)` | O(1)* | O(1) | System call; * may vary with filesystem |
 | `file.read()` | O(n) | O(n) | n = file size |
 | `file.readline()` | O(k) | O(k) | k = line length |
 | `file.readlines()` | O(n) | O(n) | n = file size |
-| `file.write(data)` | O(k) | O(1) | k = data length |
+| `file.write(data)` | O(k) | O(1)* | k = data length; * buffered, actual I/O varies |
 | `file.close()` | O(1) | O(1) | Flush and close |
 | `for line in file:` | O(n) | O(1) | n = file size (lazy iteration) |
 

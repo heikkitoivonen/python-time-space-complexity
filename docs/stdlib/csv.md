@@ -6,8 +6,8 @@ The `csv` module provides functionality for reading and writing CSV (Comma-Separ
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `csv.reader(file)` | O(1) | O(1) | Create reader object |
-| `reader.next()` or iteration | O(k) | O(k) | k = row length |
+| `csv.reader(file)` | O(1) | O(1) | Create reader object; lazy iteration |
+| `reader.next()` or iteration | O(k) | O(k) | k = row length; streaming |
 | `csv.writer(file)` | O(1) | O(1) | Create writer object |
 | `writer.writerow(row)` | O(k) | O(1) | k = row length |
 | `writer.writerows(rows)` | O(n*k) | O(1) | n rows, avg k length |

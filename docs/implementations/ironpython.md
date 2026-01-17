@@ -233,9 +233,9 @@ Standard operations have same complexity as .NET collections:
 
 | Operation | Complexity | Notes |
 |---|---|---|
-| List append | O(1)* | Amortized |
-| Dict lookup | O(1) | Average case |
-| Set membership | O(1) | Average case |
+| List append | O(1) amortized | Amortized; resizing on overflow |
+| Dict lookup | O(1) avg, O(n) worst | Hash collisions cause O(n) |
+| Set membership | O(1) avg, O(n) worst | Hash collisions cause O(n) |
 | Insert at index | O(n) | Requires shifting |
 
 Similar to CPython, but backed by .NET types.

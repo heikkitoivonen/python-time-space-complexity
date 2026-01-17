@@ -9,7 +9,7 @@ The `selectors` module provides a high-level interface for multiplexed I/O, allo
 | `DefaultSelector()` | O(1) | O(1) | Create selector |
 | `selector.register(fileobj)` | O(1) | O(1) | Register socket/file |
 | `selector.unregister(fileobj)` | O(1) | O(1) | Unregister |
-| `selector.select(timeout)` | O(n) | O(k) | Wait for events, n = registered, k = ready |
+| `selector.select(timeout)` | O(n) or O(k) | O(k) | O(n) for select, O(k) for epoll/kqueue; k = ready |
 | `selector.modify(fileobj)` | O(1) | O(1) | Change registration |
 | `selector.get_map()` | O(1) | O(n) | Get all registrations |
 
@@ -74,9 +74,9 @@ sel.register(sock, selectors.EVENT_READ)  # O(1) space
 
 ## Selecting with Timeout
 
-### Time Complexity: O(n log n) worst case
+### Time Complexity: O(n) for epoll/kqueue, O(n) for select
 
-Where n = number of registered file objects.
+Where n = number of registered file objects. Note: epoll/kqueue return only ready events in O(k) where k = ready file objects, but internal kernel operations are O(n) for setup.
 
 ```python
 import selectors
@@ -89,10 +89,9 @@ for i in range(100):
     sock = socket.socket()
     sel.register(sock, selectors.EVENT_READ)  # O(1) per socket
 
-# Wait for I/O: O(n log n) worst case
-# n = registered sockets
+# Wait for I/O: O(n) where n = registered sockets
 # Returns only ready file objects: O(k) where k <= n
-events = sel.select(timeout=1.0)  # O(n log n) to wait
+events = sel.select(timeout=1.0)  # O(n) for select, O(k) for epoll/kqueue
 
 # Process events: O(k)
 for key, mask in events:  # k = ready file objects
@@ -322,23 +321,23 @@ import select
 import socket
 
 # selectors uses best mechanism available
-# On Linux (many sockets):   epoll - O(log n) per event
-# On BSD/macOS:               kqueue - O(log n) per event  
-# Fallback:                   select - O(n) per wait
+# On Linux (many sockets):   epoll - O(1) per ready event, O(k) total
+# On BSD/macOS:               kqueue - O(1) per ready event, O(k) total  
+# Fallback:                   select - O(n) per wait where n = all registered
 
 sel = selectors.DefaultSelector()
 
 # For thousands of connections:
-# select: becomes slow O(n) per select()
-# epoll/kqueue: stays fast O(log n) per select()
+# select: becomes slow O(n) per select() - must scan all fds
+# epoll/kqueue: stays fast O(k) per select() - returns only ready fds
 
 # Registering: always O(1)
 for i in range(10000):
     sel.register(socks[i], selectors.EVENT_READ)  # O(10000)
 
 # Selecting: depends on mechanism
-# epoll/kqueue: O(log n) = O(log 10000) ~= O(13)
-# select: O(n) = O(10000)
+# epoll/kqueue: O(k) where k = ready fds (typically small)
+# select: O(n) = O(10000) - must check all registered fds
 events = sel.select()  # Fast with epoll/kqueue, slow with select
 ```
 
@@ -403,11 +402,11 @@ for i in range(connections):
     sel.register(socks[i], selectors.EVENT_READ)  # O(10000)
 
 # Event loop: scales well with epoll/kqueue
-# O(log n) per ready event
+# O(k) where k = ready events (typically small)
 while True:
     # Usually only few sockets ready at once
-    # If 100 ready: O(100 * log 10000) ~= O(1300)
-    events = sel.select()  # Efficient!
+    # If 100 ready: O(100) with epoll/kqueue vs O(10000) with select
+    events = sel.select()  # Efficient with epoll/kqueue!
     
     for key, mask in events:  # Only processes ready events
         handle(key, mask)

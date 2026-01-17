@@ -7,10 +7,10 @@ The `dbm` module provides interfaces to various Unix database implementations, a
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `dbm.open()` | O(1) | O(1) | Open/create database |
-| `db[key] = value` | O(log n) | O(k) | Insert/update key |
-| `db[key]` | O(log n) | O(1) | Retrieve value |
-| `del db[key]` | O(log n) | O(1) | Delete key |
-| `key in db` | O(log n) | O(1) | Key lookup |
+| `db[key] = value` | O(1) to O(log n) | O(k) | Backend-dependent; gdbm is O(1) avg |
+| `db[key]` | O(1) to O(log n) | O(1) | Backend-dependent; gdbm is O(1) avg |
+| `del db[key]` | O(1) to O(log n) | O(1) | Backend-dependent |
+| `key in db` | O(1) to O(log n) | O(1) | Backend-dependent |
 | `db.keys()` | O(n) | O(n) | Get all keys (slow) |
 | `db.close()` | O(n) | O(1) | Flush and close |
 

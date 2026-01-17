@@ -6,7 +6,7 @@ The `crypt` module provides Unix password hashing functionality using the crypt(
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `crypt()` | O(n) | O(1) | n = iterations |
+| `crypt()` | O(n) | O(1) | n = work factor/iterations; intentionally slow |
 | Hash password | O(n) | O(n) | Compute hash |
 
 ## Password Hashing

@@ -7,7 +7,7 @@ The `zip()` function combines elements from multiple iterables into tuples.
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
 | Creating iterator | O(1) | O(1) | Just creates iterator |
-| Consuming iterator | O(n*k) | O(n) | n = items, k = iterables |
+| Consuming iterator | O(n) | O(1) per tuple | n = items; creates tuples lazily |
 | With unequal lengths | O(n) | O(n) | Stops at shortest iterable |
 
 ## Basic Usage

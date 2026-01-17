@@ -10,7 +10,7 @@ The `deque` (double-ended queue) class from `collections` provides O(1) append a
 | `appendleft()` | O(1) | O(1) | Add to left |
 | `pop()` | O(1) | O(1) | Remove from right |
 | `popleft()` | O(1) | O(1) | Remove from left |
-| Indexing | O(1) | O(1) | Access by index |
+| Indexing | O(n) | O(1) | O(1) for ends, O(n) for middle due to block structure |
 | Insert | O(n) | O(1) | Insert at position |
 | Rotate | O(k) | O(1) | Rotate elements |
 

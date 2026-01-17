@@ -7,10 +7,10 @@ The `io` module provides core I/O classes for working with binary and text data,
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `StringIO()` creation | O(1) | O(1) | Create empty string buffer |
-| `StringIO.write()` | O(k) amortized | O(k) | k = string length |
+| `StringIO.write()` | O(n) amortized | O(n) | n = string length, amortized due to buffer resizing |
 | `StringIO.read()` | O(n) | O(n) | n = available bytes |
 | `BytesIO()` creation | O(1) | O(1) | Create empty bytes buffer |
-| `BytesIO.write()` | O(k) amortized | O(k) | k = bytes length |
+| `BytesIO.write()` | O(n) amortized | O(n) | n = bytes length, amortized due to buffer resizing |
 | `BytesIO.read()` | O(n) | O(n) | n = available bytes |
 | `seek()` position change | O(1) | O(1) | Random access pointer |
 | `tell()` get position | O(1) | O(1) | Return current position |

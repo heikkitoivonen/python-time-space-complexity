@@ -11,7 +11,7 @@ The `asyncio` module provides infrastructure for writing single-threaded concurr
 | Task creation | O(1) | O(1) | Wrap coroutine |
 | `asyncio.gather()` | O(1) | O(n) | n = number of tasks |
 | `asyncio.wait()` | O(n) | O(n) | n = tasks waiting |
-| Event queue operation | O(log n) | O(1) | n = events in queue |
+| Event queue operation | O(log n) | O(1) | Heap-based scheduling; n = pending events |
 
 ## Async Basics
 

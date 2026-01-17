@@ -11,7 +11,7 @@ The `iter()` function creates an iterator object from an iterable, and `next()` 
 | `next(iterator)` | O(1)* | O(1) | Get next item |
 | `next(iterator, default)` | O(1)* | O(1) | Get next or default |
 
-*Depends on iterator implementation; typically O(1) for built-in types
+*O(1) for built-in types; may vary for custom iterators (e.g., filter iterator is O(k) where k items are skipped)
 
 ## Creating Iterators
 

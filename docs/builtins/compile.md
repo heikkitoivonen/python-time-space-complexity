@@ -6,10 +6,11 @@ The `compile()` function compiles Python source code into a code object.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| Parse simple code | O(n) | O(n) | n = code length |
-| Parse complex code | O(n) | O(n) | Includes nesting |
-| Syntax check | O(n) | O(1) | Scan for errors |
-| Total | O(n) | O(n) | Parse + check |
+| Parse code | O(n) | O(n) | n = source code length |
+| Generate bytecode | O(n) | O(n) | Proportional to AST size |
+| Total | O(n) | O(n) | Parsing + bytecode generation |
+
+*Note: compile() is O(n) in the length of the source code. The resulting code object can be reused with eval()/exec() to avoid re-parsing.*
 
 ## Basic Usage
 

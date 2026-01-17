@@ -9,7 +9,7 @@ The `graphlib` module provides a topological sort implementation for resolving d
 | `TopologicalSorter()` init | O(1) | O(1) | Create sorter |
 | `add(node, *predecessors)` | O(k) | O(k) | Add node with k predecessors |
 | `prepare()` | O(v + e) | O(v) | Prepare sort, v = vertices, e = edges |
-| `get_node()` | O(1) | O(1) | Get next node |
+| `get_ready()` | O(1) amortized | O(1) | Get ready nodes (returns tuple) |
 | `done(node)` | O(d) | O(1) | Mark done, d = node degree |
 | Full sort (static) | O(v + e) | O(v + e) | Complete topological sort |
 

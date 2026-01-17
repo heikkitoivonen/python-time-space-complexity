@@ -77,8 +77,8 @@ long = bytearray("a" * 1000, "utf-8")   # O(1000)
 ba = bytearray(b"hello")
 
 ba[0] = 72  # O(1) - change 'h' to 'H'
-ba.append(33)  # O(1) amortized - add '!'
-ba.extend([33, 33])  # O(k) - add k items
+ba.append(33)  # O(1) amortized - may trigger resize
+ba.extend([33, 33])  # O(k) amortized - add k items
 ```
 
 ### From Iterable

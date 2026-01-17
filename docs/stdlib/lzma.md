@@ -9,7 +9,7 @@ The `lzma` module provides XZ compression and decompression functionality.
 | `lzma.open(filename)` | O(1) | O(1) | Open file handle |
 | `LZMAFile.read()` | O(m) | O(m) | Decompress all, m = uncompressed size |
 | `LZMAFile.write(data)` | O(n) | O(k) | Compress and write, n = input size |
-| `compress(data)` | O(n log n) | O(n) | Compress bytes |
+| `compress(data)` | O(n) | O(n) | Compress bytes (higher constant than gzip) |
 | `decompress(data)` | O(m) | O(m) | Decompress bytes |
 
 ## Opening Files
@@ -82,20 +82,20 @@ with lzma.open('file.xz', 'rb') as f:
 
 ## Writing (Compression)
 
-### Time Complexity: O(n log n) to O(n log^2 n)
+### Time Complexity: O(n)
 
-Where n = input size. XZ compression is CPU-intensive.
+Where n = input size. XZ compression is CPU-intensive with high constant factors.
 
 ```python
 import lzma
 
-# Write compressed: O(n log n) to O(n log^2 n)
+# Write compressed: O(n)
 with lzma.open('output.xz', 'wb') as f:
-    f.write(data)  # O(n log^2 n) with XZ compression
+    f.write(data)  # O(n) with XZ compression (high constant)
 
-# Multiple writes: O(sum * log^2(sum))
+# Multiple writes: O(n) total
 with lzma.open('output.xz', 'wb') as f:
-    for chunk in chunks:  # O(n log^2 n) total
+    for chunk in chunks:  # O(n) total
         f.write(chunk)
 ```
 
@@ -119,9 +119,9 @@ with lzma.open('output.xz', 'wb') as f:
 ```python
 import lzma
 
-# Compress entire data: O(n log^2 n) time, O(n) space
+# Compress entire data: O(n) time (high constant), O(n) space
 data = b'Large data...' * 10000
-compressed = lzma.compress(data)  # O(n log^2 n)
+compressed = lzma.compress(data)  # O(n)
 
 # Space: creates entire compressed result
 # O(n) space for output (best compression ratio)
@@ -147,12 +147,12 @@ data = lzma.decompress(compressed)  # O(m)
 ```python
 import lzma
 
-# Streaming compression: O(n log^2 n) time, O(k) space
+# Streaming compression: O(n) time (high constant), O(k) space
 compressor = lzma.LZMACompressor()
 
 result = b''
 for chunk in data_chunks:
-    result += compressor.compress(chunk)  # O(n log^2 n) total
+    result += compressor.compress(chunk)  # O(n) total
 result += compressor.flush()  # Finalize
 
 # Memory: large dictionary buffer, not entire data
@@ -183,14 +183,14 @@ import lzma
 data = b'x' * 1000000
 
 # Preset 0-2: Fast but less compression
-# O(n log n) time
+# O(n) time with lower constant
 fast = lzma.compress(data, preset=0)  # Fastest
 
 # Preset 6: Default, balanced
 medium = lzma.compress(data, preset=6)  # Balanced
 
 # Preset 9: Maximum compression, slowest
-# O(n log^2 n) time
+# O(n) time with highest constant factor
 best = lzma.compress(data, preset=9)  # Best ratio, very slow
 ```
 
@@ -202,15 +202,15 @@ import lzma
 data = large_data
 
 # Fast: preset 0 (still slower than gzip)
-compressed = lzma.compress(data, preset=0)  # O(n log n)
+compressed = lzma.compress(data, preset=0)  # O(n)
 # Size reduction: ~30%
 
 # Default: preset 6
-compressed = lzma.compress(data, preset=6)  # O(n log^2 n)
+compressed = lzma.compress(data, preset=6)  # O(n)
 # Size reduction: ~50%
 
 # Maximum: preset 9
-compressed = lzma.compress(data, preset=9)  # O(n log^2 n)
+compressed = lzma.compress(data, preset=9)  # O(n) with high constant
 # Size reduction: ~55% (best ratio)
 ```
 
@@ -264,14 +264,14 @@ with lzma.open('file.xz', 'rb') as f:
 ```python
 import lzma
 
-# Simple one-shot: O(n log^2 n)
+# Simple one-shot: O(n)
 with lzma.open('output.xz', 'wb') as f:
-    f.write(large_data)  # O(n log^2 n)
+    f.write(large_data)  # O(n)
 
-# Streaming write: O(n log^2 n), O(k) memory
+# Streaming write: O(n), O(k) memory
 with lzma.open('output.xz', 'wb') as f:
     for chunk in data_chunks:
-        f.write(chunk)  # O(sum log^2 sum) total
+        f.write(chunk)  # O(n) total
 ```
 
 ### Compress/Decompress Bytes
@@ -279,9 +279,9 @@ with lzma.open('output.xz', 'wb') as f:
 ```python
 import lzma
 
-# Compress: O(n log^2 n)
+# Compress: O(n)
 data = b'Hello world' * 100000
-compressed = lzma.compress(data)  # O(n log^2 n)
+compressed = lzma.compress(data)  # O(n)
 
 # Decompress: O(m)
 decompressed = lzma.decompress(compressed)  # O(m)
@@ -351,17 +351,17 @@ import bz2
 data = large_data
 
 # GZIP: Fast, moderate compression
-# Time: O(n log n)
+# Time: O(n)
 # Ratio: ~40%
 gzip_result = gzip.compress(data)
 
 # BZIP2: Medium speed, good compression
-# Time: O(n log^2 n)
+# Time: O(n) with higher constant
 # Ratio: ~50%
 bz2_result = bz2.compress(data)
 
 # LZMA (XZ): Slow, best compression
-# Time: O(n log^2 n)
+# Time: O(n) with highest constant
 # Ratio: ~55%
 lzma_result = lzma.compress(data)
 ```

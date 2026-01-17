@@ -82,9 +82,9 @@ points = [Point(i, i+1) for i in range(1000000)]
 
 | Operation | CPython | PyPy | Notes |
 |---|---|---|---|
-| `list.append()` | O(1)* | O(1)* | Same |
-| `dict[key]` | O(1) | O(1) | Same |
-| `set in` | O(1) | O(1) | Same |
+| `list.append()` | O(1) amortized | O(1) amortized | Same algorithm |
+| `dict[key]` | O(1) avg, O(n) worst | O(1) avg, O(n) worst | Same hash table |
+| `set in` | O(1) avg, O(n) worst | O(1) avg, O(n) worst | Same hash set |
 | Loop (tight) | O(n) | O(n)* | PyPy much faster |
 
 *Amortized or constant with much lower constant

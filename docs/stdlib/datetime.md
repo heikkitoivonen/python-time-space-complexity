@@ -8,7 +8,7 @@ The `datetime` module provides classes for manipulating dates and times.
 |-----------|------|-------|-------|
 | `datetime.now()` | O(1) | O(1) | Current date/time |
 | `datetime.fromtimestamp(ts)` | O(1) | O(1) | From Unix timestamp |
-| `datetime.strptime(s, fmt)` | O(n) | O(1) | Parse string, n = format length |
+| `datetime.strptime(s, fmt)` | O(n) | O(1) | Parse string, n = input length; format-dependent |
 | `date(year, month, day)` | O(1) | O(1) | Create date |
 | `time(hour, min, sec)` | O(1) | O(1) | Create time |
 | `timedelta(days, seconds, ...)` | O(1) | O(1) | Create duration |

@@ -6,22 +6,24 @@ The `hash()` function returns the hash value of an object, which is used by dict
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `hash(object)` | O(k) | O(1) | k = object size |
-| Hash of immutable | O(k) | O(1) | e.g., int, str, tuple |
+| `hash(object)` | O(k) | O(1) | k = object size for strings/tuples; O(1) for int/float |
+| Hash of int/float | O(1) | O(1) | Fixed-size representation |
+| Hash of string | O(n) | O(1) | n = string length; cached after first call |
+| Hash of tuple | O(n) | O(1) | n = tuple length, combines element hashes |
 | Hash of mutable | Error | - | e.g., list, dict, set (unhashable) |
-| Dictionary lookup | O(1) avg | O(1) | O(n) worst case |
-| Set membership | O(1) avg | O(1) | O(n) worst case |
+| Dictionary lookup | O(1) avg | O(1) | O(n) worst case with hash collisions |
+| Set membership | O(1) avg | O(1) | O(n) worst case with hash collisions |
 
 ## Hash Basics
 
 ### Creating Hashes
 
 ```python
-# Hash immutable types - O(k) where k = object size
-hash(42)                    # O(1) - small integer
-hash(3.14)                  # O(1) - float
-hash("hello")               # O(5) - string length
-hash((1, 2, 3))            # O(3) - tuple size
+# Hash immutable types
+hash(42)                    # O(1) - integer hashing is constant time
+hash(3.14)                  # O(1) - float hashing is constant time
+hash("hello")               # O(n) first call, O(1) cached - string length
+hash((1, 2, 3))            # O(n) - tuple size, hashes each element
 
 # Same value = same hash
 hash("hello") == hash("hello")  # True
