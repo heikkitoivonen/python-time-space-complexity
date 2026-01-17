@@ -63,6 +63,39 @@ def get_documented_files(docs_dir: Path) -> dict[str, list[str]]:
             if name != "index":
                 documented["builtins"].append(name)
 
+    # Special handling for exceptions.md - covers all exception classes
+    all_builtins = get_all_builtins()
+    exception_classes = all_builtins.get("exceptions", [])
+    if "exceptions" in documented["builtins"] and exception_classes:
+        # Add all individual exception classes as documented
+        documented["builtins"].extend(exception_classes)
+
+    # Handle naming pattern mismatches
+    # Some items have lowercase file names that should match titlecase builtins
+    naming_mappings = {
+        "bytearray": "bytearray_func",
+        "complex": "complex_func",
+        "memoryview": "memoryview_func",
+        "object": "object_func",
+        "type": "type_func",
+        "locals": "locals_func",
+        "copyright": "interpreter_info",
+        "credits": "interpreter_info",
+        "license": "interpreter_info",
+        "exit": "exit_quit",
+        "quit": "exit_quit",
+        # Built-in constants with lowercase filenames
+        "Ellipsis": "ellipsis",
+        "False": "false",
+        "None": "none",
+        "NotImplemented": "notimplemented",
+        "True": "true",
+    }
+
+    for builtin_name, doc_name in naming_mappings.items():
+        if doc_name in documented["builtins"] and builtin_name not in documented["builtins"]:
+            documented["builtins"].append(builtin_name)
+
     # Check stdlib
     stdlib_dir = docs_dir / "stdlib"
     if stdlib_dir.exists():

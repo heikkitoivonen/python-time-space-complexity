@@ -1,632 +1,867 @@
-# Python Exceptions - Complexity and Reference
+# Python Exceptions
 
-Python exceptions are raised when errors occur during program execution. This guide documents the core exception types, their causes, and how to handle them.
+Complete reference for Python's built-in exception hierarchy, including all exception classes, warnings, and best practices for exception handling.
 
 ## Exception Hierarchy
 
+### Complete Exception Tree
+
 ```
-BaseException
- ├── SystemExit
- ├── KeyboardInterrupt
- ├── GeneratorExit
- └── Exception
-      ├── StopIteration
-      ├── ArithmeticError
-      │   ├── FloatingPointError
-      │   ├── OverflowError
-      │   └── ZeroDivisionError
-      ├── AssertionError
-      ├── AttributeError
-      ├── BufferError
-      ├── EOFError
-      ├── ImportError
-      │   └── ModuleNotFoundError
-      ├── LookupError
-      │   ├── IndexError
-      │   └── KeyError
-      ├── MemoryError
-      ├── NameError
-      │   └── UnboundLocalError
-      ├── OSError
-      │   ├── FileNotFoundError
-      │   ├── IsADirectoryError
-      │   ├── NotADirectoryError
-      │   ├── PermissionError
-      │   ├── TimeoutError
-      │   └── ... (others)
-      ├── RuntimeError
-      │   └── NotImplementedError
-      ├── SyntaxError
-      │   └── IndentationError
-      ├── SystemError
-      ├── TypeError
-      ├── ValueError
-      │   └── UnicodeError
-      └── Warning
-          ├── DeprecationWarning
-          ├── FutureWarning
-          ├── UserWarning
-          └── ... (others)
+BaseException (O(1) to raise and catch)
+├── SystemExit - Program exit (exit code)
+├── KeyboardInterrupt - User interrupt (Ctrl+C)
+├── GeneratorExit - Generator cleanup
+└── Exception (base for most exceptions)
+    ├── ArithmeticError
+    │   ├── FloatingPointError - Float operation error
+    │   ├── OverflowError - Number too large
+    │   └── ZeroDivisionError - Division by zero
+    ├── AssertionError - Assertion failed
+    ├── AttributeError - Attribute not found
+    ├── BufferError - Buffer operation failed
+    ├── EOFError - End of file reached
+    ├── ExceptionGroup - Multiple exceptions
+    ├── ImportError
+    │   └── ModuleNotFoundError - Module not found
+    ├── LookupError
+    │   ├── IndexError - Index out of range
+    │   └── KeyError - Key not found
+    ├── MemoryError - Out of memory
+    ├── NameError
+    │   └── UnboundLocalError - Local variable not bound
+    ├── OSError (IO-related)
+    │   ├── FileNotFoundError - File not found
+    │   ├── FileExistsError - File exists
+    │   ├── IsADirectoryError - Is directory
+    │   ├── NotADirectoryError - Not a directory
+    │   ├── PermissionError - Permission denied
+    │   ├── ProcessLookupError - Process not found
+    │   ├── TimeoutError - Operation timeout
+    │   ├── InterruptedError - Interrupted
+    │   ├── BlockingIOError - Blocking operation
+    │   ├── ChildProcessError - Child process error
+    │   ├── BrokenPipeError - Broken pipe
+    │   ├── ConnectionError - Connection error
+    │   │   ├── BrokenPipeError
+    │   │   ├── ConnectionAbortedError
+    │   │   ├── ConnectionRefusedError
+    │   │   └── ConnectionResetError
+    │   ├── EnvironmentError - Environment error
+    │   └── IOError - I/O error
+    ├── ReferenceError - Weak reference deleted
+    ├── RuntimeError - Generic runtime error
+    ├── RecursionError - Max recursion exceeded
+    ├── StopIteration - Iterator exhausted
+    ├── StopAsyncIteration - Async iterator exhausted
+    ├── SyntaxError
+    │   ├── IndentationError - Indentation error
+    │   └── TabError - Tab/space mixing
+    ├── SystemError - Internal interpreter error
+    ├── TypeError - Wrong type
+    ├── ValueError - Wrong value
+    │   └── UnicodeError
+    │       ├── UnicodeDecodeError - Decode failed
+    │       ├── UnicodeEncodeError - Encode failed
+    │       └── UnicodeTranslateError - Translate failed
+    ├── NotImplementedError - Not implemented
+    └── Warning (warnings don't stop execution)
+        ├── DeprecationWarning - Feature deprecated
+        ├── PendingDeprecationWarning - Future deprecation
+        ├── FutureWarning - Future language change
+        ├── UserWarning - User code warning
+        ├── SyntaxWarning - Syntax warning
+        ├── RuntimeWarning - Runtime issue
+        ├── ImportWarning - Import issue
+        ├── UnicodeWarning - Unicode issue
+        ├── BytesWarning - Bytes issue
+        ├── EncodingWarning - Encoding issue
+        └── ResourceWarning - Resource issue
 ```
 
-## Core Exception Types
+## Core Exception Reference
 
-### BaseException (Base)
+### Base Exceptions - Time: O(1)
 
-**When raised**: Never directly; parent of all built-in exceptions
-**Handling**: Rarely caught (except at highest level)
+#### `BaseException`
+Root of all exceptions. Don't catch this - catch `Exception` instead.
 
 ```python
-# BaseException hierarchy
+# ❌ DON'T: Catch BaseException
 try:
-    # code
-except BaseException:  # Catches everything (too broad!)
-    pass
+    code()
+except BaseException:
+    pass  # Catches KeyboardInterrupt, SystemExit, etc!
 
-# Better: catch specific Exception instead
+# ✅ DO: Catch Exception
 try:
-    # code
-except Exception:  # Catches most errors
-    pass
+    code()
+except Exception:
+    pass  # Safer - lets SystemExit, KeyboardInterrupt through
 ```
 
-**Best practice**: Don't catch `BaseException` unless you have a specific reason (like cleanup).
+#### `SystemExit` - Program Exit
+Raised by `sys.exit()`. Not caught by `except Exception`.
 
----
+```python
+import sys
 
-### Exception (Base for most errors)
+try:
+    sys.exit(1)
+except SystemExit as e:
+    print(f"Exit code: {e.code}")  # 1
+```
 
-**When raised**: Parent class for most built-in exceptions
-**Handling**: Good base class for catching application errors
+#### `KeyboardInterrupt` - User Interrupt
+Raised by Ctrl+C. Not caught by `except Exception`.
 
 ```python
 try:
-    # code that might fail
-    value = int("abc")
-except Exception as e:  # Catches ValueError and most others
-    print(f"Error: {e}")
+    while True:
+        process()
+except KeyboardInterrupt:
+    print("User cancelled")
+    sys.exit(0)
 ```
 
----
-
-### ValueError
-
-**When raised**: When a function receives an argument of the correct type but inappropriate value
-**Complexity**: O(1) to raise, O(n) for error message
+#### `GeneratorExit` - Generator Cleanup
+Raised when generator is closed.
 
 ```python
-# ValueError examples - O(1)
-int("abc")          # ValueError: invalid literal for int()
-float("not_float")  # ValueError: could not convert string to float
+def my_generator():
+    try:
+        yield 1
+        yield 2
+    except GeneratorExit:
+        print("Cleaning up")
+        raise  # Must re-raise
 
-# Custom ValueError
-def validate_age(age):
-    if not 0 <= age <= 150:
-        raise ValueError(f"Age must be 0-150, got {age}")  # O(1)
-
-validate_age(200)  # Raises ValueError
+gen = my_generator()
+next(gen)  # Get 1
+gen.close()  # Triggers GeneratorExit
 ```
 
----
+### Arithmetic Errors - Time: O(1)
 
-### TypeError
-
-**When raised**: When operation or function is applied to object of inappropriate type
-**Complexity**: O(1) to raise
-
+#### `ZeroDivisionError` - Division by Zero
 ```python
-# TypeError examples - O(1)
-1 + "2"           # TypeError: unsupported operand type(s)
-len(123)          # TypeError: object of type 'int' has no len()
-"hello"[1.5]      # TypeError: string indices must be integers
-
-# Check type before operation
-def add(a, b):
-    if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
-        raise TypeError(f"Expected numbers, got {type(a)} and {type(b)}")
-    return a + b
-```
-
----
-
-### KeyError
-
-**When raised**: When dictionary key is not found
-**Complexity**: O(1) average, O(n) worst case
-
-```python
-# KeyError examples - O(1)
-d = {'a': 1, 'b': 2}
-d['c']  # KeyError: 'c'
-
-# Safe access - O(1)
-value = d.get('c')  # None (no error)
-value = d.get('c', 'default')  # 'default'
-
-# Check first - O(1)
-if 'c' in d:
-    value = d['c']
-```
-
----
-
-### IndexError
-
-**When raised**: When sequence index is out of range
-**Complexity**: O(1) to raise
-
-```python
-# IndexError examples - O(1)
-lst = [1, 2, 3]
-lst[5]      # IndexError: list index out of range
-lst[-10]    # IndexError: list index out of range
-
-# Safe access - O(1)
-if len(lst) > 5:
-    value = lst[5]
-
-# Handle gracefully - O(1)
 try:
-    value = lst[index]
+    result = 10 / 0
+except ZeroDivisionError:
+    print("Cannot divide by zero")
+```
+
+#### `FloatingPointError` - Float Operation Error
+```python
+import warnings
+warnings.simplefilter("error", FloatingPointError)
+
+try:
+    result = float('inf') - float('inf')  # NaN
+except FloatingPointError:
+    print("Invalid float operation")
+```
+
+#### `OverflowError` - Number Too Large
+```python
+import sys
+
+try:
+    large = sys.maxsize + 1
+    power = 10 ** 1000000  # May overflow in some contexts
+except OverflowError:
+    print("Number too large")
+```
+
+#### `ArithmeticError` - Base Arithmetic Error
+Parent class for arithmetic errors.
+
+```python
+try:
+    result = 10 / 0
+except ArithmeticError as e:
+    print(f"Arithmetic: {type(e).__name__}")
+```
+
+### Lookup Errors - Time: O(1)
+
+#### `KeyError` - Dictionary Key Not Found
+```python
+data = {'a': 1, 'b': 2}
+
+try:
+    value = data['c']  # Key doesn't exist
+except KeyError as e:
+    print(f"Key not found: {e}")
+```
+
+#### `IndexError` - Index Out of Range
+```python
+items = [1, 2, 3]
+
+try:
+    item = items[10]  # Index too large
 except IndexError:
-    value = None
+    print("Index out of range")
 ```
 
----
-
-### AttributeError
-
-**When raised**: When attribute reference or assignment fails
-**Complexity**: O(1) to raise
+#### `LookupError` - Base Lookup Error
+Parent class for KeyError and IndexError.
 
 ```python
-# AttributeError examples - O(1)
+try:
+    data = [1, 2, 3]
+    value = data[99]
+except LookupError:
+    print("Item not found")
+```
+
+### Type and Value Errors - Time: O(1)
+
+#### `TypeError` - Wrong Type
+```python
+try:
+    result = "string" + 5  # Can't add str + int
+except TypeError:
+    print("Type mismatch")
+```
+
+#### `ValueError` - Wrong Value
+```python
+try:
+    number = int("not a number")
+except ValueError:
+    print("Invalid value")
+```
+
+#### `AttributeError` - Attribute Not Found
+```python
 class MyClass:
     def __init__(self):
         self.x = 1
 
 obj = MyClass()
-obj.y  # AttributeError: 'MyClass' object has no attribute 'y'
 
-# Check before access - O(1)
-if hasattr(obj, 'y'):
-    value = obj.y
-
-# Use getattr with default - O(1)
-value = getattr(obj, 'y', None)
+try:
+    value = obj.y  # Attribute doesn't exist
+except AttributeError:
+    print("Attribute not found")
 ```
 
----
-
-### NameError
-
-**When raised**: When local or global name is not found
-**Complexity**: O(1) lookup
-
+#### `NameError` - Name Not Found
 ```python
-# NameError examples - O(1)
-print(undefined_var)  # NameError: name 'undefined_var' is not defined
-
-# Check if name exists - O(1)
-if 'x' in locals():
-    print(x)
-if 'y' in globals():
-    print(y)
-
-# Catch NameError
 try:
-    result = possibly_undefined_var  # O(1)
+    print(undefined_variable)
 except NameError:
-    result = default_value
+    print("Name not defined")
 ```
 
----
-
-### ZeroDivisionError
-
-**When raised**: When dividing by zero
-**Complexity**: O(1) to raise
+#### `UnboundLocalError` - Local Variable Not Bound
+Subclass of NameError. Raised when referencing local variable before assignment.
 
 ```python
-# ZeroDivisionError examples - O(1)
-10 / 0   # ZeroDivisionError: division by zero
-10 % 0   # ZeroDivisionError: integer division or modulo by zero
+def func():
+    try:
+        print(x)  # x referenced before assignment
+        x = 5
+    except UnboundLocalError:
+        print("Local variable not bound")
 
-# Check before division - O(1)
-if divisor != 0:
-    result = dividend / divisor
-else:
-    result = float('inf')  # or handle appropriately
-
-# Try/except approach
-try:
-    result = dividend / divisor  # O(1)
-except ZeroDivisionError:
-    result = None
+func()
 ```
 
----
+### Unicode Errors - Time: O(n) where n = string length
 
-### FileNotFoundError
-
-**When raised**: When trying to open/access file that doesn't exist
-**Complexity**: O(1) filesystem lookup
+#### `UnicodeError` - Unicode Problem
+Base class for unicode errors.
 
 ```python
-# FileNotFoundError examples - O(1)
-with open('nonexistent.txt') as f:  # FileNotFoundError: [Errno 2] No such file or directory
-
-# Check first - O(1)
-import os
-if os.path.exists('file.txt'):
-    with open('file.txt') as f:
-        content = f.read()
-
-# Handle with try/except
 try:
-    with open('file.txt') as f:  # O(1)
-        content = f.read()
-except FileNotFoundError:
-    content = ""
+    bytes_data = b'\x80\x81'
+    text = bytes_data.decode('ascii')
+except UnicodeError:
+    print("Unicode problem")
 ```
 
----
+#### `UnicodeDecodeError` - Decoding Failed
+```python
+try:
+    bytes_data = b'\xff\xfe'
+    text = bytes_data.decode('utf-8')
+except UnicodeDecodeError as e:
+    print(f"Can't decode: {e.reason}")
+```
 
-### OSError
+#### `UnicodeEncodeError` - Encoding Failed
+```python
+try:
+    text = "Hello 世界"
+    bytes_data = text.encode('ascii')  # Can't encode Chinese
+except UnicodeEncodeError as e:
+    print(f"Can't encode: {e.reason}")
+```
 
-**When raised**: When OS-level operation fails (includes FileNotFoundError)
-**Complexity**: O(1) to raise
+#### `UnicodeTranslateError` - Translation Failed
+```python
+# Raised during str.translate() with invalid mapping
+try:
+    text = "hello"
+    result = text.translate({0: "x"})  # Bad mapping
+except UnicodeTranslateError:
+    print("Translation failed")
+```
+
+### I/O and OS Errors - Time: O(1)
+
+#### `OSError` - Operating System Error
+Base class for OS-related errors. Includes all file/network errors.
 
 ```python
-# OSError examples - O(1)
-import os
-os.remove('/root/protected.txt')  # PermissionError (subclass of OSError)
-os.mkdir('/nonexistent/dir')  # FileNotFoundError (subclass of OSError)
-
-# Handle OSError family - O(1)
 try:
-    result = os.some_operation()  # O(1)
-except FileNotFoundError:
-    print("File not found")
-except PermissionError:
-    print("Permission denied")
+    with open("nonexistent.txt") as f:
+        data = f.read()
 except OSError as e:
     print(f"OS error: {e}")
 ```
 
----
-
-### ImportError / ModuleNotFoundError
-
-**When raised**: When import statement fails
-**Complexity**: O(n) for module search/loading
-
+#### `FileNotFoundError` - File Not Found
 ```python
-# ImportError examples - O(n)
-import nonexistent_module  # ModuleNotFoundError: No module named 'nonexistent_module'
-from os import missing_function  # ImportError: cannot import name 'missing_function'
-
-# Check if module available - O(1)
 try:
-    import optional_module  # O(n) - first load
-except ImportError:
-    optional_module = None
-
-# Conditional import
-try:
-    import numpy as np
-except ImportError:
-    np = None
-
-if np:
-    result = np.array([1, 2, 3])
-```
-
----
-
-### RuntimeError
-
-**When raised**: When error doesn't fit into any category
-**Complexity**: O(1) to raise
-
-```python
-# RuntimeError examples - O(1)
-class Generator:
-    def __init__(self):
-        self.value = None
-    
-    def step(self):
-        if self.value is None:
-            raise RuntimeError("Not initialized")
-
-# Catch RuntimeError - O(1)
-try:
-    gen.step()  # O(1)
-except RuntimeError as e:
-    print(f"Runtime issue: {e}")
-```
-
----
-
-### AssertionError
-
-**When raised**: When assert statement fails
-**Complexity**: O(1) to raise
-
-```python
-# AssertionError examples - O(1)
-assert 1 == 1, "Math is broken"  # OK
-assert 1 == 2, "Math is broken"  # AssertionError: Math is broken
-
-# Use in debugging - O(1)
-def process(value):
-    assert value > 0, "Value must be positive"  # O(1)
-    return value * 2
-
-# Note: assertions can be disabled with -O flag
-# Don't use for normal error handling
-```
-
----
-
-### StopIteration
-
-**When raised**: When iterator is exhausted
-**Complexity**: O(1) to raise
-
-```python
-# StopIteration examples - O(1)
-it = iter([1, 2, 3])
-next(it)  # 1
-next(it)  # 2
-next(it)  # 3
-next(it)  # StopIteration
-
-# Handle StopIteration - O(1)
-try:
-    value = next(iterator)  # O(1)
-except StopIteration:
-    value = None
-
-# Use default - O(1)
-value = next(iterator, None)
-```
-
----
-
-### NotImplementedError
-
-**When raised**: When method should be overridden but isn't
-**Complexity**: O(1) to raise
-
-```python
-# NotImplementedError examples - O(1)
-class Base:
-    def method(self):
-        raise NotImplementedError("Subclass must implement method")
-
-class Derived(Base):
-    def method(self):
-        return "Implemented"
-
-# Proper usage
-obj = Derived()
-obj.method()  # "Implemented"
-
-wrong = Base()
-wrong.method()  # NotImplementedError
-```
-
----
-
-### SyntaxError / IndentationError
-
-**When raised**: At parse time (cannot be caught)
-**Complexity**: O(n) for parsing
-
-```python
-# These are syntax errors (caught at parse time)
-# if x = 5:  # SyntaxError: invalid syntax
-#   print(x)
-
-#     print("bad indent")  # IndentationError: unexpected indent
-
-# Cannot catch SyntaxError at runtime
-# (code won't even parse)
-```
-
----
-
-### MemoryError
-
-**When raised**: When memory allocation fails
-**Complexity**: O(1) to raise, but indicates serious issue
-
-```python
-# MemoryError example - O(1) to raise
-try:
-    huge_list = [0] * (10**100)  # Try to allocate huge memory
-except MemoryError:
-    print("Out of memory")
-
-# Graceful degradation
-import sys
-max_items = sys.maxsize // 1000  # Conservative limit
-```
-
----
-
-### EOFError
-
-**When raised**: When input() hits end-of-file
-**Complexity**: O(1) to raise
-
-```python
-# EOFError example - O(1)
-try:
-    data = input("Enter data: ")  # O(k)
-except EOFError:
-    print("No more input")
-
-# Handle in interactive programs
-while True:
-    try:
-        line = input("> ")  # O(k)
-    except EOFError:
-        break  # End of input
-    except KeyboardInterrupt:
-        print("Interrupted")
-        break
-```
-
----
-
-### KeyboardInterrupt
-
-**When raised**: When user presses Ctrl+C
-**Complexity**: O(1) to raise
-
-```python
-# KeyboardInterrupt example - O(1)
-try:
-    while True:
-        process_data()  # Long operation
-except KeyboardInterrupt:
-    print("Interrupted by user")
-finally:
-    cleanup()  # Always runs
-```
-
----
-
-## Exception Handling Patterns
-
-### Try/Except/Finally
-
-```python
-# Basic pattern - O(1) overhead
-try:
-    resource = open('file.txt')  # O(n)
-    process(resource)
+    with open("missing.txt") as f:
+        content = f.read()
 except FileNotFoundError:
     print("File not found")
-except Exception as e:
-    print(f"Unexpected error: {e}")
-finally:
-    resource.close()  # Always runs
 ```
 
-### Context Managers
-
+#### `FileExistsError` - File Already Exists
 ```python
-# Better - automatic cleanup
-with open('file.txt') as f:  # O(1) setup
-    content = f.read()  # O(n)
-# Automatic close - O(1)
+import os
+
+try:
+    os.makedirs("existing_dir")
+except FileExistsError:
+    print("Directory already exists")
 ```
 
-### Multiple Exceptions
-
+#### `IsADirectoryError` - Expected File, Got Directory
 ```python
-# Catch multiple - O(1)
 try:
-    result = int(user_input)
-except (ValueError, TypeError) as e:
-    print(f"Invalid input: {e}")
-
-# Or separate handlers
-try:
-    data = process()
-except ValueError:
-    print("Invalid value")
-except KeyError:
-    print("Missing key")
-except Exception as e:
-    print(f"Unknown error: {e}")
+    with open("/tmp") as f:  # /tmp is a directory
+        data = f.read()
+except IsADirectoryError:
+    print("Path is a directory")
 ```
 
-### Re-raising Exceptions
-
+#### `NotADirectoryError` - Expected Directory, Got File
 ```python
-# Log and re-raise - O(1)
 try:
-    operation()
-except ValueError as e:
-    logger.error(f"ValueError: {e}")
-    raise  # Re-raise same exception
-
-# Transform exception
-try:
-    operation()
-except ValueError as e:
-    raise RuntimeError(f"Processing failed: {e}") from e
+    os.listdir("file.txt")  # file.txt is a file, not directory
+except NotADirectoryError:
+    print("Path is not a directory")
 ```
 
-## Custom Exceptions
+#### `PermissionError` - Permission Denied
+```python
+try:
+    with open("/root/secret.txt") as f:
+        data = f.read()
+except PermissionError:
+    print("Permission denied")
+```
 
-### Creating Custom Exceptions
+#### `TimeoutError` - Operation Timeout
+```python
+import socket
+
+try:
+    socket.create_connection(("example.com", 80), timeout=0.001)
+except TimeoutError:
+    print("Connection timeout")
+```
+
+#### `BlockingIOError` - Operation Would Block
+```python
+import os
+
+try:
+    os.set_blocking(fd, False)
+    os.read(fd, 1024)
+except BlockingIOError:
+    print("Would block")
+```
+
+#### `InterruptedError` - Operation Interrupted
+```python
+try:
+    # Interrupted system call
+    result = os.read(fd, 1024)
+except InterruptedError:
+    print("Operation interrupted")
+```
+
+#### `ChildProcessError` - Child Process Error
+```python
+try:
+    os.waitpid(-1, 0)  # No child processes
+except ChildProcessError:
+    print("No child process")
+```
+
+#### `BrokenPipeError` - Broken Pipe
+```python
+import socket
+
+try:
+    socket.send(data)  # Pipe/socket closed
+except BrokenPipeError:
+    print("Pipe broken")
+```
+
+#### `ConnectionError` - Connection Error
+Base class for connection errors.
 
 ```python
-# Simple custom exception
-class CustomError(Exception):
+try:
+    socket.connect(("unreachable.host", 80))
+except ConnectionError:
+    print("Connection failed")
+```
+
+#### `ConnectionRefusedError` - Connection Refused
+```python
+try:
+    socket.connect(("localhost", 12345))  # No server listening
+except ConnectionRefusedError:
+    print("Server refused connection")
+```
+
+#### `ConnectionAbortedError` - Connection Aborted
+```python
+try:
+    socket.recv(1024)  # Connection aborted
+except ConnectionAbortedError:
+    print("Connection aborted")
+```
+
+#### `ConnectionResetError` - Connection Reset
+```python
+try:
+    socket.send(data)  # Peer reset connection
+except ConnectionResetError:
+    print("Connection reset")
+```
+
+#### `ProcessLookupError` - Process Not Found
+```python
+import os
+
+try:
+    os.kill(999999, signal.SIGTERM)  # PID doesn't exist
+except ProcessLookupError:
+    print("Process not found")
+```
+
+#### `EnvironmentError` - Environment Error
+Old name for OSError. Still exists for compatibility.
+
+```python
+try:
+    file_operation()
+except EnvironmentError:  # Same as OSError
+    print("Environment error")
+```
+
+#### `IOError` - I/O Error
+Old name for OSError. Still exists for compatibility.
+
+```python
+try:
+    with open("file.txt") as f:
+        data = f.read()
+except IOError:  # Same as OSError
+    print("I/O error")
+```
+
+#### `EOFError` - End of File
+```python
+try:
+    value = input()  # User sends EOF (Ctrl+D)
+except EOFError:
+    print("End of input")
+```
+
+### Import Errors - Time: O(n) where n = import chain
+
+#### `ImportError` - Import Failed
+```python
+try:
+    import nonexistent_module
+except ImportError:
+    print("Cannot import module")
+```
+
+#### `ModuleNotFoundError` - Module Not Found
+Subclass of ImportError. More specific error.
+
+```python
+try:
+    import pandas
+except ModuleNotFoundError:
+    print("Module not installed")
+```
+
+### Iteration Errors - Time: O(1)
+
+#### `StopIteration` - Iterator Exhausted
+Raised when iterator has no more items.
+
+```python
+iterator = iter([1, 2, 3])
+
+try:
+    while True:
+        value = next(iterator)
+        print(value)
+except StopIteration:
+    print("Iterator exhausted")
+```
+
+#### `StopAsyncIteration` - Async Iterator Exhausted
+```python
+async def async_iter():
+    for i in range(3):
+        yield i
+    # Implicitly raises StopAsyncIteration
+
+async def main():
+    async_gen = async_iter()
+    try:
+        while True:
+            value = await async_gen.__anext__()
+            print(value)
+    except StopAsyncIteration:
+        print("Async iterator exhausted")
+```
+
+### Reference and Memory Errors - Time: O(1)
+
+#### `ReferenceError` - Weak Reference Deleted
+```python
+import weakref
+
+class MyClass:
     pass
 
-# With custom logic
-class ValidationError(ValueError):
-    def __init__(self, field, message):
-        self.field = field
-        self.message = message
-    
-    def __str__(self):
-        return f"Validation error in {self.field}: {self.message}"
+obj = MyClass()
+weak_ref = weakref.ref(obj)
 
-# Usage
+del obj  # Delete original object
+
 try:
-    if not is_valid(data):
-        raise ValidationError('email', 'Invalid email format')
-except ValidationError as e:
-    print(e)
+    obj_again = weak_ref()
+    if obj_again is None:
+        raise ReferenceError("Object was garbage collected")
+except ReferenceError:
+    print("Weak reference no longer valid")
+```
+
+#### `MemoryError` - Out of Memory
+```python
+try:
+    huge_list = [0] * (10 ** 100)  # Impossible to allocate
+except MemoryError:
+    print("Out of memory")
+```
+
+### System Errors - Time: O(1)
+
+#### `RuntimeError` - Generic Runtime Error
+Catch-all for runtime problems.
+
+```python
+def risky_operation():
+    raise RuntimeError("Something went wrong")
+
+try:
+    risky_operation()
+except RuntimeError:
+    print("Runtime error occurred")
+```
+
+#### `RecursionError` - Max Recursion Exceeded
+```python
+import sys
+
+def infinite_recursion():
+    return infinite_recursion()
+
+try:
+    infinite_recursion()
+except RecursionError:
+    print(f"Max recursion depth: {sys.getrecursionlimit()}")
+```
+
+#### `SystemError` - Internal Interpreter Error
+Indicates Python interpreter bug.
+
+```python
+# Very rare - indicates CPython bug
+try:
+    pass  # SystemError won't normally occur
+except SystemError:
+    print("Python interpreter error - report as bug!")
+```
+
+#### `BufferError` - Buffer Operation Failed
+```python
+try:
+    memoryview(5)  # Can't create memoryview of int
+except BufferError:
+    print("Invalid buffer operation")
+```
+
+### Syntax and Assertion Errors - Time: O(1)
+
+#### `SyntaxError` - Syntax Error
+Raised at parse time for invalid syntax.
+
+```python
+try:
+    compile("if True", "<string>", "exec")  # Missing colon
+except SyntaxError as e:
+    print(f"Syntax error: {e.msg} at line {e.lineno}")
+```
+
+#### `IndentationError` - Indentation Error
+Subclass of SyntaxError for indentation issues.
+
+```python
+try:
+    compile("if True:\npass", "<string>", "exec")  # Bad indent
+except IndentationError:
+    print("Indentation error")
+```
+
+#### `TabError` - Tab/Space Mixing
+Subclass of IndentationError. Mixing tabs and spaces.
+
+```python
+try:
+    compile("if True:\n\tpass\n    pass", "<string>", "exec")
+except TabError:
+    print("Mixed tabs and spaces")
+```
+
+#### `AssertionError` - Assertion Failed
+```python
+try:
+    assert False, "Assertion message"
+except AssertionError as e:
+    print(f"Assertion failed: {e}")
+```
+
+#### `NotImplementedError` - Not Implemented
+```python
+class Base:
+    def operation(self):
+        raise NotImplementedError("Subclasses must implement")
+
+class Derived(Base):
+    def operation(self):
+        return "implemented"
+
+try:
+    Base().operation()
+except NotImplementedError:
+    print("Method not implemented")
+```
+
+### Exception Groups - Time: O(n) where n = exceptions
+
+#### `ExceptionGroup` - Multiple Exceptions
+```python
+try:
+    raise ExceptionGroup("Multiple errors", [
+        ValueError("Error 1"),
+        TypeError("Error 2"),
+    ])
+except ExceptionGroup as eg:
+    for exc in eg.exceptions:
+        print(f"- {type(exc).__name__}: {exc}")
+```
+
+#### `BaseExceptionGroup` - Base Exception Group
+```python
+try:
+    raise BaseExceptionGroup("Critical errors", [
+        SystemExit(1),
+        KeyboardInterrupt(),
+    ])
+except BaseExceptionGroup as eg:
+    print(f"Multiple critical errors: {len(eg.exceptions)}")
+```
+
+## Warning Classes - Time: O(1) to raise
+
+Warnings don't stop execution unless converted to errors.
+
+### Common Warnings
+
+```python
+import warnings
+
+# DeprecationWarning - Feature deprecated
+warnings.warn("Use new_func() instead", DeprecationWarning)
+
+# PendingDeprecationWarning - Future deprecation
+warnings.warn("Will be removed in 3.15", PendingDeprecationWarning)
+
+# FutureWarning - Language change coming
+warnings.warn("Behavior will change in Python 4.0", FutureWarning)
+
+# UserWarning - User-issued warning (default)
+warnings.warn("Check your input data")
+
+# SyntaxWarning - Syntax issue
+warnings.warn("Ambiguous syntax", SyntaxWarning)
+
+# RuntimeWarning - Runtime issue
+warnings.warn("Unusual runtime condition", RuntimeWarning)
+
+# ImportWarning - Import issue
+warnings.warn("Can't import module", ImportWarning)
+
+# UnicodeWarning - Unicode issue
+warnings.warn("Unicode handling", UnicodeWarning)
+
+# BytesWarning - Bytes issue
+warnings.warn("Bytes behavior issue", BytesWarning)
+
+# EncodingWarning - Encoding assumption
+warnings.warn("Encoding not specified", EncodingWarning)
+
+# ResourceWarning - Resource leak
+warnings.warn("Resource not closed", ResourceWarning)
+```
+
+### Converting Warnings to Errors
+
+```python
+import warnings
+
+# Make DeprecationWarning raise an error
+warnings.filterwarnings("error", category=DeprecationWarning)
+
+try:
+    warnings.warn("Deprecated", DeprecationWarning)
+except DeprecationWarning:
+    print("Caught as error")
 ```
 
 ## Exception Handling Best Practices
 
-✅ **Do**:
-- Catch specific exceptions (not bare `except:`)
-- Use `finally` or context managers for cleanup
-- Provide informative error messages
-- Log exceptions properly
-- Use custom exceptions for domain errors
-- Re-raise if you can't handle
+### Catch Specific Exceptions - Time: O(1)
 
-❌ **Avoid**:
-- Catching `BaseException` (too broad)
-- Silent exceptions (`except: pass`)
-- Using exceptions for control flow
-- Not logging exceptions
-- Generic exception messages
-- Catching and ignoring exceptions
+```python
+# ✅ DO: Catch specific exceptions
+try:
+    data = json.loads(user_input)
+except json.JSONDecodeError:
+    print("Invalid JSON")
+except ValueError:
+    print("Invalid value")
 
-## Exception Raising Complexity
+# ❌ DON'T: Catch Exception or BaseException
+try:
+    data = json.loads(user_input)
+except:  # Catches everything including KeyboardInterrupt!
+    print("Error")
+```
 
-| Operation | Time | Space | Notes |
-|-----------|------|-------|-------|
-| Raise exception | O(1) | O(1) | Creating exception object |
-| Exception handling | O(1) | O(1) | Finding handler |
-| Stack unwinding | O(d) | O(1) | d = call depth |
-| Finally blocks | O(1) | O(1) | Executed on exit |
+### Use Exception Chaining - Time: O(1)
 
-## Related Documentation
+```python
+try:
+    result = 10 / 0
+except ZeroDivisionError as e:
+    # Preserve original exception
+    raise ValueError("Invalid calculation") from e
+```
 
-- **[try/except statements](control_flow.md)** - Exception handling syntax
-- **[context managers](context_managers.md)** - Resource management
-- **[logging](../stdlib/logging.md)** - Proper error logging
+### Custom Exception Hierarchy - Time: O(1)
 
-## Version Notes
+```python
+class AppError(Exception):
+    """Base exception for app"""
+    pass
 
-- **Python 2.x**: Slightly different exception hierarchy
-- **Python 3.x**: Improved exception chaining with `from`
-- **Python 3.10+**: Better error messages with `ExceptionGroup`
+class ValidationError(AppError):
+    """Validation failed"""
+    pass
 
----
+class DatabaseError(AppError):
+    """Database operation failed"""
+    pass
 
-**All 40+ core exceptions are covered in this hierarchy. Refer to specific exception type above for detailed information.**
+try:
+    validate_data(user_input)
+except ValidationError:
+    print("Validation failed")
+except DatabaseError:
+    print("Database error")
+except AppError:
+    print("Application error")
+```
+
+### Finally Block - Time: O(1)
+
+```python
+try:
+    resource = acquire_resource()
+    use_resource(resource)
+except Exception as e:
+    print(f"Error: {e}")
+else:
+    print("Success")
+finally:
+    # Always executes
+    cleanup_resource(resource)
+```
+
+### Context Managers - Time: O(1)
+
+```python
+# ✅ Preferred: Context managers handle cleanup
+with open("file.txt") as f:
+    data = f.read()
+# File automatically closed, even if error occurs
+```
+
+## Exception Information - Time: O(1)
+
+```python
+import traceback
+import sys
+
+try:
+    result = 10 / 0
+except ZeroDivisionError:
+    # Get exception info
+    exc_type, exc_value, exc_traceback = sys.exc_info()
+    
+    # Print traceback
+    traceback.print_exc()
+    
+    # Get detailed traceback
+    tb_lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
+    print("".join(tb_lines))
+    
+    # Format current exception
+    tb_str = traceback.format_exc()
+    print(tb_str)
+```
+
+## Related Modules
+
+- [warnings Module](../stdlib/warnings.md) - Warning filtering
+- [traceback Module](../stdlib/traceback.md) - Traceback manipulation
+- [sys Module](../stdlib/sys.md) - Exception info

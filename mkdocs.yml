@@ -55,6 +55,8 @@ nav:
     - Sorted: builtins/sorted.md
     - Enumerate: builtins/enumerate.md
     - All: builtins/all.md
+    - Aiter: builtins/aiter.md
+    - Anext: builtins/anext.md
     - Any: builtins/any.md
     - Absolute: builtins/abs.md
     - Power: builtins/pow.md
@@ -74,7 +76,7 @@ nav:
     - Input: builtins/input.md
     - Id: builtins/id.md
     - Globals: builtins/globals.md
-    - Locals: builtins/locals.md
+    - Locals: builtins/locals_func.md
     - Print: builtins/print.md
     - Help: builtins/help.md
     - Repr: builtins/repr.md
@@ -84,7 +86,9 @@ nav:
     - Compile: builtins/compile.md
     - Hex: builtins/hex.md
     - Bin: builtins/bin.md
+    - Breakpoint: builtins/breakpoint.md
     - Oct: builtins/oct.md
+    - Type: builtins/type_func.md
     - Callable: builtins/callable.md
     - Bool: builtins/bool_func.md
     - Int: builtins/int_func.md
@@ -116,6 +120,8 @@ nav:
     - False: builtins/false.md
     - NotImplemented: builtins/notimplemented.md
     - Ellipsis: builtins/ellipsis.md
+    - Interpreter Info: builtins/interpreter_info.md
+    - Exit/Quit: builtins/exit_quit.md
   - Standard Library:
     - Overview: stdlib/index.md
     - ABC: stdlib/abc.md
