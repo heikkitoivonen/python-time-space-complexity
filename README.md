@@ -33,8 +33,7 @@ Visit the documentation at: [pythoncomplexity.com](https://pythoncomplexity.com)
 │   └── versions/             # Version-specific guides
 ├── tests/                     # Test suite
 ├── scripts/                   # Utility scripts
-│   ├── generate_docs.py      # Documentation generation template
-│   └── validate_data.py      # Data validation template
+│   └── audit_documentation.py # Documentation coverage audit
 ├── pyproject.toml            # Project metadata and dependencies
 ├── mkdocs.yml                # MkDocs configuration
 ├── Makefile                  # Development commands

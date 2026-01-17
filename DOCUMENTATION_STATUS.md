@@ -225,14 +225,12 @@ All standard library modules are fully documented, including new Python 3.14 mod
 - ✅ `plistlib` - Property list format
 - ✅ `sndhdr` - Sound file format detection
 
-### ⊘ Excluded Items (5 - intentionally out of scope)
+### ⊘ Excluded Items (3 - intentionally out of scope)
 
 These items appear in audit but are **intentionally not documented** as they are not part of Python's standard library:
 
 **Project Scripts** (not stdlib):
 - `audit_documentation` - Project's own audit script
-- `generate_docs` - Project's own documentation generation script
-- `validate_data` - Project's own data validation script
 
 **Third-party Packages** (external, not stdlib):
 - `pip` - External package manager

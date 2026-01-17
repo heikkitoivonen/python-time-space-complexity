@@ -105,8 +105,7 @@ python-time-space-complexity/
 │   ├── builtins.json
 │   └── stdlib.json
 ├── scripts/                   # Utility scripts
-│   ├── generate_docs.py      # Generate docs from data
-│   └── validate_data.py      # Validate complexity claims
+│   └── audit_documentation.py # Documentation coverage audit
 ├── tests/                     # Test files
 ├── .github/workflows/         # GitHub Actions CI/CD
 │   └── deploy.yml           # Deploy to GitHub Pages

@@ -65,8 +65,7 @@ data/
 ### /scripts - Automation
 ```
 scripts/
-├── generate_docs.py  - Generate docs from data (template)
-└── validate_data.py  - Validate complexity claims (template)
+└── audit_documentation.py - Documentation coverage audit
 ```
 
 ### /.github - CI/CD
