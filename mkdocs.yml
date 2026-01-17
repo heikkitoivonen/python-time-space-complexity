@@ -93,6 +93,7 @@ nav:
     - Contextlib: stdlib/contextlib.md
     - Copy: stdlib/copy.md
     - Counter: stdlib/counter.md
+    - Calendar: stdlib/calendar.md
     - Csv: stdlib/csv.md
     - Dataclasses: stdlib/dataclasses.md
     - DBM: stdlib/dbm.md
@@ -128,14 +129,17 @@ nav:
     - Pickle: stdlib/pickle.md
     - Pkgutil: stdlib/pkgutil.md
     - Namedtuple: stdlib/namedtuple.md
+    - Numbers: stdlib/numbers.md
     - Ntpath: stdlib/ntpath.md
     - Operator: stdlib/operator.md
     - OrderedDict: stdlib/ordereddict.md
     - OS: stdlib/os.md
+    - Platform: stdlib/platform.md
     - Pathlib: stdlib/pathlib.md
     - Posixpath: stdlib/posixpath.md
     - Pprint: stdlib/pprint.md
     - Queue: stdlib/queue.md
+    - Shlex: stdlib/shlex.md
     - Shutil: stdlib/shutil.md
     - Random: stdlib/random.md
     - Regular Expressions: stdlib/re.md
@@ -144,6 +148,7 @@ nav:
     - Signal: stdlib/signal.md
     - Socket: stdlib/socket.md
     - Shelve: stdlib/shelve.md
+    - Smtplib: stdlib/smtplib.md
     - Statistics: stdlib/statistics.md
     - String: stdlib/string.md
     - Sqlite3: stdlib/sqlite3.md

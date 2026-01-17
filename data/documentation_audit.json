@@ -277,8 +277,8 @@
   },
   "stdlib": {
     "total": 188,
-    "documented": 87,
-    "coverage_percent": 46.3,
+    "documented": 92,
+    "coverage_percent": 48.9,
     "missing": [
       "aifc",
       "antigravity",
@@ -286,7 +286,6 @@
       "audit_documentation",
       "bdb",
       "cProfile",
-      "calendar",
       "cgi",
       "cgitb",
       "chunk",
@@ -326,7 +325,6 @@
       "netrc",
       "nntplib",
       "nturl2path",
-      "numbers",
       "opcode",
       "optparse",
       "pdb",
@@ -334,7 +332,6 @@
       "pip",
       "pipes",
       "pkg_resources",
-      "platform",
       "plistlib",
       "poplib",
       "profile",
@@ -351,10 +348,8 @@
       "sched",
       "secrets",
       "setuptools",
-      "shlex",
       "site",
       "smtpd",
-      "smtplib",
       "sndhdr",
       "socketserver",
       "sre_compile",
@@ -395,7 +390,7 @@
   },
   "summary": {
     "total_items": 337,
-    "total_documented": 128,
-    "overall_coverage_percent": 38.0
+    "total_documented": 133,
+    "overall_coverage_percent": 39.5
   }
 }
