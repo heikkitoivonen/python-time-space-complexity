@@ -86,6 +86,13 @@ nav:
     - Bin: builtins/bin.md
     - Oct: builtins/oct.md
     - Callable: builtins/callable.md
+    - Bool: builtins/bool_func.md
+    - Int: builtins/int_func.md
+    - Float: builtins/float_func.md
+    - Str: builtins/str_func.md
+    - Bytes: builtins/bytes_func.md
+    - List: builtins/list_func.md
+    - Dict: builtins/dict_func.md
     - Exceptions: builtins/exceptions.md
   - Standard Library:
     - Overview: stdlib/index.md
