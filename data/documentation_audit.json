@@ -277,8 +277,8 @@
   },
   "stdlib": {
     "total": 188,
-    "documented": 74,
-    "coverage_percent": 39.4,
+    "documented": 79,
+    "coverage_percent": 42.0,
     "missing": [
       "aifc",
       "antigravity",
@@ -319,7 +319,6 @@
       "imghdr",
       "imp",
       "importlib",
-      "ipaddress",
       "keyword",
       "lib2to3",
       "linecache",
@@ -368,8 +367,6 @@
       "sre_parse",
       "ssl",
       "stat",
-      "statistics",
-      "string",
       "stringprep",
       "sunau",
       "symtable",
@@ -377,7 +374,6 @@
       "tabnanny",
       "telnetlib",
       "this",
-      "timeit",
       "tkinter",
       "token",
       "tokenize",
@@ -389,7 +385,6 @@
       "turtle",
       "turtledemo",
       "uu",
-      "uuid",
       "validate_data",
       "venv",
       "warnings",
@@ -407,7 +402,7 @@
   },
   "summary": {
     "total_items": 337,
-    "total_documented": 115,
-    "overall_coverage_percent": 34.1
+    "total_documented": 120,
+    "overall_coverage_percent": 35.6
   }
 }

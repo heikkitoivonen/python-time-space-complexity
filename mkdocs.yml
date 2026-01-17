@@ -134,10 +134,13 @@ nav:
     - Shutil: stdlib/shutil.md
     - Random: stdlib/random.md
     - Regular Expressions: stdlib/re.md
+    - Ipaddress: stdlib/ipaddress.md
     - Selectors: stdlib/selectors.md
     - Signal: stdlib/signal.md
     - Socket: stdlib/socket.md
     - Shelve: stdlib/shelve.md
+    - Statistics: stdlib/statistics.md
+    - String: stdlib/string.md
     - Sqlite3: stdlib/sqlite3.md
     - Struct: stdlib/struct.md
     - Subprocess: stdlib/subprocess.md
@@ -147,7 +150,9 @@ nav:
     - Threading: stdlib/threading.md
     - Types: stdlib/types.md
     - Typing: stdlib/typing.md
+    - Timeit: stdlib/timeit.md
     - Unittest: stdlib/unittest.md
+    - Uuid: stdlib/uuid.md
     - Urllib: stdlib/urllib.md
     - Zlib: stdlib/zlib.md
     - Zipfile: stdlib/zipfile.md
