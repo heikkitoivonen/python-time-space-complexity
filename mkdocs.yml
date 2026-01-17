@@ -125,6 +125,7 @@ nav:
   - Standard Library:
     - Overview: stdlib/index.md
     - ABC: stdlib/abc.md
+    - Annotationlib: stdlib/annotationlib.md
     - Argparse: stdlib/argparse.md
     - Aifc: stdlib/aifc.md
     - Antigravity: stdlib/antigravity.md
@@ -161,6 +162,7 @@ nav:
     - Curses: stdlib/curses.md
     - Calendar: stdlib/calendar.md
     - Colorsys: stdlib/colorsys.md
+    - Compression: stdlib/compression.md
     - Csv: stdlib/csv.md
     - Dataclasses: stdlib/dataclasses.md
     - DBM: stdlib/dbm.md
@@ -298,6 +300,7 @@ nav:
     - This: stdlib/this.md
     - Tkinter: stdlib/tkinter.md
     - Turtle: stdlib/turtle.md
+    - Turtledemo: stdlib/turtledemo.md
     - Tty: stdlib/tty.md
     - Types: stdlib/types.md
     - Typing: stdlib/typing.md

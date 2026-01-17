@@ -1,9 +1,9 @@
 {
   "timestamp": null,
   "builtins": {
-    "total": 149,
-    "documented": 173,
-    "coverage_percent": 116.1,
+    "total": 150,
+    "documented": 174,
+    "coverage_percent": 116.0,
     "missing": [],
     "by_category": {
       "exceptions": [
@@ -52,6 +52,7 @@
         "PendingDeprecationWarning",
         "PermissionError",
         "ProcessLookupError",
+        "PythonFinalizationError",
         "RecursionError",
         "ReferenceError",
         "ResourceWarning",
@@ -166,23 +167,20 @@
     }
   },
   "stdlib": {
-    "total": 188,
-    "documented": 196,
-    "coverage_percent": 104.3,
+    "total": 168,
+    "documented": 199,
+    "coverage_percent": 118.5,
     "missing": [
       "audit_documentation",
       "cProfile",
       "generate_docs",
       "pip",
-      "pkg_resources",
-      "setuptools",
-      "turtledemo",
       "validate_data"
     ]
   },
   "summary": {
-    "total_items": 337,
-    "total_documented": 369,
-    "overall_coverage_percent": 109.5
+    "total_items": 318,
+    "total_documented": 373,
+    "overall_coverage_percent": 117.3
   }
 }
