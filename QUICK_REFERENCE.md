@@ -17,12 +17,12 @@
 ### Dictionaries & Sets
 | Operation | Time |
 |-----------|------|
-| `d[key]` | O(1) |
-| `d[key] = v` | O(1) |
-| `key in d` | O(1) |
-| `d.keys()` / `.values()` / `.items()` | O(1) |
-| `set.add()` | O(1) |
-| `set.in` | O(1) |
+| `d[key]` | O(1) avg |
+| `d[key] = v` | O(1) avg |
+| `key in d` | O(1) avg |
+| `d.keys()` / `.values()` / `.items()` | O(1) view; O(n) iterate |
+| `set.add()` | O(1) avg |
+| `x in set` | O(1) avg |
 
 **Pro tip:** Use sets for fast membership testing, not lists.
 
@@ -117,20 +117,24 @@ sorted_list.sort()
 
 ### Performance Tier
 ```
-Python 3.8/3.9  ← Baseline
+Python 3.9      ← Baseline
 Python 3.10     ← +5% improvements
 Python 3.11     ← +10-60% improvements (inline caching!)
 Python 3.12     ← +5-10% improvements
+Python 3.13     ← Similar (experimental free-threading)
+Python 3.14     ← Better GC pauses, new heapq max-heap
 ```
 
 **Recommendation:** Use Python 3.11+ for performance-critical code.
 
 ### Features by Version
 ```
-3.9: Type hints without imports (list[int])
+3.9:  Type hints without imports (list[int])
 3.10: Pattern matching (match/case)
 3.11: Inline caching (2-4x faster attribute access)
-3.12: Better specialization
+3.12: Comprehension inlining, type parameters
+3.13: Free-threading (experimental), JIT (experimental)
+3.14: heapq max-heap functions, annotationlib, compression.zstd
 ```
 
 ## Implementation Comparison

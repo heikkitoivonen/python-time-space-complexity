@@ -3,7 +3,7 @@
 ## Initial Setup
 
 ### Prerequisites
-- Python 3.8+ (3.11+ recommended)
+- Python 3.9+ (3.14 recommended)
 - [uv](https://github.com/astral-sh/uv) (fast Python package manager)
 - Git
 

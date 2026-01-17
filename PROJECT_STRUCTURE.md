@@ -5,24 +5,25 @@
 A complete, production-ready GitHub repository for documenting Python complexity with automated deployment to GitHub Pages.
 
 ### Key Statistics
-- **30+ markdown files** (~3,800 lines of documentation)
+- **373 documented items** with 118% coverage (see `scripts/audit_documentation.py`)
 - **Complete website** ready to deploy
 - **4 Python implementations** documented (CPython, PyPy, Jython, IronPython)
-- **5 Python versions** (3.8, 3.9, 3.10, 3.11, 3.12)
-- **5 built-in types** with detailed complexity analysis
-- **3+ stdlib modules** documented
+- **6 Python versions** documented (3.9–3.14)
+- All built-in types with detailed complexity analysis
+- 199 stdlib modules documented (including Python 3.14 additions)
 
 ## Directory Layout
 
 ### Root Level
 ```
 README.md               - Project overview and quick links
-LICENSE.txt                - MIT License
-CONTRIBUTING.md        - Contribution guidelines
-SETUP.md              - Quick start for developers
-PROJECT_STRUCTURE.md  - This file
-mkdocs.yml            - Website configuration
-requirements.txt      - Python dependencies
+LICENSE.txt             - MIT License
+CONTRIBUTING.md         - Contribution guidelines
+SETUP.md                - Quick start for developers
+DEV_GUIDE.md            - Development workflow and standards
+PROJECT_STRUCTURE.md    - This file
+mkdocs.yml              - Website configuration
+pyproject.toml          - Python dependencies and tooling
 ```
 
 ### /docs - Website Content
@@ -49,6 +50,8 @@ docs/
 │   └── ironpython.md         - .NET-based Python
 └── versions/                   - Version guides
     ├── index.md              - Version timeline
+    ├── py314.md              - Python 3.14 (max-heap, annotationlib)
+    ├── py313.md              - Python 3.13 (free-threading)
     ├── py312.md              - Python 3.12
     ├── py311.md              - Python 3.11 (inline caching)
     ├── py310.md              - Python 3.10
@@ -108,10 +111,13 @@ Similar structure to built-in types, with:
 - When to use each data structure
 - Performance comparisons
 
-**Covered modules:**
+**Covered modules include:**
 - `collections` - deque, Counter, defaultdict, OrderedDict, namedtuple
-- `heapq` - Min-heap operations
+- `heapq` - Min/max-heap operations (max-heap new in 3.14)
 - `bisect` - Binary search in sorted lists
+- `annotationlib` - Annotation introspection (new in 3.14)
+- `compression.zstd` - Zstandard compression (new in 3.14)
+- And 190+ more (see audit for full list)
 
 ### Python Implementation Guides
 
@@ -140,21 +146,22 @@ Each version page includes:
 - **End of life** - Support timeline
 
 **Versions:**
-- Python 3.12 - Latest (October 2023)
+- Python 3.14 - Latest (October 2025): max-heap, annotationlib, compression.zstd
+- Python 3.13 - Free-threading (experimental), JIT (experimental)
+- Python 3.12 - Comprehension inlining, type parameters
 - Python 3.11 - Inline caching, 10-60% faster
 - Python 3.10 - Pattern matching
 - Python 3.9 - Type hints without imports
-- Python 3.8 - Assignment expressions (walrus)
 
 ## How to Use This Repository
 
 ### For Development
 ```bash
 # Install dependencies
-pip install -r requirements.txt
+uv sync
 
 # Serve locally
-mkdocs serve
+make serve
 
 # Visit http://localhost:8000
 ```
@@ -244,22 +251,11 @@ mkdocs serve
 
 ## Statistics
 
-- **Pages Created:** 30+
-- **Documentation Lines:** ~3,800
-- **Code Examples:** 100+
-- **Complexity Tables:** 50+
-- **Implementations Covered:** 4
-- **Python Versions:** 5
-- **Built-in Types:** 5
-- **Stdlib Modules:** 3+
-
-## File Sizes
-
-- Total documentation: ~3,800 lines
-- mkdocs.yml: Configuration
-- requirements.txt: 3 Python packages
-- GitHub Actions: Deployment workflow
-- Data files: JSON structure for extensibility
+Run `python scripts/audit_documentation.py` for current metrics:
+- **Documented Items:** 373
+- **Coverage:** 118%
+- **Python Versions:** 6 (3.9–3.14)
+- **Implementations:** 4
 
 ## Future Expansion Ideas
 

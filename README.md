@@ -6,8 +6,8 @@ A comprehensive resource documenting the time and space complexity of Python's b
 
 This project provides detailed documentation of algorithmic complexity for:
 - **Python Built-ins**: `list`, `dict`, `set`, `str`, etc.
-- **Standard Library Modules**: `collections`, `heapq`, `bisect`, and more
-- **Multiple Python Versions**: CPython 3.8+
+- **Standard Library Modules**: `collections`, `heapq`, `bisect`, `annotationlib`, `compression.zstd`, and more
+- **Python Versions**: 3.9–3.14 (including new 3.14 features)
 - **Alternative Implementations**: CPython, PyPy, Jython, IronPython
 
 ## Features
@@ -47,7 +47,7 @@ Visit the documentation at: [pythoncomplexity.com](https://pythoncomplexity.com)
 
 ### Requirements
 
-- Python 3.8+ (3.11+ recommended)
+- Python 3.9+ (3.14 recommended)
 - [uv](https://github.com/astral-sh/uv) - Fast Python package manager
 
 ### Quick Start

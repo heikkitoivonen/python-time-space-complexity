@@ -4,7 +4,7 @@ This guide covers development workflow, testing, and quality standards for this 
 
 ## Prerequisites
 
-- Python 3.8+ (3.11+ recommended)
+- Python 3.9+ (3.14 recommended)
 - [uv](https://github.com/astral-sh/uv) - Fast Python package manager
 
 ## Quick Setup
@@ -157,7 +157,7 @@ uv run ruff check --fix .
 
 Configuration in `pyproject.toml`:
 - Line length: 100 characters
-- Python 3.8+ compatibility
+- Python 3.9+ compatibility
 - Checks: pycodestyle, pyflakes, isort, comprehensions, bugbear, upgrades
 
 ### Formatting
@@ -192,7 +192,7 @@ uv run pyright
 
 Configuration in `pyproject.toml`:
 - Strict type checking enabled
-- Python 3.8+ compatibility
+- Python 3.9+ compatibility
 - Detects unused imports, undefined variables, type mismatches
 
 ### Testing
@@ -396,7 +396,7 @@ Optional environment variables for development:
 
 ```bash
 # Set Python version for uv
-export UV_PYTHON=3.11
+export UV_PYTHON=3.14
 
 # Set virtual environment location
 export VIRTUAL_ENV=.venv
