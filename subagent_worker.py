@@ -9,10 +9,8 @@ Usage:
 """
 
 import os
-import sys
-from pathlib import Path
 from datetime import datetime
-import json
+from pathlib import Path
 
 AGENT_ID = os.environ.get("SUBAGENT_ID", "unknown")
 LOCK_DIR = Path(os.environ.get("LOCK_DIR", "docs/.locks"))
@@ -86,19 +84,19 @@ def process_file(filepath):
 
         # For now, just log what would be reviewed
         if summary["has_complexity_table"]:
-            print(f"  ✓ Has complexity table")
+            print("  ✓ Has complexity table")
         else:
-            print(f"  ⚠ Missing complexity table")
+            print("  ⚠ Missing complexity table")
 
         if summary["has_examples"]:
-            print(f"  ✓ Has code examples")
+            print("  ✓ Has code examples")
         else:
-            print(f"  ⚠ Missing code examples")
+            print("  ⚠ Missing code examples")
 
         if summary["has_best_practices"]:
-            print(f"  ✓ Has best practices")
+            print("  ✓ Has best practices")
         else:
-            print(f"  ⚠ Missing best practices")
+            print("  ⚠ Missing best practices")
 
         print(f"  Size: {summary['size']} bytes")
 

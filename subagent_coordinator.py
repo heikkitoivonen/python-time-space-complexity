@@ -23,9 +23,8 @@ import json
 import os
 import subprocess
 import sys
-from pathlib import Path
 from datetime import datetime
-import time
+from pathlib import Path
 
 
 class SubagentCoordinator:
@@ -151,7 +150,7 @@ class SubagentCoordinator:
         failed = len(progress["failed"])
         pending = total - completed - in_progress - failed
 
-        print(f"\nProgress Report:")
+        print("\nProgress Report:")
         print(f"  Total files: {total}")
         print(f"  Completed:   {completed} ({100*completed/total:.1f}%)")
         print(f"  In progress: {in_progress}")
@@ -215,9 +214,9 @@ class SubagentCoordinator:
         print("Subagent Documentation Review Coordinator")
         print(f"{'=' * 60}\n")
 
-        print(f"Configuration:")
+        print("Configuration:")
         print(f"  Agents: {self.num_agents}")
-        print(f"  Prompt file: .subagent_prompt.md")
+        print("  Prompt file: .subagent_prompt.md")
         print(f"  Lock directory: {self.lock_dir}")
         print(f"  Dry run: {self.dryrun}")
 
