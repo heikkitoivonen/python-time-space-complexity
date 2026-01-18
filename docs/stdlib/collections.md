@@ -18,7 +18,7 @@ from collections import deque
 | `appendleft(x)` | O(1) |
 | `pop()` | O(1) |
 | `popleft()` | O(1) |
-| `access[i]` | O(n) | <!-- VERIFY: deque indexing may be O(n) for middle elements due to block structure -->
+| `access[i]` | O(1) ends, O(n) middle | Ends (d[0], d[-1]) are O(1); middle elements O(n) due to block structure |
 | `extend(iterable)` | O(k) for k items |
 | `rotate(n)` | O(n) or O(k) for small rotations |
 | `clear()` | O(n) |
