@@ -42,7 +42,7 @@ See [Built-in Types](builtins/list.md) for detailed analysis.
 
 ## Coverage
 
-- **Python Versions**: 3.8, 3.9, 3.10, 3.11, 3.12+
+- **Python Versions**: 3.9-3.14
 - **Implementations**: CPython, PyPy, Jython, IronPython
 - **Operations**: Over 100+ built-in and stdlib operations
 - **Updates**: Regularly updated with new Python releases
