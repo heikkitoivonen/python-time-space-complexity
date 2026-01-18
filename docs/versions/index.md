@@ -219,8 +219,8 @@ Python 3.13 → Python 3.14  Better GC pauses, new heapq functions
 
 | Version | Lookup | Contains | Notes |
 |---------|--------|----------|-------|
-| 3.3+ | O(1) | O(n*m) | Flexible representation |
-| 3.11+ | O(1) | O(n*m)* | Faster due to inline caching |
+| 3.3+ | O(1) | O(n + m) worst for long strings, O(n*m) worst for pathological cases | Flexible representation |
+| 3.11+ | O(1) | O(n + m) worst for long strings, O(n*m) worst for pathological cases* | Faster due to inline caching |
 
 ## Upgrading Python
 

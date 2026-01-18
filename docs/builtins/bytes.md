@@ -16,7 +16,7 @@ The `bytes` type is an immutable sequence of bytes, while `bytearray` is the mut
 | `copy()` | O(n) | Creates new bytes object |
 | `join()` | O(n) | Single pass, n = total output length |
 | `split()` | O(n) | Single pass |
-| `find(sub)` | O(n*m) | n = bytes length, m = pattern length |
+| `find(sub)` | O(n + m) worst for long strings, O(n*m) worst for pathological cases | n = bytes length, m = pattern length |
 | `replace(old, new)` | O(n) | Creates new bytes object |
 | `decode()` | O(n) | Convert to string |
 | `hex()` | O(n) | Convert to hex |
@@ -105,7 +105,7 @@ s = b.decode('ascii')      # O(n)
 ### Searching and Replacing
 
 ```python
-# Find substring: O(n*m)
+# Find substring: O(n + m) worst for long strings, O(n*m) worst for pathological cases
 data = b"hello world"
 idx = data.find(b"world")  # O(n)
 

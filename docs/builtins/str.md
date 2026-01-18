@@ -8,9 +8,9 @@ The `str` type is an immutable sequence of Unicode characters. Python strings ha
 |-----------|------|-------|
 | `len()` | O(1) | Direct lookup |
 | `access[i]` | O(1) | Direct indexing |
-| `in` (substring) | O(n*m) worst, O(n) avg | Uses fast skip algorithm in CPython |
-| `count(sub)` | O(n*m) worst | n = string, m = substring; uses fast algorithm |
-| `find(sub)` | O(n*m) worst, O(n) avg | Uses two-way or similar fast algorithm |
+| `in` (substring) | O(n + m) worst for long strings, O(n*m) worst for pathological cases | Uses Two-Way / fastsearch algorithm in CPython (linear worst-case) |
+| `count(sub)` | O(n + m) worst for long strings, O(n*m) worst for pathological cases | n = string, m = substring; uses Two-Way/fastsearch (linear worst-case) |
+| `find(sub)` | O(n + m) worst for long strings, O(n*m) worst for pathological cases | Uses Two-Way / fastsearch algorithm in CPython (linear worst-case) |
 | `replace(old, new)` | O(n) | Single pass |
 | `split(sep)` | O(n) | Single pass |
 | `join()` | O(n) | n = total chars |
@@ -80,8 +80,8 @@ result = "".join(str(i) for i in range(10000))
 
 | Method | Complexity | Notes |
 |--------|-----------|-------|
-| `str.find()` | O(n*m) worst, O(n) avg | CPython uses two-way algorithm |
-| `str.count()` | O(n*m) worst, O(n) avg | Non-overlapping searches |
+| `str.find()` | O(n + m) worst for long strings, O(n*m) worst for pathological cases | CPython uses Two-Way / fastsearch algorithm (linear worst-case) |
+| `str.count()` | O(n + m) worst for long strings, O(n*m) worst for pathological cases | Non-overlapping searches (Two-Way/fastsearch) |
 | `str.replace()` | O(n) | Single pass with copy |
 | `str.split()` | O(n) | Single pass |
 | `str.startswith()` | O(m) | m = prefix length |
