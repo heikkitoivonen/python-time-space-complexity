@@ -40,6 +40,8 @@ env/
 .vscode/
 .idea/
 .claude/
+.project
+.pydevproject
 *.swp
 *.swo
 *~
