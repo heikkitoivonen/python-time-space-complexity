@@ -81,7 +81,6 @@ numbers_set = {1, 2, 3, 4, 5}
 ## Version Notes
 
 - **All Python 3 versions**: Core complexity unchanged
-- **Python 3.7+**: Sets maintain insertion order internally (not guaranteed API)
 - **Python 3.9+**: New set union/intersection operators
 
 ## Implementation Comparison

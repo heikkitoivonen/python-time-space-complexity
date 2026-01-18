@@ -14,9 +14,9 @@ The `dict` type is a mutable mapping that stores key-value pairs. It's implement
 | `get(key)` | O(1) avg, O(n) worst | Hash lookup |
 | `pop(key)` | O(1) avg, O(n) worst | Hash deletion |
 | `clear()` | O(n) | Must deallocate all entries |
-| `keys()` | O(1) | View object (Python 3) |
-| `values()` | O(1) | View object (Python 3) |
-| `items()` | O(1) | View object (Python 3) |
+| `keys()` | O(1) | View object (O(n) to iterate) |
+| `values()` | O(1) | View object (O(n) to iterate) |
+| `items()` | O(1) | View object (O(n) to iterate) |
 | `copy()` | O(n) | Shallow copy of all pairs |
 | `update(other)` | O(k) | k = len(other), amortized |
 | `setdefault(key, val)` | O(1) avg | Hash lookup + insert |

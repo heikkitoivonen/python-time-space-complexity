@@ -97,7 +97,7 @@ Similar, but may have different resize factors based on Java arrays.
 ❌ **Avoid**:
 - `insert(0, x)` for frequent operations - use `collections.deque` instead
 - Repeated `pop(0)` - use `deque.popleft()`
-- Building large lists with string concatenation in loops
+- Building large lists using concatenation (`+`) instead of `append()` or `extend()`
 
 ## Related Types
 
