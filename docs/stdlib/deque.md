@@ -251,12 +251,14 @@ def bfs(graph, start):
 ## Best Practices
 
 ✅ **Do**:
+
 - Use for queue/stack (O(1) both ends)
 - Use for sliding windows
 - Use for BFS algorithms
 - Set maxlen for bounded collections
 
 ❌ **Avoid**:
+
 - Random access (use list)
 - When order of operation doesn't matter (use set)
 - Sorting large deques (convert to list)

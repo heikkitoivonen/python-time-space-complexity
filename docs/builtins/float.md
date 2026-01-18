@@ -197,11 +197,13 @@ for i in range(1000000):
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `float` for general numerical computation
 - Use `math.isclose()` for float comparisons
 - Use `round()` for display, not comparison
 
 ❌ **Avoid**:
+
 - Comparing floats with `==` directly
 - Assuming decimal representation is exact
 - Using floats for financial calculations (use `Decimal`)

@@ -536,6 +536,7 @@ result2 = checker.has_attr('x')  # O(1) - cached
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `hasattr()` to safely check before accessing
 - Use `getattr()` with default instead of hasattr + getattr
 - Cache results if checking many attributes
@@ -543,6 +544,7 @@ result2 = checker.has_attr('x')  # O(1) - cached
 - Use for duck typing and protocol checking
 
 ❌ **Avoid**:
+
 - Using hasattr() repeatedly on same attribute (cache instead)
 - hasattr() + getattr() together (use getattr with default)
 - Checking many attributes with multiple hasattr() calls

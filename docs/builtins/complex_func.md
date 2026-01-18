@@ -356,12 +356,14 @@ phase = cmath.phase(c)    # atan2(4, 3)
 ## Best Practices
 
 ✅ **Do**:
+
 - Use complex literal notation: `3 + 4j`
 - Use `complex()` for string parsing: `complex("3+4j")`
 - Use `cmath` module for complex math functions
 - Use `.real` and `.imag` for components
 
 ❌ **Avoid**:
+
 - Assuming complex() is faster than literal (it's not)
 - Using complex for 2D vectors (not designed for that)
 - Forgetting j suffix when typing imaginary literals

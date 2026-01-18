@@ -386,12 +386,14 @@ s = {frozenset([3, 4])}  # Works
 ## Best Practices
 
 ✅ **Do**:
+
 - Implement `__hash__()` and `__eq__()` together for custom classes
 - Ensure hash agrees with equality: if `a == b` then `hash(a) == hash(b)`
 - Use frozen data structures for dict keys/set members
 - Use frozenset instead of set when you need hashability
 
 ❌ **Avoid**:
+
 - Implementing `__hash__()` without `__eq__()` (or vice versa)
 - Relying on specific hash values (they can change between Python versions)
 - Hashing mutable objects (they're unhashable by design)

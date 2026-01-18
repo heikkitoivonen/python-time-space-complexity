@@ -262,6 +262,7 @@ match = pattern.search(text)  # O(m)
 ## Best Practices
 
 ✅ **Do**:
+
 - Compile patterns once, reuse them
 - Use raw strings (r'...')
 - Use `pattern.finditer()` for lazy matching
@@ -269,6 +270,7 @@ match = pattern.search(text)  # O(m)
 - Use anchors (^, $) to limit search
 
 ❌ **Avoid**:
+
 - Nested quantifiers (a+)+
 - Alternation with overlap (`foo|fo`)
 - Recompiling patterns in loops

@@ -322,12 +322,14 @@ text = binary.decode("utf-8")  # More explicit
 ## Best Practices
 
 ✅ **Do**:
+
 - Define `__str__()` for custom classes (user-friendly)
 - Use `str()` for readable output
 - Use f-strings for clarity: `f"{value}"`
 - Cache str conversions if used multiple times
 
 ❌ **Avoid**:
+
 - Using `str()` for non-string types unnecessarily
 - Slow `__str__()` implementations
 - String concatenation in loops (use join)

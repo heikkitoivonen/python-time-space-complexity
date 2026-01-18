@@ -265,12 +265,14 @@ for i in range(large_count):
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `divmod()` when you need both quotient and remainder
 - Use for base conversion algorithms
 - Use for time calculations and pagination
 - Remember floor division semantics for negatives
 
 ❌ **Avoid**:
+
 - Computing `q` and `r` separately when you need both
 - Forgetting about negative number behavior
 - Assuming truncation toward zero (Python uses floor)

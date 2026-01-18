@@ -266,12 +266,14 @@ result = list(map(lambda a, b: a + b, [1, 2, 3], [10, 20]))
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `map()` for lazy evaluation with large datasets
 - Use `map(function, iterable)` instead of `list(map(lambda x: function(x), iterable))`
 - Use `map()` with built-in functions like `int`, `str`, `float`
 - Use generator expressions for complex transformations
 
 ❌ **Avoid**:
+
 - `list(map(lambda x: ..., iterable))` - use list comprehension instead
 - Forgetting that `map()` returns an iterator, not a list
 - `map()` with expensive functions without understanding lazy evaluation

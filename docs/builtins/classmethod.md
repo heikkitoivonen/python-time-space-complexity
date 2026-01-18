@@ -592,6 +592,7 @@ obj1 = Child.from_classmethod()  # Works correctly
 ## Best Practices
 
 ✅ **Do**:
+
 - Use for alternative constructors and factories
 - Use for class-level state management
 - Use for registry/plugin patterns
@@ -599,6 +600,7 @@ obj1 = Child.from_classmethod()  # Works correctly
 - Document what the classmethod does clearly
 
 ❌ **Avoid**:
+
 - Using classmethod when staticmethod suffices
 - Modifying class state without clear intent
 - Complex logic in classmethods (keep simple)

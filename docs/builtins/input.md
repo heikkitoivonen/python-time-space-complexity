@@ -333,6 +333,7 @@ values = input("Enter all values: ").split()  # O(k)
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `input()` for interactive programs
 - Validate and convert input with error handling
 - Use `strip()` to remove whitespace
@@ -340,6 +341,7 @@ values = input("Enter all values: ").split()  # O(k)
 - Use file input for large data sets
 
 ❌ **Avoid**:
+
 - Using `input()` in production servers (won't work)
 - Forgetting input returns a string (requires conversion)
 - Assuming input is safe (validate it!)

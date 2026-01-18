@@ -333,12 +333,14 @@ a, *middle, z = t  # O(1)
 ## Best Practices
 
 ✅ **Do**:
+
 - Use tuple() to convert iterables to immutable
 - Use tuples for hashable sequences (dict keys, set members)
 - Use tuple unpacking for readability
 - Use tuple literal (1, 2, 3) for constants
 
 ❌ **Avoid**:
+
 - Using tuple() when you need to modify items (use list)
 - Creating tuples from very large iterables (memory)
 - Forgetting trailing comma for single-item tuple: (1) vs (1,)

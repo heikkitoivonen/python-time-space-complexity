@@ -120,12 +120,14 @@ Backed by Java strings, similar performance characteristics.
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `str.join()` for combining multiple strings
 - Use f-strings for formatting (Python 3.6+)
 - Use `in` for substring checking (O(n) average)
 - Use `.find()` and `.replace()` for efficient manipulation
 
 ❌ **Avoid**:
+
 - String concatenation in loops with `+`
 - Repeated `.replace()` calls - do once or use regex
 - Checking membership with `in` inside nested loops without caching

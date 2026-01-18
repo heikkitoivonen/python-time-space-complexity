@@ -193,12 +193,14 @@ except ZeroDivisionError:
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `pow(x, y, z)` for modular exponentiation
 - Use `pow(x, y)` or `x ** y` (equivalent for small values)
 - Use for cryptographic operations (efficient algorithm)
 - Remember O(log y) complexity - efficient even for large exponents
 
 ❌ **Avoid**:
+
 - Computing `(x ** y) % z` - use `pow(x, y, z)` instead
 - Naive exponentiation (multiply x by itself y times)
 - Assuming O(y) complexity (it's O(log y))

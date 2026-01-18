@@ -160,12 +160,14 @@ elapsed = time.time() - start
 ## Best Practices
 
 ✅ **Do**:
+
 - Use argparse for command-line tools
 - Provide helpful descriptions
 - Use subparsers for complex tools
 - Validate arguments with type and choices
 
 ❌ **Avoid**:
+
 - Manual sys.argv parsing
 - Unclear help messages
 - Too many positional arguments

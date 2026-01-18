@@ -161,11 +161,13 @@ arr_d = array.array('d', [1.0, 2.5, 3.14])
 ## Best Practices
 
 ✅ **Do**:
+
 - Use for numeric data collections
 - Use for memory efficiency
 - Convert to list for type mixing
 
 ❌ **Avoid**:
+
 - Mixed types in array
 - Frequent insertions/deletions
 - When flexibility needed

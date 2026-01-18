@@ -255,12 +255,14 @@ if 'a' in c:  # O(1)
 ## Best Practices
 
 ✅ **Do**:
+
 - Use for frequency analysis
 - Use most_common() for top-k
 - Use Counter arithmetic for operations
 - Use for anagram/duplicate detection
 
 ❌ **Avoid**:
+
 - For non-hashable objects
 - When simple dict suffices
 - Excessive Counter creation (reuse)

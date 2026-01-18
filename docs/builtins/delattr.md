@@ -600,6 +600,7 @@ def safe_delete_checked(obj, attrs):
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `delattr()` to completely remove attributes
 - Check with `hasattr()` before deleting
 - Use in cleanup routines and context managers
@@ -607,6 +608,7 @@ def safe_delete_checked(obj, attrs):
 - Use try/except for graceful failure handling
 
 ❌ **Avoid**:
+
 - Deleting attributes that don't exist (check first)
 - Deleting in __del__ unless necessary (GC may fail)
 - Assuming deletion affects class-level attributes

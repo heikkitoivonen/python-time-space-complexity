@@ -415,6 +415,7 @@ def process_data(items, processor, config=None):
 ## Best Practices
 
 ✅ **Do**:
+
 - Use type hints for function parameters and returns
 - Use `Optional[T]` for nullable values
 - Use generic types for collections
@@ -422,6 +423,7 @@ def process_data(items, processor, config=None):
 - Include type hints in public APIs
 
 ❌ **Avoid**:
+
 - Over-annotating (use when helpful)
 - Assuming type hints are enforced (they're not)
 - Using `Any` excessively (defeats purpose)

@@ -195,12 +195,14 @@ not any(x > 0 for x in numbers)  # False
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `all()` to check if all items meet a condition
 - Use generator expressions with `all()` for lazy evaluation
 - Remember `all([])` returns `True` (vacuous truth)
 - Use short-circuit evaluation for expensive checks
 
 ❌ **Avoid**:
+
 - Creating lists with comprehensions (use generators)
 - Unnecessary nesting in conditions
 - Using `all()` when checking just one item

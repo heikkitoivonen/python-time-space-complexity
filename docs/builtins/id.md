@@ -362,12 +362,14 @@ print(id(false1) == id(false2))  # Always True
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `is` operator instead of `id(x) == id(y)`
 - Use `is None` for None checks (standard)
 - Use id() for debugging and object tracking
 - Remember ID is implementation-dependent
 
 ❌ **Avoid**:
+
 - Using id() in regular code (use `is` instead)
 - Assuming specific ID values
 - Relying on ID across Python sessions

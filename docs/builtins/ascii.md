@@ -298,12 +298,14 @@ ascii("日本語")   # "'\\u65e5\\u672c\\u8a9e'"
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `ascii()` for logging with non-ASCII content
 - Use `ascii()` for API responses to avoid encoding issues
 - Use `ascii()` when ASCII-only output is required
 - Use for debugging to see all whitespace and control characters
 
 ❌ **Avoid**:
+
 - Using `ascii()` for user-facing output (use `str()`)
 - Assuming `ascii()` output is smaller (it's usually larger)
 - Using `ascii()` when you can use proper encoding

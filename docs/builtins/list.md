@@ -48,6 +48,7 @@ If size >= capacity:
 ```
 
 This means:
+
 - Append is O(1) amortized
 - You don't resize on every append
 - Overallocation reduces resize frequency
@@ -90,11 +91,13 @@ Similar, but may have different resize factors based on Java arrays.
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `append()` for adding items
 - Use `extend()` for multiple items
 - Append then reverse if you need prepending
 
 ❌ **Avoid**:
+
 - `insert(0, x)` for frequent operations - use `collections.deque` instead
 - Repeated `pop(0)` - use `deque.popleft()`
 - Building large lists using concatenation (`+`) instead of `append()` or `extend()`

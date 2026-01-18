@@ -350,6 +350,7 @@ for algo in secure_algos:
 ## Best Practices
 
 ✅ **Do**:
+
 - Use SHA256 or SHA512 for new code
 - Use PBKDF2 or Argon2 for password hashing
 - Process large files in chunks
@@ -357,6 +358,7 @@ for algo in secure_algos:
 - Verify file integrity with hashes
 
 ❌ **Avoid**:
+
 - Using MD5 or SHA1 (cryptographically broken)
 - Using simple hash + salt for passwords (use bcrypt/argon2)
 - Assuming hash uniqueness (collisions possible)

@@ -209,6 +209,7 @@ data.insert(pos, ('d', 4))
 
 !!! tip "Amortized Efficiency"
     For many insertions:
+
     - Multiple `insort()` calls: O(n²) overall
     - Collect then single `sort()`: O(n log n) overall
     

@@ -340,6 +340,7 @@ exec("x = 1", big_scope)  # Must keep scope in memory
 ## Best Practices
 
 ✅ **Do**:
+
 - Compile code once if executing multiple times
 - Use `compile()` with exec for better performance
 - Keep exec() code simple and clear
@@ -347,6 +348,7 @@ exec("x = 1", big_scope)  # Must keep scope in memory
 - Only use with trusted code sources
 
 ❌ **Avoid**:
+
 - Using `exec()` with user input (security risk)
 - Executing complex code repeatedly without compilation
 - Using `exec()` when regular functions would work

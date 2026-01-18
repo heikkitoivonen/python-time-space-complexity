@@ -100,12 +100,14 @@ Similar characteristics, backed by Java arrays.
 ## Best Practices
 
 ✅ **Do**:
+
 - Use tuples for immutable sequences
 - Use tuples as dict keys when you need structured keys
 - Use tuples for multiple return values
 - Use tuple unpacking: `x, y = point`
 
 ❌ **Avoid**:
+
 - Repeated concatenation: `t += (item,)` in loops - use list instead
 - Creating tuples from large iterables in loops
 - Assuming tuple copy is fast - it still references same elements

@@ -355,12 +355,14 @@ if divisor != 0:     # O(1)
 ## Best Practices
 
 ✅ **Do**:
+
 - Use implicit truthiness: `if items:` not `if len(items) > 0:`
 - Check `is None` explicitly: `if value is None:` not `if not value:`
 - Use `bool()` to convert to boolean explicitly when needed
 - Define `__bool__()` for custom classes (not `__len__()` alone)
 
 ❌ **Avoid**:
+
 - Confusing empty with False: `[]` and `False` are both falsy but different
 - Using `bool()` unnecessarily in conditions
 - Assuming all falsy values are False

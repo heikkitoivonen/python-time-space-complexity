@@ -566,6 +566,7 @@ obj.__dict__ = {f'attr{i}': i for i in range(100)}
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `setattr()` for dynamic attribute assignment
 - Use `setattr()` to respect property setters
 - Use `__dict__.update()` for bulk initialization
@@ -573,6 +574,7 @@ obj.__dict__ = {f'attr{i}': i for i in range(100)}
 - Use descriptors for computed properties
 
 ❌ **Avoid**:
+
 - Using `setattr()` in tight O(n) loops repeatedly
 - Assuming all attributes can be set (check hasattr first)
 - Direct `__dict__` assignment when descriptors should be called

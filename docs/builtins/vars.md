@@ -606,6 +606,7 @@ print(hasattr(obj, 'y'))  # False - not changed
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `vars()` for quick attribute dictionary access
 - Use for serialization (objects to dicts)
 - Use for object copying and comparison
@@ -613,6 +614,7 @@ print(hasattr(obj, 'y'))  # False - not changed
 - Cache result if accessing multiple times
 
 ❌ **Avoid**:
+
 - Using `vars()` on objects without __dict__ (check first)
 - Modifying vars() result expecting to change the object
 - Using on built-in types (they have no __dict__)

@@ -384,12 +384,14 @@ def example():
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `globals()` for metaprogramming when needed
 - Cache globals() if calling multiple times
 - Use inspect module for reflection
 - Be explicit about variable scope
 
 ❌ **Avoid**:
+
 - Relying on locals() to set variables in functions
 - Calling globals() in loops (cache it)
 - Modifying globals() at module level (confusing)

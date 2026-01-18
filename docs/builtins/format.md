@@ -367,6 +367,7 @@ formatted = f"{value}"  # "(3.14+2.71j)" - O(12)
 ## Best Practices
 
 ✅ **Do**:
+
 - Use f-strings for clarity and performance (Python 3.6+)
 - Use str.format() for templating with variables
 - Use format() function for custom formatting logic
@@ -374,6 +375,7 @@ formatted = f"{value}"  # "(3.14+2.71j)" - O(12)
 - Use join() for building large formatted strings
 
 ❌ **Avoid**:
+
 - % formatting for new code (harder to read)
 - Repeated string concatenation with format() results (O(n²))
 - Complex format specs without documentation

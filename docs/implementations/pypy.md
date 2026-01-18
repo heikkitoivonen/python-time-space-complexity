@@ -113,6 +113,7 @@ def heavy_computation():
 ### Long-Running Servers
 
 PyPy excellent for servers:
+
 - Initial startup slightly slower
 - Pays off in hours/days of running
 - Can handle 10-50x more requests

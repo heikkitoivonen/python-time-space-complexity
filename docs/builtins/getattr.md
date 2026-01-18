@@ -561,6 +561,7 @@ val2 = cached.get('x')  # O(1) - from cache
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `getattr()` with default value instead of try/except
 - Cache results for repeated attribute lookups
 - Use for dynamic attribute access in loops
@@ -568,6 +569,7 @@ val2 = cached.get('x')  # O(1) - from cache
 - Use with `hasattr()` for complex validation
 
 ❌ **Avoid**:
+
 - Accessing attributes in tight O(n) loops without caching
 - Assuming all accessed attributes are safe (may raise exceptions)
 - Using `getattr()` when direct access is clearer

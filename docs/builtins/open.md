@@ -383,6 +383,7 @@ except IOError as e:
 ## Best Practices
 
 ✅ **Do**:
+
 - Use context manager (`with` statement) for automatic cleanup
 - Iterate large files line-by-line (lazy evaluation)
 - Use binary mode for non-text files
@@ -390,6 +391,7 @@ except IOError as e:
 - Seek only in binary mode (text mode has issues)
 
 ❌ **Avoid**:
+
 - Forgetting to close files (use `with`)
 - Loading huge files entirely into memory (`readlines()`)
 - Manual try/finally instead of context managers

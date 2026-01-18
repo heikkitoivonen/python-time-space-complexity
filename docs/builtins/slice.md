@@ -236,11 +236,13 @@ result = list(itertools.islice(data, 100, 200))  # O(100) when consumed
 ## Best Practices
 
 ✅ **Do**:
+
 - Create reusable slice objects for repeated patterns
 - Use slice objects with custom `__getitem__` methods
 - Understand that slicing creates new sequences (O(k))
 
 ❌ **Avoid**:
+
 - Assuming slicing is O(1) (it's O(k) where k is slice size)
 - Creating unnecessary intermediate slices
 - Over-slicing before iteration (use `itertools.islice` for lazy evaluation)

@@ -110,12 +110,14 @@ sock.sendto(b'Response', addr)  # O(k)
 ## Best Practices
 
 ✅ **Do**:
+
 - Use context managers (with statement)
 - Set timeouts
 - Close sockets properly
 - Use asyncio for many connections
 
 ❌ **Avoid**:
+
 - Blocking operations in GUI
 - No timeout (hangs)
 - Not closing sockets

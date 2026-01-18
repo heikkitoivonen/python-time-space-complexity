@@ -215,12 +215,14 @@ best = min(options, key=evaluate_option)
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `min()` to find minimum element
 - Use key parameter for custom comparisons
 - Use generators with `min()` for memory efficiency
 - Provide `default` parameter for possibly empty sequences
 
 ❌ **Avoid**:
+
 - Sorting just to find minimum (use `min()` instead)
 - Unnecessary key function evaluations
 - Finding min without checking if sequence is empty

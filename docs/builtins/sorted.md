@@ -303,12 +303,14 @@ result = sorted(numbers)  # Nearly O(n)
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `sorted()` to create new sorted list
 - Use `key` parameter for custom sorting
 - Use `operator.attrgetter()` instead of lambda for attributes
 - Pre-compute expensive keys if sorting by them multiple times
 
 ❌ **Avoid**:
+
 - Calling `sorted()` multiple times (cache result)
 - Complex lambda functions (define function instead)
 - Sorting by expensive computation in key (pre-compute)

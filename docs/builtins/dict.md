@@ -37,6 +37,7 @@ The `dict` type is a mutable mapping that stores key-value pairs. It's implement
 ### Hash Table Structure
 
 CPython uses a hash table with:
+
 - **Hash function**: SipHash13 for `str`/`bytes` (default since Python 3.11); other types use type-specific hashing
 - **Collision handling**: Open addressing with probing
 - **Growth factor**: ~2-4x when load factor exceeded
@@ -90,11 +91,13 @@ Similar hash table implementation as CPython.
 ## Best Practices
 
 ✅ **Do**:
+
 - Use dict for key-value lookups
 - Leverage dict comprehensions: `{k: v for k, v in items}`
 - Use `setdefault()` for conditional insertion
 
 ❌ **Avoid**:
+
 - Don't rely on order in Python < 3.6
 - Unhashable types as keys (lists, dicts, sets)
 - Extremely large dicts with poor hash functions

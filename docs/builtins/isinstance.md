@@ -330,12 +330,14 @@ if isinstance(lst, list):  # O(1)
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `isinstance(obj, (type1, type2))` for multiple types
 - Use ABCs for flexible type checking
 - Use `isinstance()` for inheritance-aware type checking
 - Cache expensive type checks
 
 ❌ **Avoid**:
+
 - `type(obj) is SomeType` for inheritance (doesn't follow inheritance)
 - Expensive ABC checks in tight loops
 - Checking against too many types at once (long tuples)

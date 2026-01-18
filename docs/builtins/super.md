@@ -658,6 +658,7 @@ class Child(Parent):
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `super()` for parent method calls
 - Use in cooperative multiple inheritance
 - Use in mixins and plugin systems
@@ -666,6 +667,7 @@ class Child(Parent):
 - Document MRO in complex hierarchies
 
 ❌ **Avoid**:
+
 - Mixing `super()` and explicit parent calls
 - Forgetting to call `super()` in __init__
 - Deep inheritance chains (limit to 3-4 levels)

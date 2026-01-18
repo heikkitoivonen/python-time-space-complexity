@@ -291,12 +291,14 @@ bin((1 << 32) - 1)  # 32 ones
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `bin()` for debugging bitwise operations
 - Use `format(value, 'b')` if you don't need '0b' prefix
 - Use `bit_length()` or `bit_count()` for counting
 - Use `int(binary_str, 2)` to parse binary
 
 ❌ **Avoid**:
+
 - Using `bin()` for very frequent operations (cache result)
 - Assuming binary operations are faster than regular ops
 - Building binary from decimal without understanding conversion

@@ -217,12 +217,14 @@ codes = list(map(ord, text))  # O(n) - slightly more efficient
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `ord()` for getting character code points
 - Use with `chr()` for bidirectional conversion
 - Use `map(ord, string)` for bulk operations
 - Use for encoding/decoding operations
 
 ❌ **Avoid**:
+
 - Using `ord()` for character type checking (use str methods)
 - Assuming ASCII-only (support Unicode)
 - Passing multiple characters or strings

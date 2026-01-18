@@ -271,12 +271,14 @@ total = sum(t.amount for t in transactions)  # O(n)
 ## Best Practices
 
 ✅ **Do**:
+
 - Use for simple data containers
 - Use for returning multiple values
 - Use _asdict() for serialization
 - Use defaults for optional fields
 
 ❌ **Avoid**:
+
 - Complex logic (use classes)
 - Mutable data (use dataclass)
 - When inheritance needed

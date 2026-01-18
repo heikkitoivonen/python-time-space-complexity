@@ -478,6 +478,7 @@ def process(value=...):
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `...` for function stubs during development
 - Use in abstract base classes as placeholders
 - Use for "all remaining" in slicing contexts
@@ -486,6 +487,7 @@ def process(value=...):
 - Document when ellipsis is used as sentinel
 
 ❌ **Avoid**:
+
 - Using `== ...` (use `is ...` instead)
 - Confusing with unpacking operator `*`
 - Returning ellipsis from production functions

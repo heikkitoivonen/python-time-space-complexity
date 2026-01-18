@@ -258,12 +258,14 @@ result = ''.join(map(chr, codes))
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `chr()` to create characters from code points
 - Use with `ord()` for bidirectional conversion
 - Use `map(chr, codes)` for bulk conversion
 - Use for encoding/decoding operations
 
 ❌ **Avoid**:
+
 - Creating strings character by character (use join)
 - Assuming ASCII-only (support Unicode)
 - Using string literals when code points are computed

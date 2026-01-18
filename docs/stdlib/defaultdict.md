@@ -240,12 +240,14 @@ dd_time = time.time() - start
 ## Best Practices
 
 ✅ **Do**:
+
 - Use for grouping/counting
 - Use for nested structures
 - Use with appropriate default factory
 - Provide default factory explicitly
 
 ❌ **Avoid**:
+
 - Complex default factory logic
 - Side effects in default factory
 - When regular dict with get() is clearer

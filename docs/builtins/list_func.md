@@ -321,12 +321,14 @@ for item in range(10**9):  # Iterates without storing
 ## Best Practices
 
 ✅ **Do**:
+
 - Use list() to convert iterables to lists when indexing needed
 - Use list comprehensions instead of list(map(...))
 - Avoid materializing huge ranges unnecessarily
 - Use slicing for copying: `copy = lst[:]`
 
 ❌ **Avoid**:
+
 - list(range(10**9)) - materializes huge list
 - Assuming list() is faster than `[...]` literal
 - Deep nesting without deepcopy when needed

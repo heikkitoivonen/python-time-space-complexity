@@ -169,12 +169,14 @@ except TypeError:
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `max()` to find maximum element
 - Use key parameter for custom comparisons
 - Use generators with `max()` for memory efficiency
 - Provide `default` parameter for possibly empty sequences
 
 ❌ **Avoid**:
+
 - Sorting just to find maximum (use `max()` instead)
 - Unnecessary key function evaluations
 - Finding max without checking if sequence is empty

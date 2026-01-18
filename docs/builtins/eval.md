@@ -316,6 +316,7 @@ for i in range(1000):
 ## Best Practices
 
 ✅ **Do**:
+
 - Compile expressions once if evaluated multiple times
 - Use `ast.literal_eval()` for untrusted data
 - Use `compile()` for better performance with repeated evals
@@ -323,6 +324,7 @@ for i in range(1000):
 - Provide clear error messages
 
 ❌ **Avoid**:
+
 - Using `eval()` with user input (security risk)
 - Evaluating complex expressions repeatedly (compile first)
 - Using `eval()` when regular functions would work

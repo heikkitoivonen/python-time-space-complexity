@@ -211,12 +211,14 @@ cursor.execute('SELECT * FROM users WHERE name = ?', ('Alice',))
 ## Best Practices
 
 ✅ **Do**:
+
 - Use parameterized queries (prevent injection)
 - Use transactions for multiple operations
 - Use indexes for frequent queries
 - Use context managers for cleanup
 
 ❌ **Avoid**:
+
 - String concatenation in queries (SQL injection)
 - Multiple commits in loops
 - Missing indexes on frequently queried columns

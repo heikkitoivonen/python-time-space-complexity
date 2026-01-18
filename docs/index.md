@@ -12,6 +12,7 @@ Welcome to the comprehensive guide for Python operation complexity. This resourc
 ## Why This Matters
 
 Understanding complexity helps you:
+
 - Write performant Python code
 - Choose the right data structure for your use case
 - Predict how your code scales with larger inputs

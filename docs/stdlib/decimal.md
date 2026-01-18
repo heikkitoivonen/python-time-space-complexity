@@ -349,6 +349,7 @@ Decimal('NaN') + 5       # Decimal('NaN')
 ## Best Practices
 
 ✅ **Do**:
+
 - Use Decimal for financial calculations (exact results)
 - Create Decimal from strings, not floats
 - Set appropriate precision for your domain
@@ -356,6 +357,7 @@ Decimal('NaN') + 5       # Decimal('NaN')
 - Cache common Decimal values
 
 ❌ **Avoid**:
+
 - Mixing Decimal and float operations (convert both to Decimal)
 - Creating Decimal from float: `Decimal(0.1)` ❌ use `Decimal('0.1')` ✅
 - Excessive precision (slower without benefit)

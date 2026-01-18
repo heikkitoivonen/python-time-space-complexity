@@ -355,12 +355,14 @@ deep = copy.deepcopy(outer)  # Doesn't affect original
 ## Best Practices
 
 ✅ **Do**:
+
 - Use dict comprehensions for clarity: `{k: v for ...}`
 - Use dict() with zip() for pairs: `dict(zip(keys, values))`
 - Specify all data upfront if possible
 - Use keyword arguments for simple dicts
 
 ❌ **Avoid**:
+
 - Building dicts gradually with assignments
 - Assuming dict() is faster than `{}` (similar)
 - Confusing shallow and deep copies

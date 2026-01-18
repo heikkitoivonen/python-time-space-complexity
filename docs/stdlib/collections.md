@@ -171,6 +171,7 @@ from collections import OrderedDict
 ### Notes
 
 - **Python 3.6+**: Regular `dict` preserves order, so `OrderedDict` mainly useful for:
+
   - Compatibility with older code
   - `move_to_end()` method for reordering
   - Explicit intent in code

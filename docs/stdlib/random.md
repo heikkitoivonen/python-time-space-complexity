@@ -388,6 +388,7 @@ threads = [
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `random.seed()` for reproducible randomness in tests
 - Use `random.choices()` for weighted selection
 - Use each thread's own `random.Random()` instance
@@ -395,6 +396,7 @@ threads = [
 - Cache seed for reproducibility
 
 ❌ **Avoid**:
+
 - Assuming `random()` is cryptographically secure (use `secrets` instead)
 - Sharing RNG between threads (create separate instances)
 - Re-seeding frequently (defeats reproducibility)

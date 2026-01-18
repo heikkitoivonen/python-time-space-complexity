@@ -409,12 +409,14 @@ except TypeError:
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `issubclass()` to check class hierarchies
 - Use `issubclass(cls, (base1, base2))` for multiple bases
 - Use ABCs for flexible type checking
 - Check only once and cache results if in tight loops
 
 ❌ **Avoid**:
+
 - Calling `issubclass()` with non-class objects (raises TypeError)
 - Assuming parameterized generics work with `issubclass()`
 - Excessive subclass checks in tight loops (cache instead)

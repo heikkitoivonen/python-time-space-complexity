@@ -208,12 +208,14 @@ result = any(f() for f in [expensive1, expensive2, expensive3])
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `any()` to check if any item meets a condition
 - Use generator expressions with `any()` for lazy evaluation
 - Remember `any([])` returns `False`
 - Use for early exit with expensive checks
 
 ❌ **Avoid**:
+
 - Creating lists with comprehensions (use generators)
 - Using `any()` when `in` operator is clearer
 - Unnecessary nesting in conditions

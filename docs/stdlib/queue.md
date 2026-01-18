@@ -323,6 +323,7 @@ d.append('item')  # O(1), NOT thread-safe
 ## Best Practices
 
 ✅ **Do**:
+
 - Use Queue for thread-safe work distribution
 - Use PriorityQueue for priority-based processing
 - Use LifoQueue for stack-like behavior in threads
@@ -330,6 +331,7 @@ d.append('item')  # O(1), NOT thread-safe
 - Call `task_done()` to track completion
 
 ❌ **Avoid**:
+
 - Using Queue in single-threaded code (use `deque`)
 - Forgetting to call `task_done()`
 - Ignoring timeouts (risk of deadlock)

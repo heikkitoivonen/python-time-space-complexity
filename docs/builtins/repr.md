@@ -285,12 +285,14 @@ single_repr = repr(items)  # O(1000) - same complexity
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `repr()` for debugging and logging
 - Implement `__repr__()` to return evaluable code when possible
 - Use `repr()` in error messages for clarity
 - Let `repr()` handle string escaping
 
 ❌ **Avoid**:
+
 - Assuming `repr()` will always be evaluable (it may not be for all objects)
 - Using `repr()` for user-facing output (use `str()` instead)
 - Implementing expensive `__repr__()` methods

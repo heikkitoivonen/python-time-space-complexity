@@ -695,6 +695,7 @@ class Cached:
 ## Best Practices
 
 ✅ **Do**:
+
 - Use for read-only computed attributes
 - Use to validate input in setters
 - Use to implement lazy loading
@@ -703,6 +704,7 @@ class Cached:
 - Make getters fast (no I/O)
 
 ❌ **Avoid**:
+
 - Complex logic in property methods (keep simple)
 - I/O operations in getters (causes performance issues)
 - Properties with unexpected side effects

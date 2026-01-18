@@ -310,12 +310,14 @@ t2 = timeit.timeit(lambda: items[::-1], number=10000)
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `reversed()` to reverse sequences without modifying
 - Use for lazy iteration over reversed sequences
 - Combine with `enumerate()` for reverse iteration with indices
 - Use for one-pass reverse iterations
 
 ❌ **Avoid**:
+
 - Converting to list immediately (defeats laziness)
 - Using with non-sequences (check type first)
 - Using `reversed()` when `reverse()` modifies in-place

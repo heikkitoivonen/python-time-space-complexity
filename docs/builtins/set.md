@@ -37,6 +37,7 @@ The `set` type is an unordered collection of unique items. It's implemented as a
 ### Hash Table Implementation
 
 Sets use the same hash table design as dictionaries, but:
+
 - Only stores keys (no values)
 - More memory efficient than dict
 - Same O(1) average case lookup
@@ -97,12 +98,14 @@ Underlying Java HashSet, same O(1) characteristics.
 ## Best Practices
 
 ✅ **Do**:
+
 - Use sets for membership testing with large collections
 - Use set operations (`|`, `&`, `-`, `^`) for combining sets
 - Use sets to remove duplicates: `set(list_with_dups)`
 - Use `frozenset` for hashable unique items
 
 ❌ **Avoid**:
+
 - Using lists for frequent membership checks
 - Relying on set order (not guaranteed)
 - Unhashable types (lists, dicts) in sets

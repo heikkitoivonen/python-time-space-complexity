@@ -336,12 +336,14 @@ t2 = timeit.timeit(lambda: [items[i] for i in range(len(items))], number=10000)
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `enumerate()` when you need both index and item
 - Use `enumerate(iterable, start=1)` for 1-based indexing
 - Use `enumerate()` with `break` for early exit
 - Use `enumerate()` for lazy evaluation with large datasets
 
 ❌ **Avoid**:
+
 - Using `range(len(...))` when `enumerate()` is clearer
 - Using `zip(range(len(...)), iterable)` - use `enumerate()` instead
 - Forgetting that `enumerate()` returns an iterator

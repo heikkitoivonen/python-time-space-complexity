@@ -433,6 +433,7 @@ import pickle
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `csv.DictReader` for named columns (clearer)
 - Use `csv.reader` for simple positional access
 - Use `newline=''` when opening CSV files (Python 3)
@@ -441,6 +442,7 @@ import pickle
 - Close files with context manager (`with` statement)
 
 ❌ **Avoid**:
+
 - Manual string splitting (let csv handle parsing)
 - Assuming comma is delimiter (specify if different)
 - Loading entire large CSV into memory at once

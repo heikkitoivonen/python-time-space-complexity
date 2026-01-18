@@ -34,6 +34,7 @@ Python's built-in types have well-defined complexity characteristics for their o
 ### Amortized Complexity
 
 Some operations like `list.append()` have **amortized O(1)** complexity. This means:
+
 - Most append operations are O(1)
 - Occasionally, a resize happens requiring O(n)
 - Over many operations, the average is O(1)
@@ -41,6 +42,7 @@ Some operations like `list.append()` have **amortized O(1)** complexity. This me
 ### Implementation Details
 
 CPython uses:
+
 - **Lists**: Dynamic arrays with over-allocation
 - **Dicts**: Hash tables with open addressing (Python 3.6+)
 - **Sets**: Hash tables (similar to dicts)

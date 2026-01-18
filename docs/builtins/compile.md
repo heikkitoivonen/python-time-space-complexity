@@ -339,12 +339,14 @@ code = compile("x + y" * 1000, "<string>", "eval")
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `compile()` for code executed multiple times
 - Save compiled code in variables for reuse
 - Use meaningful filenames for debugging
 - Pre-compile hot paths in performance-critical code
 
 ❌ **Avoid**:
+
 - Compiling code that runs only once (overhead > benefit)
 - Using `compile()` as security mechanism (it's not)
 - Ignoring SyntaxErrors from user input

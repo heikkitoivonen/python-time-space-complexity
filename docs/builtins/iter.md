@@ -411,12 +411,14 @@ item3 = next(it)  # (2, 'c') - O(1)
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `iter()` and `next()` for custom iterators
 - Use generators for memory-efficient iteration
 - Use default value in `next()` to avoid exceptions
 - Use `for` loops (they use `iter()` and `next()` internally)
 
 ❌ **Avoid**:
+
 - Calling `next()` without handling `StopIteration`
 - Creating iterators you won't use (lazy evaluation wasted)
 - Assuming you can iterate an iterator twice (exhausts on first pass)

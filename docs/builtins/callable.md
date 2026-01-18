@@ -358,12 +358,14 @@ manager.emit("click")  # Output: Event: click
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `callable()` to check before invoking unknown objects
 - Check in callback/handler validation
 - Document which parameters should be callable
 - Use in defensive programming
 
 ❌ **Avoid**:
+
 - Assuming objects are callable without checking
 - Using `callable()` for type discrimination (use `isinstance()` for that)
 - Overcomplicating with `__call__` when simple functions work

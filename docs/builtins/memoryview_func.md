@@ -368,12 +368,14 @@ result = bytes(mv) + bytes(mv)  # O(2n)
 ## Best Practices
 
 ✅ **Do**:
+
 - Use memoryview for zero-copy access
 - Create memoryview to pass to functions efficiently
 - Use slicing for efficient sub-ranges
 - Convert to bytes only when necessary
 
 ❌ **Avoid**:
+
 - Using memoryview for single access (overhead not worth it)
 - Assuming memoryview works like list (different API)
 - Trying to modify immutable buffers (bytes)

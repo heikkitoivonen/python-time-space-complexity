@@ -293,12 +293,14 @@ result = list(zip_longest([1, 2, 3, 4, 5], ['a', 'b', 'c'], fillvalue=None))
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `zip()` to combine multiple iterables
 - Use `zip()` for iterating in parallel
 - Use `enumerate()` instead of `zip(range(len(...)), ...)`
 - Use `zip_longest()` when lengths differ and you need all items
 
 ❌ **Avoid**:
+
 - Converting to list immediately - keep as iterator
 - `zip()` with deeply nested iterables (becomes unreadable)
 - Forgetting that `zip()` returns an iterator, not a list

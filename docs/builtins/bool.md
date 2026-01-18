@@ -193,12 +193,14 @@ result = condition & expensive_operation()    # bitwise AND, not short-circuit
 ## Best Practices
 
 ✅ **Do**:
+
 - Use short-circuit operators (`and`, `or`) for performance
 - Use `all()` and `any()` for collections
 - Compare with `True`/`False` explicitly when needed
 - Rely on truthiness for simple conditions
 
 ❌ **Avoid**:
+
 - `if x == True:` when `if x:` suffices
 - `if x == False:` when `if not x:` suffices
 - Mixing `and`/`or` without clear precedence

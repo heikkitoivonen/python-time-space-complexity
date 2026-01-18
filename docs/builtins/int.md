@@ -155,6 +155,7 @@ product = (10**5000) * (10**5000)  # O(5000²) to O(5000*log(5000))
 ### CPython
 
 Uses variable-length representation for arbitrary precision:
+
 - Small integers cached for performance
 - Uses Karatsuba algorithm for large multiplication
 - Bit operations are efficient (word-aligned)
@@ -163,6 +164,7 @@ Uses variable-length representation for arbitrary precision:
 ### PyPy
 
 Similar performance characteristics with JIT compilation helping with:
+
 - Repeated operations
 - Type stability
 

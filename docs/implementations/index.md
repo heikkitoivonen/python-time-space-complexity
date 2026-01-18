@@ -46,6 +46,7 @@ While standard operations have similar complexity across implementations, there 
 ## Detailed Guides
 
 See individual implementation pages for:
+
 - Specific optimizations
 - Performance characteristics
 - Known differences in complexity

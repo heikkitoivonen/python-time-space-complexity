@@ -494,6 +494,7 @@ def slow_approach(obj):
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `dir()` for interactive exploration
 - Cache results if used multiple times on same object
 - Filter results for specific attribute types
@@ -501,6 +502,7 @@ def slow_approach(obj):
 - Check before accessing with `in` operator on dir() result
 
 ❌ **Avoid**:
+
 - Using `dir()` in tight loops without caching
 - Assuming `dir()` output format is stable across versions
 - Using it for performance-critical code (it's O(n log n))

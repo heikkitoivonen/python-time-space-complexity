@@ -330,6 +330,7 @@ help(func)  # Shows custom docstring
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `help()` for interactive exploration
 - Use `help(topic)` to learn about Python features
 - Check `__doc__` attribute directly in code
@@ -337,6 +338,7 @@ help(func)  # Shows custom docstring
 - Write clear docstrings for your functions
 
 ❌ **Avoid**:
+
 - Using `help()` in tight loops (call once, cache result)
 - Assuming `help()` output format is stable
 - Using `help()` for production code (direct access faster)

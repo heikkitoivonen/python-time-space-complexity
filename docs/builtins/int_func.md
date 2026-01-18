@@ -308,12 +308,14 @@ float(3.99) # 3.99
 ## Best Practices
 
 ✅ **Do**:
+
 - Validate input before converting: `int(input())`
 - Use `try-except` for user input
 - Specify base explicitly when parsing non-decimal: `int(s, 16)`
 - Cache conversion results if used multiple times
 
 ❌ **Avoid**:
+
 - Assuming int() won't fail on user input
 - Using int() repeatedly on same string (cache it)
 - Expecting int() to round (it truncates)

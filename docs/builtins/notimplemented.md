@@ -472,6 +472,7 @@ class Inefficient:
 ## Best Practices
 
 ✅ **Do**:
+
 - Return NotImplemented from dunder methods for unsupported types
 - Check with `is NotImplemented` (not equality)
 - Use for operator overloading
@@ -480,6 +481,7 @@ class Inefficient:
 - Document supported types
 
 ❌ **Avoid**:
+
 - Raising NotImplementedError in dunder methods (use NotImplemented)
 - Using `== NotImplemented` (use `is NotImplemented`)
 - Returning NotImplemented from regular methods

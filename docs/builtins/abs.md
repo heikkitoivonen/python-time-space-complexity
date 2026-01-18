@@ -188,12 +188,14 @@ t = timeit.timeit(lambda: abs(-5), number=10**7)
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `abs()` for absolute values
 - Use in list comprehensions for bulk operations
 - Use for distance/magnitude calculations
 - Use for deviation analysis
 
 ❌ **Avoid**:
+
 - Manual if/else checks (less readable)
 - Using `max()` when `abs()` is clearer
 - Assuming type compatibility

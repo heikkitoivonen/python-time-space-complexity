@@ -256,12 +256,14 @@ d = {'a': 1, 'b': 2}  # O(n)
 ## Best Practices
 
 ✅ **Do**:
+
 - Use for backwards compatibility with Python 3.6
 - Use for LRU/MRU cache patterns with `move_to_end()`
 - Use when strict insertion-order equality matters
 - Use for explicit code intent
 
 ❌ **Avoid**:
+
 - Using instead of regular `dict` in Python 3.7+ without special needs
 - Assuming faster than regular `dict`
 - Using for non-ordered operations

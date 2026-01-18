@@ -230,12 +230,14 @@ fsum([0.1] * 10)  # More precise for floats
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `sum()` for numeric aggregation
 - Use generator expressions with `sum()` for memory efficiency
 - Use `sum([], start=[])` with explicit start value
 - Use `math.fsum()` when precision matters
 
 ❌ **Avoid**:
+
 - `sum(nested_lists, [])` - O(n²) concatenation
 - `sum(strings, "")` - inefficient string concatenation
 - Forgetting start value (causes TypeError with non-numeric sequences)

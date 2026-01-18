@@ -303,12 +303,14 @@ result = nan + 1     # nan (propagates)
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `try-except` for user input
 - Handle special values (inf, nan) if relevant
 - Validate ranges for your use case
 - Use decimal.Decimal for financial calculations
 
 ❌ **Avoid**:
+
 - Floating-point arithmetic for money (use Decimal)
 - Comparing floats with `==` (use tolerance)
 - Assuming string parsing always succeeds

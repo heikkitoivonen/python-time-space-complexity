@@ -252,12 +252,14 @@ hex_hash = h.hex()  # Bytes.hex() is even faster
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `hex()` for readable hex representation
 - Use `format(value, 'x')` when you don't need '0x' prefix
 - Use f-strings for complex formatting: `f"{value:x}"`
 - Use `int(hex_string, 16)` to convert back
 
 ❌ **Avoid**:
+
 - Assuming hex() output is always lowercase (it is, but format uppercase with 'X')
 - Building hex from decimal without understanding the conversion
 - Using `hex()` for very frequent operations (cache result)

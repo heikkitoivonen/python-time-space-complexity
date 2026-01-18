@@ -201,6 +201,7 @@ rotating = logging.handlers.RotatingFileHandler(
 ## Best Practices
 
 ✅ **Do**:
+
 - Use logging instead of print() for production
 - Set appropriate log levels
 - Use lazy formatting with %s
@@ -208,6 +209,7 @@ rotating = logging.handlers.RotatingFileHandler(
 - Use exception() for exceptions
 
 ❌ **Avoid**:
+
 - Logging sensitive information (passwords)
 - Excessive debug logging in production
 - Eager string formatting

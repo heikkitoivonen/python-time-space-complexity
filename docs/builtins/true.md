@@ -459,6 +459,7 @@ if user_exists and is_admin:  # Checks user_exists first
 ## Best Practices
 
 ✅ **Do**:
+
 - Use boolean values for flags and conditions
 - Return boolean from validation functions
 - Use truthiness checks in conditions
@@ -467,6 +468,7 @@ if user_exists and is_admin:  # Checks user_exists first
 - Use in type hints: `-> bool`
 
 ❌ **Avoid**:
+
 - Returning 1/0 instead of True/False
 - Explicit `is True` checks (use truthiness)
 - Complex boolean expressions without parentheses

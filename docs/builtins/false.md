@@ -464,6 +464,7 @@ if cache_valid and not force_refresh:  # O(1) if cache_valid is False
 ## Best Practices
 
 ✅ **Do**:
+
 - Use False for disabled/off/no states
 - Return False for failed validations
 - Use in type hints: `-> bool`
@@ -472,6 +473,7 @@ if cache_valid and not force_refresh:  # O(1) if cache_valid is False
 - Use short-circuit evaluation
 
 ❌ **Avoid**:
+
 - Confusing False with other falsy values
 - Using `== False` (just use `not value`)
 - Using `is False` except when checking exact type

@@ -91,12 +91,14 @@ output, _ = proc2.communicate()  # O(n) - n = file size
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `run()` for simple commands
 - Use `capture_output=True`
 - Use `text=True` for string output
 - Check return codes
 
 ❌ **Avoid**:
+
 - Shell injection (use list, not string)
 - Ignoring return codes
 - No timeout protection

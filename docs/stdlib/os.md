@@ -235,12 +235,14 @@ except FileNotFoundError:
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `os.path.join()` for cross-platform compatibility
 - Use `os.scandir()` for directory listing (faster)
 - Use `pathlib.Path` for modern code (more readable)
 - Check existence before accessing files
 
 ❌ **Avoid**:
+
 - Assuming forward slashes work on all platforms
 - Using string concatenation for paths
 - Multiple stat calls when one suffices

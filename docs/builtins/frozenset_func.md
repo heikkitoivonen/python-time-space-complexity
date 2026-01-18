@@ -333,12 +333,14 @@ large_fs = frozenset(range(10**6))   # 1,000,000 items
 ## Best Practices
 
 ✅ **Do**:
+
 - Use frozenset when you need a hashable set
 - Use frozenset as dict key or in sets
 - Use frozenset for immutable collections
 - Use frozenset for cache keys with sets
 
 ❌ **Avoid**:
+
 - Using frozenset when you need to modify (use set)
 - Assuming frozenset is faster (usually slower to create)
 - Putting unhashable items in frozensets

@@ -251,6 +251,7 @@ new_dt = dt + relativedelta(months=1)  # 2024-02-29
 ## Best Practices
 
 ✅ **Do**:
+
 - Use timezone-aware datetimes for storage/transmission
 - Use UTC internally, convert to local for display
 - Use `datetime.now(timezone.utc)` not `datetime.utcnow()`
@@ -258,6 +259,7 @@ new_dt = dt + relativedelta(months=1)  # 2024-02-29
 - Use `isoformat()` for serialization
 
 ❌ **Avoid**:
+
 - Mixing timezone-aware and naive datetimes
 - String parsing in tight loops without caching
 - Using `datetime.utcnow()` (deprecated)

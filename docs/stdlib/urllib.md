@@ -393,6 +393,7 @@ content2 = fetch_cached('https://example.com')
 ## Best Practices
 
 ✅ **Do**:
+
 - Use context managers (`with`) for proper cleanup
 - Always specify encoding when decoding bytes
 - Handle URLError and HTTPError exceptions
@@ -401,6 +402,7 @@ content2 = fetch_cached('https://example.com')
 - Use query parameters via urlencode, not string concatenation
 
 ❌ **Avoid**:
+
 - Fetching untrusted URLs without validation
 - Ignoring SSL certificate errors (security risk)
 - Manual URL string construction (use urlencode)

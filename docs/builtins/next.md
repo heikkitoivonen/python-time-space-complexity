@@ -305,12 +305,14 @@ lst = list(range(1000000))  # O(n) memory!
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `for` loops for normal iteration
 - Use `next()` with default to avoid exceptions
 - Use `next()` for special iterator control
 - Use generator functions with `next()` for lazy evaluation
 
 ❌ **Avoid**:
+
 - Calling `next()` without handling `StopIteration`
 - Using `next()` when `for` loop is clearer
 - Assuming `next()` is faster than for loops (it's not)

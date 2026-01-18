@@ -156,6 +156,7 @@ python -m unittest -v  # O(n*t)
 ## Best Practices
 
 ✅ **Do**:
+
 - Write independent tests
 - Use setUp/tearDown
 - Name tests clearly
@@ -163,6 +164,7 @@ python -m unittest -v  # O(n*t)
 - Use mocks for dependencies
 
 ❌ **Avoid**:
+
 - Test interdependencies
 - Testing implementation details
 - Huge test methods

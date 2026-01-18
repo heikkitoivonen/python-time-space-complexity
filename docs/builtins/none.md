@@ -484,6 +484,7 @@ def fast_process(items):
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `is None` for checking (not `== None`)
 - Use `is not None` for non-None check
 - Use None as default argument value
@@ -492,6 +493,7 @@ def fast_process(items):
 - Explicitly return None when appropriate
 
 ❌ **Avoid**:
+
 - Using `== None` (use `is None` instead)
 - Returning None implicitly when unclear
 - Confusing None with empty values ([], {}, "")

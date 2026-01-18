@@ -293,12 +293,14 @@ s3 = set(range(5))  # O(n)
 ## Best Practices
 
 ✅ **Do**:
+
 - Use sets for membership testing (O(1) vs O(n) for lists)
 - Use sets to remove duplicates
 - Use set operations for intersection/union/difference
 - Use {} literal for constants, set() for iterables
 
 ❌ **Avoid**:
+
 - Using sets when order matters (they're unordered)
 - Putting unhashable items in sets (lists, dicts)
 - Creating sets of mutable objects (won't work)

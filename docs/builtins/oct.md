@@ -276,12 +276,14 @@ t2 = timeit.timeit(lambda: oct(value), number=100000)
 ## Best Practices
 
 ✅ **Do**:
+
 - Use octal for file permissions and modes
 - Use `format(value, 'o')` if you don't need '0o' prefix
 - Use octal literals in permission codes: `0o755`
 - Use `int(octal_str, 8)` to parse octal
 
 ❌ **Avoid**:
+
 - Using octal without clear purpose (confusing)
 - Forgetting the '0o' prefix (Python 3 requires it)
 - Assuming octal arithmetic (it's still base 10)

@@ -341,12 +341,14 @@ ba[0] = 72  # O(1) - OK
 ## Best Practices
 
 ✅ **Do**:
+
 - Use bytearray when you need mutable bytes
 - Build byte sequences with bytearray then convert to bytes
 - Modify in-place rather than concatenating
 - Specify encoding explicitly: `bytearray(text, "utf-8")`
 
 ❌ **Avoid**:
+
 - Using bytearray when immutable bytes sufficient
 - Concatenating bytes in loops (use bytearray)
 - Forgetting encoding parameter

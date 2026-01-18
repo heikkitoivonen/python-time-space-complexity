@@ -319,12 +319,14 @@ text = b.decode("utf-8")
 ## Best Practices
 
 ✅ **Do**:
+
 - Specify encoding explicitly: `bytes(text, "utf-8")`
 - Use UTF-8 as default encoding
 - Handle encoding errors: `errors="strict"` (default) or other options
 - Cache encoded values if used repeatedly
 
 ❌ **Avoid**:
+
 - Assuming ASCII encoding (won't work with accents)
 - Forgetting encoding parameter in bytes()
 - Creating large bytes objects unnecessarily

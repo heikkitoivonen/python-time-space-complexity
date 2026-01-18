@@ -208,11 +208,13 @@ print(len(s.encode('utf-8')))  # 5 - five bytes
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `len()` to check if container is empty (it's O(1))
 - Use `if container:` for truthiness checks
 - Cache length only if used multiple times in tight loops
 
 ❌ **Avoid**:
+
 - `len(list(generator))` to count generator items (O(n))
 - Recomputing length in `__len__` (should be cached)
 - Assuming generators have length (they don't)

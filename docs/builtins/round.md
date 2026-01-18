@@ -208,6 +208,7 @@ t_format = timeit.timeit(lambda: f"{3.14159:.2f}", number=10**7)
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `round()` for numeric rounding
 - Use `Decimal` for financial calculations
 - Use `f"{x:.2f}"` for display formatting
@@ -215,6 +216,7 @@ t_format = timeit.timeit(lambda: f"{3.14159:.2f}", number=10**7)
 - Use negative digits for rounding to powers of 10
 
 ❌ **Avoid**:
+
 - Using `round()` for financial calculations (precision issues)
 - Assuming traditional rounding (0.5 rounds up) - Python uses banker's
 - Relying on exact float precision

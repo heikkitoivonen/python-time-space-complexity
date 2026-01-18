@@ -605,6 +605,7 @@ def mean(data):
 ## Best Practices
 
 ✅ **Do**:
+
 - Use for utility and helper functions
 - Use to organize related stateless functions
 - Use when function doesn't need self or cls
@@ -612,6 +613,7 @@ def mean(data):
 - Document that method is static in docstrings
 
 ❌ **Avoid**:
+
 - Using staticmethod when you need class or instance state
 - Complex logic (keep simple)
 - Mixing staticmethod with instance state access

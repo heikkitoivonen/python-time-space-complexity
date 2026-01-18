@@ -350,12 +350,14 @@ type(MyClass)   # <class 'type'>
 ## Best Practices
 
 ✅ **Do**:
+
 - Inherit from object explicitly for clarity (Python 2 compatibility)
 - Use object() for sentinel values
 - Rely on object's default behavior
 - Check isinstance(x, object) for type checking
 
 ❌ **Avoid**:
+
 - Creating instances of object() for storage (use custom classes)
 - Trying to add attributes to object() instances
 - Assuming object() instances have special behavior

@@ -218,12 +218,14 @@ print(lst)  # Output: [[...]] - handles circular refs
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `print()` for simple output (it's designed for this)
 - Collect strings then print once for massive output
 - Use `end=""` or `sep=""` to control formatting
 - Print to file with `file=` parameter
 
 ❌ **Avoid**:
+
 - Building large strings with `+=` before printing (O(n²))
 - Calling `flush=True` unless you need immediate output
 - Printing inside tight loops without buffering considerations

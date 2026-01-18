@@ -387,6 +387,7 @@ hex_str = binascii.hexlify(data)
 ## Best Practices
 
 ✅ **Do**:
+
 - Use base64 for binary data in text protocols
 - Use urlsafe variant for URLs/file names
 - Process large files in chunks
@@ -394,6 +395,7 @@ hex_str = binascii.hexlify(data)
 - Document encoding used in serialized data
 
 ❌ **Avoid**:
+
 - Using base64 for encryption (it's just encoding, not secure)
 - Assuming base64 is one-way (it's trivially reversible)
 - Forgetting to handle padding in edge cases

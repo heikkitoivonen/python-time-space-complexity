@@ -83,12 +83,14 @@ def increment_safe():
 ## Best Practices
 
 ✅ **Do**:
+
 - Use locks for shared resources
 - Use context managers for locks
 - Use Thread objects
 - Set daemon=True for background threads
 
 ❌ **Avoid**:
+
 - Sharing mutable objects without locks
 - CPU-bound tasks (use multiprocessing)
 - Deadlocks (acquire locks in order)

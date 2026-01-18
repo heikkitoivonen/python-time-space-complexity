@@ -293,12 +293,14 @@ result = list(filter(lambda x: x > 100, [1, 2, 3, 4, 5]))
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `filter()` for lazy evaluation with large datasets
 - Use `filter(None, list)` to remove falsy values
 - Use list comprehension for most filtering in Python 3
 - Chain `filter()` with `map()` for complex transformations
 
 ❌ **Avoid**:
+
 - Nested `filter()` calls - use list comprehension instead
 - Complex predicates in `filter()` - define functions for clarity
 - Forgetting that `filter()` returns an iterator, not a list
