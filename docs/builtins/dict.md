@@ -37,7 +37,7 @@ The `dict` type is a mutable mapping that stores key-value pairs. It's implement
 ### Hash Table Structure
 
 CPython uses a hash table with:
-- **Hash function**: FNV hash (and others) depending on data type
+- **Hash function**: SipHash13 for `str`/`bytes` (default since Python 3.11); other types use type-specific hashing
 - **Collision handling**: Open addressing with probing
 - **Growth factor**: ~2-4x when load factor exceeded
 - **Python 3.6+**: Insertion order preserved (compact dict design)

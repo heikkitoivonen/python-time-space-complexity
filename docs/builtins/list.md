@@ -44,7 +44,7 @@ CPython's list uses a growth factor strategy:
 
 ```
 If size >= capacity:
-    new_capacity = (size * 9) // 8 + 6  # Growth formula
+    new_capacity = (newsize + newsize // 8 + 6) & ~3  # Aligned to multiple of 4
 ```
 
 This means:

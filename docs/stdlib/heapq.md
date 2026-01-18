@@ -11,8 +11,8 @@ The `heapq` module provides heap implementations for priority queue operations.
 | `heappop(heap)` | O(log n) | O(1) | Remove and return min item |
 | `heappushpop(heap, item)` | O(log n) | O(1) | Push then pop (more efficient than separate calls) |
 | `heapreplace(heap, item)` | O(log n) | O(1) | Pop then push (more efficient than separate calls) |
-| `nlargest(n, iterable)` | O(k log n) | O(n) | k = iterable length, maintains heap of n items |
-| `nsmallest(n, iterable)` | O(k log n) | O(n) | k = iterable length, maintains heap of n items |
+| `nlargest(k, iterable)` | O(N log k) | O(k) | N = iterable length; maintains heap of k items; O(N log N) if k ≥ N |
+| `nsmallest(k, iterable)` | O(N log k) | O(k) | N = iterable length; maintains heap of k items; O(N log N) if k ≥ N |
 | `merge(*iterables)` | O(n log k) | O(k) | n = total items, k = count of iterables |
 
 ## Max-Heap Operations (Python 3.14+)
