@@ -442,3 +442,199 @@ class TestTupleComplexity:
         assert is_linear_time(small_time, large_time, 100), (
             f"Repetition doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
+
+
+class TestStrComplexity:
+    """Test str operation complexities as documented in docs/builtins/str.md."""
+
+    SMALL_SIZE = 1_000
+    LARGE_SIZE = 100_000
+    SIZE_RATIO = LARGE_SIZE / SMALL_SIZE
+
+    def test_len_is_o1(self) -> None:
+        """len() should be O(1) - direct lookup."""
+        small_str = "a" * self.SMALL_SIZE
+        large_str = "a" * self.LARGE_SIZE
+
+        small_time = measure_time(lambda: len(small_str))
+        large_time = measure_time(lambda: len(large_str))
+
+        assert is_constant_time(small_time, large_time), (
+            f"len() appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
+        )
+
+    def test_index_access_is_o1(self) -> None:
+        """str[i] should be O(1) - direct indexing."""
+        small_str = "a" * self.SMALL_SIZE
+        large_str = "a" * self.LARGE_SIZE
+
+        small_time = measure_time(lambda: small_str[self.SMALL_SIZE // 2])
+        large_time = measure_time(lambda: large_str[self.LARGE_SIZE // 2])
+
+        assert is_constant_time(small_time, large_time), (
+            f"Index access appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
+        )
+
+    def test_find_is_on(self) -> None:
+        """str.find() should be O(n) for substring search."""
+        small_str = "a" * self.SMALL_SIZE + "b"
+        large_str = "a" * self.LARGE_SIZE + "b"
+
+        small_time = measure_time(lambda: small_str.find("b"), iterations=50)
+        large_time = measure_time(lambda: large_str.find("b"), iterations=50)
+
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
+            f"find() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
+        )
+
+    def test_rfind_is_on(self) -> None:
+        """str.rfind() should be O(n) for reverse substring search."""
+        small_str = "b" + "a" * self.SMALL_SIZE
+        large_str = "b" + "a" * self.LARGE_SIZE
+
+        small_time = measure_time(lambda: small_str.rfind("b"), iterations=50)
+        large_time = measure_time(lambda: large_str.rfind("b"), iterations=50)
+
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
+            f"rfind() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
+        )
+
+    def test_count_is_on(self) -> None:
+        """str.count() should be O(n) - scans entire string."""
+        small_str = "a" * self.SMALL_SIZE
+        large_str = "a" * self.LARGE_SIZE
+
+        small_time = measure_time(lambda: small_str.count("a"), iterations=50)
+        large_time = measure_time(lambda: large_str.count("a"), iterations=50)
+
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
+            f"count() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
+        )
+
+    def test_replace_is_on(self) -> None:
+        """str.replace() should be O(n) - single pass."""
+        small_str = "a" * self.SMALL_SIZE
+        large_str = "a" * self.LARGE_SIZE
+
+        small_time = measure_time(lambda: small_str.replace("a", "b"), iterations=50)
+        large_time = measure_time(lambda: large_str.replace("a", "b"), iterations=50)
+
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
+            f"replace() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
+        )
+
+    def test_split_is_on(self) -> None:
+        """str.split() should be O(n) - single pass."""
+        small_str = "a " * self.SMALL_SIZE
+        large_str = "a " * self.LARGE_SIZE
+
+        small_time = measure_time(lambda: small_str.split(), iterations=50)
+        large_time = measure_time(lambda: large_str.split(), iterations=50)
+
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
+            f"split() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
+        )
+
+    def test_join_is_on(self) -> None:
+        """str.join() should be O(n) - n = total chars."""
+        small_list = ["a"] * self.SMALL_SIZE
+        large_list = ["a"] * self.LARGE_SIZE
+
+        small_time = measure_time(lambda: "".join(small_list), iterations=50)
+        large_time = measure_time(lambda: "".join(large_list), iterations=50)
+
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
+            f"join() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
+        )
+
+    def test_upper_is_on(self) -> None:
+        """str.upper() should be O(n) - processes each char."""
+        small_str = "a" * self.SMALL_SIZE
+        large_str = "a" * self.LARGE_SIZE
+
+        small_time = measure_time(lambda: small_str.upper(), iterations=50)
+        large_time = measure_time(lambda: large_str.upper(), iterations=50)
+
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
+            f"upper() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
+        )
+
+    def test_strip_is_on(self) -> None:
+        """str.strip() should be O(n)."""
+        small_str = " " * 100 + "a" * self.SMALL_SIZE + " " * 100
+        large_str = " " * 100 + "a" * self.LARGE_SIZE + " " * 100
+
+        small_time = measure_time(lambda: small_str.strip(), iterations=50)
+        large_time = measure_time(lambda: large_str.strip(), iterations=50)
+
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
+            f"strip() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
+        )
+
+    def test_startswith_is_om(self) -> None:
+        """str.startswith() should be O(m) where m = prefix length."""
+        large_str = "a" * self.LARGE_SIZE
+        small_prefix = "a" * 100
+        large_prefix = "a" * 10000
+
+        small_time = measure_time(
+            lambda: large_str.startswith(small_prefix), iterations=100
+        )
+        large_time = measure_time(
+            lambda: large_str.startswith(large_prefix), iterations=100
+        )
+
+        assert is_linear_time(small_time, large_time, 100), (
+            f"startswith() doesn't scale with prefix: {small_time:.2e}s vs {large_time:.2e}s"
+        )
+
+    def test_concatenation_is_on(self) -> None:
+        """String concatenation should be O(n+m)."""
+        small_str = "a" * self.SMALL_SIZE
+        large_str = "a" * self.LARGE_SIZE
+
+        small_time = measure_time(lambda: small_str + small_str, iterations=50)
+        large_time = measure_time(lambda: large_str + large_str, iterations=50)
+
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
+            f"Concatenation doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
+        )
+
+    def test_slice_is_ok(self) -> None:
+        """Slicing should be O(k) where k = slice length."""
+        large_str = "a" * self.LARGE_SIZE
+
+        small_slice_time = measure_time(
+            lambda: large_str[: self.SMALL_SIZE], iterations=50
+        )
+        large_slice_time = measure_time(
+            lambda: large_str[: self.LARGE_SIZE], iterations=50
+        )
+
+        assert is_linear_time(small_slice_time, large_slice_time, self.SIZE_RATIO), (
+            f"Slicing doesn't scale linearly: {small_slice_time:.2e}s vs {large_slice_time:.2e}s"
+        )
+
+    def test_in_substring_is_on(self) -> None:
+        """'in' substring check should be O(n)."""
+        small_str = "a" * self.SMALL_SIZE + "b"
+        large_str = "a" * self.LARGE_SIZE + "b"
+
+        small_time = measure_time(lambda: "b" in small_str, iterations=50)
+        large_time = measure_time(lambda: "b" in large_str, iterations=50)
+
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
+            f"'in' doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
+        )
+
+    def test_encode_is_on(self) -> None:
+        """str.encode() should be O(n)."""
+        small_str = "a" * self.SMALL_SIZE
+        large_str = "a" * self.LARGE_SIZE
+
+        small_time = measure_time(lambda: small_str.encode(), iterations=50)
+        large_time = measure_time(lambda: large_str.encode(), iterations=50)
+
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
+            f"encode() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
+        )
