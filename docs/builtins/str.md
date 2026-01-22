@@ -81,6 +81,7 @@ result = "".join(str(i) for i in range(10000))
 | Method | Complexity | Notes |
 |--------|-----------|-------|
 | `str.find()` | O(n + m) worst for long strings, O(n*m) worst for pathological cases | CPython uses Two-Way / fastsearch algorithm (linear worst-case) |
+| `str.rfind()` | O(n*m) worst case | Does not use Two-Way algorithm; uses backward Boyer-Moore-Horspool |
 | `str.count()` | O(n + m) worst for long strings, O(n*m) worst for pathological cases | Non-overlapping searches (Two-Way/fastsearch) |
 | `str.replace()` | O(n) | Single pass with copy |
 | `str.split()` | O(n) | Single pass |
