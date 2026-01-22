@@ -18,7 +18,7 @@ The `list` type is a mutable, ordered sequence. It's implemented as a dynamic ar
 | `clear()` | O(n) | Deallocate memory |
 | `index(x)` | O(n) | Linear search |
 | `count(x)` | O(n) | Linear scan |
-| `sort()` | O(n log n) | Timsort/Powersort |
+| `sort()` | O(n log n) avg/worst, O(n) best | Timsort/Powersort; adaptive for partially sorted data |
 | `reverse()` | O(n) | In-place reversal |
 | `copy()` | O(n) | Shallow copy |
 | `extend(iterable)` | O(k) | k = length of iterable |

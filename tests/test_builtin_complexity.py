@@ -298,6 +298,54 @@ class TestListComplexity:
             f"{small_slice_time:.2e}s vs {large_slice_time:.2e}s"
         )
 
+    def test_sort_average_case(self) -> None:
+        """sort() should be O(n log n) average case."""
+        import random
+
+        random.seed(42)
+        small_list = [random.randint(0, 1000000) for _ in range(self.SMALL_SIZE)]
+        large_list = [random.randint(0, 1000000) for _ in range(self.LARGE_SIZE)]
+
+        def sort_small() -> None:
+            lst = small_list.copy()
+            lst.sort()
+
+        def sort_large() -> None:
+            lst = large_list.copy()
+            lst.sort()
+
+        small_time = measure_time(sort_small, iterations=20)
+        large_time = measure_time(sort_large, iterations=20)
+
+        # O(n log n) means large should be ~100 * log(100000)/log(1000) ~ 166x slower
+        # We use a generous tolerance since timing can vary
+        expected_ratio = (self.LARGE_SIZE / self.SMALL_SIZE) * (17 / 10)  # ~170x
+        assert large_time < small_time * expected_ratio * 3, (
+            f"sort() appears worse than O(n log n): {small_time:.2e}s vs {large_time:.2e}s"
+        )
+
+    def test_sort_best_case_already_sorted(self) -> None:
+        """sort() should be O(n) for already sorted data (Timsort adaptive)."""
+        small_list = list(range(self.SMALL_SIZE))
+        large_list = list(range(self.LARGE_SIZE))
+
+        def sort_small() -> None:
+            lst = small_list.copy()
+            lst.sort()
+
+        def sort_large() -> None:
+            lst = large_list.copy()
+            lst.sort()
+
+        small_time = measure_time(sort_small, iterations=20)
+        large_time = measure_time(sort_large, iterations=20)
+
+        # For already sorted data, Timsort is O(n), so should scale linearly
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
+            f"sort() on sorted data doesn't appear linear: "
+            f"{small_time:.2e}s vs {large_time:.2e}s"
+        )
+
 
 class TestTupleComplexity:
     """Test tuple operation complexities as documented in docs/builtins/tuple.md."""
