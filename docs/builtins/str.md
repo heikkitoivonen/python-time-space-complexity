@@ -9,19 +9,65 @@ The `str` type is an immutable sequence of Unicode characters. Python strings ha
 | `len()` | O(1) | Direct lookup |
 | `access[i]` | O(1) | Direct indexing |
 | `in` (substring) | O(n + m) worst for long strings, O(n*m) worst for pathological cases | Uses Two-Way / fastsearch algorithm in CPython (linear worst-case) |
-| `count(sub)` | O(n + m) worst for long strings, O(n*m) worst for pathological cases | n = string, m = substring; uses Two-Way/fastsearch (linear worst-case) |
-| `find(sub)` | O(n + m) worst for long strings, O(n*m) worst for pathological cases | Uses Two-Way / fastsearch algorithm in CPython (linear worst-case) |
-| `replace(old, new)` | O(n) | Single pass |
-| `split(sep)` | O(n) | Single pass |
-| `join()` | O(n) | n = total chars |
-| `upper()/lower()` | O(n) | Must process each char |
-| `strip()` | O(n) | May check both ends |
-| `startswith()`/`endswith()` | O(m) | m = prefix/suffix length |
-| `format()` | O(n) | n = template length |
 | `s + s` (concatenation) | O(n+m) | Creates new string |
 | `s * n` (repetition) | O(n\*len(s)) | Creates new string |
 | `slice [::2]` | O(k) | k = slice length |
-| `encode()` | O(n) | Convert to bytes |
+| **Search** |||
+| `find(sub)` | O(n + m) worst for long strings, O(n*m) worst for pathological cases | Uses Two-Way / fastsearch algorithm in CPython (linear worst-case) |
+| `rfind(sub)` | O(n*m) worst case | Does not use Two-Way algorithm; uses backward Boyer-Moore-Horspool |
+| `index(sub)` | O(n + m) | Like find() but raises ValueError if not found |
+| `rindex(sub)` | O(n*m) worst case | Like rfind() but raises ValueError if not found |
+| `count(sub)` | O(n + m) worst for long strings, O(n*m) worst for pathological cases | n = string, m = substring; uses Two-Way/fastsearch (linear worst-case) |
+| `startswith(prefix)` | O(m) | m = prefix length |
+| `endswith(suffix)` | O(m) | m = suffix length |
+| **Replace/Translate** |||
+| `replace(old, new)` | O(n) | Single pass |
+| `translate(table)` | O(n) | Single pass with table lookup |
+| `maketrans()` | O(k) | k = number of mappings; static method |
+| `expandtabs(tabsize)` | O(n) | Replace tabs with spaces |
+| `removeprefix(prefix)` | O(n) | Returns slice if prefix matches (Python 3.9+) |
+| `removesuffix(suffix)` | O(n) | Returns slice if suffix matches (Python 3.9+) |
+| **Split/Join** |||
+| `split(sep)` | O(n) | Single pass |
+| `rsplit(sep)` | O(n) | Split from right |
+| `splitlines()` | O(n) | Split on line boundaries |
+| `partition(sep)` | O(n) | Split into 3-tuple at first sep |
+| `rpartition(sep)` | O(n) | Split into 3-tuple at last sep |
+| `join(iterable)` | O(n) | n = total output chars |
+| **Case Conversion** |||
+| `upper()` | O(n) | Must process each char |
+| `lower()` | O(n) | Must process each char |
+| `capitalize()` | O(n) | Uppercase first, lowercase rest |
+| `title()` | O(n) | Titlecase words |
+| `swapcase()` | O(n) | Swap upper/lower |
+| `casefold()` | O(n) | Aggressive lowercase for caseless matching |
+| **Stripping** |||
+| `strip(chars)` | O(n) | Remove from both ends |
+| `lstrip(chars)` | O(n) | Remove from left |
+| `rstrip(chars)` | O(n) | Remove from right |
+| **Padding/Alignment** |||
+| `center(width)` | O(n) | Pad both sides |
+| `ljust(width)` | O(n) | Pad right side |
+| `rjust(width)` | O(n) | Pad left side |
+| `zfill(width)` | O(n) | Pad with zeros |
+| **Predicates** |||
+| `isalnum()` | O(n) | Check alphanumeric |
+| `isalpha()` | O(n) | Check alphabetic |
+| `isascii()` | O(n) | Check ASCII (Python 3.7+) |
+| `isdecimal()` | O(n) | Check decimal chars |
+| `isdigit()` | O(n) | Check digit chars |
+| `isidentifier()` | O(n) | Check valid identifier |
+| `islower()` | O(n) | Check lowercase |
+| `isnumeric()` | O(n) | Check numeric chars |
+| `isprintable()` | O(n) | Check printable |
+| `isspace()` | O(n) | Check whitespace |
+| `istitle()` | O(n) | Check titlecase |
+| `isupper()` | O(n) | Check uppercase |
+| **Formatting** |||
+| `format(*args)` | O(n) | n = template length |
+| `format_map(mapping)` | O(n) | Like format() with mapping |
+| **Encoding** |||
+| `encode(encoding)` | O(n) | Convert to bytes |
 
 ## Space Complexity
 
@@ -75,18 +121,6 @@ result = "".join(str(i) for i in range(10000))
 ```
 
 ## Advanced Features
-
-### String Methods Complexity
-
-| Method | Complexity | Notes |
-|--------|-----------|-------|
-| `str.find()` | O(n + m) worst for long strings, O(n*m) worst for pathological cases | CPython uses Two-Way / fastsearch algorithm (linear worst-case) |
-| `str.rfind()` | O(n*m) worst case | Does not use Two-Way algorithm; uses backward Boyer-Moore-Horspool |
-| `str.count()` | O(n + m) worst for long strings, O(n*m) worst for pathological cases | Non-overlapping searches (Two-Way/fastsearch) |
-| `str.replace()` | O(n) | Single pass with copy |
-| `str.split()` | O(n) | Single pass |
-| `str.startswith()` | O(m) | m = prefix length |
-| `str.translate()` | O(n) | Single pass |
 
 ### Substring Search
 
