@@ -335,7 +335,21 @@ sqrt_c = cmath.sqrt(c)    # O(1)
 exp_c = cmath.exp(c)      # O(1)
 ```
 
-## Attributes and Methods
+## Methods
+
+| Method | Time | Space | Notes |
+|--------|------|-------|-------|
+| `conjugate()` | O(1) | O(1) | Return complex conjugate (flip sign of imaginary) |
+| `from_number(x)` | O(1) | O(1) | Class method; convert number to complex (Python 3.14+) |
+
+## Attributes
+
+| Attribute | Time | Notes |
+|-----------|------|-------|
+| `real` | O(1) | Real part as float |
+| `imag` | O(1) | Imaginary part as float |
+
+## Attributes and Methods Examples
 
 ```python
 # O(1) - access properties
@@ -351,6 +365,9 @@ magnitude = abs(c)        # 5.0
 # Phase angle
 import cmath
 phase = cmath.phase(c)    # atan2(4, 3)
+
+# From number (Python 3.14+)
+c = complex.from_number(3.14)  # (3.14+0j)
 ```
 
 ## Best Practices
