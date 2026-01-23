@@ -43,6 +43,24 @@ The `float` type represents floating-point numbers with fixed precision (64-bit 
 | `math.ceil(x)` | O(1) | O(1) | Ceiling |
 | `math.trunc(x)` | O(1) | O(1) | Truncate |
 
+## Instance Methods
+
+| Method | Time | Space | Notes |
+|--------|------|-------|-------|
+| `is_integer()` | O(1) | O(1) | Check if float is whole number |
+| `as_integer_ratio()` | O(1) | O(1) | Returns exact (numerator, denominator) tuple |
+| `hex()` | O(1) | O(1) | Convert to hexadecimal string |
+| `fromhex(s)` | O(n) | O(1) | Class method; create float from hex string |
+| `conjugate()` | O(1) | O(1) | Returns self; complex number compatibility |
+| `from_number(x)` | O(1) | O(1) | Class method; convert number to float (Python 3.14+) |
+
+## Numeric Attributes
+
+| Attribute | Time | Notes |
+|-----------|------|-------|
+| `real` | O(1) | Returns self; real part |
+| `imag` | O(1) | Always 0.0; imaginary part |
+
 ## Common Operations
 
 ### Basic Arithmetic

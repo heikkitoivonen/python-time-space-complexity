@@ -54,6 +54,27 @@ The `int` type represents arbitrary precision integers. Python 3 has a single in
 | `repr(x)` | O(n) | O(n) | String representation |
 | `int(x)` | O(1) | O(1) | No-op if already int |
 
+## Instance Methods
+
+| Method | Time | Space | Notes |
+|--------|------|-------|-------|
+| `bit_length()` | O(1) | O(1) | Number of bits needed to represent value |
+| `bit_count()` | O(n) | O(1) | Count of 1 bits (popcount); Python 3.10+ |
+| `to_bytes(length, byteorder)` | O(n) | O(n) | Convert to bytes; n = length |
+| `from_bytes(bytes, byteorder)` | O(n) | O(n) | Class method; create int from bytes |
+| `as_integer_ratio()` | O(1) | O(1) | Returns (self, 1) tuple |
+| `is_integer()` | O(1) | O(1) | Always returns True for int |
+| `conjugate()` | O(1) | O(1) | Returns self; complex number compatibility |
+
+## Numeric Attributes
+
+| Attribute | Time | Notes |
+|-----------|------|-------|
+| `real` | O(1) | Returns self; real part |
+| `imag` | O(1) | Always 0; imaginary part |
+| `numerator` | O(1) | Returns self; for Rational interface |
+| `denominator` | O(1) | Always 1; for Rational interface |
+
 ## Common Operations
 
 ### Basic Arithmetic
