@@ -21,6 +21,10 @@ The `set` type is an unordered collection of unique items. It's implemented as a
 | `issubset()` | O(n) | Check all elements |
 | `issuperset()` | O(m) | m = other length |
 | `isdisjoint()` | O(min(n,m)) | Early termination |
+| `update(other)` | O(m) | In-place union; m = len(other) |
+| `difference_update(other)` | O(m) | In-place difference |
+| `intersection_update(other)` | O(n) | In-place intersection; rebuilds set |
+| `symmetric_difference_update(other)` | O(m) | In-place symmetric difference |
 
 ## Space Complexity
 

@@ -21,6 +21,7 @@ The `dict` type is a mutable mapping that stores key-value pairs. It's implement
 | `update(other)` | O(k) | k = len(other), amortized |
 | `setdefault(key, val)` | O(1) avg | Hash lookup + insert |
 | `fromkeys(keys)` | O(k) | k = len(keys) |
+| `popitem()` | O(1) | Remove last inserted pair (LIFO since 3.7) |
 
 *Note: O(1) average case assumes good hash distribution. Worst case O(n) occurs with pathological hash collisions, which is rare with Python's randomized hashing.*
 
