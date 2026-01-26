@@ -8,11 +8,38 @@ The `decimal` module provides support for decimal floating point arithmetic with
 |-----------|------|-------|-------|
 | `Decimal(value)` | O(n) | O(n) | n = digits in value |
 | `Decimal.from_float(f)` | O(1) | O(1) | Convert from float |
+| `Decimal.from_number(x)` | O(n) | O(n) | Convert from int/float/Decimal |
 | Addition/Subtraction | O(n) | O(n) | n = max digits |
 | Multiplication | O(n²) | O(n) | Grade-school; Python uses Karatsuba for large n |
 | Division | O(n²) | O(n) | Long division algorithm |
 | `quantize()` | O(n) | O(n) | Round to precision |
-| Comparison | O(n) | O(1) | n = digits to compare |
+| `normalize()` | O(n) | O(n) | Remove trailing zeros |
+| `sqrt()` | O(n²) | O(n) | Square root |
+| `exp()` / `ln()` / `log10()` | O(n²) | O(n) | Transcendental functions |
+| Comparison (`compare()`) | O(n) | O(1) | n = digits to compare |
+| `compare_total()` | O(n) | O(1) | Compare with total ordering |
+| `as_tuple()` | O(n) | O(n) | Return (sign, digits, exponent) |
+| `as_integer_ratio()` | O(n) | O(n) | Return (numerator, denominator) |
+| `to_eng_string()` | O(n) | O(n) | Engineering notation string |
+| `to_integral_value()` | O(n) | O(n) | Round to integer |
+| `copy_abs()` / `copy_negate()` | O(n) | O(n) | Copy with sign change |
+| `copy_sign(other)` | O(n) | O(n) | Copy with other's sign |
+| `is_finite()` / `is_infinite()` | O(1) | O(1) | Check special values |
+| `is_nan()` / `is_qnan()` / `is_snan()` | O(1) | O(1) | Check NaN types |
+| `is_signed()` / `is_zero()` | O(1) | O(1) | Check sign/zero |
+| `is_normal()` / `is_subnormal()` | O(1) | O(1) | Check normalization |
+| `number_class()` | O(1) | O(1) | Return classification string |
+| `adjusted()` | O(1) | O(1) | Return adjusted exponent |
+| `radix()` | O(1) | O(1) | Return 10 (base) |
+| `same_quantum(other)` | O(1) | O(1) | Check same exponent |
+| `scaleb(exp)` | O(n) | O(n) | Scale by power of 10 |
+| `shift(n)` / `rotate(n)` | O(n) | O(n) | Shift/rotate digits |
+| `logical_and/or/xor/invert` | O(n) | O(n) | Logical ops on digit strings |
+| `fma(x, y)` | O(n²) | O(n) | Fused multiply-add |
+| `max(other)` / `min(other)` | O(n) | O(1) | Return max/min |
+| `next_plus()` / `next_minus()` | O(n) | O(n) | Next representable value |
+| `next_toward(other)` | O(n) | O(n) | Next value toward other |
+| `remainder_near(other)` | O(n²) | O(n) | IEEE remainder |
 
 ## Creating Decimal Objects
 

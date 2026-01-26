@@ -24,49 +24,21 @@ The `csv` module provides functionality for reading and writing CSV (Comma-Separ
 
 ## Reading CSV Files
 
-### Basic CSV Reading
+### Lazy vs Eager Reading
 
 ```python
 import csv
 
-# Create reader - O(1)
-with open('data.csv', 'r') as file:
-    reader = csv.reader(file)  # O(1)
-    
-    # Iterate rows - O(k) per row
-    for row in reader:  # O(k) per iteration
-        print(row)  # List of fields
-        # row = ['name', 'age', 'city']
-```
+# LAZY: O(1) memory - process one row at a time (preferred for large files)
+with open('data.csv', 'r', newline='') as file:
+    reader = csv.reader(file)  # O(1) - creates iterator
+    for row in reader:         # O(k) per row, k = row length
+        process(row)           # Row discarded after processing
 
-### Row-by-Row Iteration (Memory Efficient)
-
-```python
-import csv
-
-# Lazy iteration for large files - O(1) memory
-with open('data.csv', 'r') as file:
+# EAGER: O(n) memory - loads entire file (only for small files or random access)
+with open('data.csv', 'r', newline='') as file:
     reader = csv.reader(file)
-    
-    for row in reader:  # O(k) per row, O(1) memory
-        first_name = row[0]  # O(1)
-        age = row[1]         # O(1)
-        process(row)         # O(k)
-```
-
-### Reading All Rows
-
-```python
-import csv
-
-# Load all rows into memory - O(n) memory
-with open('data.csv', 'r') as file:
-    reader = csv.reader(file)
-    all_rows = list(reader)  # O(n) memory, n = file size
-
-# Now iterate from memory
-for row in all_rows:  # O(1) per iteration (already in memory)
-    process(row)
+    all_rows = list(reader)    # O(n*k) time, O(n*k) memory
 ```
 
 ## Writing CSV Files
@@ -91,24 +63,6 @@ with open('output.csv', 'w') as file:
     ])  # O(n*k) total
 
 # File auto-closed
-```
-
-### Escaping and Quoting
-
-```python
-import csv
-
-# CSV handles escaping automatically - O(k)
-with open('output.csv', 'w') as file:
-    writer = csv.writer(file)
-    
-    # Values with commas (auto-quoted) - O(k)
-    writer.writerow(['Alice', 'NYC, NY', 'Engineer'])  # O(k)
-    # Output: Alice,"NYC, NY",Engineer
-    
-    # Values with quotes (auto-escaped) - O(k)
-    writer.writerow(['Bob', 'Says "hi"'])  # O(k)
-    # Output: Bob,"Says ""hi"""
 ```
 
 ## Dictionary-based CSV Operations
@@ -174,26 +128,6 @@ with open('data.csv', 'r', encoding='latin-1') as file:
     reader = csv.reader(file, delimiter=';')
     for row in reader:  # O(k) per row
         process(row)
-```
-
-## Quote Handling
-
-### Quote Styles
-
-```python
-import csv
-
-# QUOTE_MINIMAL (default) - quotes only when needed
-writer = csv.writer(file, quoting=csv.QUOTE_MINIMAL)
-
-# QUOTE_ALL - quotes all fields
-writer = csv.writer(file, quoting=csv.QUOTE_ALL)
-
-# QUOTE_NONNUMERIC - quotes non-numeric fields
-writer = csv.writer(file, quoting=csv.QUOTE_NONNUMERIC)
-
-# QUOTE_NONE - no quoting (must escape manually)
-writer = csv.writer(file, quoting=csv.QUOTE_NONE, escapechar='\\')
 ```
 
 ## Common Patterns
@@ -296,10 +230,10 @@ with open('merged.csv', 'w') as outfile:
 ```python
 import csv
 
-# Write in batches (more efficient) - O(n*k)
-with open('output.csv', 'w') as file:
+# Write in batches - reduces per-row overhead
+with open('output.csv', 'w', newline='') as file:
     writer = csv.writer(file)
-    writer.writeheader()
+    writer.writerow(['Name', 'Age', 'City'])  # Header
     
     # Collect rows in memory, then write batch
     batch = []
@@ -307,12 +241,12 @@ with open('output.csv', 'w') as file:
         batch.append(row)
         
         if len(batch) >= 1000:  # Write every 1000 rows
-            writer.writerows(batch)  # O(1000*k)
+            writer.writerows(batch)  # O(1000*k) - one call vs 1000
             batch = []
     
     # Write remaining
     if batch:
-        writer.writerows(batch)  # O(final_batch*k)
+        writer.writerows(batch)
 ```
 
 ### Reading Large Files Efficiently
@@ -337,122 +271,27 @@ with open('large_file.csv', 'r') as file:
         process_chunk(chunk)
 ```
 
-## Encoding Handling
-
-```python
-import csv
-
-# UTF-8 (default) - O(1) setup
-with open('data.csv', 'r', encoding='utf-8') as file:
-    reader = csv.reader(file)
-    for row in reader:  # O(k) per row
-        process(row)
-
-# Latin-1 (for European data) - O(1) setup
-with open('data.csv', 'r', encoding='latin-1') as file:
-    reader = csv.reader(file)
-    for row in reader:
-        process(row)
-
-# Write with specific encoding
-with open('output.csv', 'w', encoding='utf-8', newline='') as file:
-    writer = csv.writer(file)
-    writer.writerow(['Name', 'Value'])
-```
-
-## Edge Cases
-
-### Handling Empty Fields
-
-```python
-import csv
-
-# Empty fields are preserved
-data = [
-    ['Name', '', 'City'],  # Empty age field
-    ['Alice', '', 'NYC'],
-    ['Bob', '25', 'LA']
-]
-
-with open('output.csv', 'w') as file:
-    writer = csv.writer(file)
-    writer.writerows(data)
-
-# Reading back
-with open('output.csv', 'r') as file:
-    reader = csv.DictReader(file)
-    for row in reader:
-        age = row[''] if '' in row else None  # Handle empty header
-```
-
-### Handling Newlines
-
-```python
-import csv
-
-# newline='' is required for proper handling (Python 3)
-with open('output.csv', 'w', newline='') as file:
-    writer = csv.writer(file)
-    writer.writerow(['Name', 'Description'])
-    writer.writerow(['Alice', 'Multi\nline\ntext'])  # Properly quoted
-
-# Reading
-with open('output.csv', 'r', newline='') as file:
-    reader = csv.reader(file)
-    for row in reader:
-        print(row)
-```
-
-## Comparison: CSV vs JSON vs Pickle
-
-```python
-import csv
-import json
-import pickle
-
-# CSV - good for tabular data
-# Pros: Simple, human-readable, Excel-compatible
-# Cons: No schema, string values
-
-# JSON - good for hierarchical data
-# Pros: Structured, preserves types
-# Cons: More verbose
-
-# Pickle - good for Python object serialization
-# Pros: Preserves exact Python types
-# Cons: Python-specific, security risk
-
-# CSV is preferred for tabular data export
-```
-
 ## Version Notes
 
-- **Python 2.x**: csv module available, unicode handling complex
-- **Python 3.x**: csv module standard, better unicode support
-- **All versions**: Use `newline=''` parameter in Python 3
+- **Python 3.12+**: Added `QUOTE_STRINGS` and `QUOTE_NOTNULL` constants
+- **All Python 3**: Use `newline=''` parameter when opening CSV files
 
 ## Related Modules
 
-- **pandas** - High-level CSV operations and data manipulation
-- **[json](json.md)** - Alternative structured data format
-- **[io](io.md)** - Low-level I/O operations
+- **pandas** - Higher-level CSV with O(n) memory but faster vectorized operations
+- **[json](json.md)** - O(n) parsing; use for hierarchical data
+- **[io](io.md)** - StringIO for in-memory CSV processing
 
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use `csv.DictReader` for named columns (clearer)
-- Use `csv.reader` for simple positional access
-- Use `newline=''` when opening CSV files (Python 3)
-- Specify `encoding='utf-8'` explicitly
-- Process large files line-by-line (lazy iteration)
-- Close files with context manager (`with` statement)
+- Process large files lazily (O(1) memory) instead of `list(reader)` (O(n) memory)
+- Use `writerows()` for batches - fewer function calls than repeated `writerow()`
+- Use `csv.reader` for positional access (O(1) per field vs O(1) dict lookup overhead)
 
 ❌ **Avoid**:
 
-- Manual string splitting (let csv handle parsing)
-- Assuming comma is delimiter (specify if different)
-- Loading entire large CSV into memory at once
-- Forgetting newline='' parameter
-- Mixing csv.reader with manual field indexing
-- Trying to handle complex nested structures (use JSON)
+- `list(reader)` on large files - loads entire file into memory O(n)
+- Manual string splitting with `split(',')` - incorrect for quoted fields, same O(k) complexity but buggy
+- Repeated small writes - buffer with batches for better I/O performance
