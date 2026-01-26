@@ -21,18 +21,48 @@ The `datetime` module provides classes for manipulating dates and times.
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `date.year`, `date.month`, `date.day` | O(1) | O(1) | Attribute access |
-| `date.weekday()` | O(1) | O(1) | Day of week (0-6) |
-| `date.isoweekday()` | O(1) | O(1) | Day of week (1-7) |
+| `date.today()` | O(1) | O(1) | Current local date |
+| `date.fromisoformat(s)` | O(n) | O(1) | Parse ISO format string |
+| `date.fromtimestamp(ts)` | O(1) | O(1) | From Unix timestamp |
+| `date.fromordinal(n)` | O(1) | O(1) | From proleptic Gregorian ordinal |
+| `date.fromisocalendar(y, w, d)` | O(1) | O(1) | From ISO year, week, day |
+| `date.weekday()` | O(1) | O(1) | Day of week (0=Mon, 6=Sun) |
+| `date.isoweekday()` | O(1) | O(1) | Day of week (1=Mon, 7=Sun) |
+| `date.isocalendar()` | O(1) | O(1) | Returns (year, week, weekday) |
 | `date.isoformat()` | O(1) | O(1) | ISO 8601 string |
+| `date.strftime(fmt)` | O(n) | O(n) | Format to string |
+| `date.ctime()` | O(1) | O(1) | C-style string |
+| `date.timetuple()` | O(1) | O(1) | time.struct_time |
+| `date.toordinal()` | O(1) | O(1) | Proleptic Gregorian ordinal |
 | `date.replace(year=...)` | O(1) | O(1) | Return new date |
+
+## Datetime Operations
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `datetime.combine(date, time)` | O(1) | O(1) | Combine date and time objects |
+| `datetime.fromisoformat(s)` | O(n) | O(1) | Parse ISO format string |
+| `datetime.date()` | O(1) | O(1) | Extract date part |
+| `datetime.time()` | O(1) | O(1) | Extract time part (no tzinfo) |
+| `datetime.timetz()` | O(1) | O(1) | Extract time part (with tzinfo) |
+| `datetime.timestamp()` | O(1) | O(1) | Return POSIX timestamp |
+| `datetime.utctimetuple()` | O(1) | O(1) | UTC time.struct_time |
+| `datetime.dst()` | O(1) | O(1) | Daylight saving offset |
+| `datetime.tzname()` | O(1) | O(1) | Timezone name string |
+| `datetime.utcoffset()` | O(1) | O(1) | UTC offset as timedelta |
 
 ## Time Operations
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `time.hour`, `time.minute`, `time.second` | O(1) | O(1) | Attribute access |
+| `time.fromisoformat(s)` | O(n) | O(1) | Parse ISO format string |
 | `time.isoformat()` | O(1) | O(1) | ISO 8601 string |
+| `time.strftime(fmt)` | O(n) | O(n) | Format to string |
 | `time.replace(hour=...)` | O(1) | O(1) | Return new time |
+| `time.dst()` | O(1) | O(1) | Daylight saving offset |
+| `time.tzname()` | O(1) | O(1) | Timezone name string |
+| `time.utcoffset()` | O(1) | O(1) | UTC offset as timedelta |
 
 ## Timedelta Operations
 
@@ -138,6 +168,17 @@ if dt1 == dt2:
 dates = [dt2, dt1, dt1 + timedelta(days=1)]
 sorted_dates = sorted(dates)  # O(n log n)
 ```
+
+## Timezone Class
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `timezone(offset)` | O(1) | O(1) | Create fixed offset timezone |
+| `timezone.utc` | O(1) | O(1) | UTC timezone constant |
+| `tz.utcoffset(dt)` | O(1) | O(1) | Return offset from UTC |
+| `tz.tzname(dt)` | O(1) | O(1) | Return timezone name |
+| `tz.dst(dt)` | O(1) | O(1) | Return DST offset (always None for timezone) |
+| `tz.fromutc(dt)` | O(1) | O(1) | Convert UTC datetime to this timezone |
 
 ## Timezone Operations
 

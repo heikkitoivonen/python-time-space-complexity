@@ -13,19 +13,41 @@ The `pathlib` module provides an object-oriented approach to filesystem path han
 | `Path.is_file()` | O(1) | O(1) | Check if path is file |
 | `Path.is_dir()` | O(1) | O(1) | Check if path is directory |
 | `Path.is_symlink()` | O(1) | O(1) | Check if path is symlink |
+| `Path.is_mount()` | O(1) | O(1) | Check if path is mount point |
+| `Path.is_socket()` | O(1) | O(1) | Check if path is socket |
+| `Path.is_fifo()` | O(1) | O(1) | Check if path is FIFO |
+| `Path.is_block_device()` | O(1) | O(1) | Check if path is block device |
+| `Path.is_char_device()` | O(1) | O(1) | Check if path is char device |
 | `Path.stat()` | O(1) | O(1) | Get file stats |
+| `Path.lstat()` | O(1) | O(1) | Like stat but don't follow symlinks |
 | `Path.resolve()` | O(n) | O(n) | Resolve to absolute path |
+| `Path.absolute()` | O(1) | O(n) | Make absolute without resolving symlinks |
+| `Path.expanduser()` | O(1) | O(n) | Expand ~ to home directory |
 | `Path.iterdir()` | O(d) | O(d) | Iterate directory contents |
+| `Path.walk()` | O(d) | O(d) | Walk directory tree (Python 3.12+) |
 | `Path.glob(pattern)` | O(n) | O(1) per item | n = directory entries checked, returns iterator |
 | `Path.rglob(pattern)` | O(n) | O(1) per item | n = total tree entries, returns iterator |
 | `Path.mkdir()` | O(1) | O(1) | Create directory |
+| `Path.touch()` | O(1) | O(1) | Create file or update timestamp |
 | `Path.rename(target)` | O(1) | O(1) | Rename path |
+| `Path.replace(target)` | O(1) | O(1) | Rename, overwriting target if exists |
 | `Path.unlink()` | O(1) | O(1) | Delete file |
 | `Path.rmdir()` | O(1) | O(1) | Delete empty directory |
+| `Path.symlink_to(target)` | O(1) | O(1) | Create symlink |
+| `Path.hardlink_to(target)` | O(1) | O(1) | Create hard link |
+| `Path.readlink()` | O(1) | O(n) | Read symlink target |
+| `Path.chmod(mode)` | O(1) | O(1) | Change file mode |
+| `Path.lchmod(mode)` | O(1) | O(1) | chmod without following symlinks |
+| `Path.owner()` | O(1) | O(1) | Get owner name |
+| `Path.group()` | O(1) | O(1) | Get group name |
+| `Path.samefile(other)` | O(1) | O(1) | Check if same file |
+| `Path.open(mode)` | O(1) | O(1) | Open file (returns file object) |
 | `Path.read_text()` | O(n) | O(n) | Read file as text |
 | `Path.read_bytes()` | O(n) | O(n) | Read file as bytes |
 | `Path.write_text()` | O(n) | O(n) | Write text to file |
 | `Path.write_bytes()` | O(n) | O(n) | Write bytes to file |
+| `Path.as_uri()` | O(n) | O(n) | Return file:// URI |
+| `Path.from_uri(uri)` | O(n) | O(n) | Create Path from URI (Python 3.13+) |
 
 ## Path Construction
 

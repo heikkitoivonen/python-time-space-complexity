@@ -9,17 +9,46 @@ The `os` module provides a way to use operating system-dependent functionality l
 | `os.path.exists(path)` | O(1) | O(1) | Check if path exists |
 | `os.path.isfile(path)` | O(1) | O(1) | Check if file |
 | `os.path.isdir(path)` | O(1) | O(1) | Check if directory |
+| `os.path.islink(path)` | O(1) | O(1) | Check if symlink |
+| `os.path.getsize(path)` | O(1) | O(1) | Get file size in bytes |
+| `os.path.getatime(path)` | O(1) | O(1) | Get last access time |
+| `os.path.getmtime(path)` | O(1) | O(1) | Get last modification time |
+| `os.path.getctime(path)` | O(1) | O(1) | Get creation/metadata change time |
 | `os.listdir(path)` | O(n) | O(n) | List directory contents |
 | `os.scandir(path)` | O(n) | O(1) | Lazy directory iterator |
 | `os.walk(path)` | O(n) | O(d) | n = total entries, d = max depth (call stack + pending dirs) |
 | `os.stat(path)` | O(1) | O(1) | Get file statistics |
 | `os.lstat(path)` | O(1) | O(1) | Stat without following symlink |
+| `os.access(path, mode)` | O(1) | O(1) | Check file accessibility |
 | `os.remove(path)` | O(1) | O(1) | Delete file |
+| `os.unlink(path)` | O(1) | O(1) | Delete file (alias for remove) |
 | `os.mkdir(path)` | O(1) | O(1) | Create directory |
 | `os.makedirs(path)` | O(n) | O(1) | Create directories, n = depth |
 | `os.rmdir(path)` | O(1) | O(1) | Remove empty directory |
+| `os.removedirs(path)` | O(n) | O(1) | Remove empty directories recursively |
 | `os.rename(src, dst)` | O(1) | O(1) | Rename/move file |
+| `os.replace(src, dst)` | O(1) | O(1) | Rename, overwriting dst if exists |
+| `os.link(src, dst)` | O(1) | O(1) | Create hard link |
+| `os.symlink(src, dst)` | O(1) | O(1) | Create symbolic link |
+| `os.readlink(path)` | O(1) | O(n) | Read symlink target |
 | `os.chmod(path, mode)` | O(1) | O(1) | Change permissions |
+| `os.chown(path, uid, gid)` | O(1) | O(1) | Change owner/group |
+| `os.truncate(path, length)` | O(1) | O(1) | Truncate file to length |
+
+## Process and Environment
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `os.getcwd()` | O(1) | O(n) | Get current working directory |
+| `os.chdir(path)` | O(1) | O(1) | Change working directory |
+| `os.getenv(key)` | O(1) | O(1) | Get environment variable |
+| `os.putenv(key, value)` | O(1) | O(1) | Set environment variable |
+| `os.getpid()` | O(1) | O(1) | Get current process ID |
+| `os.getppid()` | O(1) | O(1) | Get parent process ID |
+| `os.getuid()` | O(1) | O(1) | Get current user ID |
+| `os.getgid()` | O(1) | O(1) | Get current group ID |
+| `os.uname()` | O(1) | O(1) | Get system information |
+| `os.cpu_count()` | O(1) | O(1) | Get number of CPUs |
 
 ## Path Operations
 
