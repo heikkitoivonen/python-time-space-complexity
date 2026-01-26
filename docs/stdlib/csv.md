@@ -14,6 +14,13 @@ The `csv` module provides functionality for reading and writing CSV (Comma-Separ
 | `csv.DictReader(file)` | O(1) | O(m) | m = header length |
 | `DictReader iteration` | O(k) | O(k) | k = row + header overhead |
 | `csv.DictWriter(file)` | O(1) | O(m) | m = field names length |
+| `csv.field_size_limit([size])` | O(1) | O(1) | Get/set max field size |
+| `csv.register_dialect(name, ...)` | O(1) | O(1) | Register custom dialect |
+| `csv.unregister_dialect(name)` | O(1) | O(1) | Remove registered dialect |
+| `csv.get_dialect(name)` | O(1) | O(1) | Get dialect by name |
+| `csv.list_dialects()` | O(d) | O(d) | List registered dialect names |
+| `Sniffer.sniff(sample)` | O(n) | O(1) | Detect CSV format from sample |
+| `Sniffer.has_header(sample)` | O(n) | O(1) | Detect if sample has header row |
 
 ## Reading CSV Files
 
