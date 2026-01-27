@@ -8,8 +8,8 @@ The `html` module provides utilities for working with HTML content, including es
 |-----------|------|-------|-------|
 | `escape(text)` | O(n) | O(n) | n = string length |
 | `unescape(text)` | O(n) | O(n) | n = string length |
-| `parser.HTMLParser()` | O(n) | O(n) | n = HTML size |
-| `parser.feed(text)` | O(n) | O(n) | n = text length |
+| `html.parser.HTMLParser()` | O(1) | O(1) | Parser construction |
+| `HTMLParser.feed(text)` | O(n) | O(1) | n = text length; extra space depends on handlers |
 
 ## Common Operations
 
@@ -47,7 +47,7 @@ unescaped = unescape(escaped)
 # Common entities - O(n)
 entities = '&copy; &nbsp; &#169; &#x00A9;'
 result = unescape(entities)
-# Returns: © ™ © ©
+# Returns: ©  © ©
 ```
 
 ## Common Use Cases
@@ -260,9 +260,7 @@ def get_title_safe(attrs):
 
 ## Version Notes
 
-- **Python 3.2+**: html.escape() and unescape()
-- **Python 3.4+**: Improved html.parser
-- **Python 3.x**: Full Unicode support
+- **Python 3.x**: `html.escape`, `html.unescape`, and `html.parser` are available
 
 ## Related Documentation
 

@@ -6,11 +6,11 @@ The `hmac` module provides HMAC (Hash-based Message Authentication Code) functio
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `hmac.new(key, msg, digestmod)` | O(n) | O(n) | Create HMAC, n = msg size |
-| `HMAC.update(msg)` | O(n) | O(k) | Add data to digest, k = hash block size |
+| `hmac.new(key, msg, digestmod)` | O(n) | O(1) | Create HMAC, n = msg size |
+| `HMAC.update(msg)` | O(n) | O(1) | Add data to digest, k = hash block size |
 | `HMAC.digest()` | O(k) | O(k) | Get binary digest, k = hash output size |
 | `HMAC.hexdigest()` | O(k) | O(k) | Get hex digest |
-| `hmac.compare_digest(a, b)` | O(n) | O(1) | Constant-time comparison |
+| `hmac.compare_digest(a, b)` | O(n) | O(1) | Timing-safe for equal-length inputs |
 
 ## Creating HMAC
 
@@ -33,14 +33,14 @@ h = hmac.new(key, message, hashlib.sha256)  # O(n)
 digest = h.digest()  # O(k) where k = output size
 ```
 
-### Space Complexity: O(n)
+### Space Complexity: O(1)
 
 ```python
 import hmac
 import hashlib
 
-# Memory for message processing
-h = hmac.new(key, message, hashlib.sha256)  # O(n) for buffering
+# No buffering of the full message (beyond the input itself)
+h = hmac.new(key, message, hashlib.sha256)  # O(1) extra space
 ```
 
 ## Streaming Updates
@@ -127,22 +127,22 @@ import hashlib
 
 message = b'data' * 1000
 
-# MD5: Fast but deprecated
+# MD5: Deprecated (cryptographically broken)
 # O(n) time
 h = hmac.new(b'key', message, hashlib.md5)  # O(n)
 digest = h.digest()  # O(16) bytes
 
-# SHA1: Faster than SHA256, deprecated
+# SHA1: Deprecated (cryptographically broken)
 # O(n) time
 h = hmac.new(b'key', message, hashlib.sha1)  # O(n)
 digest = h.digest()  # O(20) bytes
 
-# SHA256: Default, secure
-# O(n) time (slower than MD5/SHA1)
+# SHA256: Common, secure choice
+# O(n) time
 h = hmac.new(b'key', message, hashlib.sha256)  # O(n)
 digest = h.digest()  # O(32) bytes
 
-# SHA512: More secure, slower
+# SHA512: Larger digest size; performance varies by platform
 # O(n) time
 h = hmac.new(b'key', message, hashlib.sha512)  # O(n)
 digest = h.digest()  # O(64) bytes
@@ -209,7 +209,7 @@ if received_hmac == computed_hmac:  # ❌ INSECURE
 
 # Good: Constant-time comparison
 if hmac.compare_digest(received_hmac, computed_hmac):  # ✓ SECURE
-    # Always takes same time, timing independent
+    # Timing-safe for equal-length inputs; time depends on length
     pass
 ```
 
@@ -373,8 +373,8 @@ import hashlib
 # Good balance of security and performance
 h = hmac.new(b'key', b'data', hashlib.sha256)
 
-# SHA512: MAXIMUM SECURITY
-# Slower but better for critical applications
+# SHA512: Larger digest size
+# Performance varies by platform
 h = hmac.new(b'key', b'data', hashlib.sha512)
 ```
 
@@ -406,10 +406,7 @@ h = hmac.new(very_long_key, b'data', hashlib.sha256)
 
 ## Version Notes
 
-- **Python 2.4+**: Basic HMAC support
-- **Python 3.4+**: `compare_digest()` function
-- **Python 3.6+**: Better performance
-- **Python 3.9+**: Additional algorithm support
+- **Python 3.x**: `hmac` module available, including `compare_digest()`
 
 ## Related Documentation
 

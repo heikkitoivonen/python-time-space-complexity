@@ -201,8 +201,8 @@ fifo_queue = deque()  # Simple FIFO
 heapq.heappush(heap_queue, (priority, task))  # O(log n)
 fifo_queue.append(task)  # O(1)
 
-# Get task with priority
-task = heapq.heappop(heap_queue)  # O(log n), gets highest priority
+# Get task with priority (smallest priority value first)
+task = heapq.heappop(heap_queue)  # O(log n)
 task = fifo_queue.popleft()  # O(1), gets oldest
 ```
 

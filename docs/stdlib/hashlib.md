@@ -275,17 +275,17 @@ import time
 
 data = b"x" * (1024 * 1024)  # 1MB
 
-# MD5 (fastest, insecure)
+# MD5 (fast, insecure)
 start = time.time()
 hashlib.md5(data).digest()  # O(1MB)
 md5_time = time.time() - start
 
-# SHA256 (slower, secure)
+# SHA256 (secure)
 start = time.time()
 hashlib.sha256(data).digest()  # O(1MB)
 sha256_time = time.time() - start
 
-# SHA512 (slowest, more secure)
+# SHA512 (secure; speed varies by platform)
 start = time.time()
 hashlib.sha512(data).digest()  # O(1MB)
 sha512_time = time.time() - start
@@ -321,7 +321,22 @@ assert digest1 == digest2
 import hashlib
 
 # Algorithms guaranteed available
-guaranteed = {'md5', 'sha1', 'sha224', 'sha256', 'sha384', 'sha512'}
+guaranteed = {
+    'md5',
+    'sha1',
+    'sha224',
+    'sha256',
+    'sha384',
+    'sha512',
+    'blake2b',
+    'blake2s',
+    'sha3_224',
+    'sha3_256',
+    'sha3_384',
+    'sha3_512',
+    'shake_128',
+    'shake_256',
+}
 
 # Algorithms available on system
 available = set(hashlib.algorithms_available)
