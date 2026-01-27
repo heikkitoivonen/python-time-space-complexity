@@ -49,7 +49,7 @@ See [Built-in Types](builtins/list.md) for detailed analysis.
 
 ## Why Trust This Documentation?
 
-This documentation has been reviewed and refined through **100+ commits** by multiple AI coding agents (Amp, Claude, Antigravity, Kiro, Copilot, Codex) working alongside human contributors. Each agent brings different perspectives and catches different issues, resulting in thorough cross-validation. A growing unit test suite validates complexity claims against actual Python behavior.
+This documentation has been reviewed and refined through **100+ commits** by multiple AI coding agents (Amp, Claude, Gemini CLI, Kiro, Copilot, Codex) and models (Opus 4.5, Sonnet 4.5, Gemini 3 Pro, gpt-5.2-codex, ...) working alongside human contributors. Each agent brings different perspectives and catches different issues, resulting in thorough cross-validation. A growing unit test suite validates complexity claims against actual Python behavior.
 
 It's also **fully open source**—anyone can review the content, [file issues](https://github.com/heikkitoivonen/python-time-space-complexity/issues), or [submit improvements](https://github.com/heikkitoivonen/python-time-space-complexity/pulls). All sources are cited, and claims are based on official Python documentation and CPython source code.
 
