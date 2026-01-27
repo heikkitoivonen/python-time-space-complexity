@@ -6,9 +6,9 @@ The `numbers` module provides abstract base classes for numeric types, allowing 
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `isinstance(obj, Number)` | O(1) | O(1) | Type check |
-| `issubclass(cls, Number)` | O(1) | O(1) | Class check |
-| `register(cls)` | O(1) | O(1) | Register type |
+| `isinstance(obj, Number)` | Varies | O(1) | Depends on ABC cache and MRO length |
+| `issubclass(cls, Number)` | Varies | O(1) | Depends on ABC cache and MRO length |
+| `register(cls)` | Varies | O(1) | Updates ABC registries |
 
 ## Common Operations
 
@@ -17,17 +17,17 @@ The `numbers` module provides abstract base classes for numeric types, allowing 
 ```python
 import numbers
 
-# O(1) - check if number (any numeric type)
+# Check if number (any numeric type)
 value = 42
 is_number = isinstance(value, numbers.Number)  # True
 
-# O(1) - check specific numeric types
+# Check specific numeric types
 is_integral = isinstance(value, numbers.Integral)  # True
 is_real = isinstance(value, numbers.Real)  # True
 is_complex = isinstance(value, numbers.Complex)  # True
 is_rational = isinstance(value, numbers.Rational)  # True
 
-# O(1) - works with all numeric types
+# Works with all numeric types
 print(isinstance(3.14, numbers.Real))           # True
 print(isinstance(2+3j, numbers.Complex))        # True
 print(isinstance(Decimal('1.5'), numbers.Real)) # True
@@ -40,14 +40,14 @@ import numbers
 from fractions import Fraction
 from decimal import Decimal
 
-# O(1) - check class hierarchy
+# Check class hierarchy
 print(issubclass(int, numbers.Integral))       # True
 print(issubclass(float, numbers.Real))         # True
 print(issubclass(complex, numbers.Complex))    # True
 print(issubclass(Fraction, numbers.Rational))  # True
 print(issubclass(Decimal, numbers.Real))       # False - not by default
 
-# O(1) - type checking cascade
+# Type checking cascade
 def process_number(value):
     if isinstance(value, numbers.Integral):
         return "Integer operation"
@@ -59,7 +59,7 @@ def process_number(value):
         return "Complex operation"
     return "Unknown"
 
-result = process_number(Fraction(3, 4))  # O(1) - "Rational operation"
+result = process_number(Fraction(3, 4))  # "Rational operation"
 ```
 
 ## Common Use Cases
