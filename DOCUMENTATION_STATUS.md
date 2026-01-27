@@ -5,8 +5,8 @@ This document tracks the coverage of built-in functions, types, and standard lib
 ## Overview
 
 - **Total Items**: 317 (150 builtins + 167 stdlib modules)
-- **Documented**: 377 (174 builtins + 203 stdlib)
-- **Coverage**: 118.9%
+- **Documented**: 379 (174 builtins + 205 stdlib)
+- **Coverage**: 119.6%
 
 **Note**: Coverage exceeds 100% because comprehensive documentation files (like `exceptions.md`) cover multiple individual items, and we document deprecated/removed modules for historical reference.
 
@@ -203,7 +203,7 @@ Complete coverage of all built-in functions, types, exceptions, and constants:
 
 ## Standard Library Modules
 
-**Coverage: 121.6% (203/167)**
+**Coverage: 122.8% (205/167)**
 
 All standard library modules are fully documented, including new Python 3.14 modules. Coverage exceeds 100% due to documentation of deprecated/removed modules for historical reference.
 
@@ -305,9 +305,9 @@ All file and I/O modules now documented:
 - ✅ `shutil` - High-level file operations
 - ✅ `tempfile` - Temporary files
 
-### ✅ ALL MODULES COMPLETE (203/203)
+### ✅ ALL MODULES COMPLETE (205/205)
 
-All 100 previously undocumented stdlib modules have been added:
+All 102 previously undocumented stdlib modules have been added:
 
 **Utilities & System (20)**
 - ✅ `ast` - Abstract syntax trees
@@ -368,6 +368,9 @@ All 100 previously undocumented stdlib modules have been added:
 - ✅ `tty` - Terminal control
 - ✅ `zipimport` - Zip import support
 
+**Memory Mapping (1)**
+- ✅ `mmap` - Memory-mapped file access
+
 **Parsing & Compilation (12)**
 - ✅ `codeop` - Compile Python source
 - ✅ `code` - Code evaluation
@@ -382,7 +385,8 @@ All 100 previously undocumented stdlib modules have been added:
 - ✅ `symtable` - Symbol table
 - ✅ `token` - Token types
 
-**Number Operations (1)**
+**Number Operations (2)**
+- ✅ `math` - Floating-point math functions
 - ✅ `zoneinfo` - IANA time zone database
 
 **GUI & Interface (4)**

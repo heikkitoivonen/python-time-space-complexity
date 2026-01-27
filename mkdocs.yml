@@ -219,7 +219,9 @@ nav:
     - Mailbox: stdlib/mailbox.md
     - Mailcap: stdlib/mailcap.md
     - Marshal: stdlib/marshal.md
+    - Math: stdlib/math.md
     - Mimetypes: stdlib/mimetypes.md
+    - Mmap: stdlib/mmap.md
     - Modulefinder: stdlib/modulefinder.md
     - Multiprocessing: stdlib/multiprocessing.md
     - Netrc: stdlib/netrc.md

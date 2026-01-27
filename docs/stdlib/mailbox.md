@@ -6,8 +6,8 @@ The `mailbox` module provides classes for reading, writing, and manipulating var
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| Open mailbox | O(n) | O(n) | n = messages |
-| Add message | O(1) amortized | O(1) | Append operation |
+| Open mailbox | Varies | Varies | Depends on mailbox format and indexing |
+| Add message | Varies | Varies | Depends on mailbox type and file I/O |
 | Iterate messages | O(n) | O(1) | Sequential access |
 
 ## Working with Mailboxes
@@ -17,7 +17,7 @@ The `mailbox` module provides classes for reading, writing, and manipulating var
 ```python
 import mailbox
 
-# Open mbox - O(n)
+# Open mbox - cost depends on format and file size
 mbox = mailbox.mbox('mail.mbox')
 
 # Iterate - O(n)
@@ -34,7 +34,7 @@ mbox.close()
 import mailbox
 from email.message import EmailMessage
 
-# Open - O(n)
+# Open - cost depends on format and file size
 mbox = mailbox.mbox('mail.mbox')
 
 # Create message - O(1)
@@ -42,10 +42,10 @@ msg = EmailMessage()
 msg['Subject'] = 'Test'
 msg.set_content('Hello')
 
-# Add - O(1)
+# Add - cost depends on mailbox type and I/O
 key = mbox.add(msg)
 
-# Flush to disk - O(n)
+# Flush to disk - cost depends on pending changes
 mbox.flush()
 mbox.close()
 ```

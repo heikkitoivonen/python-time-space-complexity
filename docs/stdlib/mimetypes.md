@@ -10,7 +10,7 @@ The `mimetypes` module provides support for working with MIME types, mapping fil
 | `guess_type(url)` | O(1) | O(1) | Lookup MIME type |
 | `guess_extension(type)` | O(1) | O(1) | Get extension |
 | `add_type(type, ext)` | O(1) | O(1) | Register mapping |
-| `read(filename)` | O(n) | O(n) | n = file size |
+| `read_mime_types(filename)` | O(n) | O(n) | n = file size |
 
 ## Common Operations
 
@@ -43,7 +43,7 @@ ext = mimetypes.guess_extension('application/pdf')
 
 # Get all possible extensions - O(k) where k = extension count
 exts = mimetypes.guess_all_extensions('text/plain')
-# Returns: ['.txt', '.asc', '.c', .h', ...]
+# Returns: ['.txt', '.asc', '.c', '.h', ...]
 ```
 
 ## Common Use Cases
@@ -61,16 +61,12 @@ def get_content_type(filename):
     if mime_type is None:
         mime_type = 'application/octet-stream'
     
-    # O(1) to format header
-    content_type = mime_type
-    if encoding:
-        content_type += f'; charset={encoding}'
-    
-    return content_type
+    # encoding from guess_type is compression (e.g., 'gzip')
+    return mime_type, encoding
 
 # Usage - O(1)
-ct = get_content_type('document.pdf')  # 'application/pdf'
-ct = get_content_type('data.csv')      # 'text/csv'
+ct, enc = get_content_type('document.pdf')  # ('application/pdf', None)
+ct, enc = get_content_type('data.csv')      # ('text/csv', None)
 ```
 
 ### Serving Files in Web Applications
@@ -158,7 +154,7 @@ def initialize_mimetypes(custom_files=None):
         for filepath in custom_files:
             if os.path.exists(filepath):
                 # O(n) to read and parse file
-                mimetypes.read(filepath)
+                mimetypes.read_mime_types(filepath)
 
 # Usage - O(n+m)
 initialize_mimetypes(['custom-types.txt'])
@@ -242,6 +238,7 @@ for file in files:
 
 ```python
 import mimetypes
+from pathlib import Path
 
 def get_accurate_type(filename):
     """Get accurate MIME type - O(1)"""

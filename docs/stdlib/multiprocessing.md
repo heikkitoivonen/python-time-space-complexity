@@ -7,13 +7,13 @@ The `multiprocessing` module provides process-based parallelism for CPU-bound ta
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `Process(target)` | O(1) | O(1) | Create process object |
-| `process.start()` | O(w) | O(w) | Start process, w = process overhead |
-| `process.join()` | O(1) | O(1) | Wait for process |
+| `process.start()` | Varies | Varies | Depends on start method and OS |
+| `process.join()` | Varies | O(1) | Wait for process |
 | `Queue()` | O(1) | O(1) | Create queue |
-| `queue.put(item)` | O(n) | O(n) | Add to queue, n = serialized item size (pickling) |
-| `queue.get()` | O(n) | O(n) | Remove from queue, n = item size (unpickling) |
-| `Pool(processes)` | O(w) | O(w) | Create pool, w = process count |
-| `pool.map(fn, items)` | O(n) | O(n) | Map over items, n = item count |
+| `queue.put(item)` | Varies | Varies | Pickling + IPC + OS scheduling |
+| `queue.get()` | Varies | Varies | Unpickling + IPC + OS scheduling |
+| `Pool(processes)` | Varies | Varies | Depends on start method and process count |
+| `pool.map(fn, items)` | Varies | Varies | Includes task scheduling and IPC |
 
 ## Process Creation
 
@@ -30,12 +30,11 @@ def worker(name):
 # Create process: O(1)
 p = Process(target=worker, args=("A",))  # O(1) to create object
 
-# Start process: O(w)
-# w = startup overhead (fork, initialization)
-p.start()  # O(w)
+# Start process: cost depends on OS and start method
+p.start()
 
-# Join process: O(1) operation (wait for completion)
-p.join()  # O(1) operation, blocks until done
+# Join process: waits for completion
+p.join()
 ```
 
 ### Space Complexity: O(w)
@@ -44,7 +43,6 @@ p.join()  # O(1) operation, blocks until done
 from multiprocessing import Process
 
 # Each process uses significant memory
-# w = memory per process (typically 10-50MB)
 
 processes = []
 for i in range(10):
@@ -53,7 +51,7 @@ for i in range(10):
     processes.append(p)  # O(10w) total memory
 
 for p in processes:
-    p.join()  # O(1) per join
+    p.join()
 
 # Note: Start fewer processes than you think!
 # 4-8 usually sufficient for CPU-bound (use CPU count)
@@ -66,20 +64,17 @@ for p in processes:
 ```python
 from multiprocessing import Queue
 
-# Create queue: O(1)
-q = Queue()  # O(1)
+# Create queue
+q = Queue()
 
-# Put item: O(n) for pickling where n = item size
-# Item is serialized before sending
-q.put("item")  # O(n) for serialization
+# Put item: pickling + IPC costs
+q.put("item")
 
-# Get item: O(n) for unpickling where n = item size
-# Item is deserialized after receiving
-item = q.get()  # O(n) for deserialization
+# Get item: unpickling + IPC costs
+item = q.get()
 
-# Block until available: O(n) operation for unpickling
-# Time depends on when item arrives
-item = q.get(timeout=5)  # O(n) for deserialization
+# Block until available
+item = q.get(timeout=5)
 ```
 
 ### Space Complexity
@@ -91,11 +86,11 @@ q = Queue(maxsize=100)  # O(1) to create
 
 # Space grows as items accumulate
 for i in range(100):
-    q.put(i)  # O(1) per put, O(100) total space
+    q.put(i)
 
 # Space reduces as items consumed
 while not q.empty():
-    item = q.get()  # O(1) per get
+    item = q.get()
 ```
 
 ## Pool
@@ -106,12 +101,11 @@ while not q.empty():
 from multiprocessing import Pool
 import os
 
-# Create pool: O(w) time
-# w = number of worker processes
-pool = Pool(processes=4)  # O(w) to create
+# Create pool: cost depends on start method
+pool = Pool(processes=4)
 
 # Default: os.cpu_count() processes
-pool = Pool()  # O(w) where w = CPU count
+pool = Pool()
 
 # Each process has significant overhead
 # Time: 10-100ms per process to start
@@ -128,10 +122,9 @@ def square(x):
 
 pool = Pool(processes=4)
 
-# Map: O(n) to submit tasks
-# n = number of items
+# Map: cost depends on scheduling and IPC
 items = range(1000)
-results = pool.map(square, items)  # O(n)
+results = pool.map(square, items)
 
 # Collects all results (blocks until done)
 # Returns list in original order
@@ -144,9 +137,9 @@ from multiprocessing import Pool
 
 pool = Pool(processes=4)
 
-# Submit: O(n) to queue tasks
+# Submit tasks
 items = range(1000)
-result_async = pool.map_async(square, items)  # O(n)
+result_async = pool.map_async(square, items)
 
 # Returns immediately: O(1)
 # Get results later: O(1) operation
@@ -180,12 +173,11 @@ from multiprocessing import Pool
 
 pool = Pool(processes=4)
 
-# Create iterator: O(1)
-# Processes items lazily
-results_iter = pool.imap(process, items)  # O(1) to create
+# Create iterator
+results_iter = pool.imap(process, items)
 
-# Iterate: O(n) total for all items
-for result in results_iter:  # O(n log n) due to task scheduling
+# Iterate: cost depends on scheduling and IPC
+for result in results_iter:
     process_result(result)  # O(1) per iteration
 ```
 
@@ -199,13 +191,12 @@ pool = Pool(processes=4)
 # Submit tasks
 results = pool.map(task, items)  # O(n)
 
-# Close: O(1)
+# Close: prevents new tasks
 # Prevents new tasks
-pool.close()  # O(1)
+pool.close()
 
-# Join: O(w)
-# Wait for all tasks to complete
-pool.join()  # O(w) to wait for w processes
+# Join: wait for all tasks to complete
+pool.join()
 
 # Or use context manager
 with Pool(processes=4) as pool:
@@ -222,15 +213,15 @@ from multiprocessing import Pipe, Process
 # Create pipe: O(1)
 parent_conn, child_conn = Pipe()  # O(1)
 
-# Send: O(1) amortized
-parent_conn.send("message")  # O(1)
+# Send: pickling + IPC costs
+parent_conn.send("message")
 
-# Receive: O(1) operation
-msg = child_conn.recv()  # O(1), blocks until available
+# Receive: blocks until available
+msg = child_conn.recv()
 
 # Bidirectional: both ends can send/receive
-child_conn.send("reply")  # O(1)
-reply = parent_conn.recv()  # O(1)
+child_conn.send("reply")
+reply = parent_conn.recv()
 ```
 
 ## Common Patterns
@@ -247,8 +238,8 @@ def process_item(item):
 def parallel_map(items):
     """Process items in parallel."""
     with Pool() as pool:
-        # Submit all: O(n)
-        results = pool.map(process_item, items)  # O(n)
+        # Submit all tasks
+        results = pool.map(process_item, items)
     
     return results
     # Total: O(n) time, O(w) processes
@@ -262,14 +253,14 @@ from multiprocessing import Queue, Process
 def producer(q, items):
     """Produce items."""
     for item in items:  # O(n)
-        q.put(item)  # O(1) per put
+        q.put(item)
     q.put(None)  # Signal end
 
 def consumer(q):
     """Consume items."""
     results = []
     while True:
-        item = q.get()  # O(1) per get
+        item = q.get()
         if item is None:
             break
         results.append(process(item))  # O(m) per item
@@ -305,9 +296,9 @@ def parallel_compute(data, num_processes=4):
         for i in range(0, len(data), chunk_size)
     ]
     
-    # Process chunks: O(n)
+    # Process chunks: includes scheduling and IPC
     with Pool(processes=num_processes) as pool:
-        results = pool.map(compute, chunks)  # O(n)
+        results = pool.map(compute, chunks)
     
     return sum(results)  # Aggregate
 ```
@@ -319,24 +310,24 @@ from multiprocessing import Pipe, Process
 
 def worker(conn, task_id):
     """Worker receives and sends."""
-    msg = conn.recv()  # O(1)
+    msg = conn.recv()
     result = process_message(msg)
-    conn.send(result)  # O(1)
+    conn.send(result)
 
 # Create communication channel
-parent_conn, child_conn = Pipe()  # O(1)
+parent_conn, child_conn = Pipe()
 
 # Start worker process
 p = Process(target=worker, args=(child_conn, 1))
 p.start()
 
 # Parent sends task
-parent_conn.send(("task_data",))  # O(1)
+parent_conn.send(("task_data",))
 
 # Parent receives result
-result = parent_conn.recv()  # O(1)
+result = parent_conn.recv()
 
-p.join()  # O(1)
+p.join()
 ```
 
 ## Performance Characteristics
@@ -346,21 +337,19 @@ p.join()  # O(1)
 ```python
 from multiprocessing import Pool, Process
 
-# Process creation is expensive
-# Startup time: 10-100ms per process
-# Memory: 10-50MB per process
+# Process creation is expensive and platform-dependent
 
 # Rule: Use Pool for multiple tasks
 # Creates workers once, reuses them
 
 # Good: Reuse pool for multiple operations
 with Pool(processes=4) as pool:
-    results1 = pool.map(task1, items)  # O(n1)
-    results2 = pool.map(task2, items)  # O(n2)
+    results1 = pool.map(task1, items)
+    results2 = pool.map(task2, items)
 
 # Avoid: Creating new pool each time
 for items_batch in batches:
-    pool = Pool(processes=4)  # O(w) overhead each time!
+    pool = Pool(processes=4)
     results = pool.map(task, items_batch)
     pool.close()
     pool.join()
@@ -396,7 +385,7 @@ pool.join()
 results = pool.map(task, large_items, chunksize=100)
 
 # Avoid: Default chunksize for large datasets
-results = pool.map(task, 1000000_items)  # chunksize=1 is slow
+results = pool.map(task, large_items)  # chunksize=1 is slow
 ```
 
 ### When to Use multiprocessing
@@ -423,10 +412,7 @@ with ThreadPoolExecutor(max_workers=8) as executor:
 
 ## Version Notes
 
-- **Python 2.6+**: multiprocessing module introduced
-- **Python 3.0+**: Enhanced API
-- **Python 3.4+**: Better integration with concurrent.futures
-- **Python 3.13+**: Better IPC mechanisms
+- **Python 3.x**: `multiprocessing` module is available
 
 ## Differences from Threading
 
