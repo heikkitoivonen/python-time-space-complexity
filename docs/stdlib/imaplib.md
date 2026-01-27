@@ -6,9 +6,9 @@ The `imaplib` module provides IMAP4 client functionality for accessing email on 
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `login()` | O(1) | O(1) | Authentication |
-| List mailboxes | O(n) | O(n) | n = mailboxes |
-| Fetch messages | O(n) | O(n) | n = messages |
+| `login()` | Varies | Varies | Network round‑trip, server auth |
+| List mailboxes | Varies | Varies | Depends on server and response size |
+| Fetch messages | Varies | Varies | Depends on server, message sizes, and network |
 
 ## Accessing IMAP Mailboxes
 

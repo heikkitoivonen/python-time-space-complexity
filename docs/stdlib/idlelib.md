@@ -6,8 +6,8 @@ The `idlelib` module provides the Python IDLE editor library, used to build the 
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| Editor initialization | O(1) | O(n) | n = UI components |
-| Syntax highlighting | O(n) | O(n) | n = line length |
+| Editor initialization | Varies | Varies | Depends on Tk setup and platform |
+| Syntax highlighting | Varies | Varies | Depends on highlighter and text size processed |
 
 ## IDLE Components
 

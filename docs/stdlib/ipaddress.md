@@ -13,7 +13,7 @@ The `ipaddress` module provides utilities for creating and manipulating IPv4 and
 | `ip_address(addr)` | O(n) | O(1) | Auto-detect IP type |
 | `ip_network(addr)` | O(n) | O(1) | Auto-detect network type |
 | Address membership | O(1) | O(1) | Check in network |
-| Subnet iteration | O(2^k) | O(1) | Generate subnets |
+| Subnet iteration | O(s) | O(1) | s = number of subnets generated |
 
 ## IP Address Creation
 
@@ -189,10 +189,12 @@ if is_private('10.0.0.1'):
 from ipaddress import IPv4Network
 
 def find_common_supernet(networks):
-    """Find supernet containing all networks: O(n)"""
-    networks = [IPv4Network(n) for n in networks]  # O(n)
-    supernet = IPv4Network.supernet_of(networks)  # O(n)
-    return supernet
+    """Find a supernet containing all networks (naive)."""
+    nets = [IPv4Network(n) for n in networks]
+    candidate = nets[0]
+    while not all(candidate.supernet_of(n) or candidate == n for n in nets):
+        candidate = candidate.supernet()
+    return candidate
 ```
 
 ### Parse Mixed Address Types

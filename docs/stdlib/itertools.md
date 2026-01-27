@@ -17,7 +17,6 @@ The `itertools` module provides efficient looping tools for creating iterators a
 
 | Function | Time | Space | Notes |
 |----------|------|-------|-------|
-| `filter(pred, iter)` | O(n) total | O(1) | Filter items |
 | `filterfalse(pred, iter)` | O(n) total | O(1) | Opposite filter |
 | `compress(iter, sel)` | O(n) total | O(1) | Mask-based filter |
 | `dropwhile(pred, iter)` | O(n) total | O(1) | Drop while true |
@@ -44,11 +43,11 @@ The `itertools` module provides efficient looping tools for creating iterators a
 | `combinations(iterable, r)` | O(C(n,r)) total | O(r) per item | All r-combinations |
 | `combinations_with_replacement(iter, r)` | O(C(n+r-1,r)) total | O(r) per item | Combinations allowing repeats |
 | `permutations(iterable, r)` | O(P(n,r)) total | O(r) per item | All permutations |
-| `product(iter1, iter2, ...)` | O(n₁×n₂×...×nₖ) | O(n) init + O(k) per item | Cartesian product; stores all inputs in memory first |
+| `product(iter1, iter2, ...)` | O(n₁×n₂×...×nₖ) | O(Σnᵢ) init + O(k) per item | Cartesian product; stores all inputs in memory first |
 
 ## Memory Characteristics
 
-All itertools functions are lazy - they generate items on demand without storing the entire result.
+All itertools functions are lazy iterators, but some cache input data (e.g., `cycle`, `tee`, `product`).
 
 ```python
 import itertools

@@ -7,11 +7,11 @@ The `inspect` module provides utilities for inspecting live objects, including m
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `getmembers(obj)` | O(m) | O(m) | Get all members of object |
-| `getdoc(obj)` | O(1) | O(n) | Get docstring |
+| `getdoc(obj)` | O(n) | O(n) | n = docstring length |
 | `signature(func)` | O(p) | O(p) | Get function signature |
-| `getsource(obj)` | O(n) | O(n) | Get source code |
-| `getsourcelines(obj)` | O(n) | O(n) | Get source + line numbers |
-| `getfile(obj)` | O(1) | O(1) | Get file path |
+| `getsource(obj)` | Varies | Varies | File I/O + inspect cache |
+| `getsourcelines(obj)` | Varies | Varies | File I/O + inspect cache |
+| `getfile(obj)` | Varies | Varies | May inspect metadata and loaders |
 | `isfunction(obj)` | O(1) | O(1) | Check if function |
 | `ismethod(obj)` | O(1) | O(1) | Check if method |
 | `isclass(obj)` | O(1) | O(1) | Check if class |
@@ -120,14 +120,14 @@ Where n = source code size.
 ```python
 import inspect
 
-# Get source: O(n) to read file
-source = inspect.getsource(func)  # O(n)
+# Get source: file I/O and caching behavior vary
+source = inspect.getsource(func)
 
-# Get lines with line numbers: O(n)
-source_lines, start_line = inspect.getsourcelines(func)  # O(n)
+# Get lines with line numbers
+source_lines, start_line = inspect.getsourcelines(func)
 
 # Source is read from disk and cached
-# Subsequent calls may be O(1) from cache
+# Subsequent calls may be faster if cached
 ```
 
 #### Space Complexity: O(n)
@@ -304,9 +304,7 @@ frame = sys._getframe(0)  # O(1) vs O(d)
 
 ## Version Notes
 
-- **Python 3.3+**: `signature()` added
-- **Python 3.5+**: Improvements to signature handling
-- **Python 3.10+**: Parameter behavior changes
+- **Python 3.x**: `inspect` utilities are available
 
 ## Related Documentation
 

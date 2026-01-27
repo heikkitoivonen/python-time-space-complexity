@@ -69,7 +69,7 @@ stream.seek(0)
 for line in stream:  # O(n) iteration
     print(f"Line: {line.strip()}")
 
-# Clear stream - O(1)
+# Close stream - O(1)
 stream.close()
 ```
 
@@ -243,6 +243,9 @@ from io import BytesIO
 
 stream = BytesIO(b"x" * 1000)
 
+def process(data):
+    print(f"Processing {len(data)} bytes")
+
 # Read in chunks - O(n) total, O(1) per chunk
 chunk_size = 100
 while True:
@@ -250,9 +253,6 @@ while True:
     if not chunk:
         break
     process(chunk)  # Process chunk
-
-def process(data):
-    print(f"Processing {len(data)} bytes")
 ```
 
 ### Seek Performance
