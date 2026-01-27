@@ -6,8 +6,8 @@ The `logging` module provides functionality for flexible event logging, with dif
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `logging.basicConfig()` | O(1) | O(1) | Configure logging |
-| `logger.debug/info/warning/error()` | O(k) | O(1) | k = message length |
+| `logging.basicConfig()` | Varies | Varies | Creates handlers/formatters |
+| `logger.debug/info/warning/error()` | Varies | Varies | Depends on handlers, filters, and I/O |
 | `getLogger()` | O(1) avg | O(1) | Get logger instance |
 | Formatting message | O(k) | O(k) | k = formatted string |
 
@@ -18,13 +18,13 @@ The `logging` module provides functionality for flexible event logging, with dif
 ```python
 import logging
 
-# Configure logging - O(1)
+# Configure logging - cost depends on handlers
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-# Log messages - O(k)
+# Log messages - cost depends on handlers and I/O
 logging.debug('Debug message')      # Not shown (level=INFO)
 logging.info('Info message')        # O(10)
 logging.warning('Warning message')  # O(15)
@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 # Set level - O(1)
 logger.setLevel(logging.DEBUG)
 
-# Log messages - O(k)
+# Log messages - cost depends on handlers and I/O
 logger.debug('Debug: %s', variable)      # O(k)
 logger.info('Processing: %s', item)      # O(k)
 logger.warning('Issue: %s', issue)       # O(k)
@@ -73,12 +73,12 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 file_handler.setFormatter(formatter)
 console_handler.setFormatter(formatter)
 
-# Add handlers - O(1) each
+# Add handlers - O(1) each (list append)
 logger.addHandler(file_handler)      # O(1)
 logger.addHandler(console_handler)   # O(1)
 
-# Log - O(k)
-logger.info('Application started')   # O(k)
+# Log - cost depends on handlers and I/O
+logger.info('Application started')
 ```
 
 ## Log Levels
@@ -100,7 +100,7 @@ logger.setLevel(logging.WARNING)
 
 # Only WARNING and above are logged
 logger.debug('Not logged')      # Skipped
-logger.warning('Is logged')     # O(k)
+logger.warning('Is logged')
 ```
 
 ## Common Patterns
@@ -121,16 +121,16 @@ logger = logging.getLogger(__name__)
 
 def process_file(filename):
     try:
-        logger.info(f'Processing {filename}')      # O(k)
+        logger.info(f'Processing {filename}')
         with open(filename) as f:
             data = f.read()  # O(n)
-        logger.debug(f'Read {len(data)} bytes')    # O(k)
+        logger.debug(f'Read {len(data)} bytes')
         return process(data)
     except FileNotFoundError:
-        logger.error(f'File not found: {filename}')  # O(k)
+        logger.error(f'File not found: {filename}')
         return None
     except Exception as e:
-        logger.exception(f'Unexpected error: {e}')   # O(k)
+        logger.exception(f'Unexpected error: {e}')
         return None
 ```
 
@@ -144,9 +144,9 @@ logger = logging.getLogger(__name__)
 try:
     result = risky_operation()  # Might fail
 except ValueError as e:
-    logger.error(f'Invalid value: {e}')     # O(k)
+    logger.error(f'Invalid value: {e}')
 except Exception as e:
-    logger.exception('Unexpected error')    # O(k) - includes traceback
+    logger.exception('Unexpected error')    # Includes traceback
 ```
 
 ## Performance Considerations
@@ -172,14 +172,14 @@ logger.debug(f'User {username} logged in')   # Always format string
 ```python
 import logging
 
-# File handler - O(k) to write
+# File handler - cost depends on I/O and buffering
 handler = logging.FileHandler('app.log')
 
 # Buffering affects performance
 # Default: buffered (fast)
 # Unbuffered: flush each write (slow but safer)
 
-# Rotating file handler - O(k) per write
+# Rotating file handler - cost depends on I/O and rollover
 rotating = logging.handlers.RotatingFileHandler(
     'app.log',
     maxBytes=1000000,  # 1MB
@@ -189,9 +189,7 @@ rotating = logging.handlers.RotatingFileHandler(
 
 ## Version Notes
 
-- **Python 2.x**: logging module available
-- **Python 3.x**: Enhanced with better formatting
-- **All versions**: O(k) logging complexity
+- **Python 3.x**: `logging` module is available
 
 ## Related Modules
 

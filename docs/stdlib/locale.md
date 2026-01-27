@@ -7,11 +7,11 @@ The `locale` module provides access to the POSIX locale database for language, c
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `getlocale()` | O(1) | O(1) | Get current locale |
-| `setlocale(category, locale)` | O(1) | O(1) | Set locale |
+| `setlocale(category, locale)` | Varies | Varies | Depends on platform/C library |
 | `localeconv()` | O(1) | O(1) | Get locale info |
-| `format(format, value)` | O(n) | O(n) | n = value length |
+| `format_string(format, value)` | O(n) | O(n) | n = formatted output size |
 | `strxfrm(string)` | O(n) | O(n) | Transform string |
-| `strcoll(s1, s2)` | O(n) | O(n) | Compare locale-aware |
+| `strcoll(s1, s2)` | O(n) | O(1) | Compare locale-aware |
 
 ## Common Operations
 
@@ -58,7 +58,7 @@ import locale
 # Set German locale - O(1)
 locale.setlocale(locale.LC_NUMERIC, 'de_DE.UTF-8')
 
-# O(n) format number - n = value length
+# O(n) format number - n = formatted output size
 value = 1234567.89
 formatted = locale.format_string("%.2f", value)
 # Returns: "1.234.567,89"
@@ -173,12 +173,12 @@ formatted = cache.format_number(1234.56, "%.2f")  # O(1)
 ```python
 import locale
 
-# Bad: Multiple setlocale calls - O(k) per call
+# Bad: Multiple setlocale calls - varies by platform
 for i in range(100):
-    locale.setlocale(locale.LC_NUMERIC, 'de_DE.UTF-8')  # O(1)
+    locale.setlocale(locale.LC_NUMERIC, 'de_DE.UTF-8')
     value = locale.format_string("%.2f", i)
 
-# Good: Set once - O(1) setup
+# Good: Set once (avoids repeated C library calls)
 locale.setlocale(locale.LC_NUMERIC, 'de_DE.UTF-8')
 for i in range(100):
     value = locale.format_string("%.2f", i)  # O(n)
@@ -211,10 +211,8 @@ def efficient_sort(strings):
 
 ## Version Notes
 
-- **Python 2.6+**: Basic locale support
-- **Python 3.x**: Full locale support
-- **Platform-specific**: Available on Unix/Linux and Windows
-- **Encoding**: UTF-8 recommended for modern systems
+- **Python 3.x**: `locale` module is available
+- **Platform-specific**: Behavior depends on the underlying C library and locale data
 
 ## Related Documentation
 

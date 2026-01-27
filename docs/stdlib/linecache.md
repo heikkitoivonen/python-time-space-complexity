@@ -9,7 +9,7 @@ The `linecache` module allows efficient retrieval of individual lines from Pytho
 | `getline()` first access | O(n) | O(n) | Loads entire file into cache; n = file lines |
 | `getline()` cached | O(1) | O(1) | Returns cached line |
 | `checkcache()` | O(k) | O(1) | k = cached files; checks mtime for invalidation |
-| `clearcache()` | O(1) | O(1) | Clear all cached files |
+| `clearcache()` | O(k) | O(1) | k = cached files; clears entries |
 
 ## Getting Lines from Files
 
@@ -34,11 +34,11 @@ for i in range(1, 4):
 ```python
 import linecache
 
-# Clear cache - O(1)
-linecache.checkcache()
+# Clear entire cache - O(k)
+linecache.clearcache()
 
-# Clear specific file - O(1)
-linecache.checkcache('myfile.py')
+# Invalidate cache entries if files changed
+linecache.checkcache()
 ```
 
 ## Related Documentation

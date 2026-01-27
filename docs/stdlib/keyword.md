@@ -6,8 +6,8 @@ The `keyword` module provides access to Python's set of keywords and allows chec
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `keyword.iskeyword()` | O(1) | O(1) | Hash-based lookup |
-| Access keyword list | O(1) | O(1) | Pre-computed |
+| `keyword.iskeyword()` | O(n) | O(1) | n = string length |
+| Access keyword list | O(1) | O(1) | Pre-computed list |
 
 ## Checking for Keywords
 

@@ -7,12 +7,11 @@ The `json` module provides JSON serialization and deserialization.
 | Function | Time | Space | Notes |
 |----------|------|-------|-------|
 | `json.dumps(obj)` | O(n) | O(n) | Serialize to string |
-| `json.dump(obj, fp)` | O(n) | O(k) | Write to file; k = buffer size (streams output) |
+| `json.dump(obj, fp)` | O(n) | O(d) | d = nesting depth; writes incrementally |
 | `json.loads(s)` | O(n) | O(n) | Parse JSON string |
-| `json.load(fp)` | O(n) | O(n) | Read from file |
+| `json.load(fp)` | O(n) | O(n) | Reads full file into memory |
 | `JSONEncoder.encode()` | O(n) | O(n) | Custom encoder |
 | `JSONDecoder.decode()` | O(n) | O(n) | Custom decoder |
-| `JSONDecodeError` | - | - | Exception for parse errors (subclass of ValueError) |
 
 ## Serialization (dumps/dump)
 
@@ -89,7 +88,7 @@ data = {'key': 'value', 'items': list(range(1000))}
 with open('data.json', 'w') as f:
     json.dump(data, f)  # O(n) serialization + write
 
-# Streaming: O(1) memory, O(n) time
+# Streaming: O(d) extra memory, O(n) time (object itself still in memory)
 # Writes to file incrementally
 ```
 
@@ -216,10 +215,7 @@ json_str = json.dumps(person, default=custom_serializer)  # O(n)
 
 ## Version Notes
 
-- **Python 2.6+**: Basic json module
-- **Python 3.4+**: Better performance
-- **Python 3.6+**: Preserves key order (dicts ordered)
-- **Python 3.9+**: Performance improvements
+- **Python 3.x**: `json` module is available
 
 ## Common Issues
 

@@ -6,11 +6,11 @@ The `lzma` module provides XZ compression and decompression functionality.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `lzma.open(filename)` | O(1) | O(1) | Open file handle |
-| `LZMAFile.read()` | O(m) | O(m) | Decompress all, m = uncompressed size |
+| `lzma.open(filename)` | Varies | Varies | Depends on file I/O and options |
+| `LZMAFile.read()` | O(m) | O(m) | Full read, m = uncompressed size |
 | `LZMAFile.write(data)` | O(n) | O(k) | Compress and write, n = input size |
-| `compress(data)` | O(n) | O(n) | Compress bytes (higher constant than gzip) |
-| `decompress(data)` | O(m) | O(m) | Decompress bytes |
+| `compress(data)` | O(n) | O(n) | One-shot compression |
+| `decompress(data)` | O(m) | O(m) | One-shot decompression |
 
 ## Opening Files
 
@@ -19,9 +19,8 @@ The `lzma` module provides XZ compression and decompression functionality.
 ```python
 import lzma
 
-# Opening LZMA file: O(1) time
-# Just opens file handle
-f = lzma.open('file.xz', 'rb')  # O(1)
+# Opening LZMA file: cost depends on I/O and options
+f = lzma.open('file.xz', 'rb')
 
 # With context manager
 with lzma.open('file.xz', 'rb') as f:
@@ -34,7 +33,7 @@ with lzma.open('file.xz', 'rb') as f:
 import lzma
 
 # Just file handle, minimal memory
-f = lzma.open('file.xz', 'rb')  # O(1) space
+f = lzma.open('file.xz', 'rb')
 ```
 
 ## Reading (Decompression)
@@ -147,13 +146,15 @@ data = lzma.decompress(compressed)  # O(m)
 ```python
 import lzma
 
-# Streaming compression: O(n) time (high constant), O(k) space
+# Streaming compression: O(n) time, O(k) space
 compressor = lzma.LZMACompressor()
 
-result = b''
+# Avoid quadratic behavior by collecting chunks
+parts = []
 for chunk in data_chunks:
-    result += compressor.compress(chunk)  # O(n) total
-result += compressor.flush()  # Finalize
+    parts.append(compressor.compress(chunk))
+parts.append(compressor.flush())  # Finalize
+result = b''.join(parts)
 
 # Memory: large dictionary buffer, not entire data
 ```
@@ -166,9 +167,11 @@ import lzma
 # Streaming decompression: O(m) time, O(k) space
 decompressor = lzma.LZMADecompressor()
 
-result = b''
+# Avoid quadratic behavior by collecting chunks
+parts = []
 for chunk in compressed_chunks:
-    result += decompressor.decompress(chunk)  # O(m) total
+    parts.append(decompressor.decompress(chunk))
+result = b''.join(parts)
 
 # Memory: decompression buffer
 ```
@@ -201,17 +204,17 @@ import lzma
 
 data = large_data
 
-# Fast: preset 0 (still slower than gzip)
+# Fast: preset 0 (still slower than gzip in many cases)
 compressed = lzma.compress(data, preset=0)  # O(n)
-# Size reduction: ~30%
+# Size reduction depends on input data
 
 # Default: preset 6
 compressed = lzma.compress(data, preset=6)  # O(n)
-# Size reduction: ~50%
+# Size reduction depends on input data
 
 # Maximum: preset 9
 compressed = lzma.compress(data, preset=9)  # O(n) with high constant
-# Size reduction: ~55% (best ratio)
+# Size reduction depends on input data
 ```
 
 ## Streaming Decompression
@@ -362,7 +365,7 @@ bz2_result = bz2.compress(data)
 
 # LZMA (XZ): Slow, best compression
 # Time: O(n) with highest constant
-# Ratio: ~55%
+# Ratio depends on input data
 lzma_result = lzma.compress(data)
 ```
 
@@ -415,10 +418,7 @@ with lzma.open('huge.xz', 'rt') as f:
 
 ## Version Notes
 
-- **Python 3.3+**: LZMA module introduced
-- **Python 3.4+**: Enhanced performance
-- **Python 3.6+**: Performance improvements
-- **Python 3.9+**: Better compression options
+- **Python 3.x**: `lzma` module is available
 
 ## Related Documentation
 
