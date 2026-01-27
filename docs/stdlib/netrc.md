@@ -7,7 +7,7 @@ The `netrc` module parses and encapsulates the .netrc file, which contains login
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `netrc()` parse | O(n) | O(n) | n = file size |
-| Lookup auth | O(n) | O(1) | n = hostname length |
+| Lookup auth | O(1) | O(1) | Hash-based |
 
 ## Working with Netrc Files
 
