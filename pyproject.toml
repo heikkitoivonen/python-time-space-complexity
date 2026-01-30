@@ -32,16 +32,17 @@ classifiers = [
 ]
 
 dependencies = [
-    "mkdocs>=1.5.0",
-    "mkdocs-material>=9.4.0",
-    "mkdocs-mermaid2-plugin>=1.1.0",
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocs-mermaid2-plugin",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.4.0",
-    "ruff>=0.1.0",
-    "pyyaml>=6.0",
+    "pytest",
+    "ruff",
+    "pyyaml",
+    "pyright",
 ]
 
 [project.urls]
@@ -53,10 +54,10 @@ Issues = "https://github.com/heikkitoivonen/python-time-space-complexity/issues"
 # uv dependency groups configuration
 [dependency-groups]
 dev = [
-    "pytest>=7.4.0",
-    "ruff>=0.1.0",
-    "pyyaml>=6.0",
-    "pyright>=1.1.408",
+    "pytest",
+    "ruff",
+    "pyyaml",
+    "pyright",
 ]
 
 [tool.ruff]

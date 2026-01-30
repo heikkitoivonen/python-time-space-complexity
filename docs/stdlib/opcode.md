@@ -17,14 +17,14 @@ The `opcode` module provides access to Python's bytecode opcodes and their prope
 import opcode
 
 # Get opcode number - O(1)
-print(opcode.opmap['LOAD_CONST'])  # 100
-print(opcode.opmap['RETURN_VALUE']) # 83
+print(opcode.opmap['LOAD_CONST'])
+print(opcode.opmap['RETURN_VALUE'])
 
 # Get opcode name - O(1)
-print(opcode.opname[100])  # 'LOAD_CONST'
+print(opcode.opname[opcode.opmap['LOAD_CONST']])
 
-# Check if opcode has argument - O(1)
-print(opcode.HAVE_ARGUMENT)  # Codes >= 90 have args
+# Check if opcode has argument threshold - O(1)
+print(opcode.HAVE_ARGUMENT)
 
 # Compare opcodes - O(1)
 if opcode.opmap['STORE_NAME'] > opcode.HAVE_ARGUMENT:

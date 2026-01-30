@@ -51,4 +51,4 @@ assert cmath.isnan(z)  # O(1)
 ## Related Documentation
 
 - [math Module](math.md)
-- [complex Built-in](../builtins/complex.md)
+- [complex() Function](../builtins/complex_func.md)
