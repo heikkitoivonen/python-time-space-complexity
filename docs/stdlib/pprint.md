@@ -6,7 +6,7 @@ The `pprint` module provides a way to pretty-print Python data structures with c
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `pprint(obj)` | O(n) | O(n) | Pretty print object |
+| `pprint(obj)` | O(n) | O(n) | Pretty print object; output size dominates |
 | `pformat(obj)` | O(n) | O(n) | Format to string |
 | `PrettyPrinter()` | O(1) | O(1) | Create formatter |
 | `saferepr(obj)` | O(n) | O(n) | Safe repr; handles circular references |
@@ -225,7 +225,7 @@ from pprint import pprint, pformat
 large_dict = {f'key_{i}': i for i in range(1000000)}
 formatted = pformat(large_dict)  # O(n) memory
 
-# pprint writes incrementally (still O(n) internally)
+# pprint writes to a stream but still builds repr strings internally
 import sys
 pprint(large_dict, stream=sys.stderr)  # O(n) memory
 ```
@@ -260,11 +260,6 @@ pp = PrettyPrinter(indent=4)
 # Recursion depth limit
 pp = PrettyPrinter(depth=3)
 ```
-
-## Version Notes
-
-- **Python 3.2+**: `compact` parameter added
-- **Python 3.10+**: Better formatting improvements
 
 ## Related Documentation
 

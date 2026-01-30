@@ -5,12 +5,12 @@ This document tracks the coverage of built-in functions, types, and standard lib
 ## Overview
 
 - **Total Items**: 317 (150 builtins + 167 stdlib modules)
-- **Documented**: 379 (174 builtins + 205 stdlib)
-- **Coverage**: 119.6%
+- **Documented**: 382 (174 builtins + 208 stdlib)
+- **Coverage**: 120.5%
 
 **Note**: Coverage exceeds 100% because comprehensive documentation files (like `exceptions.md`) cover multiple individual items, and we document deprecated/removed modules for historical reference.
 
-Last updated: January 27, 2026 (Python 3.14 audit)
+Last updated: January 30, 2026 (Python 3.14 audit)
 
 ## Built-in Types & Functions
 
@@ -203,7 +203,7 @@ Complete coverage of all built-in functions, types, exceptions, and constants:
 
 ## Standard Library Modules
 
-**Coverage: 122.8% (205/167)**
+**Coverage: 124.6% (208/167)**
 
 All standard library modules are fully documented, including new Python 3.14 modules. Coverage exceeds 100% due to documentation of deprecated/removed modules for historical reference.
 
@@ -305,9 +305,9 @@ All file and I/O modules now documented:
 - ✅ `shutil` - High-level file operations
 - ✅ `tempfile` - Temporary files
 
-### ✅ ALL MODULES COMPLETE (205/205)
+### ✅ ALL MODULES COMPLETE (208/208)
 
-All 102 previously undocumented stdlib modules have been added:
+All 105 previously undocumented stdlib modules have been added:
 
 **Utilities & System (20)**
 - ✅ `ast` - Abstract syntax trees
@@ -359,22 +359,25 @@ All 102 previously undocumented stdlib modules have been added:
 - ✅ `telnetlib` - Telnet client
 - ✅ `xmlrpc` - XML-RPC protocol
 
-**File & Path Operations (7)**
+**File & Path Operations (9)**
 - ✅ `chunk` - IFF chunk reading
 - ✅ `imghdr` - Image file type detection
 - ✅ `nturl2path` - URL to path conversion
 - ✅ `pipes` - Shell pipeline interface
+- ✅ `posix` - POSIX APIs (low-level)
 - ✅ `pty` - Pseudo-terminal
+- ✅ `pwd` - Unix password database
 - ✅ `tty` - Terminal control
 - ✅ `zipimport` - Zip import support
 
 **Memory Mapping (1)**
 - ✅ `mmap` - Memory-mapped file access
 
-**Parsing & Compilation (12)**
+**Parsing & Compilation (13)**
 - ✅ `codeop` - Compile Python source
 - ✅ `code` - Code evaluation
 - ✅ `py_compile` - Compilation
+- ✅ `pyexpat` - Low-level Expat XML parser
 - ✅ `lib2to3` - Python 2 to 3 conversion
 - ✅ `modulefinder` - Module dependencies
 - ✅ `opcode` - Python opcodes

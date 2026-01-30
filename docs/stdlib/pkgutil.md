@@ -6,11 +6,11 @@ The `pkgutil` module provides utilities for working with packages and module sea
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `iter_modules(path)` | O(n) | O(n) | n = modules in path |
-| `walk_packages()` | O(n) | O(n) | n = all subpackages |
-| `find_loader(name)` | O(1) avg, O(n) worst | O(1) | Check sys.modules; O(n) worst case due to hash collisions |
-| `get_data(name)` | O(n) | O(n) | n = file size |
-| `extend_path()` | O(n) | O(n) | n = path entries |
+| `iter_modules(path)` | O(n) | O(1) per item | n = modules in path |
+| `walk_packages()` | O(n) | O(n) | n = all subpackages/modules (tracks seen paths) |
+| `find_spec(name)` | O(1) avg, O(p) worst | O(1) | p = sys.meta_path length (import hooks) |
+| `get_data(name)` | O(n) | O(n) | n = file size (plus import overhead) |
+| `extend_path()` | O(p + k) | O(p + k) | p = search path entries, k = .pkg entries |
 
 ## Common Operations
 

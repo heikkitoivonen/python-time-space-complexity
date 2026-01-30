@@ -28,8 +28,9 @@ pty.spawn(['bash'])
 ### Fork with PTY
 
 ```python
-import pty
 import os
+import pty
+import sys
 
 # Fork with pseudo-terminal - O(1)
 pid, master_fd = pty.fork()

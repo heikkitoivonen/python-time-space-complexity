@@ -31,7 +31,7 @@ plist_bytes = b"""<?xml version="1.0"?>
 </dict>
 </plist>"""
 
-data = plistlib.loads(plist_bytes)
+data = plistlib.loads(plist_bytes)  # accepts bytes/bytearray
 print(data['Name'])  # "John Doe"
 print(data['Age'])   # 30
 ```
@@ -53,10 +53,15 @@ print(data['settings'])
 
 ### Supported Types
 
+`plistlib` only supports a limited set of types. Dictionary keys must be strings,
+and values must be one of: `str`, `int`, `float`, `bool`, `bytes`, `datetime.datetime`,
+`dict`, `list`, or `tuple`. Unsupported types raise `TypeError`.
+
 ```python
+import datetime
 import plistlib
 
-# Create plist-compatible data - O(1)
+# Create plist-compatible data
 data = {
     'name': 'MyApp',
     'version': '1.0',
@@ -111,7 +116,7 @@ data = {'name': 'test', 'value': 123}
 # XML format (text, human-readable) - O(n)
 xml_bytes = plistlib.dumps(data, sort_keys=True, fmt=plistlib.FMT_XML)
 
-# Binary format (compact, faster) - O(n)
+# Binary format (compact, often smaller) - O(n)
 binary_bytes = plistlib.dumps(data, sort_keys=True, fmt=plistlib.FMT_BINARY)
 
 print(f"XML size: {len(xml_bytes)} bytes")
@@ -197,7 +202,7 @@ print(f"Executable: {info.get('CFBundleExecutable')}")
 import plistlib
 from datetime import datetime
 
-# Create structured data - O(1)
+# Create structured data
 manifest = {
     'title': 'Project Files',
     'version': 1,

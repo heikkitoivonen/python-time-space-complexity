@@ -6,9 +6,9 @@ The `pdb` module provides an interactive debugger for Python code, allowing brea
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `set_trace()` | O(1) | O(1) | Enter debugger |
-| Breakpoint | O(1) | O(1) | Register break |
-| Step/continue | O(1) | O(1) | Control flow |
+| `set_trace()` | Varies | O(1) | Setup is O(1); interactive runtime is program/user dependent |
+| Breakpoint | O(1) to register | O(1) | Hit checks occur during program execution |
+| Step/continue | Varies | O(1) | Runs until next stop; depends on code executed |
 
 ## Interactive Debugging
 
@@ -18,7 +18,7 @@ The `pdb` module provides an interactive debugger for Python code, allowing brea
 import pdb
 
 def buggy_function(x):
-    # Enter debugger - O(1)
+    # Enter debugger (setup is O(1); runtime depends on program/user)
     pdb.set_trace()
     
     result = x * 2
@@ -37,7 +37,7 @@ import traceback
 try:
     1 / 0
 except Exception:
-    # Debug after exception - O(1)
+    # Debug after exception (setup is O(1); runtime depends on session)
     pdb.post_mortem()
 ```
 

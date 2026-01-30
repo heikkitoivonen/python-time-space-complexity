@@ -32,11 +32,11 @@ for classname, obj in classes.items():
 import pyclbr
 
 # Read with functions - O(n)
-classes = pyclbr.readmodule('script.py')
-functions = pyclbr.readmodule_ex('script.py')
+classes = pyclbr.readmodule('script', path=['.'])
+symbols = pyclbr.readmodule_ex('script', path=['.'])
 
 # Examine
-for name, obj in functions.items():
+for name, obj in symbols.items():
     if isinstance(obj, pyclbr.Function):
         print(f"Function: {name} at line {obj.lineno}")
     else:

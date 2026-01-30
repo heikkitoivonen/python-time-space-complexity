@@ -19,7 +19,7 @@ import py_compile
 # Compile file - O(n)
 py_compile.compile('module.py')
 
-# Creates module.cpython-311.pyc
+# Creates a version-tagged .pyc in __pycache__ (PEP 3147)
 
 # Compile with custom output
 py_compile.compile('module.py', cfile='module.pyc')

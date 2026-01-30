@@ -6,14 +6,14 @@ The `platform` module provides functions to access platform-specific information
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `platform()` | O(1) | O(1) | Cached after first call |
-| `system()` | O(1) | O(1) | Cached after first call |
-| `release()` | O(1) | O(1) | Cached after first call |
-| `version()` | O(1) | O(1) | Cached after first call |
-| `machine()` | O(1) | O(1) | Cached after first call |
-| `node()` | O(1) | O(1) | Cached after first call; first call may involve syscall |
+| `platform()` | O(1) cached, O(n) first | O(n) | n = length of result string |
+| `system()` | O(1) cached, O(n) first | O(n) | Derived from uname |
+| `release()` | O(1) cached, O(n) first | O(n) | Derived from uname |
+| `version()` | O(1) cached, O(n) first | O(n) | Derived from uname |
+| `machine()` | O(1) cached, O(n) first | O(n) | Derived from uname |
+| `node()` | O(1) cached, O(n) first | O(n) | Hostname length |
 | `python_version()` | O(1) | O(1) | Static value |
-| `uname()` | O(1) | O(1) | Cached after first call |
+| `uname()` | O(1) cached, O(n) first | O(n) | n = total size of fields |
 
 ## Common Operations
 
@@ -22,20 +22,20 @@ The `platform` module provides functions to access platform-specific information
 ```python
 import platform
 
-# O(1) - get operating system name
+# O(1) after cache; first call O(n)
 os_name = platform.system()  # 'Linux', 'Windows', 'Darwin'
 
-# O(1) - get OS release
+# O(1) after cache; first call O(n)
 os_release = platform.release()  # '5.15.0-1234-generic'
 
-# O(1) - get OS version
+# O(1) after cache; first call O(n)
 os_version = platform.version()
 # '#1234-Ubuntu SMP ...'
 
-# O(1) - get machine architecture
+# O(1) after cache; first call O(n)
 machine = platform.machine()  # 'x86_64', 'arm64'
 
-# O(1) - get hostname
+# O(1) after cache; first call O(n)
 hostname = platform.node()  # 'mycomputer'
 ```
 
@@ -64,15 +64,15 @@ compiler = platform.python_compiler()
 ```python
 import platform
 
-# O(1) - get complete platform description
+# O(1) after cache; first call O(n)
 platform_str = platform.platform()
 # 'Linux-5.15.0-1234-generic-x86_64-with-glibc2.35'
 
-# O(1) - with detailed version
+# O(1) after cache; first call O(n)
 detailed = platform.platform(aliased=True)
 # Uses common OS aliases like 'Ubuntu' instead of 'Linux'
 
-# O(1) - with specific details
+# O(1) after cache; first call O(n)
 custom = platform.platform(aliased=True, terse=True)
 ```
 
@@ -81,7 +81,7 @@ custom = platform.platform(aliased=True, terse=True)
 ```python
 import platform
 
-# O(1) - get uname data (Unix-like systems)
+# O(1) after cache; first call O(n)
 uname_info = platform.uname()
 # Returns: (system, node, release, version, machine, processor)
 

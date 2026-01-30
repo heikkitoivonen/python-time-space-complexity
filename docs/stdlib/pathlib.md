@@ -7,8 +7,8 @@ The `pathlib` module provides an object-oriented approach to filesystem path han
 | Method | Time | Space | Notes |
 |--------|------|-------|-------|
 | `Path(str)` | O(n) | O(n) | Create Path from string |
-| `Path.cwd()` | O(1) | O(n) | Get current directory |
-| `Path.home()` | O(1) | O(n) | Get home directory |
+| `Path.cwd()` | O(n) | O(n) | n = length of current directory |
+| `Path.home()` | O(n) | O(n) | n = length of home directory |
 | `Path.exists()` | O(1) | O(1) | Check if path exists |
 | `Path.is_file()` | O(1) | O(1) | Check if path is file |
 | `Path.is_dir()` | O(1) | O(1) | Check if path is directory |
@@ -21,10 +21,10 @@ The `pathlib` module provides an object-oriented approach to filesystem path han
 | `Path.stat()` | O(1) | O(1) | Get file stats |
 | `Path.lstat()` | O(1) | O(1) | Like stat but don't follow symlinks |
 | `Path.resolve()` | O(n) | O(n) | Resolve to absolute path |
-| `Path.absolute()` | O(1) | O(n) | Make absolute without resolving symlinks |
-| `Path.expanduser()` | O(1) | O(n) | Expand ~ to home directory |
-| `Path.iterdir()` | O(d) | O(d) | Iterate directory contents |
-| `Path.walk()` | O(d) | O(d) | Walk directory tree (Python 3.12+) |
+| `Path.absolute()` | O(n) | O(n) | Make absolute without resolving symlinks |
+| `Path.expanduser()` | O(n) | O(n) | Expand ~ to home directory |
+| `Path.iterdir()` | O(d) | O(1) per item | Iterator over directory entries |
+| `Path.walk()` | O(n) | O(d) | n = total entries, d = max depth |
 | `Path.glob(pattern)` | O(n) | O(1) per item | n = directory entries checked, returns iterator |
 | `Path.rglob(pattern)` | O(n) | O(1) per item | n = total tree entries, returns iterator |
 | `Path.mkdir()` | O(1) | O(1) | Create directory |
@@ -35,7 +35,7 @@ The `pathlib` module provides an object-oriented approach to filesystem path han
 | `Path.rmdir()` | O(1) | O(1) | Delete empty directory |
 | `Path.symlink_to(target)` | O(1) | O(1) | Create symlink |
 | `Path.hardlink_to(target)` | O(1) | O(1) | Create hard link |
-| `Path.readlink()` | O(1) | O(n) | Read symlink target |
+| `Path.readlink()` | O(n) | O(n) | n = length of symlink target |
 | `Path.chmod(mode)` | O(1) | O(1) | Change file mode |
 | `Path.lchmod(mode)` | O(1) | O(1) | chmod without following symlinks |
 | `Path.owner()` | O(1) | O(1) | Get owner name |
@@ -64,10 +64,10 @@ path = Path('/home/user/documents/file.txt')  # O(27)
 # Relative path: O(n)
 path = Path('docs/README.md')  # O(13)
 
-# Current directory: O(1) - system call
+# Current directory: O(n) in path length
 cwd = Path.cwd()
 
-# Home directory: O(1) - system call
+# Home directory: O(n) in path length
 home = Path.home()
 ```
 
@@ -164,7 +164,7 @@ for item in path.iterdir():  # O(d)
 count = sum(1 for _ in path.iterdir())  # O(d)
 ```
 
-#### Space Complexity: O(d)
+#### Space Complexity: O(1) per item
 
 ```python
 from pathlib import Path
@@ -293,14 +293,14 @@ path.write_bytes(b'Binary data')  # O(11)
 path.write_text('x' * 1000000)  # O(n)
 ```
 
-#### Space Complexity: O(1)
+#### Space Complexity: O(n)
 
 ```python
 from pathlib import Path
 
-# Streaming write - no buffer needed
+# Encodes to bytes before writing
 content = 'x' * 1000000
-Path('file.txt').write_text(content)  # O(1) extra space
+Path('file.txt').write_text(content)  # O(n) extra space
 ```
 
 ## File System Modifications
@@ -368,13 +368,13 @@ for file in Path('src').rglob('*.py'):  # O(d) to find files
 ```python
 from pathlib import Path
 
-# Build paths: O(1) per operation
+# Build paths: O(n) in total path length
 base = Path('data')
-file = base / 'subdir' / 'file.txt'  # O(1) per /
+file = base / 'subdir' / 'file.txt'  # O(n)
 
 # Multiple files
 for name in files:
-    path = base / name  # O(1) per iteration
+    path = base / name  # O(n) in path length
 ```
 
 ### Safe Deletion

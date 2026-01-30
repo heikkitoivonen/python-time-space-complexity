@@ -25,7 +25,7 @@ data = {'name': 'Alice', 'age': 30, 'scores': [95, 87, 92]}
 # Serialize to bytes - O(n) where n = object size
 pickled = pickle.dumps(data)
 print(type(pickled))  # <class 'bytes'>
-print(len(pickled))   # ~50 bytes
+print(len(pickled))   # Size varies by protocol and data
 
 # Deserialize from bytes - O(n)
 restored = pickle.loads(pickled)
@@ -57,29 +57,29 @@ import pickle
 
 obj = {'a': 1, 'b': [2, 3, 4]}
 
-# Protocol 0 (ASCII, human-readable) - O(n) slowest
+# Protocol 0 (ASCII, human-readable) - O(n)
 p0 = pickle.dumps(obj, protocol=0)
-print(len(p0))  # Largest
+print(len(p0))  # Often largest, but varies by object
 
 # Protocol 1 (Binary, old) - O(n)
 p1 = pickle.dumps(obj, protocol=1)
-print(len(p1))  # Smaller
+print(len(p1))  # Often smaller than protocol 0
 
 # Protocol 2 (Binary, Python 2.3+) - O(n)
 p2 = pickle.dumps(obj, protocol=2)
-print(len(p2))  # Smaller still
+print(len(p2))  # Often smaller than protocol 1
 
 # Protocol 3 (Binary, Python 3.0+) - O(n)
 p3 = pickle.dumps(obj, protocol=3)
-print(len(p3))  # Even smaller
+print(len(p3))  # Often smaller than protocol 2
 
-# Protocol 4 (Binary, Python 3.4+) - O(n) faster
+# Protocol 4 (Binary, Python 3.4+) - O(n)
 p4 = pickle.dumps(obj, protocol=4)
-print(len(p4))  # Optimized
+print(len(p4))  # Often more compact for many objects
 
-# Protocol 5 (Binary, Python 3.8+) - O(n) fastest
+# Protocol 5 (Binary, Python 3.8+) - O(n)
 p5 = pickle.dumps(obj, protocol=5)
-print(len(p5))  # Smallest and fastest
+print(len(p5))  # Supports out-of-band buffers; size varies
 ```
 
 ### Default Protocol
@@ -216,7 +216,7 @@ class Team:
         self.name = name
         self.members = members  # List of dicts
 
-# Pickle nested structure - O(n*m)
+# Pickle nested structure - O(n) in total object graph size
 team = Team('Team A', [
     {'name': 'Alice', 'role': 'lead'},
     {'name': 'Bob', 'role': 'dev'}
@@ -224,7 +224,7 @@ team = Team('Team A', [
 
 pickled = pickle.dumps(team)
 
-# Unpickle - O(n*m)
+# Unpickle - O(n) in total object graph size
 restored = pickle.loads(pickled)
 print(restored.name)       # 'Team A'
 print(restored.members[0]) # {'name': 'Alice', ...}
@@ -267,11 +267,11 @@ large_list = list(range(1000000))
 # Method 1: dumps - creates bytes in memory - O(n) space
 data_bytes = pickle.dumps(large_list)  # Large memory usage
 
-# Method 2: dump to file - streams output - O(n) time, O(1) space
+# Method 2: dump to file - streams output - O(n) time, O(n) space for memoization
 with open('large.pkl', 'wb') as f:
     pickle.dump(large_list, f)  # Much more memory efficient
 
-# Method 3: Pickler with file - O(n) time, O(1) space
+# Method 3: Pickler with file - O(n) time, O(n) space for memoization
 with open('large.pkl', 'wb') as f:
     pickler = pickle.Pickler(f)
     pickler.dump(large_list)
@@ -395,7 +395,7 @@ restored = dill.loads(pickled)
 - **Protocol 0**: Slowest, largest, ASCII (rarely use)
 - **Protocol 1-2**: Legacy compatibility
 - **Protocol 3**: Default Python 3, good balance
-- **Protocol 4+**: Better compression, faster for large objects
+- **Protocol 4+**: More compact encoding (no compression), often faster for large objects
 
 ## Best Practices
 
