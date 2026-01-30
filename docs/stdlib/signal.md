@@ -168,11 +168,16 @@ print("Resumed")
 ```python
 import signal
 import selectors
+import socket
 
 # Set wakeup fd for event loop: O(1)
 # Wakes up select/poll when signal arrives
 sel = selectors.DefaultSelector()
-signal.set_wakeup_fd(sel.fileno())  # O(1)
+read_sock, write_sock = socket.socketpair()
+read_sock.setblocking(False)
+write_sock.setblocking(False)
+signal.set_wakeup_fd(write_sock.fileno())  # O(1)
+sel.register(read_sock, selectors.EVENT_READ)
 
 # Now signals wake up selector instead of immediate delivery
 events = sel.select(timeout=1.0)  # Can be interrupted safely
@@ -316,21 +321,13 @@ daemon.run()
 ```python
 import signal
 
-def safe_handler(signum, frame):
-    """Safe signal handler."""
-    # Only call async-signal-safe functions!
-    # Safe: os.write, signal.signal
-    # Unsafe: print, logging, threading calls
-    os.write(1, b"Signal received\n")  # Safe
+def minimal_handler(signum, frame):
+    """Minimal signal handler."""
+    # Keep handlers short; avoid blocking I/O or locks.
+    os.write(1, b"Signal received\n")
 
-def unsafe_handler(signum, frame):
-    """Unsafe signal handler."""
-    # These can deadlock!
-    print("Signal received")  # Unsafe!
-    logger.info("Signal")  # Unsafe!
-
-# Register safe handler
-signal.signal(signal.SIGUSR1, safe_handler)  # O(1)
+# Register handler
+signal.signal(signal.SIGUSR1, minimal_handler)  # O(1)
 ```
 
 ### Best Practices
@@ -442,7 +439,7 @@ print(signal.Signals)  # Enum of available signals
 
 - **Python 2.0+**: Basic signal handling
 - **Python 3.3+**: Better Windows support
-- **Python 3.5+**: signal.set_wakeup_fd()
+- **Python 3.x**: signal.set_wakeup_fd() available
 - **Python 3.10+**: signal.Signals enum
 
 ## Related Documentation

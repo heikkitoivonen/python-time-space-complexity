@@ -19,8 +19,8 @@ import socket
 # Create socket - O(1)
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-# Connect to server - O(n)
-sock.connect(('localhost', 8000))  # O(n) - network time
+# Connect to server (network-bound)
+sock.connect(('localhost', 8000))
 
 # Send data - O(k)
 sock.send(b'Hello')  # O(5)
@@ -46,8 +46,8 @@ sock.bind(('localhost', 8000))  # O(1)
 # Listen for connections - O(1)
 sock.listen(1)  # O(1)
 
-# Accept connection - O(n)
-client, addr = sock.accept()  # O(n) - wait for client
+# Accept connection (network-bound wait)
+client, addr = sock.accept()
 
 # Communicate - O(k)
 data = client.recv(1024)  # O(k)
@@ -67,9 +67,9 @@ sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sock.bind(('localhost', 8000))
 sock.listen(5)
 
-# Accept multiple clients - O(n) per client
+# Accept multiple clients (network-bound wait per client)
 while True:
-    client, addr = sock.accept()  # O(n) - wait
+    client, addr = sock.accept()
     
     # Handle client - O(k)
     try:

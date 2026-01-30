@@ -6,8 +6,8 @@ The `sysconfig` module provides access to Python's configuration information and
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `get_config_var()` | O(1) | O(1) | Cached lookup |
-| `get_paths()` | O(1) | O(1) | Cached paths |
+| `get_config_var()` | O(1) avg | O(1) | Cached lookup |
+| `get_paths()` | O(1) avg | O(1) | Cached paths |
 
 ## Getting Configuration Information
 

@@ -7,11 +7,11 @@ The `statistics` module provides functions for calculating basic statistical pro
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `mean(data)` | O(n) | O(1) | Calculate average |
-| `median(data)` | O(n log n) | O(n) | Calculate median; requires sorting |
+| `median(data)` | O(n log n) | O(n) | Calculates median; sorting |
 | `mode(data)` | O(n) | O(n) | Find most common |
 | `stdev(data)` | O(n) | O(1) | Standard deviation; two passes |
 | `variance(data)` | O(n) | O(1) | Calculate variance; two passes |
-| `quantiles(data)` | O(n log n) | O(n) | Calculate quantiles |
+| `quantiles(data)` | O(n log n) | O(n) | Calculate quantiles (sorting) |
 
 ## Mean
 
@@ -121,8 +121,7 @@ most_common = mode(data)  # O(6) = 1
 data = [1, 1, 2, 2, 3, 3]
 m = mode(data)  # Returns 1 (first encountered)
 
-# Python 3.8+: mode() returns first mode if multimodal
-# Python 3.7 and earlier: raised StatisticsError for multimodal data
+# Note: if all values are equally common, mode() returns the first value
 data = [1, 2, 3]  # All equally common
 m = mode(data)    # Returns 1 (first encountered)
 ```
@@ -360,7 +359,7 @@ except StatisticsError:
 
 - **Python 3.4+**: statistics module introduced
 - **Python 3.8+**: `quantiles()` function added
-- **Python 3.11+**: `mean()`, `variance()`, `stdev()` consume iterators in one pass (O(1) space vs O(n) when given an iterator instead of a list)
+- **Python 3.8+**: `mode()` returns the first mode for multimodal data
 
 ## Related Documentation
 

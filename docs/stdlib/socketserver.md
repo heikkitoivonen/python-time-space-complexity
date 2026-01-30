@@ -6,9 +6,9 @@ The `socketserver` module provides classes for writing network servers, supporti
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| Server creation | O(1) | O(1) | Bind to port |
+| Server creation | O(1) + network latency | O(1) | Bind/listen; network setup dominates |
 | Handle request | O(n) | O(n) | n = request size |
-| Serve loop | O(m) | O(m) | m = concurrent requests |
+| Serve loop | Varies | Varies | Blocking accept + per-request handling |
 
 ## Creating Network Servers
 
@@ -29,7 +29,7 @@ class MyHandler(socketserver.StreamRequestHandler):
 
 # Create server - O(1)
 with socketserver.TCPServer(("localhost", 8000), MyHandler) as server:
-    # Serve - O(m) where m = requests
+    # Serve - blocking accept + per-request handling
     server.serve_forever()
 ```
 
@@ -50,7 +50,7 @@ server = socketserver.ThreadingTCPServer(
     MyHandler
 )
 
-# Serve - O(m) concurrent
+# Serve - blocking accept + per-request handling
 server.serve_forever()
 ```
 

@@ -6,8 +6,8 @@ The `ssl` module wraps socket objects with TLS/SSL encryption, enabling secure c
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `wrap_socket()` | O(1) | O(1) | Wrap for TLS |
-| Handshake | O(1) + crypto | O(1) | TLS handshake; asymmetric cryptography overhead |
+| `wrap_socket()` | O(1) | O(1) | Wrap for TLS (no handshake yet) |
+| Handshake | Varies | Varies | Network round trips + crypto |
 | Send/receive | O(n) | O(n) | n = data size |
 
 ## Secure Socket Communication
@@ -23,7 +23,7 @@ context = ssl.create_default_context()
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
     # Wrap with SSL - O(1)
     with context.wrap_socket(sock, server_hostname='example.com') as ssock:
-        # Connect - O(1)
+        # Connect (network-bound)
         ssock.connect(('example.com', 443))
         
         # Send request - O(n)

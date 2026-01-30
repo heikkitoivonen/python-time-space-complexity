@@ -126,6 +126,7 @@ def generate_secure_password(length=12):
 
 ```python
 import secrets
+from datetime import datetime, timedelta
 
 # Generate tokens for authentication - O(n)
 def create_session_token():
@@ -151,11 +152,12 @@ session = {
 import secrets
 
 def lottery_selection(participants, winners=5):
-    # O(1) per selection
+    # O(1) per selection (swap with last element, then pop)
     selected = []
     for _ in range(min(winners, len(participants))):
         idx = secrets.randbelow(len(participants))
-        selected.append(participants.pop(idx))
+        participants[idx], participants[-1] = participants[-1], participants[idx]
+        selected.append(participants.pop())
     return selected
 
 participants = list(range(100))

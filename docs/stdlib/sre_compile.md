@@ -2,6 +2,10 @@
 
 The `sre_compile` module handles the internal compilation of regular expression patterns to bytecode (used internally by `re` module).
 
+!!! warning "Internal module"
+    `sre_compile` is an internal implementation detail of `re` and is not part of the
+    public API. Prefer using `re.compile()` and compiled pattern attributes.
+
 ## Complexity Reference
 
 | Operation | Time | Space | Notes |
@@ -15,14 +19,13 @@ The `sre_compile` module handles the internal compilation of regular expression 
 
 ```python
 import re
-import sre_compile
 
 # Compile pattern - O(n)
 pattern = re.compile(r'\d+')
 
-# Access bytecode - O(1)
-bytecode = pattern.pattern
-print(bytecode)
+# Access the original pattern string - O(1)
+pattern_str = pattern.pattern
+print(pattern_str)
 
 # Get pattern info
 print(pattern.groups)      # Number of groups

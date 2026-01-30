@@ -187,14 +187,11 @@ import shlex
 def parse_custom_syntax(text):
     """Parse with custom syntax rules - O(n)"""
     # O(1) - create custom parser
-    lexer = shlex.shlex(text, posix=True)
+    lexer = shlex.shlex(text, posix=True, punctuation_chars="|><;")
     
     # O(1) - customize behavior
     lexer.whitespace_split = False  # Default - split on whitespace
     lexer.wordchars += '@.-'  # Add to word characters
-    
-    # Custom delimiters - O(1)
-    lexer.delimiters = '|><;'  # Shell-like delimiters
     
     tokens = []
     
@@ -290,7 +287,7 @@ tokens = efficient_parse('contact user@example.com', '@.')
 
 - **Python 2.6+**: Basic functionality
 - **Python 3.3+**: shlex.quote() available
-- **Python 3.x**: Full POSIX compliance
+- **Python 3.x**: POSIX-like behavior when `posix=True`
 
 ## Related Documentation
 

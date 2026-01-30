@@ -5,8 +5,8 @@ This document tracks the coverage of built-in functions, types, and standard lib
 ## Overview
 
 - **Total Items**: 317 (150 builtins + 167 stdlib modules)
-- **Documented**: 387 (174 builtins + 213 stdlib)
-- **Coverage**: 122.1%
+- **Documented**: 389 (174 builtins + 215 stdlib)
+- **Coverage**: 122.7%
 
 **Note**: Coverage exceeds 100% because comprehensive documentation files (like `exceptions.md`) cover multiple individual items, and we document deprecated/removed modules for historical reference.
 
@@ -203,7 +203,7 @@ Complete coverage of all built-in functions, types, exceptions, and constants:
 
 ## Standard Library Modules
 
-**Coverage: 127.5% (213/167)**
+**Coverage: 128.7% (215/167)**
 
 All standard library modules are fully documented, including new Python 3.14 modules. Coverage exceeds 100% due to documentation of deprecated/removed modules for historical reference.
 
@@ -224,6 +224,7 @@ All standard library modules are fully documented, including new Python 3.14 mod
 - ✅ `imp` - Import machinery (deprecated)
 - ✅ `plistlib` - Property list format
 - ✅ `sndhdr` - Sound file format detection
+- ✅ `select` - I/O multiplexing
 
 ### ⊘ Excluded Items (4 - intentionally out of scope)
 
@@ -305,11 +306,11 @@ All file and I/O modules now documented:
 - ✅ `shutil` - High-level file operations
 - ✅ `tempfile` - Temporary files
 
-### ✅ ALL MODULES COMPLETE (213/213)
+### ✅ ALL MODULES COMPLETE (215/215)
 
-All 110 previously undocumented stdlib modules have been added:
+All 112 previously undocumented stdlib modules have been added:
 
-**Utilities & System (20)**
+**Utilities & System (22)**
 - ✅ `ast` - Abstract syntax trees
 - ✅ `dis` - Disassembler for bytecode
 - ✅ `doctest` - Testing via docstrings
@@ -327,8 +328,10 @@ All 110 previously undocumented stdlib modules have been added:
 - ✅ `pydoc` - Documentation viewer
 - ✅ `runpy` - Run Python modules
 - ✅ `sched` - Event scheduler
+- ✅ `select` - I/O multiplexing
 - ✅ `stat` - File status constants
 - ✅ `sysconfig` - System configuration
+- ✅ `syslog` - System logger
 - ✅ `trace` - Trace execution
 
 **String & Text Processing (4)**

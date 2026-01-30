@@ -6,14 +6,14 @@ The `shelve` module provides persistent dictionary storage using the DBM databas
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `shelve.open()` | O(1) | O(1) | Open/create database |
-| `shelf[key] = value` | O(1) avg, O(n) worst | O(k) | Store pickled value; O(n) worst case due to hash collisions |
-| `shelf[key]` | O(1) avg, O(n) worst | O(k) | Retrieve and unpickle; O(n) worst case due to hash collisions |
-| `del shelf[key]` | O(1) avg, O(n) worst | O(1) | Delete key; O(n) worst case due to hash collisions |
-| `key in shelf` | O(1) avg, O(n) worst | O(1) | Key lookup; O(n) worst case due to hash collisions |
-| `len(shelf)` | O(n) | O(1) | Scan all keys |
-| `shelf.keys()` | O(n) | O(n) | Get all keys |
-| `shelf.close()` | O(n) | O(1) | Flush and close |
+| `shelve.open()` | O(1) | O(1) | Open/create database; filesystem work varies |
+| `shelf[key] = value` | O(1) avg, O(n) worst | O(k) | DBM lookup + pickle; backend-dependent |
+| `shelf[key]` | O(1) avg, O(n) worst | O(k) | DBM lookup + unpickle; backend-dependent |
+| `del shelf[key]` | O(1) avg, O(n) worst | O(1) | Delete key; backend-dependent |
+| `key in shelf` | O(1) avg, O(n) worst | O(1) | Membership check; backend-dependent |
+| `len(shelf)` | Varies | O(1) | Some backends scan keys (O(n)) |
+| `shelf.keys()` | O(n) | O(n) | Often returns a materialized list; backend-dependent |
+| `shelf.close()` | O(m) | O(1) | Flush pending writes (m = dirty entries) |
 
 ## Basic Usage
 
@@ -22,17 +22,17 @@ The `shelve` module provides persistent dictionary storage using the DBM databas
 ```python
 import shelve
 
-# Open or create database - O(1)
+# Open or create database - O(1) (filesystem work varies)
 shelf = shelve.open('mydata.db')
 
-# Store objects - O(1) avg each (hash-based DBM)
+# Store objects - O(1) avg per DBM operation
 shelf['name'] = 'Alice'
 shelf['age'] = 30
 shelf['scores'] = [95, 87, 92]
 shelf['config'] = {'debug': True, 'timeout': 30}
 
 # Changes are buffered until close
-shelf.close()  # O(n) - flush all to disk
+shelf.close()  # O(m) - flush pending writes
 ```
 
 ### Retrieve Data
@@ -40,10 +40,10 @@ shelf.close()  # O(n) - flush all to disk
 ```python
 import shelve
 
-# Open existing database - O(1)
+# Open existing database - O(1) (filesystem work varies)
 shelf = shelve.open('mydata.db')
 
-# Retrieve objects - O(1) avg each (hash-based DBM)
+# Retrieve objects - O(1) avg per DBM operation
 name = shelf['name']        # 'Alice'
 age = shelf['age']          # 30
 scores = shelf['scores']    # [95, 87, 92]
@@ -65,7 +65,7 @@ shelf.close()
 ```python
 import shelve
 
-# Use with statement for automatic close - O(1) open/close
+# Use with statement for automatic close (flush cost varies)
 with shelve.open('mydata.db') as shelf:
     
     # Store data - O(1) avg
@@ -87,8 +87,8 @@ import shelve
 
 with shelve.open('mydata.db') as shelf:
     
-    # Store multiple items - O(1) avg each
-    shelf['user1'] = {'name': 'Alice'}
+# Store multiple items - O(1) avg each
+shelf['user1'] = {'name': 'Alice'}
     shelf['user2'] = {'name': 'Bob'}
     shelf['user3'] = {'name': 'Charlie'}
     
@@ -101,8 +101,8 @@ with shelve.open('mydata.db') as shelf:
     for key in shelf:
         print(f"{key}: {shelf[key]}")
     
-    # Number of items - O(n)
-    count = len(shelf)
+# Number of items - varies by backend
+count = len(shelf)
 ```
 
 ### Iterate Over Items
@@ -186,14 +186,14 @@ with shelve.open('mydata.db') as shelf:
 ```python
 import shelve
 
-# Use default (usually anydbm) - O(1)
+# Use default backend selected by dbm
 shelf = shelve.open('data')
 
 # Explicitly specify backend
 import dbm.dumb
 import dbm.gnu
 
-# dbm.dumb (pure Python, slow) - O(1)
+# dbm.dumb (pure Python, slow)
 shelf = shelve.open('data', flag='c')
 
 # Check available DBM modules
@@ -206,16 +206,16 @@ print(dbm.whichdb('data'))  # Detect backend
 ```python
 import shelve
 
-# 'r' = read-only - O(1)
+# 'r' = read-only
 shelf = shelve.open('data.db', flag='r')
 
-# 'w' = read-write, create if missing - O(1)
+# 'w' = read-write, create if missing
 shelf = shelve.open('data.db', flag='w')
 
-# 'c' = read-write, create if missing (default) - O(1)
+# 'c' = read-write, create if missing (default)
 shelf = shelve.open('data.db', flag='c')
 
-# 'n' = always create new, empty - O(1)
+# 'n' = always create new, empty
 shelf = shelve.open('data.db', flag='n')
 ```
 
@@ -275,10 +275,10 @@ with shelve.open('people.db') as shelf:
 ## Performance Considerations
 
 ### Time Complexity
-- **Storage operations**: O(1) avg for hash-based DBM + disk I/O
+- **Storage operations**: O(1) avg for DBM backends + disk I/O
 - **Retrieval**: O(1) avg + unpickling time
 - **Iteration**: O(n) to scan all keys
-- **Deletion**: O(1) avg for hash-based DBM
+- **Deletion**: O(1) avg for DBM backends
 
 ### Space Complexity
 - **Database**: O(n) for n stored objects
@@ -296,13 +296,13 @@ for i in range(1000):
     shelf[f'key{i}'] = f'value{i}'
 
 # Data not written to disk yet!
-# Force flush - O(n) writes all
+# Force flush - O(m) for pending writes
 shelf.sync()
 
 # More safe: flush before reading in another process
 shelf.sync()
 
-# Close also flushes - O(n)
+# Close also flushes - O(m)
 shelf.close()
 ```
 

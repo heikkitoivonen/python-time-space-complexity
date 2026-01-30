@@ -15,8 +15,8 @@ The `subprocess` module enables spawning new processes, connecting to I/O pipes,
 ```python
 import subprocess
 
-# Simple execution - O(p)
-result = subprocess.run(['ls', '-l'])  # O(p) - process time
+# Simple execution (process time dominates)
+result = subprocess.run(['ls', '-l'])
 
 # Capture output - O(n)
 result = subprocess.run(['echo', 'hello'], capture_output=True, text=True)
@@ -52,7 +52,7 @@ if result.returncode != 0:
 ```python
 import subprocess
 
-# Create process - O(p)
+# Create process (process time dominates)
 process = subprocess.Popen(
     ['cat'],
     stdin=subprocess.PIPE,
@@ -70,7 +70,7 @@ print(output)  # 'hello\n'
 ```python
 import subprocess
 
-# Pipeline - O(n)
+# Pipeline - O(n) with output size
 proc1 = subprocess.Popen(['cat', 'file.txt'], stdout=subprocess.PIPE)
 proc2 = subprocess.Popen(
     ['grep', 'pattern'],

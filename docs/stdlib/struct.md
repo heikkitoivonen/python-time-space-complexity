@@ -9,8 +9,8 @@ The `struct` module handles binary data conversions, packing Python values into 
 | `Struct()` compilation | O(m) | O(m) | m = format string length; compile once |
 | `pack()` | O(k) | O(k) | k = number of fields; add O(m) parsing if not pre-compiled |
 | `unpack()` | O(k) | O(k) | k = number of fields |
-| `pack_into()` | O(n) | O(1) | n = number of fields |
-| `unpack_from()` | O(n) | O(n) | n = number of fields |
+| `pack_into()` | O(k) | O(1) | k = number of fields |
+| `unpack_from()` | O(k) | O(k) | k = number of fields |
 | `calcsize()` | O(m) | O(1) | m = format string length |
 
 ## Format Strings
@@ -55,16 +55,16 @@ import struct
 # '>' = big-endian
 # '!' = network (big-endian)
 
-# Native order - O(1) lookup
+# Native order - O(m) parse
 native = struct.calcsize('i')       # 4
 
-# Little-endian - O(1) lookup
+# Little-endian - O(m) parse
 little = struct.calcsize('<i')      # 4
 
-# Big-endian - O(1) lookup
+# Big-endian - O(m) parse
 big = struct.calcsize('>i')         # 4
 
-# With alignment - O(1) lookup
+# With alignment - O(m) parse
 aligned = struct.calcsize('@ii')    # 8 (with padding)
 unaligned = struct.calcsize('=ii')  # 8 (no padding)
 ```
@@ -76,7 +76,7 @@ unaligned = struct.calcsize('=ii')  # 8 (no padding)
 ```python
 import struct
 
-# Pack single value - O(n)
+# Pack single value - O(1)
 # Format: integer (4 bytes)
 bytes_data = struct.pack('i', 42)
 print(bytes_data)  # b'*\x00\x00\x00' (little-endian)
@@ -170,13 +170,13 @@ value3 = struct.unpack_from('f', buffer, 6)[0]   # 3.14
 ```python
 import struct
 
-# Create compiled struct - O(n) once, then O(1) per operation
+# Create compiled struct - O(m) once, then O(n) per operation
 header_format = struct.Struct('4sI')  # 4-char string + unsigned int
 
-# Pack with compiled struct - O(n)
+# Pack with compiled struct - O(n) for n fields
 bytes_data = header_format.pack(b"HEAD", 12345)
 
-# Unpack with compiled struct - O(n)
+# Unpack with compiled struct - O(n) for n fields
 header, version = header_format.unpack(bytes_data)
 print(header)    # b'HEAD'
 print(version)   # 12345

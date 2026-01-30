@@ -9,8 +9,8 @@ The `smtplib` module provides a Simple Mail Transfer Protocol (SMTP) client for 
 | `SMTP()` | O(1) + network latency | O(1) | Network connection; latency dominates |
 | `sendmail()` | O(n) | O(n) | n = message size |
 | `send_message()` | O(n) | O(n) | n = message size |
-| `login()` | O(n) | O(n) | n = handshake |
-| `quit()` | O(1) | O(1) | Close connection |
+| `login()` | Varies | O(1) | Network round trips; auth mechanism dependent |
+| `quit()` | O(1) + network latency | O(1) | Close connection |
 
 ## Common Operations
 
@@ -20,16 +20,16 @@ The `smtplib` module provides a Simple Mail Transfer Protocol (SMTP) client for 
 import smtplib
 from email.message import EmailMessage
 
-# O(n) where n = connection time
+# Network-bound connection setup
 server = smtplib.SMTP('smtp.gmail.com', 587)
 
-# O(n) - TLS handshake
+# TLS handshake (network-bound)
 server.starttls()
 
-# O(n) - authenticate where n = handshake time
+# Authenticate (network-bound)
 server.login('your_email@gmail.com', 'your_password')
 
-# O(n) - send message where n = message size
+# Send message where n = message size
 message = EmailMessage()
 message['Subject'] = 'Hello'
 message['From'] = 'your_email@gmail.com'
@@ -38,7 +38,7 @@ message.set_content('Email body')
 
 server.send_message(message)
 
-# O(1) - close connection
+# Close connection (network-bound)
 server.quit()
 ```
 
@@ -49,21 +49,21 @@ import smtplib
 
 def send_email(smtp_host, smtp_port, sender, password, recipient, subject, body):
     """Send email with full details - O(n)"""
-    # O(n) - establish connection
+    # Establish connection (network-bound)
     with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
         
-        # O(n) - enable encryption
+        # Enable encryption (network-bound)
         server.starttls()
         
-        # O(n) - authenticate
+        # Authenticate (network-bound)
         server.login(sender, password)
         
-        # O(n) - compose message where n = message size
+        # Compose message where n = message size
         message = f"""Subject: {subject}
 
 {body}"""
         
-        # O(n) - send message
+        # Send message where n = message size
         server.sendmail(sender, [recipient], message)
 
 # Usage - O(n)
@@ -87,8 +87,8 @@ import smtplib
 from email.message import EmailMessage
 
 def send_bulk_emails(recipients, subject, body):
-    """Send emails to multiple recipients - O(n*m)"""
-    # O(n) - connection setup
+    """Send emails to multiple recipients - O(k*m)"""
+    # Connection setup (network-bound)
     with smtplib.SMTP('smtp.gmail.com', 587) as server:
         server.starttls()
         server.login('sender@gmail.com', 'password')
@@ -117,7 +117,7 @@ from email.message import EmailMessage
 
 def send_html_email(recipient, subject, html_body, attachments=None):
     """Send HTML email with attachments - O(n)"""
-    # O(1) - create message
+    # Create message
     message = EmailMessage()
     message['Subject'] = subject
     message['From'] = 'sender@gmail.com'
@@ -181,7 +181,7 @@ class EmailQueue:
     
     def _process_queue(self):
         """Background worker - O(n) per email"""
-        # O(n) - connect once
+        # Connect once (network-bound)
         server = smtplib.SMTP(self.host, self.port)
         server.starttls()
         server.login(self.username, self.password)
@@ -216,11 +216,11 @@ import smtplib
 import time
 
 def send_email_with_retry(host, port, sender, password, recipient, subject, body, retries=3):
-    """Send with retry logic - O(n*r)"""
-    # O(r*n) where r = retries, n = operation time
+    """Send with retry logic - O(r*n)"""
+    # O(r*n) where r = retries, n = message size + network
     for attempt in range(retries):
         try:
-            # O(n) - send
+            # Send (network-bound + message size)
             with smtplib.SMTP(host, port, timeout=10) as server:
                 server.starttls()
                 server.login(sender, password)
@@ -234,8 +234,8 @@ def send_email_with_retry(host, port, sender, password, recipient, subject, body
             print(f"Attempt {attempt + 1} failed: {e}")
             
             if attempt < retries - 1:
-                # O(1) - wait before retry
-                time.sleep(2 ** attempt)  # Exponential backoff
+            # O(1) - wait before retry
+            time.sleep(2 ** attempt)  # Exponential backoff
     
     return False  # Failed after retries
 
@@ -258,16 +258,16 @@ success = send_email_with_retry(
 ```python
 import smtplib
 
-# Bad: Create connection for each email - O(n*k) per email
+# Bad: Create connection for each email (network-bound each time)
 for recipient in recipients:
-    server = smtplib.SMTP('smtp.gmail.com', 587)  # O(n)
+    server = smtplib.SMTP('smtp.gmail.com', 587)
     server.starttls()
     server.login(user, pwd)
     server.sendmail(user, recipient, msg)  # O(m)
-    server.quit()  # O(1)
+    server.quit()
 
-# Good: Reuse connection - O(n + k*m)
-with smtplib.SMTP('smtp.gmail.com', 587) as server:  # O(n)
+# Good: Reuse connection - O(k*m) after setup
+with smtplib.SMTP('smtp.gmail.com', 587) as server:
     server.starttls()
     server.login(user, pwd)
     
@@ -282,7 +282,7 @@ import smtplib
 
 def send_to_list(recipients, message):
     """Send to multiple recipients in one call - O(n)"""
-    # O(n) - connection and auth
+    # Connection and auth (network-bound)
     with smtplib.SMTP('smtp.gmail.com', 587) as server:
         server.starttls()
         server.login(user, password)
@@ -290,7 +290,7 @@ def send_to_list(recipients, message):
         # O(n) - single sendmail call for all
         server.sendmail(user, recipients, message)
 
-# Usage - O(n) where n = total recipient count
+# Usage - O(n) where n = total recipient count + message size
 recipients = ['user1@example.com', 'user2@example.com']
 send_to_list(recipients, msg_text)  # More efficient than multiple calls
 ```
@@ -301,7 +301,7 @@ send_to_list(recipients, msg_text)  # More efficient than multiple calls
 import smtplib
 
 # Good: Automatic cleanup with context manager
-with smtplib.SMTP('smtp.gmail.com', 587) as server:  # O(n)
+with smtplib.SMTP('smtp.gmail.com', 587) as server:
     server.starttls()
     server.login('user', 'pass')
     server.sendmail('from', 'to', msg)  # O(m)

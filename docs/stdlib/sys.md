@@ -194,7 +194,7 @@ output = buffer.getvalue()
 ```python
 import sys
 
-# Bad: O(n) lookup each time
+# Repeated lookups are O(1) average, but caching avoids extra dict hits
 for i in range(1000):
     if 'json' in sys.modules:
         # use json module
@@ -215,7 +215,7 @@ import sys
 for path in paths:
     sys.path.insert(0, path)  # O(n) each time
 
-# Good: Extend at once - O(k) where k = paths to add
+# Good: Extend at once - O(n + k) to rebuild list
 sys.path = paths + sys.path  # Rebuild list
 # Or: O(k) amortized
 for path in reversed(paths):

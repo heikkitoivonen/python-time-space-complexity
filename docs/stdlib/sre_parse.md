@@ -2,6 +2,10 @@
 
 The `sre_parse` module parses regular expression patterns into an abstract syntax tree used by the regex engine.
 
+!!! warning "Internal module"
+    `sre_parse` is an internal implementation detail of `re` and is not part of the
+    public API. Prefer using `re` for regex operations.
+
 ## Complexity Reference
 
 | Operation | Time | Space | Notes |

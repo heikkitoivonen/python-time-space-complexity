@@ -26,16 +26,16 @@ def func(a, b):
 # Create symbol table - O(n)
 table = symtable.symtable(code, '<string>', 'exec')
 
-# Get info - O(1)
-print(table.get_name())        # Module name
-print(table.get_symbols())      # All symbols
+# Get info
+print(table.get_name())         # O(1) - module name
+print(table.get_symbols())      # O(n) - all symbols
 
-# Get symbol - O(1)
+# Get symbol - O(1) average
 sym = table.lookup('x')
 print(sym.is_global())
 print(sym.is_local())
 
-# Get nested scopes - O(1)
+# Get nested scopes - O(n)
 children = table.get_children()  # Functions, classes
 ```
 

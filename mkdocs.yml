@@ -270,6 +270,7 @@ nav:
     - Random: stdlib/random.md
     - Regular Expressions: stdlib/re.md
     - Ipaddress: stdlib/ipaddress.md
+    - Select: stdlib/select.md
     - Selectors: stdlib/selectors.md
     - Signal: stdlib/signal.md
     - Site: stdlib/site.md
@@ -296,6 +297,7 @@ nav:
     - Symtable: stdlib/symtable.md
     - Sys: stdlib/sys.md
     - Sysconfig: stdlib/sysconfig.md
+    - Syslog: stdlib/syslog.md
     - Tarfile: stdlib/tarfile.md
     - Tempfile: stdlib/tempfile.md
     - Telnetlib: stdlib/telnetlib.md

@@ -254,10 +254,10 @@ def connect_many(hosts_ports):
         sel.register(sock, selectors.EVENT_WRITE, data=(host, port))
         sockets.append(sock)
     
-    # Wait for connections: O(n log n)
-    # n = number of sockets
+    # Wait for connections: O(n) for select, O(k) for epoll/kqueue
+    # n = registered sockets, k = ready sockets
     while True:
-        events = sel.select()  # O(n log n)
+        events = sel.select()  # O(n) for select, O(k) for epoll/kqueue
         
         if not events:
             break
@@ -298,9 +298,9 @@ def main():
     with open('file.txt') as f:
         sel.register(f, selectors.EVENT_READ)  # O(1)
     
-    # Event loop: O(n log n) where n = files
+    # Event loop: O(n) for select, O(k) for epoll/kqueue
     while True:
-        events = sel.select()  # O(n log n)
+        events = sel.select()  # O(n) for select, O(k) for epoll/kqueue
         
         for key, mask in events:  # O(k) ready
             if key.fileobj == sys.stdin:

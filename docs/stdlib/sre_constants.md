@@ -2,12 +2,16 @@
 
 The `sre_constants` module defines constants used internally by the regex engine and the sre_compile/sre_parse modules.
 
+!!! warning "Internal module"
+    `sre_constants` is an internal implementation detail of `re` and is not part of
+    the public API. Prefer using `re` for regex operations.
+
 ## Complexity Reference
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | Access constant | O(1) | O(1) | Static constants |
-| Lookup opcode | O(1) | O(1) | Hash table |
+| Lookup opcode | O(1) | O(1) | Attribute lookup |
 
 ## Regex Engine Constants
 
@@ -21,7 +25,7 @@ print(sre_constants.LITERAL)      # Regular character
 print(sre_constants.BRANCH)       # | operator
 print(sre_constants.RANGE)        # Character range [a-z]
 
-# View all opcodes
+# View all constants (implementation details)
 for name in dir(sre_constants):
     if name.isupper():
         print(f"{name}: {getattr(sre_constants, name)}")

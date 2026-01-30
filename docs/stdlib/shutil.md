@@ -6,9 +6,9 @@ The `shutil` module provides high-level file operations like copying and removin
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `copy(src, dst)` | O(n) | O(1) | Copy file and permissions |
-| `copy2(src, dst)` | O(n) | O(1) | Copy with metadata |
-| `copytree(src, dst)` | O(d*n) | O(d) | Copy directory tree |
+| `copy(src, dst)` | O(n) | O(1) | Copy file contents + basic metadata |
+| `copy2(src, dst)` | O(n) | O(1) | Copy with full metadata |
+| `copytree(src, dst)` | O(n) | O(d) | n = total bytes copied, d = entries |
 | `rmtree(path)` | O(d) | O(d) | Remove directory tree |
 | `move(src, dst)` | O(1) or O(n) | O(1) | O(1) same filesystem (rename); O(n) cross-filesystem (copy+delete) |
 | `disk_usage(path)` | O(1) | O(1) | Single statvfs syscall |
@@ -75,15 +75,15 @@ shutil.copy2('file.bin', 'copy.bin')  # O(1) extra space
 
 ### copytree()
 
-#### Time Complexity: O(d*n)
+#### Time Complexity: O(n)
 
-Where d = total entries, n = average file size.
+Where n = total bytes copied across all files (plus O(d) for traversal).
 
 ```python
 import shutil
 
 # Copy entire directory tree
-shutil.copytree('src_dir', 'dst_dir')  # O(d*n) to copy all files
+shutil.copytree('src_dir', 'dst_dir')  # O(n) to copy all file bytes
 
 # With ignore patterns
 shutil.copytree('src', 'dst', 

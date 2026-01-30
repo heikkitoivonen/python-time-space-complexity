@@ -6,8 +6,8 @@ The `site` module sets up the Python path and site-specific module search paths,
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| Site initialization | O(n) | O(n) | n = directory entries |
-| Add paths | O(n) | O(n) | Build sys.path |
+| Site initialization | Varies | Varies | Scans site dirs, reads .pth files |
+| Add paths | O(p + l) | O(l) | p = paths added, l = .pth lines |
 
 ## Site Configuration
 
