@@ -1,6 +1,6 @@
 # queue - Synchronized Queue Data Structures
 
-The `queue` module provides thread-safe queue implementations for coordinating work between multiple producer and consumer threads or processes.
+The `queue` module provides thread-safe queue implementations for coordinating work between multiple producer and consumer threads.
 
 ## Complexity Reference
 
@@ -10,11 +10,13 @@ The `queue` module provides thread-safe queue implementations for coordinating w
 | `Queue.get()` | O(1) | O(1) | Remove item (blocks if empty) |
 | `Queue.put_nowait()` | O(1) | O(1) | Add item (raises Full if full) |
 | `Queue.get_nowait()` | O(1) | O(1) | Remove item (raises Empty if empty) |
-| `Queue.qsize()` | O(1) | O(1) | Get approximate size |
-| `PriorityQueue.put()` | O(log n) | O(1) | Add with priority |
-| `PriorityQueue.get()` | O(log n) | O(1) | Get highest priority |
+| `Queue.qsize()` | O(1) | O(1) | Approximate size (not reliable under contention) |
+| `PriorityQueue.put()` | O(log n) | O(1) amortized | Add with priority (heap push) |
+| `PriorityQueue.get()` | O(log n) | O(1) amortized | Remove smallest-priority item (heap pop) |
 | `LifoQueue.put()` | O(1) amortized | O(1) | Add item (LIFO); uses list internally |
 | `LifoQueue.get()` | O(1) | O(1) | Remove item (LIFO) |
+| `SimpleQueue.put()` | O(1) | O(1) | Add item (unbounded, never blocks on size) |
+| `SimpleQueue.get()` | O(1) | O(1) | Remove item (blocks if empty) |
 
 ## Basic Queue (FIFO)
 
@@ -86,7 +88,6 @@ print("All tasks complete")
 
 ```python
 from queue import PriorityQueue
-import heapq
 
 # Create priority queue - O(1)
 pq = PriorityQueue()

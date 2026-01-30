@@ -5,8 +5,8 @@ This document tracks the coverage of built-in functions, types, and standard lib
 ## Overview
 
 - **Total Items**: 317 (150 builtins + 167 stdlib modules)
-- **Documented**: 382 (174 builtins + 208 stdlib)
-- **Coverage**: 120.5%
+- **Documented**: 387 (174 builtins + 213 stdlib)
+- **Coverage**: 122.1%
 
 **Note**: Coverage exceeds 100% because comprehensive documentation files (like `exceptions.md`) cover multiple individual items, and we document deprecated/removed modules for historical reference.
 
@@ -203,7 +203,7 @@ Complete coverage of all built-in functions, types, exceptions, and constants:
 
 ## Standard Library Modules
 
-**Coverage: 124.6% (208/167)**
+**Coverage: 127.5% (213/167)**
 
 All standard library modules are fully documented, including new Python 3.14 modules. Coverage exceeds 100% due to documentation of deprecated/removed modules for historical reference.
 
@@ -305,9 +305,9 @@ All file and I/O modules now documented:
 - ✅ `shutil` - High-level file operations
 - ✅ `tempfile` - Temporary files
 
-### ✅ ALL MODULES COMPLETE (208/208)
+### ✅ ALL MODULES COMPLETE (213/213)
 
-All 105 previously undocumented stdlib modules have been added:
+All 110 previously undocumented stdlib modules have been added:
 
 **Utilities & System (20)**
 - ✅ `ast` - Abstract syntax trees
@@ -416,19 +416,24 @@ All 105 previously undocumented stdlib modules have been added:
 - ✅ `this` - Zen of Python
 - ✅ `readline` - Line-editing support
 
-**System & Locale (5)**
+**System & Locale (7)**
 - ✅ `netrc` - Netrc file handling
 - ✅ `site` - Site-specific configuration
 - ✅ `crypt` - Password hashing (Unix)
 - ✅ `fcntl` - File control (Unix)
 - ✅ `termios` - POSIX terminal I/O control
+- ✅ `resource` - Process resource limits (Unix)
+- ✅ `grp` - Unix group database
 
-**Internal & Testing (5)**
+**Internal & Testing (11)**
 - ✅ `concurrent` - Concurrency (parent package)
 - ✅ `copyreg` - Copy registration
 - ✅ `encodings` - Built-in encodings
 - ✅ `xdrlib` - XDR serialization
 - ✅ `xml` - XML parsing base
+- ✅ `xml.dom` - DOM XML APIs
+- ✅ `xml.sax` - SAX XML APIs
+- ✅ `xml.etree.ElementTree` - ElementTree XML APIs
 - ✅ `binascii` - Binary-ASCII conversion
 - ✅ `marshal` - Object serialization
 - ✅ `webbrowser` - Browser control

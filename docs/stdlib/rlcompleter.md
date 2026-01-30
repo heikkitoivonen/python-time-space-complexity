@@ -7,7 +7,7 @@ The `rlcompleter` module provides command-line completion for the Python interac
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `Completer()` | O(1) | O(1) | Create completer |
-| `complete(text, state)` | O(n) | O(k) | n = namespace size; scans for matches |
+| `complete(text, state)` | O(n) | O(n) | n = candidate names in namespace/dir(); builds match list |
 
 ## Readline Completion
 

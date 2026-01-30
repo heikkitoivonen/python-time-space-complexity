@@ -194,6 +194,7 @@ nav:
     - Getpass: stdlib/getpass.md
     - Gettext: stdlib/gettext.md
     - Glob: stdlib/glob.md
+    - Grp: stdlib/grp.md
     - Imp: stdlib/imp.md
     - Graphlib: stdlib/graphlib.md
     - Html: stdlib/html.md
@@ -260,6 +261,7 @@ nav:
     - Quopri: stdlib/quopri.md
     - Readline: stdlib/readline.md
     - Reprlib: stdlib/reprlib.md
+    - Resource: stdlib/resource.md
     - Rlcompleter: stdlib/rlcompleter.md
     - Runpy: stdlib/runpy.md
     - Sched: stdlib/sched.md
@@ -325,6 +327,9 @@ nav:
     - Webbrowser: stdlib/webbrowser.md
     - Wsgiref: stdlib/wsgiref.md
     - Xml: stdlib/xml.md
+    - Xml.dom: stdlib/xml.dom.md
+    - Xml.etree.ElementTree: stdlib/xml.etree.elementtree.md
+    - Xml.sax: stdlib/xml.sax.md
     - Xmlrpc: stdlib/xmlrpc.md
     - Xdrlib: stdlib/xdrlib.md
     - Zlib: stdlib/zlib.md

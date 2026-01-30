@@ -6,8 +6,8 @@ The `reprlib` module provides an alternative repr() implementation that produces
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `repr()` | O(n) | O(n) | n = visible characters |
-| Truncation | O(1) | O(1) | Configurable limit |
+| `repr()` | O(k) | O(k) | k = items/chars visited up to limits |
+| Truncation | O(k) | O(1) | Limit reduces traversal/output, not O(1) |
 
 ## Creating Readable Representations
 

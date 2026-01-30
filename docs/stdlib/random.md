@@ -9,12 +9,12 @@ The `random` module provides pseudo-random number generation for various probabi
 | `random.random()` | O(1) | O(1) | Uniform [0.0, 1.0) |
 | `random.randint(a, b)` | O(1) | O(1) | Uniform integer |
 | `random.choice(seq)` | O(1) | O(1) | Random element |
-| `random.choices(seq, k)` | O(k) | O(k) | k items with replacement |
-| `random.sample(seq, k)` | O(k) typical, O(n) worst | O(k) | k items without replacement; O(n) when k is close to n |
+| `random.choices(seq, k)` | O(k) to O(n + k log n) | O(k) to O(n + k) | O(k) if no weights; builds cumulative weights if provided |
+| `random.sample(seq, k)` | O(k) to O(n) | O(k) to O(n) | Copies population when k is large or input is set/dict |
 | `random.shuffle(list)` | O(n) | O(1) | In-place Fisher-Yates shuffle |
 | `random.uniform(a, b)` | O(1) | O(1) | Uniform float |
 | `random.gauss(mu, sigma)` | O(1) | O(1) | Gaussian distribution |
-| `random.seed(a)` | O(1) | O(1) | Set seed |
+| `random.seed(a)` | O(len(a)) | O(1) | Seed processing depends on input type |
 
 ## Basic Random Number Generation
 
@@ -79,13 +79,13 @@ import random
 lst = [1, 2, 3, 4, 5]
 selections = random.choices(lst, k=3)  # [5, 2, 5] - O(3)
 
-# Weighted selection - O(k)
+# Weighted selection - O(n + k log n)
 colors = ['red', 'blue', 'green']
 weights = [0.5, 0.3, 0.2]
-draws = random.choices(colors, weights=weights, k=100)  # O(100)
+draws = random.choices(colors, weights=weights, k=100)  # O(n + k log n)
 
-# Without replacement (sample) - O(k)
-unique = random.sample(lst, k=3)  # [3, 1, 4] - O(3), no duplicates
+# Without replacement (sample) - O(k) to O(n)
+unique = random.sample(lst, k=3)  # [3, 1, 4] - no duplicates
 ```
 
 ### Shuffling
@@ -188,7 +188,7 @@ def random_partition(arr, low, high):
     pivot_idx = random.randint(low, high)  # O(1)
     # ... partition logic
 
-# Shuffle-sort (random sort for testing) - O(n log n) expected
+# Shuffle-sort (bogosort) - expected O(n!) time
 def shuffle_sort(arr):
     while not is_sorted(arr):
         random.shuffle(arr)  # O(n) per iteration
@@ -277,7 +277,7 @@ np.random.shuffle(big_arr)  # O(1000000)
 import random
 from bisect import bisect
 
-# Simple weighted choice with normalization - O(1)
+# Simple weighted choice with normalization - O(n)
 def weighted_choice(choices, weights):
     total = sum(weights)
     r = random.uniform(0, total)
@@ -288,11 +288,11 @@ def weighted_choice(choices, weights):
         upto += weight
     return choices[-1]
 
-# O(k) where k = number of choices
-# Better: use random.choices() - O(k) but optimized in C
+# O(n) where n = number of choices
+# Better: use random.choices() when you want multiple draws
 items = ['a', 'b', 'c']
 weights = [0.5, 0.3, 0.2]
-result = random.choices(items, weights=weights, k=1)[0]  # O(1)
+result = random.choices(items, weights=weights, k=1)[0]  # O(n)
 ```
 
 ## State Management
@@ -357,8 +357,8 @@ array = np.random.random(1000)  # Fast bulk generation
 import random
 import threading
 
-# Random module is NOT thread-safe
-# Each thread should have its own Random instance
+# The module-level RNG is safe to call from multiple threads, but it shares state.
+# Use a per-thread Random instance to avoid contention and interleaved sequences.
 
 def worker(seed):
     rng = random.Random(seed)  # O(1) - thread-safe
@@ -376,8 +376,7 @@ threads = [
 
 - **Python 2.x and 3.x**: Core functions available in all versions
 - **Python 3.6+**: `random.choices()` added
-- **Python 3.9+**: Algorithm improvements for better quality randomness
-- **Different platforms**: May have slight variations in random sequence
+- **Different versions**: Some algorithms (e.g., `randrange`) have changed for quality, so sequences may differ
 
 ## Related Modules
 

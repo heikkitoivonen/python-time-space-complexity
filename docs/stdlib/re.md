@@ -7,29 +7,29 @@ The `re` module provides regular expression matching operations.
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `re.compile(pattern)` | O(n) | O(n) | n = pattern length |
-| `pattern.match(string)` | O(m) typical, O(n*m) worst | O(m) | Worst case with backtracking |
-| `pattern.fullmatch(string)` | O(m) typical, O(n*m) worst | O(m) | Match entire string |
-| `pattern.search(string)` | O(m) typical, O(n*m) worst | O(m) | Searches full string |
-| `pattern.findall(string)` | O(n*m) | O(k) | k = number of matches |
-| `pattern.finditer(string)` | O(n) per match | O(1) per match | Lazy iteration |
-| `pattern.sub(repl, string)` | O(n*m) | O(m) | n = pattern, m = string |
-| `pattern.subn(repl, string)` | O(n*m) | O(m) | Like sub, returns (newstr, count) |
-| `pattern.split(string)` | O(n*m) | O(m) | n = pattern, m = string |
-| `re.match(pattern, string)` | O(n + m) typical | O(m) | Compiles + matches; cached up to ~512; O(n*m) worst with backtracking |
-| `re.search(pattern, string)` | O(n + m) typical | O(m) | Compiles + matches; cached up to ~512; O(n*m) worst with backtracking |
+| `pattern.match(string)` | O(m) typical, O(exp) worst | O(m) | Worst case from backtracking |
+| `pattern.fullmatch(string)` | O(m) typical, O(exp) worst | O(m) | Match entire string |
+| `pattern.search(string)` | O(m) typical, O(exp) worst | O(m) | Searches full string |
+| `pattern.findall(string)` | O(m) typical, O(exp) worst | O(k) | k = total matches |
+| `pattern.finditer(string)` | O(m) typical, O(exp) worst | O(1) | Lazy iteration |
+| `pattern.sub(repl, string)` | O(m) typical, O(exp) worst | O(m) | Match + build output |
+| `pattern.subn(repl, string)` | O(m) typical, O(exp) worst | O(m) | Like sub, returns (newstr, count) |
+| `pattern.split(string)` | O(m) typical, O(exp) worst | O(m) | Split by pattern |
+| `re.match(pattern, string)` | O(n + m) typical, O(exp) worst | O(m) | Compiles on cache miss; cached up to ~512 |
+| `re.search(pattern, string)` | O(n + m) typical, O(exp) worst | O(m) | Compiles on cache miss; cached up to ~512 |
 | `re.escape(string)` | O(n) | O(n) | Escape special regex characters |
-| `re.purge()` | O(1) | O(1) | Clear compiled pattern cache |
-| `re.error` | - | - | Exception for invalid patterns (alias: PatternError in 3.13+) |
+| `re.purge()` | O(c) | O(1) | Clear compiled pattern cache (c = cache size) |
+| `re.error` | - | - | Exception for invalid patterns |
 
-*Note: Worst case for catastrophic backtracking; typical cases are much better.
+*Note: "O(exp)" denotes exponential time in m from catastrophic backtracking; typical cases are much better.
 
 ## Pattern Caching
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `re.match(pattern, s)` | O(n + m) | O(n+m) | Pattern compiled, cached up to ~512 |
+| `re.match(pattern, s)` | O(n + m) | O(n+m) | Compiles on cache miss; cached up to ~512 |
 | `compiled = re.compile(p)` | O(n) | O(n) | Explicit compilation |
-| `compiled.match(s)` | O(n*m)* | O(m) | Uses cached pattern |
+| `compiled.match(s)` | O(m) typical, O(exp) worst | O(m) | Uses the already-compiled pattern |
 
 CPython caches the last ~512 compiled patterns automatically.
 
@@ -178,7 +178,7 @@ print(f"Time: {end - start}s")  # Fast!
 ```python
 import re
 
-# Bad: recompiles pattern each time - O(n²)
+# Bad: recompiles pattern each time
 for line in large_file:
     if re.search(r'\d+', line):  # Recompiles each time!
         process(line)
@@ -254,7 +254,7 @@ match = pattern.search(text)  # O(m)
 
 ## Version Notes
 
-- **Python 3.7+**: `regex` module available as alternative
+- **Third-party**: The `regex` package provides additional features
 - **Python 3.x**: `re` module is standard
 - **Python 2.x**: Similar but with different Unicode handling
 
