@@ -4,9 +4,9 @@ This document tracks the coverage of built-in functions, types, and standard lib
 
 ## Overview
 
-- **Total Items**: 317 (150 builtins + 167 stdlib modules)
-- **Documented**: 389 (174 builtins + 215 stdlib)
-- **Coverage**: 122.7%
+- **Total Items**: 313 (150 builtins + 163 stdlib modules)
+- **Documented**: 385 (174 builtins + 211 stdlib)
+- **Coverage**: 123.0%
 
 **Note**: Coverage exceeds 100% because comprehensive documentation files (like `exceptions.md`) cover multiple individual items, and we document deprecated/removed modules for historical reference.
 
@@ -203,7 +203,7 @@ Complete coverage of all built-in functions, types, exceptions, and constants:
 
 ## Standard Library Modules
 
-**Coverage: 128.7% (215/167)**
+**Coverage: 129.4% (211/163)**
 
 All standard library modules are fully documented, including new Python 3.14 modules. Coverage exceeds 100% due to documentation of deprecated/removed modules for historical reference.
 
@@ -226,9 +226,9 @@ All standard library modules are fully documented, including new Python 3.14 mod
 - ✅ `sndhdr` - Sound file format detection
 - ✅ `select` - I/O multiplexing
 
-### ⊘ Excluded Items (4 - intentionally out of scope)
+### ⊘ Excluded Items (8 - intentionally out of scope)
 
-These items appear in audit but are **intentionally not documented** as they are not part of Python's standard library:
+These items are **intentionally not documented** and excluded from coverage calculations:
 
 **Project Scripts** (not stdlib):
 - `audit_documentation` - Project's own audit script
@@ -236,6 +236,12 @@ These items appear in audit but are **intentionally not documented** as they are
 
 **Third-party Packages** (external, not stdlib):
 - `pip` - External package manager
+
+**Internal (non-public) stdlib modules**:
+- `pydoc_data` - Internal pydoc data
+- `sre_compile` - Internal regex compiler
+- `sre_constants` - Internal regex constants
+- `sre_parse` - Internal regex parser
 
 **Case Sensitivity**:
 - `cProfile` - Already documented as `cprofile.md`
@@ -306,9 +312,9 @@ All file and I/O modules now documented:
 - ✅ `shutil` - High-level file operations
 - ✅ `tempfile` - Temporary files
 
-### ✅ ALL MODULES COMPLETE (215/215)
+### ✅ ALL MODULES COMPLETE (211/211)
 
-All 112 previously undocumented stdlib modules have been added:
+All 108 previously undocumented stdlib modules have been added:
 
 **Utilities & System (22)**
 - ✅ `ast` - Abstract syntax trees
@@ -376,7 +382,7 @@ All 112 previously undocumented stdlib modules have been added:
 **Memory Mapping (1)**
 - ✅ `mmap` - Memory-mapped file access
 
-**Parsing & Compilation (13)**
+**Parsing & Compilation (10)**
 - ✅ `codeop` - Compile Python source
 - ✅ `code` - Code evaluation
 - ✅ `py_compile` - Compilation
@@ -385,9 +391,6 @@ All 112 previously undocumented stdlib modules have been added:
 - ✅ `modulefinder` - Module dependencies
 - ✅ `opcode` - Python opcodes
 - ✅ `pyclbr` - Class/function browser
-- ✅ `sre_compile` - Regular expression compilation
-- ✅ `sre_constants` - Regex constants
-- ✅ `sre_parse` - Regex parsing
 - ✅ `symtable` - Symbol table
 - ✅ `token` - Token types
 
@@ -408,12 +411,11 @@ All 112 previously undocumented stdlib modules have been added:
 - ✅ `wsgiref` - WSGI utilities
 - ✅ `zipapp` - ZIP application creation
 
-**Development & Meta (9)**
+**Development & Meta (8)**
 - ✅ `antigravity` - Easter egg
 - ✅ `bdb` - Debugger framework
 - ✅ `cmd` - Interactive command interfaces
 - ✅ `compileall` - Batch compilation
-- ✅ `pydoc_data` - Pydoc data
 - ✅ `rlcompleter` - Readline completion
 - ✅ `tabnanny` - Python indentation checker
 - ✅ `this` - Zen of Python

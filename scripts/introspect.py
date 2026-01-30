@@ -24,7 +24,13 @@ def suppress_stdout():
 def get_stdlib_modules() -> list[str]:
     """Get all stdlib module names, sorted alphabetically."""
     if hasattr(sys, "stdlib_module_names"):
-        return sorted(sys.stdlib_module_names)
+        non_public = {
+            "pydoc_data",
+            "sre_compile",
+            "sre_constants",
+            "sre_parse",
+        }
+        return sorted(name for name in sys.stdlib_module_names if name not in non_public)
     raise RuntimeError("Python 3.10+ required for sys.stdlib_module_names")
 
 

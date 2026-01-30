@@ -241,7 +241,6 @@ nav:
     - Pstats: stdlib/pstats.md
     - Pyclbr: stdlib/pyclbr.md
     - Pydoc: stdlib/pydoc.md
-    - Pydoc_data: stdlib/pydoc_data.md
     - Py_compile: stdlib/py_compile.md
     - Pyexpat: stdlib/pyexpat.md
     - Namedtuple: stdlib/namedtuple.md
@@ -281,9 +280,6 @@ nav:
     - Smtpd: stdlib/smtpd.md
     - Smtplib: stdlib/smtplib.md
     - Sndhdr: stdlib/sndhdr.md
-    - Sre_compile: stdlib/sre_compile.md
-    - Sre_constants: stdlib/sre_constants.md
-    - Sre_parse: stdlib/sre_parse.md
     - Ssl: stdlib/ssl.md
     - Stat: stdlib/stat.md
     - Statistics: stdlib/statistics.md

@@ -217,6 +217,12 @@ class TestGetStdlibModules:
         assert "sys" in modules
         assert "json" in modules
 
+    def test_excludes_non_public_modules(self) -> None:
+        modules = get_stdlib_modules()
+        non_public = ["pydoc_data", "sre_compile", "sre_constants", "sre_parse"]
+        for mod in non_public:
+            assert mod not in modules
+
 
 class TestBuildItemList:
     """Tests for build_item_list function."""
@@ -256,6 +262,13 @@ class TestBuildItemList:
         private_modules = ["_thread", "_abc", "_collections", "_io"]
         for mod in private_modules:
             assert mod not in names, f"Private module {mod} should be excluded"
+
+    def test_excludes_non_public_stdlib_modules(self) -> None:
+        items = build_item_list()
+        names = [name for name, _ in items]
+        non_public = ["pydoc_data", "sre_compile", "sre_constants", "sre_parse"]
+        for mod in non_public:
+            assert mod not in names, f"Non-public module {mod} should be excluded"
 
     def test_includes_dunder_stdlib_modules(self) -> None:
         """Dunder modules like __future__ should be included."""

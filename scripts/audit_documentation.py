@@ -42,10 +42,16 @@ def get_all_builtins() -> dict[str, list[str]]:
 def get_all_stdlib_modules() -> list[str]:
     """Get list of all standard library modules."""
     stdlib_modules: list[str] = []
+    non_public = {
+        "pydoc_data",
+        "sre_compile",
+        "sre_constants",
+        "sre_parse",
+    }
 
     for _importer, modname, _ispkg in pkgutil.iter_modules():
         # Filter to main stdlib modules (no underscores at start)
-        if not modname.startswith("_"):
+        if not modname.startswith("_") and modname not in non_public:
             stdlib_modules.append(modname)
 
     return sorted(stdlib_modules)
