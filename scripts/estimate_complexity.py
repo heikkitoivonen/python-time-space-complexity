@@ -17,6 +17,8 @@ import time
 import importlib
 import math
 import statistics
+import inspect
+import typing
 from pathlib import Path
 
 # Add current directory to path so we can import local modules
@@ -24,13 +26,51 @@ sys.path.insert(0, str(Path.cwd()))
 
 
 def measure_execution_time(func, input_size, iterations=5):
-    """Measure the average execution time of func(input_sized_data)."""
+    """
+    Measure the average execution time of func(input_sized_data).
+    Uses type hints to determine whether to pass 'n' (int) or data of size 'n'.
+    """
+    input_data = None
     
-    # Generate input data based on expected signature
-    # This is a heuristic: we assume func takes a list of ints or an int n
-    # Ideally, users could provide a data generator.
-    # For now, we try passing 'n' (integer) first, then [range(n)].
+    # 1. Check type hints
+    try:
+        sig = inspect.signature(func)
+        params = list(sig.parameters.values())
+        if params:
+            first_param = params[0]
+            hint = first_param.annotation
+            
+            if hint is int:
+                input_data = input_size
+            elif hint in (list, typing.List, typing.Sequence):
+                # Simple list generation
+                input_data = list(range(input_size))
+            # Handle generic aliases like list[int] in newer Python
+            elif hasattr(hint, "__origin__") and hint.__origin__ in (list, typing.List, typing.Sequence):
+                 input_data = list(range(input_size))
+    except (ValueError, TypeError):
+        # Signature inspection failed or function is weird
+        pass
+
+    # 2. Heuristic fallback logic
+    if input_data is None:
+        return _measure_heuristic(func, input_size, iterations)
     
+    # 3. Execution with determined input
+    try:
+        start_time = time.perf_counter()
+        for _ in range(iterations):
+            func(input_data)
+        end_time = time.perf_counter()
+        return (end_time - start_time) / iterations
+    except Exception as e:
+        # If specific input failed, maybe try heuristic as last resort? 
+        # But for now, just report error to avoid infinite fallback loops.
+        # print(f"Error with generated input: {e}")
+        return None
+
+def _measure_heuristic(func, input_size, iterations):
+    """Fallback: Try int first, then list."""
     try:
         # Try passing integer N
         start_time = time.perf_counter()
@@ -46,8 +86,7 @@ def measure_execution_time(func, input_size, iterations=5):
             func(data)
         end_time = time.perf_counter()
         return (end_time - start_time) / iterations
-    except Exception as e:
-        print(f"Error executing function: {e}")
+    except Exception:
         return None
 
 def detect_complexity(n_values, times):
