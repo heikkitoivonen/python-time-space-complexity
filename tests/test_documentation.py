@@ -2,6 +2,8 @@
 
 import json
 import subprocess
+import shutil
+import pytest
 from pathlib import Path
 
 
@@ -66,7 +68,7 @@ def test_audit_report_exists():
 def test_audit_report_structure():
     """Test that audit report has correct structure."""
     audit_file = Path(__file__).parent.parent / "data" / "documentation_audit.json"
-    with open(audit_file) as f:
+    with open(audit_file, encoding="utf-8") as f:
         report = json.load(f)
 
     # Check top-level keys
@@ -120,7 +122,7 @@ def test_documented_files_match_mkdocs_nav():
 def test_minimum_builtin_coverage():
     """Test that minimum builtin coverage is maintained."""
     audit_file = Path(__file__).parent.parent / "data" / "documentation_audit.json"
-    with open(audit_file) as f:
+    with open(audit_file, encoding="utf-8") as f:
         report = json.load(f)
 
     # Coverage should not decrease below current level
@@ -134,7 +136,7 @@ def test_minimum_builtin_coverage():
 def test_minimum_stdlib_coverage():
     """Test that minimum stdlib coverage is maintained."""
     audit_file = Path(__file__).parent.parent / "data" / "documentation_audit.json"
-    with open(audit_file) as f:
+    with open(audit_file, encoding="utf-8") as f:
         report = json.load(f)
 
     # Coverage should not decrease below current level
@@ -147,6 +149,9 @@ def test_minimum_stdlib_coverage():
 
 def test_mkdocs_build_valid():
     """Test that mkdocs configuration and markdown files are valid."""
+    if not shutil.which("uv"):
+        pytest.skip("uv not found")
+
     project_root = Path(__file__).parent.parent
 
     # Run mkdocs build in quiet mode to validate config and files

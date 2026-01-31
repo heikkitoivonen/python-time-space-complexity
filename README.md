@@ -19,6 +19,7 @@ This project provides detailed documentation of algorithmic complexity for:
 - 📊 Comprehensive complexity tables for all major built-in types and operations
 - 🔄 Version-specific behavior and optimization changes
 - 🚀 Implementation-specific notes (CPython vs PyPy vs others)
+- 🛠️ CLI Tool for estimating complexity of your own code
 - 🔍 Interactive search and filtering
 - 📱 Mobile-friendly responsive design
 
@@ -81,6 +82,25 @@ uv run mkdocs serve        # Run command in venv
 uv add package-name        # Add dependency
 uv add --dev pytest-plugin # Add dev dependency
 uv lock --upgrade          # Update dependencies
+```
+
+### Complexity Estimator CLI
+
+Measure the Big-O complexity of your own Python functions:
+
+```bash
+# Usage: python scripts/estimate_complexity.py <module> <function>
+python scripts/estimate_complexity.py my_script my_function
+```
+
+Example output:
+```text
+Input Size (n)  | Avg Time (s)
+-----------------------------------
+100             | 0.000003
+500             | 0.000012
+...
+Estimated Complexity: O(n) (Linear)
 ```
 
 ---
