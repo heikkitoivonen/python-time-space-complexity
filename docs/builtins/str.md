@@ -208,3 +208,8 @@ if pattern.match(s):  # Reuse compiled pattern
 - **[Bytes](bytes_func.md)** - Immutable byte sequence
 - **[Bytearray](bytearray_func.md)** - Mutable byte sequence
 - **[Regex (re)](../stdlib/re.md)** - Pattern matching
+
+## Further Reading
+
+- [CPython Internals: str](https://zpoint.github.io/CPython-Internals/BasicObject/str/str.html) -
+  Deep dive into CPython's str implementation

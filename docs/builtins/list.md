@@ -97,3 +97,8 @@ Similar, but may have different resize factors based on Java arrays.
 - **[Deque](../stdlib/collections.md#deque)** - O(1) append and prepend
 - **[Array](../stdlib/array.md)** - More memory efficient for large numeric lists
 - **[Tuple](tuple.md)** - Immutable alternative
+
+## Further Reading
+
+- [CPython Internals: list](https://zpoint.github.io/CPython-Internals/BasicObject/list/list.html) -
+  Deep dive into CPython's list implementation

@@ -427,3 +427,8 @@ print(sys.getsizeof(status))  # Very small, reused instance
 - [Collections Module](collections.md)
 - [Typing Module](typing.md)
 - [Dataclasses Module](dataclasses.md)
+
+## Further Reading
+
+- [CPython Internals: enum](https://zpoint.github.io/CPython-Internals/BasicObject/enum/enum.html) -
+  Deep dive into CPython's enum implementation

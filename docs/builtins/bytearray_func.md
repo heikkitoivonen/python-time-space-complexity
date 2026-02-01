@@ -366,3 +366,8 @@ ba[0] = 72  # O(1) - OK
 - **Python 2.x**: bytearray() available
 - **Python 3.x**: Same behavior
 - **All versions**: Mutable, unhashable
+
+## Further Reading
+
+- [CPython Internals: bytearray](https://zpoint.github.io/CPython-Internals/BasicObject/bytearray/bytearray.html) -
+  Deep dive into CPython's bytearray implementation

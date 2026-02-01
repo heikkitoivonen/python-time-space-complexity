@@ -95,9 +95,7 @@ uv lock --upgrade          # Update dependencies
 │   ├── implementations/        # CPython, PyPy, Jython, IronPython
 │   └── versions/               # Python version guides (3.9–3.14)
 ├── data/                       # JSON data files
-│   └── documentation_audit.json
 ├── scripts/                    # Utility scripts
-│   └── audit_documentation.py
 ├── tests/                      # Test files
 ├── .github/workflows/          # GitHub Actions CI/CD
 │   └── deploy.yml

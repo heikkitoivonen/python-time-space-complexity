@@ -195,3 +195,8 @@ Similar performance characteristics with JIT compilation helping with:
 - **[Bool](bool.md)** - Boolean (subclass of int)
 - **Complex** - Complex numbers
 - **[Decimal](../stdlib/decimal.md)** - Arbitrary precision decimal
+
+## Further Reading
+
+- [CPython Internals: int](https://zpoint.github.io/CPython-Internals/BasicObject/long/long.html) -
+  Deep dive into CPython's int implementation

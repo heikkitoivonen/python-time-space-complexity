@@ -140,3 +140,8 @@ filtered = [x for x in large_list if x not in exclusions_set]
 - **[Frozenset](index.md)** - Immutable set
 - **[Dict](dict.md)** - Mutable mapping
 - **[Deque](../stdlib/collections.md#deque)** - Ordered collection
+
+## Further Reading
+
+- [CPython Internals: set](https://zpoint.github.io/CPython-Internals/BasicObject/set/set.html) -
+  Deep dive into CPython's set implementation

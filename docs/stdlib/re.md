@@ -281,3 +281,8 @@ match = pattern.search(text)  # O(m)
 - Recompiling patterns in loops
 - Greedy quantifiers where not needed (use .*?)
 - Testing without considering catastrophic backtracking
+
+## Further Reading
+
+- [CPython Internals: re](https://zpoint.github.io/CPython-Internals/Modules/re/re.html) -
+  Deep dive into CPython's re implementation

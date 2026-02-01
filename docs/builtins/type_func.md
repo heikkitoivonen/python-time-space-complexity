@@ -243,3 +243,8 @@ if type(value) is int:  # Preferred
 - [issubclass() Function](issubclass.md) - Subclass checking
 - [dir() Function](dir.md) - List attributes
 - [vars() Function](vars.md) - Get __dict__
+
+## Further Reading
+
+- [CPython Internals: type](https://zpoint.github.io/CPython-Internals/BasicObject/type/type.html) -
+  Deep dive into CPython's type implementation

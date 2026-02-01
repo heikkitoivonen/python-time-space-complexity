@@ -397,3 +397,8 @@ c = complex.from_number(3.14)  # (3.14+0j)
 - **Python 2.x**: Complex numbers available
 - **Python 3.x**: Same behavior, integrated well
 - **All versions**: 64-bit floating-point components
+
+## Further Reading
+
+- [CPython Internals: complex](https://zpoint.github.io/CPython-Internals/BasicObject/complex/complex.html) -
+  Deep dive into CPython's complex implementation

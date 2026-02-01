@@ -145,3 +145,8 @@ for i in range(1000):
 - **[List](list.md)** - Mutable alternative
 - **[Namedtuple](../stdlib/collections.md#namedtuple)** - Tuples with named fields
 - **[Dataclass](../stdlib/dataclasses.md)** - More powerful structure type
+
+## Further Reading
+
+- [CPython Internals: tuple](https://zpoint.github.io/CPython-Internals/BasicObject/tuple/tuple.html) -
+  Deep dive into CPython's tuple implementation

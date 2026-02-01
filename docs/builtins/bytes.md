@@ -216,3 +216,8 @@ parts = data.split(b" ")
 - **[Strings](str.md)** - Unicode text
 - **[Lists](list.md)** - Mutable sequences
 - **Memoryview** - Zero-copy buffer interface
+
+## Further Reading
+
+- [CPython Internals: bytes](https://zpoint.github.io/CPython-Internals/BasicObject/bytes/bytes.html) -
+  Deep dive into CPython's bytes implementation

@@ -225,3 +225,8 @@ for i in range(1000000):
 - Comparing floats with `==` directly
 - Assuming decimal representation is exact
 - Using floats for financial calculations (use `Decimal`)
+
+## Further Reading
+
+- [CPython Internals: float](https://zpoint.github.io/CPython-Internals/BasicObject/float/float.html) -
+  Deep dive into CPython's float implementation

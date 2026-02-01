@@ -117,3 +117,8 @@ d = {
 - **[Defaultdict](../stdlib/collections.md#defaultdict)** - Auto-default values
 - **[OrderedDict](../stdlib/collections.md#ordereddict)** - Explicit ordering (pre-3.6)
 - **[ChainMap](../stdlib/collections.md#chainmap)** - Multiple dict views
+
+## Further Reading
+
+- [CPython Internals: dict](https://zpoint.github.io/CPython-Internals/BasicObject/dict/dict.html) -
+  Deep dive into CPython's dict implementation

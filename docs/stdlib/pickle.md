@@ -417,3 +417,8 @@ restored = dill.loads(pickled)
 - [Copy Module](copy.md)
 - [Shelve Module](shelve.md)
 - [CSV Module](csv.md)
+
+## Further Reading
+
+- [CPython Internals: pickle](https://zpoint.github.io/CPython-Internals/Modules/pickle/pickle.html) -
+  Deep dive into CPython's pickle implementation
