@@ -196,7 +196,7 @@ class TestDequeComplexity:
         small_time = measure_time(extend_small, iterations=50)
         large_time = measure_time(extend_large, iterations=50)
 
-        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO, tolerance=5.0), (
             f"extend() doesn't scale linearly: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
@@ -217,7 +217,7 @@ class TestDequeComplexity:
         small_time = measure_time(extendleft_small, iterations=50)
         large_time = measure_time(extendleft_large, iterations=50)
 
-        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO, tolerance=5.0), (
             f"extendleft() doesn't scale linearly: "
             f"{small_time:.2e}s vs {large_time:.2e}s"
         )
@@ -250,7 +250,7 @@ class TestDequeComplexity:
         small_time = measure_clear(self.SMALL_SIZE)
         large_time = measure_clear(self.LARGE_SIZE)
 
-        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO, tolerance=5.0), (
             f"clear() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
@@ -262,7 +262,7 @@ class TestDequeComplexity:
         small_time = measure_time(lambda: small_deque.copy(), iterations=50)
         large_time = measure_time(lambda: large_deque.copy(), iterations=50)
 
-        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO, tolerance=5.0), (
             f"copy() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 

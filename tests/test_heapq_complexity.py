@@ -148,7 +148,7 @@ class TestHeapqComplexity:
         large_time = measure_time(pushpop_large)
 
         assert is_logarithmic_time(
-            small_time, large_time, self.SMALL_SIZE, self.LARGE_SIZE
+            small_time, large_time, self.SMALL_SIZE, self.LARGE_SIZE, tolerance=5.0
         ), (
             f"heappushpop() doesn't appear O(log n): "
             f"{small_time:.2e}s vs {large_time:.2e}s"

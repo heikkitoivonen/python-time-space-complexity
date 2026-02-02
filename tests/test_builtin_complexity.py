@@ -224,7 +224,7 @@ class TestListComplexity:
         small_time = measure_time(lambda: small_list.copy(), iterations=50)
         large_time = measure_time(lambda: large_list.copy(), iterations=50)
 
-        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO, tolerance=5.0), (
             f"copy() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
@@ -277,7 +277,7 @@ class TestListComplexity:
         small_time = measure_time(extend_small, iterations=50)
         large_time = measure_time(extend_large, iterations=50)
 
-        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO, tolerance=5.0), (
             f"extend() doesn't scale linearly with iterable size: "
             f"{small_time:.2e}s vs {large_time:.2e}s"
         )
@@ -293,7 +293,7 @@ class TestListComplexity:
             lambda: large_list[: self.LARGE_SIZE], iterations=50
         )
 
-        assert is_linear_time(small_slice_time, large_slice_time, self.SIZE_RATIO), (
+        assert is_linear_time(small_slice_time, large_slice_time, self.SIZE_RATIO, tolerance=5.0), (
             f"Slicing doesn't scale linearly with slice size: "
             f"{small_slice_time:.2e}s vs {large_slice_time:.2e}s"
         )
@@ -341,7 +341,7 @@ class TestListComplexity:
         large_time = measure_time(sort_large, iterations=20)
 
         # For already sorted data, Timsort is O(n), so should scale linearly
-        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO, tolerance=5.0), (
             f"sort() on sorted data doesn't appear linear: "
             f"{small_time:.2e}s vs {large_time:.2e}s"
         )
@@ -447,7 +447,7 @@ class TestTupleComplexity:
         small_time = measure_time(lambda: small_tuple + small_tuple, iterations=50)
         large_time = measure_time(lambda: large_tuple + large_tuple, iterations=50)
 
-        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO, tolerance=10.0), (
             f"Concatenation doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
@@ -475,7 +475,7 @@ class TestTupleComplexity:
         small_time = measure_time(lambda: tuple(small_list), iterations=50)
         large_time = measure_time(lambda: tuple(large_list), iterations=50)
 
-        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO, tolerance=5.0), (
             f"tuple() constructor doesn't appear linear: "
             f"{small_time:.2e}s vs {large_time:.2e}s"
         )

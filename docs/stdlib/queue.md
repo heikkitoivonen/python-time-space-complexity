@@ -118,8 +118,27 @@ lifo.put('c')  # O(1)
 
 # Pop items (last in, first out) - O(1) amortized
 print(lifo.get())  # O(1) - 'c'
-print(lifo.get())  # O(1) - 'b'
 print(lifo.get())  # O(1) - 'a'
+```
+
+## Simple Queue (Unbounded FIFO)
+
+`SimpleQueue` is a simplified, unbounded FIFO queue available in Python 3.7+. It lacks task tracking (`task_done`/`join`) but is reentrant.
+
+```python
+from queue import SimpleQueue
+
+# Create simple queue - O(1)
+sq = SimpleQueue()
+
+# Put items - O(1)
+sq.put('simple')    # O(1), never blocks
+sq.put('fast')      # O(1)
+
+# Get items - O(1)
+print(sq.get())     # O(1) - 'simple'
+print(sq.qsize())   # O(1) - 1
+print(sq.empty())   # O(1) - False
 ```
 
 ## Non-blocking Operations
@@ -311,6 +330,7 @@ d.append('item')  # O(1), NOT thread-safe
 ## Version Notes
 
 - **Python 2.6+**: queue module available
+- **Python 3.7+**: `SimpleQueue` added
 - **Python 3.x**: Same functionality
 - **All versions**: O(1) for standard queue operations
 
