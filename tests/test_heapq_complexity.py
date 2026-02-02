@@ -10,18 +10,32 @@ import time
 from typing import Any, Callable
 
 
+def trimmed_mean(samples: list[float], trim_fraction: float = 0.1) -> float:
+    """Return the trimmed mean to reduce outlier impact."""
+    if not samples:
+        return 0.0
+    if trim_fraction <= 0:
+        return sum(samples) / len(samples)
+    k = int(len(samples) * trim_fraction)
+    if len(samples) - 2 * k <= 0:
+        return sum(samples) / len(samples)
+    samples = sorted(samples)
+    core = samples[k : len(samples) - k]
+    return sum(core) / len(core)
+
+
 def measure_time(func: Callable[[], Any], iterations: int = 100) -> float:
-    """Measure average time for a function over multiple iterations."""
-    start = time.perf_counter()
+    """Measure trimmed mean time for a function over multiple iterations."""
+    times: list[float] = []
     for _ in range(iterations):
+        start = time.perf_counter()
         func()
-    end = time.perf_counter()
-    return (end - start) / iterations
+        end = time.perf_counter()
+        times.append(end - start)
+    return trimmed_mean(times)
 
 
-def is_constant_time(
-    small_time: float, large_time: float, tolerance: float = 3.0
-) -> bool:
+def is_constant_time(small_time: float, large_time: float, tolerance: float = 3.0) -> bool:
     """Check if two times are within tolerance (suggesting O(1))."""
     if small_time == 0:
         return large_time < 1e-6
@@ -103,9 +117,9 @@ class TestHeapqComplexity:
         small_time = measure_time(push_small)
         large_time = measure_time(push_large)
 
-        assert is_logarithmic_time(
-            small_time, large_time, self.SMALL_SIZE, self.LARGE_SIZE
-        ), f"heappush() doesn't appear O(log n): {small_time:.2e}s vs {large_time:.2e}s"
+        assert is_logarithmic_time(small_time, large_time, self.SMALL_SIZE, self.LARGE_SIZE), (
+            f"heappush() doesn't appear O(log n): {small_time:.2e}s vs {large_time:.2e}s"
+        )
 
     def test_heappop_is_ologn(self) -> None:
         """heappop() should be O(log n)."""
@@ -125,9 +139,9 @@ class TestHeapqComplexity:
         small_time = measure_time(pop_small)
         large_time = measure_time(pop_large)
 
-        assert is_logarithmic_time(
-            small_time, large_time, self.SMALL_SIZE, self.LARGE_SIZE
-        ), f"heappop() doesn't appear O(log n): {small_time:.2e}s vs {large_time:.2e}s"
+        assert is_logarithmic_time(small_time, large_time, self.SMALL_SIZE, self.LARGE_SIZE), (
+            f"heappop() doesn't appear O(log n): {small_time:.2e}s vs {large_time:.2e}s"
+        )
 
     def test_heappushpop_is_ologn(self) -> None:
         """heappushpop() should be O(log n)."""
@@ -144,14 +158,11 @@ class TestHeapqComplexity:
             val = heapq.heappushpop(large_heap, -1)
             heapq.heappush(large_heap, val)
 
-        small_time = measure_time(pushpop_small)
-        large_time = measure_time(pushpop_large)
+        small_time = measure_time(pushpop_small, iterations=200)
+        large_time = measure_time(pushpop_large, iterations=200)
 
-        assert is_logarithmic_time(
-            small_time, large_time, self.SMALL_SIZE, self.LARGE_SIZE, tolerance=5.0
-        ), (
-            f"heappushpop() doesn't appear O(log n): "
-            f"{small_time:.2e}s vs {large_time:.2e}s"
+        assert is_logarithmic_time(small_time, large_time, self.SMALL_SIZE, self.LARGE_SIZE), (
+            f"heappushpop() doesn't appear O(log n): {small_time:.2e}s vs {large_time:.2e}s"
         )
 
     def test_heapreplace_is_ologn(self) -> None:
@@ -174,11 +185,8 @@ class TestHeapqComplexity:
         small_time = measure_time(replace_small)
         large_time = measure_time(replace_large)
 
-        assert is_logarithmic_time(
-            small_time, large_time, self.SMALL_SIZE, self.LARGE_SIZE
-        ), (
-            f"heapreplace() doesn't appear O(log n): "
-            f"{small_time:.2e}s vs {large_time:.2e}s"
+        assert is_logarithmic_time(small_time, large_time, self.SMALL_SIZE, self.LARGE_SIZE), (
+            f"heapreplace() doesn't appear O(log n): {small_time:.2e}s vs {large_time:.2e}s"
         )
 
     def test_nlargest_scales_with_n(self) -> None:
@@ -191,8 +199,7 @@ class TestHeapqComplexity:
         large_time = measure_time(lambda: heapq.nlargest(k, large_data), iterations=50)
 
         assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
-            f"nlargest() doesn't scale linearly with N: "
-            f"{small_time:.2e}s vs {large_time:.2e}s"
+            f"nlargest() doesn't scale linearly with N: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
     def test_nsmallest_scales_with_n(self) -> None:
@@ -201,16 +208,11 @@ class TestHeapqComplexity:
         large_data = list(range(self.LARGE_SIZE))
         k = 10
 
-        small_time = measure_time(
-            lambda: heapq.nsmallest(k, small_data), iterations=50
-        )
-        large_time = measure_time(
-            lambda: heapq.nsmallest(k, large_data), iterations=50
-        )
+        small_time = measure_time(lambda: heapq.nsmallest(k, small_data), iterations=50)
+        large_time = measure_time(lambda: heapq.nsmallest(k, large_data), iterations=50)
 
         assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
-            f"nsmallest() doesn't scale linearly with N: "
-            f"{small_time:.2e}s vs {large_time:.2e}s"
+            f"nsmallest() doesn't scale linearly with N: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
     def test_nlargest_scales_with_k(self) -> None:

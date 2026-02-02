@@ -118,6 +118,7 @@ lifo.put('c')  # O(1)
 
 # Pop items (last in, first out) - O(1) amortized
 print(lifo.get())  # O(1) - 'c'
+print(lifo.get())  # O(1) - 'b'
 print(lifo.get())  # O(1) - 'a'
 ```
 

@@ -137,24 +137,19 @@ def generate_audit_report(workspace_root: Path) -> dict[str, Any]:
         "builtins": {
             "total": len(all_builtins),
             "documented": len(documented["builtins"]),
-            "coverage_percent": round(
-                100 * len(documented["builtins"]) / len(all_builtins), 1
-            ),
+            "coverage_percent": round(100 * len(documented["builtins"]) / len(all_builtins), 1),
             "missing": sorted(missing_builtins),
             "by_category": builtins_by_category,
         },
         "stdlib": {
             "total": len(stdlib_modules),
             "documented": len(documented["stdlib"]),
-            "coverage_percent": round(
-                100 * len(documented["stdlib"]) / len(stdlib_modules), 1
-            ),
+            "coverage_percent": round(100 * len(documented["stdlib"]) / len(stdlib_modules), 1),
             "missing": missing_stdlib,
         },
         "summary": {
             "total_items": len(all_builtins) + len(stdlib_modules),
-            "total_documented": len(documented["builtins"])
-            + len(documented["stdlib"]),
+            "total_documented": len(documented["builtins"]) + len(documented["stdlib"]),
             "overall_coverage_percent": round(
                 100
                 * (len(documented["builtins"]) + len(documented["stdlib"]))
@@ -195,9 +190,7 @@ def print_report(report: dict[str, Any]) -> None:
         for item in report["builtins"]["missing"][:20]:  # Show first 20
             print(f"    - {item}")
         if len(report["builtins"]["missing"]) > 20:
-            print(
-                f"    ... and {len(report['builtins']['missing']) - 20} more"
-            )
+            print(f"    ... and {len(report['builtins']['missing']) - 20} more")
 
     print("\n📚 STDLIB MODULES")
     print(f"  Total: {report['stdlib']['total']}")

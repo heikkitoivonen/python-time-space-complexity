@@ -1,10 +1,11 @@
 """Tests for documentation content and structure."""
 
 import json
-import subprocess
 import shutil
-import pytest
+import subprocess
 from pathlib import Path
+
+import pytest
 
 
 def test_documentation_files_exist():
@@ -96,13 +97,9 @@ def test_documented_files_match_mkdocs_nav():
 
     # Get documented files
     documented_builtins = {
-        f.stem
-        for f in (docs_dir / "builtins").glob("*.md")
-        if f.stem != "index"
+        f.stem for f in (docs_dir / "builtins").glob("*.md") if f.stem != "index"
     }
-    documented_stdlib = {
-        f.stem for f in (docs_dir / "stdlib").glob("*.md") if f.stem != "index"
-    }
+    documented_stdlib = {f.stem for f in (docs_dir / "stdlib").glob("*.md") if f.stem != "index"}
 
     # Read mkdocs.yml
     mkdocs_content = mkdocs_file.read_text()
@@ -128,9 +125,7 @@ def test_minimum_builtin_coverage():
     # Coverage should not decrease below current level
     min_coverage = 8.0  # Current: 8.1%
     current = report["builtins"]["coverage_percent"]
-    assert current >= min_coverage, (
-        f"Builtin coverage dropped: {current}% < {min_coverage}%"
-    )
+    assert current >= min_coverage, f"Builtin coverage dropped: {current}% < {min_coverage}%"
 
 
 def test_minimum_stdlib_coverage():
@@ -142,9 +137,7 @@ def test_minimum_stdlib_coverage():
     # Coverage should not decrease below current level
     min_coverage = 3.8  # Current: 3.9%
     current = report["stdlib"]["coverage_percent"]
-    assert current >= min_coverage, (
-        f"Stdlib coverage dropped: {current}% < {min_coverage}%"
-    )
+    assert current >= min_coverage, f"Stdlib coverage dropped: {current}% < {min_coverage}%"
 
 
 def test_mkdocs_build_valid():
@@ -182,6 +175,4 @@ def test_mkdocs_yaml_valid():
     for i, line in enumerate(lines, 1):
         if line and not line.startswith("#"):
             if "\t" in line:
-                raise AssertionError(
-                    f"mkdocs.yml line {i} contains tabs instead of spaces"
-                )
+                raise AssertionError(f"mkdocs.yml line {i} contains tabs instead of spaces")

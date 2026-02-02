@@ -10,18 +10,32 @@ import time
 from typing import Any, Callable
 
 
+def trimmed_mean(samples: list[float], trim_fraction: float = 0.1) -> float:
+    """Return the trimmed mean to reduce outlier impact."""
+    if not samples:
+        return 0.0
+    if trim_fraction <= 0:
+        return sum(samples) / len(samples)
+    k = int(len(samples) * trim_fraction)
+    if len(samples) - 2 * k <= 0:
+        return sum(samples) / len(samples)
+    samples = sorted(samples)
+    core = samples[k : len(samples) - k]
+    return sum(core) / len(core)
+
+
 def measure_time(func: Callable[[], Any], iterations: int = 100) -> float:
-    """Measure average time for a function over multiple iterations."""
-    start = time.perf_counter()
+    """Measure trimmed mean time for a function over multiple iterations."""
+    times: list[float] = []
     for _ in range(iterations):
+        start = time.perf_counter()
         func()
-    end = time.perf_counter()
-    return (end - start) / iterations
+        end = time.perf_counter()
+        times.append(end - start)
+    return trimmed_mean(times)
 
 
-def is_constant_time(
-    small_time: float, large_time: float, tolerance: float = 3.0
-) -> bool:
+def is_constant_time(small_time: float, large_time: float, tolerance: float = 3.0) -> bool:
     """Check if two times are within tolerance (suggesting O(1))."""
     if small_time == 0:
         return large_time < 1e-6
@@ -87,15 +101,15 @@ class TestListComplexity:
             for i in range(100):
                 large_list.append(i)
 
-        small_time = measure_time(append_many_small, iterations=10)
+        small_time = measure_time(append_many_small, iterations=20)
         small_list.clear()
 
         for _ in range(self.LARGE_SIZE):
             large_list.append(0)
 
-        large_time = measure_time(append_many_large, iterations=10)
+        large_time = measure_time(append_many_large, iterations=20)
 
-        assert is_constant_time(small_time, large_time, tolerance=5.0), (
+        assert is_constant_time(small_time, large_time), (
             f"append() appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
@@ -139,8 +153,7 @@ class TestListComplexity:
             f"pop(0) doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
         assert large_time > small_time * 2, (
-            f"pop(0) should be slower for larger list: "
-            f"{small_time:.2e}s vs {large_time:.2e}s"
+            f"pop(0) should be slower for larger list: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
     def test_insert_at_beginning_is_on(self) -> None:
@@ -163,8 +176,7 @@ class TestListComplexity:
             f"insert(0, x) doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
         assert large_time > small_time * 2, (
-            f"insert(0, x) should be slower for larger list: "
-            f"{small_time:.2e}s vs {large_time:.2e}s"
+            f"insert(0, x) should be slower for larger list: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
     def test_in_membership_is_on(self) -> None:
@@ -181,8 +193,7 @@ class TestListComplexity:
             f"'in' doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
         assert large_time > small_time * 2, (
-            f"'in' should be slower for larger list: "
-            f"{small_time:.2e}s vs {large_time:.2e}s"
+            f"'in' should be slower for larger list: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
     def test_index_search_is_on(self) -> None:
@@ -200,8 +211,7 @@ class TestListComplexity:
             f"index() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
         assert large_time > small_time * 2, (
-            f"index() should be slower for larger list: "
-            f"{small_time:.2e}s vs {large_time:.2e}s"
+            f"index() should be slower for larger list: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
     def test_count_is_on(self) -> None:
@@ -221,10 +231,10 @@ class TestListComplexity:
         small_list = list(range(self.SMALL_SIZE))
         large_list = list(range(self.LARGE_SIZE))
 
-        small_time = measure_time(lambda: small_list.copy(), iterations=50)
-        large_time = measure_time(lambda: large_list.copy(), iterations=50)
+        small_time = measure_time(lambda: small_list.copy(), iterations=100)
+        large_time = measure_time(lambda: large_list.copy(), iterations=100)
 
-        assert is_linear_time(small_time, large_time, self.SIZE_RATIO, tolerance=5.0), (
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
             f"copy() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
@@ -274,10 +284,10 @@ class TestListComplexity:
             base_list.clear()
             base_list.extend(large_extend)
 
-        small_time = measure_time(extend_small, iterations=50)
-        large_time = measure_time(extend_large, iterations=50)
+        small_time = measure_time(extend_small, iterations=100)
+        large_time = measure_time(extend_large, iterations=100)
 
-        assert is_linear_time(small_time, large_time, self.SIZE_RATIO, tolerance=5.0), (
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
             f"extend() doesn't scale linearly with iterable size: "
             f"{small_time:.2e}s vs {large_time:.2e}s"
         )
@@ -286,14 +296,10 @@ class TestListComplexity:
         """Slicing should be O(k) where k = slice length."""
         large_list = list(range(self.LARGE_SIZE))
 
-        small_slice_time = measure_time(
-            lambda: large_list[: self.SMALL_SIZE], iterations=50
-        )
-        large_slice_time = measure_time(
-            lambda: large_list[: self.LARGE_SIZE], iterations=50
-        )
+        small_slice_time = measure_time(lambda: large_list[: self.SMALL_SIZE], iterations=100)
+        large_slice_time = measure_time(lambda: large_list[: self.LARGE_SIZE], iterations=100)
 
-        assert is_linear_time(small_slice_time, large_slice_time, self.SIZE_RATIO, tolerance=5.0), (
+        assert is_linear_time(small_slice_time, large_slice_time, self.SIZE_RATIO), (
             f"Slicing doesn't scale linearly with slice size: "
             f"{small_slice_time:.2e}s vs {large_slice_time:.2e}s"
         )
@@ -314,8 +320,8 @@ class TestListComplexity:
             lst = large_list.copy()
             lst.sort()
 
-        small_time = measure_time(sort_small, iterations=20)
-        large_time = measure_time(sort_large, iterations=20)
+        small_time = measure_time(sort_small, iterations=40)
+        large_time = measure_time(sort_large, iterations=40)
 
         # O(n log n) means large should be ~100 * log(100000)/log(1000) ~ 166x slower
         # We use a generous tolerance since timing can vary
@@ -341,9 +347,8 @@ class TestListComplexity:
         large_time = measure_time(sort_large, iterations=20)
 
         # For already sorted data, Timsort is O(n), so should scale linearly
-        assert is_linear_time(small_time, large_time, self.SIZE_RATIO, tolerance=5.0), (
-            f"sort() on sorted data doesn't appear linear: "
-            f"{small_time:.2e}s vs {large_time:.2e}s"
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
+            f"sort() on sorted data doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
 
@@ -392,8 +397,7 @@ class TestTupleComplexity:
             f"'in' doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
         assert large_time > small_time * 2, (
-            f"'in' should be slower for larger tuple: "
-            f"{small_time:.2e}s vs {large_time:.2e}s"
+            f"'in' should be slower for larger tuple: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
     def test_index_search_is_on(self) -> None:
@@ -411,8 +415,7 @@ class TestTupleComplexity:
             f"index() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
         assert large_time > small_time * 2, (
-            f"index() should be slower for larger tuple: "
-            f"{small_time:.2e}s vs {large_time:.2e}s"
+            f"index() should be slower for larger tuple: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
     def test_count_is_on(self) -> None:
@@ -444,10 +447,10 @@ class TestTupleComplexity:
         small_tuple = tuple(range(self.SMALL_SIZE))
         large_tuple = tuple(range(self.LARGE_SIZE))
 
-        small_time = measure_time(lambda: small_tuple + small_tuple, iterations=50)
-        large_time = measure_time(lambda: large_tuple + large_tuple, iterations=50)
+        small_time = measure_time(lambda: small_tuple + small_tuple, iterations=100)
+        large_time = measure_time(lambda: large_tuple + large_tuple, iterations=100)
 
-        assert is_linear_time(small_time, large_time, self.SIZE_RATIO, tolerance=10.0), (
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
             f"Concatenation doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
@@ -455,12 +458,8 @@ class TestTupleComplexity:
         """Slicing should be O(k) where k = slice length."""
         large_tuple = tuple(range(self.LARGE_SIZE))
 
-        small_slice_time = measure_time(
-            lambda: large_tuple[: self.SMALL_SIZE], iterations=50
-        )
-        large_slice_time = measure_time(
-            lambda: large_tuple[: self.LARGE_SIZE], iterations=50
-        )
+        small_slice_time = measure_time(lambda: large_tuple[: self.SMALL_SIZE], iterations=50)
+        large_slice_time = measure_time(lambda: large_tuple[: self.LARGE_SIZE], iterations=50)
 
         assert is_linear_time(small_slice_time, large_slice_time, self.SIZE_RATIO), (
             f"Slicing doesn't scale linearly with slice size: "
@@ -472,12 +471,11 @@ class TestTupleComplexity:
         small_list = list(range(self.SMALL_SIZE))
         large_list = list(range(self.LARGE_SIZE))
 
-        small_time = measure_time(lambda: tuple(small_list), iterations=50)
-        large_time = measure_time(lambda: tuple(large_list), iterations=50)
+        small_time = measure_time(lambda: tuple(small_list), iterations=100)
+        large_time = measure_time(lambda: tuple(large_list), iterations=100)
 
-        assert is_linear_time(small_time, large_time, self.SIZE_RATIO, tolerance=5.0), (
-            f"tuple() constructor doesn't appear linear: "
-            f"{small_time:.2e}s vs {large_time:.2e}s"
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
+            f"tuple() constructor doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
     def test_repetition_is_on(self) -> None:
@@ -625,12 +623,8 @@ class TestStrComplexity:
         small_prefix = "a" * 100
         large_prefix = "a" * 10000
 
-        small_time = measure_time(
-            lambda: large_str.startswith(small_prefix), iterations=100
-        )
-        large_time = measure_time(
-            lambda: large_str.startswith(large_prefix), iterations=100
-        )
+        small_time = measure_time(lambda: large_str.startswith(small_prefix), iterations=100)
+        large_time = measure_time(lambda: large_str.startswith(large_prefix), iterations=100)
 
         assert is_linear_time(small_time, large_time, 100), (
             f"startswith() doesn't scale with prefix: {small_time:.2e}s vs {large_time:.2e}s"
@@ -652,12 +646,8 @@ class TestStrComplexity:
         """Slicing should be O(k) where k = slice length."""
         large_str = "a" * self.LARGE_SIZE
 
-        small_slice_time = measure_time(
-            lambda: large_str[: self.SMALL_SIZE], iterations=50
-        )
-        large_slice_time = measure_time(
-            lambda: large_str[: self.LARGE_SIZE], iterations=50
-        )
+        small_slice_time = measure_time(lambda: large_str[: self.SMALL_SIZE], iterations=50)
+        large_slice_time = measure_time(lambda: large_str[: self.LARGE_SIZE], iterations=50)
 
         assert is_linear_time(small_slice_time, large_slice_time, self.SIZE_RATIO), (
             f"Slicing doesn't scale linearly: {small_slice_time:.2e}s vs {large_slice_time:.2e}s"
@@ -747,12 +737,8 @@ class TestBytesComplexity:
         """Slicing should be O(k) where k = slice length."""
         large_bytes = b"a" * self.LARGE_SIZE
 
-        small_slice_time = measure_time(
-            lambda: large_bytes[: self.SMALL_SIZE], iterations=50
-        )
-        large_slice_time = measure_time(
-            lambda: large_bytes[: self.LARGE_SIZE], iterations=50
-        )
+        small_slice_time = measure_time(lambda: large_bytes[: self.SMALL_SIZE], iterations=50)
+        large_slice_time = measure_time(lambda: large_bytes[: self.LARGE_SIZE], iterations=50)
 
         assert is_linear_time(small_slice_time, large_slice_time, self.SIZE_RATIO), (
             f"Slicing doesn't scale linearly: {small_slice_time:.2e}s vs {large_slice_time:.2e}s"
@@ -838,10 +824,10 @@ class TestSetComplexity:
         small_set = set(range(self.SMALL_SIZE))
         large_set = set(range(self.LARGE_SIZE))
 
-        small_time = measure_time(lambda: (self.SMALL_SIZE - 1) in small_set)
-        large_time = measure_time(lambda: (self.LARGE_SIZE - 1) in large_set)
+        small_time = measure_time(lambda: (self.SMALL_SIZE - 1) in small_set, iterations=200)
+        large_time = measure_time(lambda: (self.LARGE_SIZE - 1) in large_set, iterations=200)
 
-        assert is_constant_time(small_time, large_time, tolerance=5.0), (
+        assert is_constant_time(small_time, large_time), (
             f"'in' appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
@@ -862,8 +848,7 @@ class TestFrozensetComplexity:
         large_time = measure_time(lambda: frozenset(large_list), iterations=50)
 
         assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
-            f"frozenset() constructor doesn't appear linear: "
-            f"{small_time:.2e}s vs {large_time:.2e}s"
+            f"frozenset() constructor doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
     def test_in_membership_is_o1_avg(self) -> None:
@@ -871,10 +856,10 @@ class TestFrozensetComplexity:
         small_fs = frozenset(range(self.SMALL_SIZE))
         large_fs = frozenset(range(self.LARGE_SIZE))
 
-        small_time = measure_time(lambda: (self.SMALL_SIZE - 1) in small_fs)
-        large_time = measure_time(lambda: (self.LARGE_SIZE - 1) in large_fs)
+        small_time = measure_time(lambda: (self.SMALL_SIZE - 1) in small_fs, iterations=200)
+        large_time = measure_time(lambda: (self.LARGE_SIZE - 1) in large_fs, iterations=200)
 
-        assert is_constant_time(small_time, large_time, tolerance=5.0), (
+        assert is_constant_time(small_time, large_time), (
             f"'in' appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
@@ -902,10 +887,10 @@ class TestDictComplexity:
         small_dict = {i: i for i in range(self.SMALL_SIZE)}
         large_dict = {i: i for i in range(self.LARGE_SIZE)}
 
-        small_time = measure_time(lambda: small_dict[self.SMALL_SIZE - 1])
-        large_time = measure_time(lambda: large_dict[self.LARGE_SIZE - 1])
+        small_time = measure_time(lambda: small_dict[self.SMALL_SIZE - 1], iterations=200)
+        large_time = measure_time(lambda: large_dict[self.LARGE_SIZE - 1], iterations=200)
 
-        assert is_constant_time(small_time, large_time, tolerance=5.0), (
+        assert is_constant_time(small_time, large_time), (
             f"dict access appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
@@ -914,10 +899,10 @@ class TestDictComplexity:
         small_dict = {i: i for i in range(self.SMALL_SIZE)}
         large_dict = {i: i for i in range(self.LARGE_SIZE)}
 
-        small_time = measure_time(lambda: (self.SMALL_SIZE - 1) in small_dict)
-        large_time = measure_time(lambda: (self.LARGE_SIZE - 1) in large_dict)
+        small_time = measure_time(lambda: (self.SMALL_SIZE - 1) in small_dict, iterations=200)
+        large_time = measure_time(lambda: (self.LARGE_SIZE - 1) in large_dict, iterations=200)
 
-        assert is_constant_time(small_time, large_time, tolerance=5.0), (
+        assert is_constant_time(small_time, large_time), (
             f"'in' appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 

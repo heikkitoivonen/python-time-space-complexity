@@ -19,18 +19,32 @@ from collections import (
 from typing import Any, Callable
 
 
+def trimmed_mean(samples: list[float], trim_fraction: float = 0.1) -> float:
+    """Return the trimmed mean to reduce outlier impact."""
+    if not samples:
+        return 0.0
+    if trim_fraction <= 0:
+        return sum(samples) / len(samples)
+    k = int(len(samples) * trim_fraction)
+    if len(samples) - 2 * k <= 0:
+        return sum(samples) / len(samples)
+    samples = sorted(samples)
+    core = samples[k : len(samples) - k]
+    return sum(core) / len(core)
+
+
 def measure_time(func: Callable[[], Any], iterations: int = 100) -> float:
-    """Measure average time for a function over multiple iterations."""
-    start = time.perf_counter()
+    """Measure trimmed mean time for a function over multiple iterations."""
+    times: list[float] = []
     for _ in range(iterations):
+        start = time.perf_counter()
         func()
-    end = time.perf_counter()
-    return (end - start) / iterations
+        end = time.perf_counter()
+        times.append(end - start)
+    return trimmed_mean(times)
 
 
-def is_constant_time(
-    small_time: float, large_time: float, tolerance: float = 3.0
-) -> bool:
+def is_constant_time(small_time: float, large_time: float, tolerance: float = 3.0) -> bool:
     """Check if two times are within tolerance (suggesting O(1))."""
     if small_time == 0:
         return large_time < 1e-6
@@ -163,8 +177,7 @@ class TestDequeComplexity:
         large_time = measure_time(lambda: large_deque[large_mid], iterations=50)
 
         assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
-            f"Middle indexing doesn't appear linear: "
-            f"{small_time:.2e}s vs {large_time:.2e}s"
+            f"Middle indexing doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
     def test_len_is_o1(self) -> None:
@@ -193,10 +206,10 @@ class TestDequeComplexity:
             base_deque.clear()
             base_deque.extend(large_extend)
 
-        small_time = measure_time(extend_small, iterations=50)
-        large_time = measure_time(extend_large, iterations=50)
+        small_time = measure_time(extend_small, iterations=100)
+        large_time = measure_time(extend_large, iterations=100)
 
-        assert is_linear_time(small_time, large_time, self.SIZE_RATIO, tolerance=5.0), (
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
             f"extend() doesn't scale linearly: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
@@ -214,24 +227,22 @@ class TestDequeComplexity:
             base_deque.clear()
             base_deque.extendleft(large_extend)
 
-        small_time = measure_time(extendleft_small, iterations=50)
-        large_time = measure_time(extendleft_large, iterations=50)
+        small_time = measure_time(extendleft_small, iterations=100)
+        large_time = measure_time(extendleft_large, iterations=100)
 
-        assert is_linear_time(small_time, large_time, self.SIZE_RATIO, tolerance=5.0), (
-            f"extendleft() doesn't scale linearly: "
-            f"{small_time:.2e}s vs {large_time:.2e}s"
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
+            f"extendleft() doesn't scale linearly: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
     def test_rotate_is_ok(self) -> None:
         """rotate(k) should be O(k)."""
         dq: deque[int] = deque(range(self.LARGE_SIZE))
 
-        small_time = measure_time(lambda: dq.rotate(10), iterations=100)
-        large_time = measure_time(lambda: dq.rotate(1000), iterations=100)
+        small_time = measure_time(lambda: dq.rotate(10), iterations=200)
+        large_time = measure_time(lambda: dq.rotate(1000), iterations=200)
 
-        assert is_linear_time(small_time, large_time, 100, tolerance=5.0), (
-            f"rotate() doesn't scale linearly with k: "
-            f"{small_time:.2e}s vs {large_time:.2e}s"
+        assert is_linear_time(small_time, large_time, 100), (
+            f"rotate() doesn't scale linearly with k: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
     def test_clear_is_on(self) -> None:
@@ -239,7 +250,7 @@ class TestDequeComplexity:
 
         def measure_clear(size: int) -> float:
             times = []
-            for _ in range(20):
+            for _ in range(40):
                 dq = deque(range(size))
                 start = time.perf_counter()
                 dq.clear()
@@ -250,7 +261,7 @@ class TestDequeComplexity:
         small_time = measure_clear(self.SMALL_SIZE)
         large_time = measure_clear(self.LARGE_SIZE)
 
-        assert is_linear_time(small_time, large_time, self.SIZE_RATIO, tolerance=5.0), (
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
             f"clear() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
@@ -259,10 +270,10 @@ class TestDequeComplexity:
         small_deque: deque[int] = deque(range(self.SMALL_SIZE))
         large_deque: deque[int] = deque(range(self.LARGE_SIZE))
 
-        small_time = measure_time(lambda: small_deque.copy(), iterations=50)
-        large_time = measure_time(lambda: large_deque.copy(), iterations=50)
+        small_time = measure_time(lambda: small_deque.copy(), iterations=100)
+        large_time = measure_time(lambda: large_deque.copy(), iterations=100)
 
-        assert is_linear_time(small_time, large_time, self.SIZE_RATIO, tolerance=5.0), (
+        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
             f"copy() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
@@ -352,12 +363,11 @@ class TestChainMapComplexity:
         small_map = ChainMap({i: i for i in range(self.SMALL_SIZE)})
         large_map = ChainMap({i: i for i in range(self.LARGE_SIZE)})
 
-        small_time = measure_time(lambda: small_map[self.SMALL_SIZE - 1])
-        large_time = measure_time(lambda: large_map[self.LARGE_SIZE - 1])
+        small_time = measure_time(lambda: small_map[self.SMALL_SIZE - 1], iterations=200)
+        large_time = measure_time(lambda: large_map[self.LARGE_SIZE - 1], iterations=200)
 
-        assert is_constant_time(small_time, large_time, tolerance=5.0), (
-            f"ChainMap lookup appears non-constant: "
-            f"{small_time:.2e}s vs {large_time:.2e}s"
+        assert is_constant_time(small_time, large_time), (
+            f"ChainMap lookup appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
 
@@ -380,8 +390,7 @@ class TestCounterComplexity:
         large_time = measure_time(lambda: large_counter.update(large_items), iterations=20)
 
         assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
-            f"Counter update doesn't appear linear: "
-            f"{small_time:.2e}s vs {large_time:.2e}s"
+            f"Counter update doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
 
@@ -396,12 +405,11 @@ class TestOrderedDictComplexity:
         small_od = OrderedDict((i, i) for i in range(self.SMALL_SIZE))
         large_od = OrderedDict((i, i) for i in range(self.LARGE_SIZE))
 
-        small_time = measure_time(lambda: small_od[self.SMALL_SIZE - 1])
-        large_time = measure_time(lambda: large_od[self.LARGE_SIZE - 1])
+        small_time = measure_time(lambda: small_od[self.SMALL_SIZE - 1], iterations=200)
+        large_time = measure_time(lambda: large_od[self.LARGE_SIZE - 1], iterations=200)
 
-        assert is_constant_time(small_time, large_time, tolerance=5.0), (
-            f"OrderedDict lookup appears non-constant: "
-            f"{small_time:.2e}s vs {large_time:.2e}s"
+        assert is_constant_time(small_time, large_time), (
+            f"OrderedDict lookup appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
     def test_move_to_end_is_o1(self) -> None:
@@ -409,12 +417,11 @@ class TestOrderedDictComplexity:
         small_od = OrderedDict((i, i) for i in range(self.SMALL_SIZE))
         large_od = OrderedDict((i, i) for i in range(self.LARGE_SIZE))
 
-        small_time = measure_time(lambda: small_od.move_to_end(self.SMALL_SIZE - 1))
-        large_time = measure_time(lambda: large_od.move_to_end(self.LARGE_SIZE - 1))
+        small_time = measure_time(lambda: small_od.move_to_end(self.SMALL_SIZE - 1), iterations=200)
+        large_time = measure_time(lambda: large_od.move_to_end(self.LARGE_SIZE - 1), iterations=200)
 
-        assert is_constant_time(small_time, large_time, tolerance=5.0), (
-            f"move_to_end() appears non-constant: "
-            f"{small_time:.2e}s vs {large_time:.2e}s"
+        assert is_constant_time(small_time, large_time), (
+            f"move_to_end() appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
 
@@ -429,10 +436,10 @@ class TestDefaultDictComplexity:
         small_dd: defaultdict[int, int] = defaultdict(int, {i: i for i in range(self.SMALL_SIZE)})
         large_dd: defaultdict[int, int] = defaultdict(int, {i: i for i in range(self.LARGE_SIZE)})
 
-        small_time = measure_time(lambda: small_dd[self.SMALL_SIZE + 1])
-        large_time = measure_time(lambda: large_dd[self.LARGE_SIZE + 1])
+        small_time = measure_time(lambda: small_dd[self.SMALL_SIZE + 1], iterations=200)
+        large_time = measure_time(lambda: large_dd[self.LARGE_SIZE + 1], iterations=200)
 
-        assert is_constant_time(small_time, large_time, tolerance=5.0), (
+        assert is_constant_time(small_time, large_time), (
             f"defaultdict missing-key access appears non-constant: "
             f"{small_time:.2e}s vs {large_time:.2e}s"
         )
@@ -449,12 +456,11 @@ class TestUserDictComplexity:
         small_ud = UserDict({i: i for i in range(self.SMALL_SIZE)})
         large_ud = UserDict({i: i for i in range(self.LARGE_SIZE)})
 
-        small_time = measure_time(lambda: small_ud[self.SMALL_SIZE - 1])
-        large_time = measure_time(lambda: large_ud[self.LARGE_SIZE - 1])
+        small_time = measure_time(lambda: small_ud[self.SMALL_SIZE - 1], iterations=200)
+        large_time = measure_time(lambda: large_ud[self.LARGE_SIZE - 1], iterations=200)
 
-        assert is_constant_time(small_time, large_time, tolerance=5.0), (
-            f"UserDict lookup appears non-constant: "
-            f"{small_time:.2e}s vs {large_time:.2e}s"
+        assert is_constant_time(small_time, large_time), (
+            f"UserDict lookup appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
 
@@ -486,8 +492,7 @@ class TestUserListComplexity:
         large_time = measure_time(lambda: large_ul.count(0), iterations=50)
 
         assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
-            f"UserList count doesn't appear linear: "
-            f"{small_time:.2e}s vs {large_time:.2e}s"
+            f"UserList count doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
 
@@ -519,6 +524,5 @@ class TestUserStringComplexity:
         large_time = measure_time(lambda: large_us.count("a"), iterations=50)
 
         assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
-            f"UserString count doesn't appear linear: "
-            f"{small_time:.2e}s vs {large_time:.2e}s"
+            f"UserString count doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
