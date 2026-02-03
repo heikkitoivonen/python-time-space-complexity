@@ -99,13 +99,11 @@ class TestComplexityEstimator:
     def test_integration_linear_list(self):
         """Run measurement on linear function (List[int] hint)."""
         # Increase data points and iterations for stability
-        n_values = [1000, 2500, 5000, 7500, 10000]
+        n_values = [1000, 2000, 4000, 8000, 16000]
         times = []
         for n in n_values:
             t = estimate_complexity.measure_execution_time(linear_time_list, n, iterations=500)
             times.append(t)
 
         complexity, _ = estimate_complexity.detect_complexity(n_values, times)
-        # Accept O(n) or O(n log n) since timing noise can cause confusion
-        # between these similar growth rates
-        assert complexity in ("O(n) (Linear)", "O(n log n) (Linearithmic)")
+        assert complexity == "O(n) (Linear)"

@@ -58,6 +58,8 @@ def measure_execution_time(func, input_size, iterations=5):
 
     # 3. Execution with determined input
     try:
+        # Warm up once to reduce cold-start noise
+        func(input_data)
         start_time = time.perf_counter()
         for _ in range(iterations):
             func(input_data)
@@ -73,6 +75,8 @@ def measure_execution_time(func, input_size, iterations=5):
 def _measure_heuristic(func, input_size, iterations):
     """Fallback: Try int first, then list."""
     try:
+        # Warm up once to reduce cold-start noise
+        func(input_size)
         # Try passing integer N
         start_time = time.perf_counter()
         for _ in range(iterations):
@@ -82,6 +86,8 @@ def _measure_heuristic(func, input_size, iterations):
     except TypeError:
         # Try passing list of size N
         data = list(range(input_size))
+        # Warm up once to reduce cold-start noise
+        func(data)
         start_time = time.perf_counter()
         for _ in range(iterations):
             func(data)
@@ -127,6 +133,82 @@ def _compute_residuals(normalized_times, theoretical):
     return [t - (a * x + b) for t, x in zip(normalized_times, theoretical)]
 
 
+def _tie_break_linear_vs_nlogn(n_values, times, scores):
+    linear_rmse = scores.get("O(n) (Linear)")
+    nlogn_rmse = scores.get("O(n log n) (Linearithmic)")
+    if linear_rmse is None or nlogn_rmse is None:
+        return None, None
+
+    relative_eps = 0.05
+    threshold = relative_eps * min(linear_rmse, nlogn_rmse)
+    if abs(linear_rmse - nlogn_rmse) > threshold:
+        return None, None
+
+    # Filter pairs together to maintain alignment (use n > 1 to avoid log(1)=0)
+    pairs = [(n, t) for n, t in zip(n_values, times) if n > 1 and t > 0]
+    if len(pairs) < 2:
+        return None, None
+
+    log_n = [math.log(n) for n, _ in pairs]
+    log_t = [math.log(t) for _, t in pairs]
+
+    mean_ln = statistics.fmean(log_n)
+    mean_lt = statistics.fmean(log_t)
+    var_ln = sum((x - mean_ln) ** 2 for x in log_n)
+    if var_ln == 0:
+        return None, None
+
+    cov = sum((x - mean_ln) * (y - mean_lt) for x, y in zip(log_n, log_t))
+    slope = cov / var_ln
+    n_mid = math.exp(mean_ln)
+    ln_mid = math.log(n_mid)
+
+    # Guard against division by zero when n_mid is near 1
+    if abs(ln_mid) < 1e-6:
+        return None, None
+
+    target_nlogn = 1.0 + (1.0 / ln_mid)
+
+    if abs(slope - 1.0) <= abs(slope - target_nlogn):
+        return "O(n) (Linear)", linear_rmse
+    return "O(n log n) (Linearithmic)", nlogn_rmse
+
+
+def _score_models(normalized_times, models, model_priority):
+    best_fit = None
+    best_score = float("inf")
+    scores = {}
+
+    for name, theoretical in models:
+        try:
+            residuals = _compute_residuals(normalized_times, theoretical)
+            if residuals is None:
+                continue
+
+            rmse = math.sqrt(statistics.fmean(r * r for r in residuals))
+            scores[name] = rmse
+
+            # Use 5% relative epsilon for tie-breaking to handle timing noise
+            # and prefer simpler models when fits are comparable
+            relative_eps = 0.05
+            threshold = relative_eps * best_score if best_score > 0 else 1e-9
+
+            if rmse < best_score - threshold:
+                best_score = rmse
+                best_fit = name
+                continue
+
+            if abs(rmse - best_score) <= threshold:
+                current_priority = model_priority[best_fit] if best_fit else 999
+                if model_priority[name] < current_priority:
+                    best_fit = name
+                    best_score = rmse
+        except statistics.StatisticsError:
+            continue
+
+    return best_fit, best_score, scores
+
+
 def detect_complexity(n_values, times):
     """
     Estimate complexity by fitting theoretical curves to measured times.
@@ -164,33 +246,17 @@ def detect_complexity(n_values, times):
         "O(n^2) (Quadratic)": 4,
     }
 
-    best_fit = None
-    best_score = float("inf")
+    best_fit, best_score, scores = _score_models(
+        normalized_times,
+        models,
+        model_priority,
+    )
 
-    for name, theoretical in models:
-        try:
-            residuals = _compute_residuals(normalized_times, theoretical)
-            if residuals is None:
-                continue
-
-            rmse = math.sqrt(statistics.fmean(r * r for r in residuals))
-
-            # Use 5% relative epsilon for tie-breaking to handle timing noise
-            # and prefer simpler models when fits are comparable
-            relative_eps = 0.05
-            threshold = relative_eps * best_score if best_score > 0 else 1e-9
-
-            if rmse < best_score - threshold:
-                best_score = rmse
-                best_fit = name
-            elif abs(rmse - best_score) <= threshold:
-                # Scores are effectively tied; prefer simpler model
-                current_priority = model_priority[best_fit] if best_fit else 999
-                if model_priority[name] < current_priority:
-                    best_fit = name
-                    best_score = rmse
-        except statistics.StatisticsError:
-            continue
+    if best_fit in ("O(n) (Linear)", "O(n log n) (Linearithmic)"):
+        tie_fit, tie_score = _tie_break_linear_vs_nlogn(n_values, times, scores)
+        if tie_fit is not None:
+            best_fit = tie_fit
+            best_score = tie_score
 
     return best_fit, best_score
 
