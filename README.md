@@ -10,10 +10,6 @@ This project provides detailed documentation of algorithmic complexity for:
 - **Python Versions**: 3.9–3.14 (including new 3.14 features)
 - **Alternative Implementations**: CPython, PyPy, Jython, IronPython
 
-### Key Statistics
-- **4 Python implementations** documented (CPython, PyPy, Jython, IronPython)
-- **6 Python versions** documented (3.9–3.14)
-
 ## Features
 
 - 📊 Comprehensive complexity tables for all major built-in types and operations

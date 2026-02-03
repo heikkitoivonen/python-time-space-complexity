@@ -91,46 +91,104 @@ def _measure_heuristic(func, input_size, iterations):
         return None
 
 
+def _compute_residuals(normalized_times, theoretical):
+    """
+    Compute residuals using least-squares linear regression with intercept.
+
+    For constant models (all values equal), uses mean as fit.
+    For other models, fits t = a * f(n) + b and requires positive slope.
+
+    Returns:
+        list of residuals, or None if model is not applicable.
+    """
+    if len(set(theoretical)) == 1:
+        # Constant model: best fit is mean of normalized times
+        mean_time = statistics.fmean(normalized_times)
+        return [t - mean_time for t in normalized_times]
+
+    # Linear regression with intercept: t = a * f(n) + b
+    n = len(theoretical)
+    sum_x = sum(theoretical)
+    sum_y = sum(normalized_times)
+    sum_xx = sum(x * x for x in theoretical)
+    sum_xy = sum(x * y for x, y in zip(theoretical, normalized_times))
+
+    denom = n * sum_xx - sum_x * sum_x
+    if abs(denom) < 1e-12:
+        return None
+
+    a = (n * sum_xy - sum_x * sum_y) / denom
+    b = (sum_y - a * sum_x) / n
+
+    # Require positive slope; negative/zero means model doesn't explain growth
+    if a <= 1e-12:
+        return None
+
+    return [t - (a * x + b) for t, x in zip(normalized_times, theoretical)]
+
+
 def detect_complexity(n_values, times):
     """
-    Estimate complexity by comparing RSquared values for different models.
-    Simplified approach: Normalize data and check correlation with theoretical curves.
+    Estimate complexity by fitting theoretical curves to measured times.
+
+    Uses least-squares linear regression (with intercept) to fit each model
+    curve to the timing data, then selects the model with lowest RMSE.
+    Prefers simpler models when RMSE values are within 5% of each other.
+
+    Returns:
+        tuple: (complexity_name, rmse) or (None, None) if insufficient data.
     """
     if len(times) < 3:
-        return "Insufficient Data"
+        return (None, None)
 
-    # Normalize times
+    # Normalize times to reduce numerical effects across models
     min_time = min(times)
-    if min_time == 0:
+    if min_time <= 0:
         min_time = 1e-9
     normalized_times = [t / min_time for t in times]
 
-    models = {
-        "O(1) (Constant)": [1 for _ in n_values],
-        "O(log n) (Logarithmic)": [math.log(n) if n > 0 else 0 for n in n_values],
-        "O(n) (Linear)": list(n_values),
-        "O(n log n) (Linearithmic)": [n * math.log(n) if n > 0 else 0 for n in n_values],
-        "O(n^2) (Quadratic)": [n**2 for n in n_values],
+    models = [
+        ("O(1) (Constant)", [1 for _ in n_values]),
+        ("O(log n) (Logarithmic)", [math.log(n) if n > 0 else 0 for n in n_values]),
+        ("O(n) (Linear)", list(n_values)),
+        ("O(n log n) (Linearithmic)", [n * math.log(n) if n > 0 else 0 for n in n_values]),
+        ("O(n^2) (Quadratic)", [n**2 for n in n_values]),
+    ]
+
+    # Prefer simpler models when scores are effectively tied.
+    model_priority = {
+        "O(1) (Constant)": 0,
+        "O(log n) (Logarithmic)": 1,
+        "O(n) (Linear)": 2,
+        "O(n log n) (Linearithmic)": 3,
+        "O(n^2) (Quadratic)": 4,
     }
 
     best_fit = None
-    best_score = -float("inf")
+    best_score = float("inf")
 
-    for name, theoretical in models.items():
-        # Calculate correlation coefficient (Pearson)
+    for name, theoretical in models:
         try:
-            if len(set(theoretical)) == 1:  # Handle constant case
-                # For constant time, we check variance of times
-                score = 1.0 / (statistics.stdev(normalized_times) + 1.0)
-            else:
-                # Correlation between theoretical and actual
-                # Using covariance / (std_dev_x * std_dev_y)
-                correlation = statistics.correlation(theoretical, times)
-                score = correlation
+            residuals = _compute_residuals(normalized_times, theoretical)
+            if residuals is None:
+                continue
 
-            if score > best_score:
-                best_score = score
+            rmse = math.sqrt(statistics.fmean(r * r for r in residuals))
+
+            # Use 5% relative epsilon for tie-breaking to handle timing noise
+            # and prefer simpler models when fits are comparable
+            relative_eps = 0.05
+            threshold = relative_eps * best_score if best_score > 0 else 1e-9
+
+            if rmse < best_score - threshold:
+                best_score = rmse
                 best_fit = name
+            elif abs(rmse - best_score) <= threshold:
+                # Scores are effectively tied; prefer simpler model
+                current_priority = model_priority[best_fit] if best_fit else 999
+                if model_priority[name] < current_priority:
+                    best_fit = name
+                    best_score = rmse
         except statistics.StatisticsError:
             continue
 
@@ -170,10 +228,13 @@ def main():
         print(f"{n:<15} | {t:.6f}")
 
     if len(times) == len(n_values):
-        complexity, score = detect_complexity(n_values, times)
+        complexity, rmse = detect_complexity(n_values, times)
         print("-" * 35)
-        print(f"Estimated Complexity: {complexity}")
-        print(f"Fit Score: {score:.3f}")
+        if complexity is None:
+            print("Insufficient data to estimate complexity.")
+        else:
+            print(f"Estimated Complexity: {complexity}")
+            print(f"RMSE: {rmse:.3f}")
 
 
 if __name__ == "__main__":
