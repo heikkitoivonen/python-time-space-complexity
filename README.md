@@ -1,5 +1,11 @@
 # Python Time & Space Complexity
 
+[![Lint / Format](https://img.shields.io/github/actions/workflow/status/heikkitoivonen/python-time-space-complexity/deploy.yml?label=lint%20%2F%20format)](https://github.com/heikkitoivonen/python-time-space-complexity/actions/workflows/deploy.yml)
+[![Type Check](https://img.shields.io/github/actions/workflow/status/heikkitoivonen/python-time-space-complexity/deploy.yml?label=type%20check)](https://github.com/heikkitoivonen/python-time-space-complexity/actions/workflows/deploy.yml)
+[![Python](https://img.shields.io/badge/python-3.9%20to%203.14-blue)](https://www.python.org/)
+[![License](https://img.shields.io/github/license/heikkitoivonen/python-time-space-complexity)](LICENSE.txt)
+[![Docs](https://img.shields.io/badge/docs-pythoncomplexity.com-brightgreen)](https://pythoncomplexity.com)
+
 A comprehensive resource documenting the time and space complexity of Python's built-in functions and standard library operations across different Python versions and implementations.
 
 ## Overview
