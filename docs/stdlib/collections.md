@@ -222,7 +222,7 @@ from collections import ChainMap
 | `access[key]` | O(n) | O(1) | n = number of maps; searches until found |
 | `set[key]` | O(1) avg | O(1) | Sets in first map; O(m) worst case where m = first map size |
 | `del[key]` | O(1) avg | O(1) | Deletes from first map; O(m) worst case where m = first map size |
-| `len()` | O(n) | O(1) | Must check all maps |
+| `len()` | O(N) | O(N) | N = total keys across all maps; builds set union internally |
 | `in` | O(n) | O(1) | Checks all maps |
 
 ### Use Cases

@@ -200,7 +200,7 @@ chr(65)        # 'A'
 
 # TypeError - non-integer
 try:
-    chr(65.0)  # Works! Floats converted to int
+    chr(65.0)  # TypeError - float not accepted
 except TypeError:
     pass
 

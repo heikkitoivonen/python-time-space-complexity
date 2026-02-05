@@ -156,14 +156,14 @@ original.sort()  # [1, 1, 3, 4, 5]
 ### Expensive Key Functions
 
 ```python
-# O(n log n * k) - k = key function time
+# O(n*k + n log n) - key computed once per element, then cached
 def expensive_key(x):
     # O(m) - expensive computation
     return sum(range(x))
 
 numbers = list(range(1000))
 result = sorted(numbers, key=expensive_key)
-# Complexity: O(n log n * m)
+# Complexity: O(n*m + n log n) - key called n times, then n log n comparisons
 
 # Better: pre-compute keys
 from operator import itemgetter
@@ -180,7 +180,7 @@ def get_sort_key(item):
     # Some expensive computation
     return complex_calculation(item)
 
-# Slow: O(n log n * k)
+# With key: O(n*k + n log n) - key computed once per element
 result = sorted(items, key=get_sort_key)
 
 # Faster: O(n*k + n log n)

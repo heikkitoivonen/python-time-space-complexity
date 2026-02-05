@@ -208,23 +208,25 @@ class BuildSystem:
     def build(self):
         """Build all targets in order - O(v + e)"""
         self.sorter.prepare()
-        
+
         built = set()
-        while True:
-            target = self.sorter.get_node()
-            if target is None:
+        while self.sorter.is_active():
+            # get_ready() returns a tuple of ready nodes
+            ready = self.sorter.get_ready()
+            if not ready:
                 break
-            
-            # Skip already built
-            if target in built:
+
+            for target in ready:
+                # Skip already built
+                if target in built:
+                    self.sorter.done(target)
+                    continue
+
+                print(f"Building {target}...")
+                # Simulate build
+                built.add(target)
                 self.sorter.done(target)
-                continue
-            
-            print(f"Building {target}...")
-            # Simulate build
-            built.add(target)
-            self.sorter.done(target)
-        
+
         return built
 
 # Usage
@@ -271,23 +273,24 @@ class TaskScheduler:
         executed = {}
         start_time = time.time()
         
-        while True:
-            # Get next ready task - O(1) amortized
-            task_name = self.sorter.get_node()
-            if task_name is None:
+        while self.sorter.is_active():
+            # Get all ready tasks - O(1) amortized
+            ready = self.sorter.get_ready()
+            if not ready:
                 break
-            
-            # Execute task - O(?)
-            if task_name in self.tasks:
-                print(f"Executing {task_name}...")
-                start = time.time()
-                result = self.tasks[task_name]()
-                elapsed = time.time() - start
-                executed[task_name] = (result, elapsed)
-                print(f"  Completed in {elapsed:.3f}s")
-            
-            # Mark done - O(d)
-            self.sorter.done(task_name)
+
+            for task_name in ready:
+                # Execute task - O(?)
+                if task_name in self.tasks:
+                    print(f"Executing {task_name}...")
+                    start = time.time()
+                    result = self.tasks[task_name]()
+                    elapsed = time.time() - start
+                    executed[task_name] = (result, elapsed)
+                    print(f"  Completed in {elapsed:.3f}s")
+
+                # Mark done - O(d)
+                self.sorter.done(task_name)
         
         total = time.time() - start_time
         print(f"Total execution time: {total:.3f}s")

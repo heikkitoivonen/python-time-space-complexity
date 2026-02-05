@@ -49,7 +49,7 @@ The `int` type represents arbitrary precision integers. Python 3 has a single in
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `hash(x)` | O(1) | O(1) | Hash value |
+| `hash(x)` | O(n)* | O(1) | Iterates over internal digits; O(1) for compact one-digit ints (roughly \|x\| <= 2^30-1 on typical 64-bit builds) |
 | `str(x)` | O(n) | O(n) | Convert to string |
 | `repr(x)` | O(n) | O(n) | String representation |
 | `int(x)` | O(1) | O(1) | No-op if already int |

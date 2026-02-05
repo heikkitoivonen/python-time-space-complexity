@@ -84,9 +84,6 @@ lst = arr.tolist()  # O(3)
 
 # To bytes - O(n)
 bytes_data = arr.tobytes()  # O(3)
-
-# To string - O(n)
-str_data = arr.tostring()  # O(3)
 ```
 
 ## Performance Comparison

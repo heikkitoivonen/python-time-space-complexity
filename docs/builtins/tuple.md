@@ -14,7 +14,7 @@ The `tuple` type is an immutable, ordered sequence. Being immutable allows vario
 | `copy()` | O(1) | O(1) | Just increments reference count |
 | `x + y` (concatenation) | O(m+n) | O(m+n) | m, n are lengths |
 | `t * n` (repetition) | O(n*len(t)) | O(n*len(t)) | Creates new tuple |
-| `hash()` | O(n) | O(1) | Computes hash by iterating all elements |
+| `hash()` | O(n) first call, O(1) cached | O(1) | Hash computed once then cached in `ob_hash` |
 | `reversed()` | O(1) | O(1) | Iterator, not materialized |
 | `tuple()` constructor | O(n) | O(n) | n = iterable length |
 | `slice [::2]` | O(k) | O(k) | k = slice length |
@@ -37,11 +37,11 @@ s = {(0, 0), (1, 1)}
 ```python
 # hash() computes hash value by iterating all elements
 t = (1, 2, 3)
-h1 = hash(t)  # O(n) - computes by iterating elements
+h1 = hash(t)  # O(n) first call - computes by iterating elements
 
-# Note: Unlike strings, tuples do NOT cache their hash
-# Each call recomputes: O(n) every time
-h2 = hash(t)  # O(n) - recomputes hash
+# CPython caches the hash in the tuple's ob_hash field
+# Subsequent calls return the cached value
+h2 = hash(t)  # O(1) - returns cached hash
 ```
 
 ### Reference vs Copy
