@@ -12,7 +12,7 @@ The `concurrent.futures` module provides high-level interfaces for asynchronousl
 | `executor.submit(fn, *args)` | O(1) | O(1) | Submit task to queue |
 | `executor.map(fn, iterable)` | O(n) | O(n) | Submit all tasks, n = item count |
 | `Future.result()` | O(1) | O(r) | Get result, r = result size |
-| `as_completed(futures)` | O(n log n) | O(n) | Heap-based iteration; yields as each completes |
+| `as_completed(futures)` | O(n log n) | O(n) | Sorts futures by id for lock ordering, then event-based iteration |
 | `wait(futures)` | O(n) | O(n) | Wait for futures |
 | `Executor` creation | O(1) | O(1) | Base class init |
 | `Future` creation | O(1) | O(1) | Pending future |
@@ -185,9 +185,9 @@ executor = ThreadPoolExecutor(max_workers=4)
 # Submit all tasks: O(n)
 futures = [executor.submit(task, i) for i in range(100)]  # O(n)
 
-# Get futures as they complete: O(n log n) for sorting
-# (maintains heap of pending futures)
-for future in as_completed(futures):  # O(n log n) time
+# Get futures as they complete: O(n log n) overall
+# (initial lock-order sorting + event-based waiter)
+for future in as_completed(futures):  # O(n log n) total
     result = future.result()  # O(1) per future
     process(result)
 ```
@@ -293,7 +293,7 @@ def process_with_timeout(items, timeout=30):
         # Submit all: O(n)
         futures = {executor.submit(task, item): item for item in items}
         
-        # Wait with timeout: O(n)
+        # Wait with timeout: O(n log n) overall
         try:
             for future in as_completed(futures, timeout=timeout):  # O(n log n)
                 result = future.result()

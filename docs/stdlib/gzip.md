@@ -153,10 +153,10 @@ import gzip
 data = b'x' * 1000000
 compressed = gzip.compress(data, compresslevel=1)  # Fastest
 
-# Compression level 6 (default): O(n)
+# Compression level 6 (balanced): O(n)
 compressed = gzip.compress(data, compresslevel=6)  # Balanced
 
-# Compression level 9 (best): O(n) but with higher constant factor
+# Compression level 9 (default, best): O(n) but with higher constant factor
 compressed = gzip.compress(data, compresslevel=9)  # Slowest, best ratio
 ```
 
@@ -291,7 +291,7 @@ with gzip.open('text.gz', 'rb') as f:  # 'b' = binary
 ```python
 import gzip
 
-# For streaming: use default (6)
+# For streaming: use default (9)
 # Already optimized for sequential compression
 
 # For one-shot:
@@ -303,7 +303,7 @@ compressed = gzip.compress(data, compresslevel=1)  # Fastest
 # Storage critical: level 9
 compressed = gzip.compress(data, compresslevel=9)  # Best ratio
 
-# Default: level 6 (good balance)
+# Default: level 9 (best compression)
 compressed = gzip.compress(data)
 ```
 

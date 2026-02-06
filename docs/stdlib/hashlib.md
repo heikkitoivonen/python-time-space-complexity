@@ -37,7 +37,7 @@ import hashlib
 data = b"test"
 
 # MD5 - O(n)
-h1 = hashlib.md5(data)  # O(4) - deprecated
+h1 = hashlib.md5(data)  # O(4) - cryptographically broken
 
 # SHA1 - O(n)
 h2 = hashlib.sha1(data)  # O(4)

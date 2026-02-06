@@ -139,14 +139,12 @@ print(stream.tell())  # 6
 # Read from position - O(n)
 print(stream.read())  # "World"
 
-# Seek from end - O(1)
-stream.seek(-5, 2)  # 2 = os.SEEK_END
-print(stream.read())  # "World"
+# Seek to end - O(1)
+stream.seek(0, 2)  # 2 = os.SEEK_END (only offset=0 allowed for text streams)
+print(stream.tell())  # 11
 
-# Seek from current - O(1)
-stream.seek(0)
-stream.read(5)       # Read "Hello"
-stream.seek(1, 1)    # 1 = os.SEEK_CUR
+# Seek to absolute position - O(1)
+stream.seek(6)
 print(stream.read())  # "World"
 ```
 
