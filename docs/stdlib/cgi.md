@@ -1,6 +1,8 @@
 # cgi Module
 
-The `cgi` module provides utilities for parsing CGI (Common Gateway Interface) form data and query strings. This module is deprecated in Python 3.13.
+⚠️ **REMOVED IN PYTHON 3.13**: The `cgi` module was deprecated in Python 3.11 and removed in Python 3.13.
+
+The `cgi` module provides utilities for parsing CGI (Common Gateway Interface) form data and query strings.
 
 ## Complexity Reference
 
@@ -183,10 +185,10 @@ if __name__ == '__main__':
     app.run()
 ```
 
-## Deprecation Notice
+## Removal Notice
 
 ```python
-# ❌ DON'T: Use cgi module (deprecated in 3.13)
+# ❌ DON'T: Use cgi module (removed in 3.13)
 import cgi
 form = cgi.FieldStorage()
 

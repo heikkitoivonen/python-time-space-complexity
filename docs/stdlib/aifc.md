@@ -1,5 +1,7 @@
 # aifc Module
 
+⚠️ **REMOVED IN PYTHON 3.13**: The `aifc` module was deprecated in Python 3.11 and removed in Python 3.13.
+
 The `aifc` module provides support for reading and writing AIFF and AIFF-C audio files.
 
 ## Complexity Reference

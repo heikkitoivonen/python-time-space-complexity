@@ -1,6 +1,8 @@
 # cgitb Module
 
-The `cgitb` module provides a CGI error handler that displays detailed tracebacks in HTML format for debugging CGI scripts. This module is deprecated in Python 3.13.
+⚠️ **REMOVED IN PYTHON 3.13**: The `cgitb` module was deprecated in Python 3.11 and removed in Python 3.13.
+
+The `cgitb` module provides a CGI error handler that displays detailed tracebacks in HTML format for debugging CGI scripts.
 
 ## Complexity Reference
 
@@ -212,10 +214,10 @@ if __name__ == '__main__':
     server.serve_forever()
 ```
 
-## Deprecation Notice
+## Removal Notice
 
 ```python
-# ❌ DON'T: Use cgitb (deprecated in 3.13)
+# ❌ DON'T: Use cgitb (removed in 3.13)
 import cgitb
 cgitb.enable()
 

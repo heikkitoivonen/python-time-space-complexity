@@ -1,5 +1,7 @@
 # pipes Module
 
+⚠️ **REMOVED IN PYTHON 3.13**: The `pipes` module was deprecated in Python 3.11 and removed in Python 3.13.
+
 The `pipes` module provides a way to run shell pipelines from Python, managing command sequences with input/output redirection.
 
 ## Complexity Reference

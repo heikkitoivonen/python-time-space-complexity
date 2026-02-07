@@ -1,12 +1,14 @@
 # xdrlib Module
 
-The `xdrlib` module provides tools for XDR (External Data Representation) serialization, used for network communication (deprecated).
+⚠️ **REMOVED IN PYTHON 3.13**: The `xdrlib` module was deprecated in Python 3.11 and removed in Python 3.13.
+
+The `xdrlib` module provides tools for XDR (External Data Representation) serialization, used for network communication.
 
 ## Complexity Reference
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `Packer()` | O(1) | O(1) | Create packer; deprecated in 3.11+ |
+| `Packer()` | O(1) | O(1) | Create packer (legacy) |
 | Pack data | O(n) | O(n) | n = data size |
 | Unpack data | O(n) | O(n) | n = buffer size |
 

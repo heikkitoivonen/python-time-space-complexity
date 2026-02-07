@@ -1,5 +1,7 @@
 # chunk Module
 
+⚠️ **REMOVED IN PYTHON 3.13**: The `chunk` module was deprecated in Python 3.11 and removed in Python 3.13.
+
 The `chunk` module provides support for reading IFF (Interchange File Format) chunks used by audio files (AIFF, WAV).
 
 ## Complexity Reference

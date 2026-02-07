@@ -1,5 +1,7 @@
 # sunau Module
 
+⚠️ **REMOVED IN PYTHON 3.13**: The `sunau` module was deprecated in Python 3.11 and removed in Python 3.13.
+
 The `sunau` module reads and writes Sun AU audio files, a simple uncompressed audio format.
 
 ## Complexity Reference

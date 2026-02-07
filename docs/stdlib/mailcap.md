@@ -1,5 +1,7 @@
 # mailcap Module
 
+⚠️ **REMOVED IN PYTHON 3.13**: The `mailcap` module was deprecated in Python 3.11 and removed in Python 3.13.
+
 The `mailcap` module reads mailcap files, which define how MIME types should be handled by external applications.
 
 ## Complexity Reference

@@ -1,5 +1,7 @@
 # crypt Module
 
+⚠️ **REMOVED IN PYTHON 3.13**: The `crypt` module was deprecated in Python 3.11 and removed in Python 3.13.
+
 The `crypt` module provides Unix password hashing functionality using the crypt() system call (Unix/Linux only).
 
 ## Complexity Reference

@@ -1,5 +1,7 @@
 # telnetlib Module
 
+⚠️ **REMOVED IN PYTHON 3.13**: The `telnetlib` module was deprecated in Python 3.11 and removed in Python 3.13.
+
 The `telnetlib` module implements a Telnet client for communicating with Telnet servers (legacy, mostly replaced by SSH).
 
 ## Complexity Reference

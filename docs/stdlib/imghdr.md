@@ -1,5 +1,7 @@
 # imghdr Module
 
+⚠️ **REMOVED IN PYTHON 3.13**: The `imghdr` module was deprecated in Python 3.11 and removed in Python 3.13.
+
 The `imghdr` module detects the type of image files by examining their file headers, supporting common formats like PNG, JPEG, GIF, etc.
 
 ## Complexity Reference

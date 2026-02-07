@@ -1,6 +1,8 @@
 # distutils Module
 
-The `distutils` module provides tools for building and distributing Python packages (deprecated in favor of setuptools and modern packaging tools).
+⚠️ **REMOVED IN PYTHON 3.12**: The `distutils` package was deprecated in Python 3.10 and removed in Python 3.12.
+
+The `distutils` module provided tools for building and distributing Python packages.
 
 ## Complexity Reference
 
@@ -14,6 +16,7 @@ The `distutils` module provides tools for building and distributing Python packa
 ### Setup Script
 
 ```python
+# Legacy example (Python <= 3.11)
 from distutils.core import setup
 
 setup(

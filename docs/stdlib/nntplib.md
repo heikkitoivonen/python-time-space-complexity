@@ -1,5 +1,7 @@
 # nntplib Module
 
+⚠️ **REMOVED IN PYTHON 3.13**: The `nntplib` module was deprecated in Python 3.11 and removed in Python 3.13.
+
 The `nntplib` module implements NNTP (Network News Transfer Protocol) client functionality for accessing Usenet newsgroups.
 
 ## Complexity Reference

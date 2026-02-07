@@ -1,5 +1,7 @@
 # uu Module
 
+⚠️ **REMOVED IN PYTHON 3.13**: The `uu` module was deprecated in Python 3.11 and removed in Python 3.13.
+
 The `uu` module provides uuencoding/uudecoding for transmitting binary data over text channels (legacy, rarely used).
 
 ## Complexity Reference
