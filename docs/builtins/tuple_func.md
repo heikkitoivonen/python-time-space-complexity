@@ -9,7 +9,7 @@ The `tuple()` function creates tuples from iterables or creates empty tuples.
 | Empty tuple | O(1) | O(1) | tuple() |
 | From iterable | O(n) | O(n) | n = iterable length |
 | From string | O(n) | O(n) | n = string length |
-| Shallow copy | O(n) | O(n) | n = tuple length |
+| From tuple (exact) | O(1) | O(1) | Returns same object |
 | From list | O(n) | O(n) | Creates new tuple |
 
 ## Basic Usage
@@ -42,7 +42,7 @@ t = tuple("abc")     # ('a', 'b', 'c')
 ```python
 # O(n) - where n = iterable length
 t = tuple((1, 2, 3))         # (1, 2, 3)
-t = tuple({1, 2, 3})         # (1, 2, 3) or unordered
+t = tuple({1, 2, 3})         # Order depends on set iteration
 t = tuple(range(5))          # (0, 1, 2, 3, 4)
 t = tuple(map(str, [1, 2]))  # ('1', '2')
 ```
@@ -52,7 +52,7 @@ t = tuple(map(str, [1, 2]))  # ('1', '2')
 ```python
 # O(n) - uses dict keys
 d = {"a": 1, "b": 2, "c": 3}
-t = tuple(d)  # ('a', 'b', 'c') or unordered - only keys
+t = tuple(d)  # ('a', 'b', 'c') - keys in insertion order
 ```
 
 ## Complexity Details

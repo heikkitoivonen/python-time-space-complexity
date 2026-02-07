@@ -26,9 +26,10 @@ a = 256
 b = 256
 print(a is b)  # True
 
-c = 257
-d = 257
-print(c is d)  # False - different objects created
+# Larger integer identity is implementation/code-path dependent
+c = int("257")
+d = int("257")
+print(c is d)  # Typically False for runtime-created values
 ```
 
 ### List Pre-allocation
@@ -40,7 +41,7 @@ Lists use dynamic arrays with growth factor ~1.125x:
 # This reduces reallocation frequency while managing memory
 ```
 
-### Dict Optimization (Python 3.6+)
+### Dict Optimization (3.6+ in CPython, 3.7+ language guarantee)
 
 ```python
 # Compact dict representation
@@ -51,7 +52,7 @@ d = {}
 d['a'] = 1
 d['b'] = 2
 d['c'] = 3
-# Order guaranteed: a, b, c
+# Insertion order: a, b, c (language guarantee from Python 3.7)
 ```
 
 ## Memory Management

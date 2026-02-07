@@ -6,7 +6,7 @@ The `locals()` function returns a dictionary containing the current local symbol
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `locals()` | O(n) | O(n) | Creates snapshot; n = local variables |
+| `locals()` | O(1) or O(n) | O(1) or O(n) | Module/class scope is O(1); optimized function scopes materialize locals mapping |
 | Access variable | O(1) avg | O(1) | Dict key lookup; O(n) worst case with collisions |
 
 ## Basic Usage
@@ -61,7 +61,7 @@ outer()
 x = 10
 y = 20
 
-# Get module-level locals - O(n)
+# Get module-level locals - O(1)
 local_vars = locals()
 print('x' in local_vars)  # True
 print('y' in local_vars)  # True
@@ -82,7 +82,7 @@ def example():
     print(local_dict)
     # {'local_var': 'local'}
     
-    # globals() - global scope - O(n)
+    # globals() - global scope - O(1)
     global_dict = globals()
     print('global_var' in global_dict)  # True
     print('local_var' in global_dict)   # False
@@ -190,7 +190,7 @@ def func():
     # locals() in function - O(n)
     local_dict = locals()
     
-    # globals() in function - O(n)
+    # globals() in function - O(1)
     global_dict = globals()
     
     # Get specific values - O(1) each

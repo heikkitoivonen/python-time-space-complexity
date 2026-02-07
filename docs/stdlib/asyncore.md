@@ -1,6 +1,6 @@
 # asyncore Module Complexity
 
-⚠️ **DEPRECATED**: The `asyncore` module is deprecated since Python 3.6 and will be removed in Python 3.13. Use `asyncio` instead.
+⚠️ **REMOVED IN PYTHON 3.12**: The `asyncore` module was deprecated since Python 3.6 and removed in Python 3.12. Use `asyncio` instead.
 
 The `asyncore` module provides low-level asynchronous socket operations and an event loop based on the select multiplex I/O mechanism.
 
@@ -13,7 +13,7 @@ The `asyncore` module provides low-level asynchronous socket operations and an e
 | `connect(addr)` | O(1) | O(1) | Connect (non-blocking) |
 | `handle_read()` | O(n) | O(n) | Handle incoming, n = data size |
 | `handle_write()` | O(n) | O(n) | Handle outgoing |
-| `loop(map)` | O(m log m) | O(m) | Main event loop, m = sockets |
+| `loop(map)` | O(m) | O(m) | Main event loop, m = sockets |
 
 ## Creating Dispatchers
 
@@ -102,7 +102,7 @@ class Server(asyncore.dispatcher):
 
 ## Event Loop
 
-### Time Complexity: O(m log m) worst case
+### Time Complexity: O(m) per loop iteration
 
 Where m = number of active connections.
 
@@ -110,14 +110,14 @@ Where m = number of active connections.
 # ⚠️ DEPRECATED
 import asyncore
 
-# Run event loop: O(m log m) per iteration
+# Run event loop: O(m) per iteration
 # m = active connections
 asyncore.loop()  # DEPRECATED!
 
-# With timeout: O(m log m) per iteration
+# With timeout: O(m) per iteration
 asyncore.loop(timeout=1.0)
 
-# Map parameter: O(m log m) per iteration
+# Map parameter: O(m) per iteration
 asyncore.loop(map=custom_map)
 ```
 
@@ -253,7 +253,7 @@ async def main():
 # 4. Hard to debug
 # 5. Limited features
 # 6. No integration with asyncio
-# 7. Will be removed in Python 3.13
+# 7. Removed in Python 3.12
 ```
 
 ## Complexity Comparison
@@ -264,7 +264,7 @@ dispatcher = asyncore.dispatcher()  # O(1)
 dispatcher.create_socket(...)  # O(1)
 dispatcher.connect(addr)  # O(1)
 dispatcher.handle_read()  # O(n)
-asyncore.loop()  # O(m log m) per iteration
+asyncore.loop()  # O(m) per iteration
 
 # asyncio equivalent (MODERN):
 async def handle_client(reader, writer):
@@ -290,7 +290,7 @@ import asyncore
 # Issues:
 # 1. Slower than asyncio (select-based)
 # 2. Less maintainable
-# 3. Will be removed in Python 3.13
+# 3. Removed in Python 3.12
 # 4. Poor error handling
 # 5. Hard to debug (callback-based)
 # 6. Limited scalability (select() has limits)
@@ -355,7 +355,7 @@ async def main():
 - **Python 2.0-2.6**: asyncore introduced
 - **Python 2.7-3.5**: Widely used
 - **Python 3.6+**: Deprecated (use asyncio)
-- **Python 3.13+**: Removed
+- **Python 3.12+**: Removed
 
 ## Related Documentation
 

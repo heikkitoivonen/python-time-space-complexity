@@ -8,7 +8,7 @@ The `min()` function returns the smallest item in an iterable or among multiple 
 |------|------|-------|-------|
 | Single iterable | O(n) | O(1) | Must compare all items |
 | Multiple arguments | O(n) | O(1) | n = number of arguments |
-| With key function | O(n*k) | O(k) | k = key function time; stores key values for comparison |
+| With key function | O(n*k) | O(1) | k = key function time; keeps only current best item/key |
 | Empty iterable | O(1) | O(1) | Raises ValueError unless default provided |
 
 ## Basic Usage
@@ -172,7 +172,7 @@ min([], default=float('inf'))  # Returns infinity if empty
 result = min([42])  # 42
 
 # O(1) - single argument
-result = min(42)  # Still O(n) where n=1
+# result = min(42)  # TypeError: 'int' object is not iterable
 ```
 
 ### Non-Comparable Types

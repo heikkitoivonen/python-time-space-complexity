@@ -1,15 +1,16 @@
 # vars() Function Complexity
 
-The `vars()` function returns the `__dict__` attribute of an object, providing a dictionary of its attributes. It's the fastest way to get all instance attributes.
+The `vars()` function returns the `__dict__` attribute of an object (or `locals()` when called without arguments).
 
 ## Complexity Analysis
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| Get __dict__ | O(1) | O(n) | n = number of attributes |
-| Return reference | O(1) | O(1) | Shallow copy, references same dict |
+| `vars(obj)` | O(1) | O(1) | Returns `obj.__dict__` reference |
+| `vars()` | O(1) or O(n) | O(1) or O(n) | Same as `locals()` in current scope |
+| Get/modify returned mapping | O(1) avg | O(1) | Dict operations; O(n) worst with collisions |
 | Modify returned dict | O(1) | O(1) | Changes affect original object |
-| No dict (modules/classes) | O(n) | O(n) | Returns dict copy or namespace |
+| Object without `__dict__` | O(1) | O(1) | Raises `TypeError` |
 
 ## Basic Usage
 
@@ -29,6 +30,15 @@ attrs = vars(obj)  # {'z': 3}
 
 # Note: class attributes (x, y) not included
 # vars() returns only instance attributes
+```
+
+### No-Argument Form
+
+```python
+# vars() with no argument is equivalent to locals()
+def f():
+    x = 1
+    return vars()  # Scope-dependent: behaves like locals()
 ```
 
 ### Inspect Object State
@@ -133,7 +143,7 @@ inst_attrs = vars(obj)  # {'instance_attr': 20}
 # O(n log n) - all accessible attributes
 all_attrs = dir(obj)  # ['class_attr', 'instance_attr', '__dict__', ...]
 
-# vars() is much faster but includes less
+# vars() is narrower but includes less
 ```
 
 ### vars() vs getattr Loop
@@ -156,7 +166,7 @@ for attr in dir(obj):  # O(n log n)
         attrs[attr] = getattr(obj, attr)  # O(1) each
     except:
         pass
-# Total: O(n²) or worse
+# Total: at least O(n log n), plus attribute access costs
 
 # vars() is much faster
 ```

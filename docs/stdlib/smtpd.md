@@ -1,5 +1,7 @@
 # smtpd Module
 
+⚠️ **REMOVED IN PYTHON 3.12**: The `smtpd` module was deprecated and removed in Python 3.12. Use `aiosmtpd` or another `asyncio`-based server.
+
 The `smtpd` module implements an SMTP server (daemon), allowing you to receive and process email.
 
 ## Complexity Reference
@@ -15,6 +17,7 @@ The `smtpd` module implements an SMTP server (daemon), allowing you to receive a
 ### Simple SMTP Listener
 
 ```python
+# Legacy example (Python <= 3.11)
 import smtpd
 import asyncore
 

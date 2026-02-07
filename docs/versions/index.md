@@ -123,7 +123,7 @@ def add(a: list[int], b: list[int]) -> list[int]:
 # Dictionary operations
 d1 = {'a': 1}
 d2 = {'b': 2}
-d3 = d1 | d2  # {' a': 1, 'b': 2}
+d3 = d1 | d2  # {'a': 1, 'b': 2}
 d1 |= d2  # Update in place
 ```
 
@@ -206,7 +206,8 @@ Python 3.13 → Python 3.14  Better GC pauses, new heapq functions
 | Version | Behavior | Complexity |
 |---------|----------|-----------|
 | 3.5 | Unordered | O(1) lookup |
-| 3.6+ | Ordered | O(1) lookup |
+| 3.6 (CPython) | Ordered (implementation detail) | O(1) lookup |
+| 3.7+ | Ordered (language guarantee) | O(1) lookup |
 | 3.9+ | Optimized | O(1) lookup (faster) |
 
 ### List Operations

@@ -53,19 +53,15 @@ print(id(x) == id(z))  # False - different IDs
 ### Immutable Types
 
 ```python
-# Small integers are cached - same ID
+# In CPython, small integers are cached (implementation detail)
 a = 5
 b = 5
 print(id(a) == id(b))  # True - same cached object
 
-# Larger integers are not cached
-c = 256
-d = 256
-print(id(c) == id(d))  # True - boundary case
-
-e = 257
-f = 257
-print(id(e) == id(f))  # False - different objects!
+# For larger integers, identity behavior is implementation/code-path dependent
+c = int("257")
+d = int("257")
+print(id(c) == id(d))  # Typically False (distinct runtime-created objects)
 
 # String interning (same for equal strings sometimes)
 s1 = "hello"

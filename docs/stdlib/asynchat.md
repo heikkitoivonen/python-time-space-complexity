@@ -1,6 +1,6 @@
 # asynchat Module Complexity
 
-⚠️ **DEPRECATED**: The `asynchat` module is deprecated since Python 3.6 and will be removed in Python 3.13. Use `asyncio` instead.
+⚠️ **REMOVED IN PYTHON 3.12**: The `asynchat` module was deprecated since Python 3.6 and removed in Python 3.12. Use `asyncio` instead.
 
 The `asynchat` module provides asynchronous socket handlers with automatic buffering and line-based protocol support.
 
@@ -273,7 +273,7 @@ import asynchat
 # Issues:
 # 1. Slower than asyncio
 # 2. Less maintainable
-# 3. Will be removed in Python 3.13
+# 3. Removed in Python 3.12
 # 4. Poor error handling
 # 5. Difficult to test
 
@@ -318,7 +318,7 @@ async def main():
 - **Python 2.0-2.6**: asynchat introduced
 - **Python 2.7-3.5**: Widely used
 - **Python 3.6+**: Deprecated (use asyncio)
-- **Python 3.13+**: Removed
+- **Python 3.12+**: Removed
 
 ## Related Documentation
 
