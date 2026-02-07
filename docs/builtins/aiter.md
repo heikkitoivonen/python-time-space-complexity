@@ -37,7 +37,7 @@ asyncio.run(main())
 import asyncio
 
 class AsyncIterable:
-    async def __aiter__(self):
+    def __aiter__(self):
         return AsyncIterator()
 
 class AsyncIterator:

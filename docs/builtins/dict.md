@@ -34,7 +34,7 @@ CPython uses a hash table with:
 - **Hash function**: SipHash13 for `str`/`bytes` (default since Python 3.11); other types use type-specific hashing
 - **Collision handling**: Open addressing with probing
 - **Growth factor**: ~2-4x when load factor exceeded
-- **Python 3.6+**: Insertion order preserved (compact dict design)
+- **Python 3.6 (CPython)**: Compact dict preserves insertion order as an implementation detail
 
 ### Hash Collision Impact
 
@@ -50,7 +50,7 @@ value = d[500]  # O(1)
 ### Insertion Order Guarantee
 
 ```python
-# Python 3.6+ guarantees insertion order
+# Python 3.7+ guarantees insertion order (language guarantee)
 d = {}
 d['a'] = 1
 d['b'] = 2
@@ -62,7 +62,8 @@ d['c'] = 3
 
 | Version | Change |
 |---------|--------|
-| Python 3.6+ | Insertion order preserved |
+| Python 3.6 | CPython compact dict preserves insertion order (implementation detail) |
+| Python 3.7+ | Insertion order guaranteed by language spec |
 | Python 3.9+ | Dict merge & update operators (`\|`, `\|=`) |
 | Python 3.10+ | Pattern matching with dicts |
 | Python 3.11+ | 23% smaller when all keys are Unicode strings |
@@ -91,7 +92,7 @@ Similar hash table implementation as CPython.
 
 ❌ **Avoid**:
 
-- Don't rely on order in Python < 3.6
+- Don't rely on insertion order in Python < 3.7 for portable behavior
 - Unhashable types as keys (lists, dicts, sets)
 - Extremely large dicts with poor hash functions
 

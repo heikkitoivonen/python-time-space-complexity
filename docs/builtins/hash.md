@@ -6,8 +6,9 @@ The `hash()` function returns the hash value of an object, which is used by dict
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `hash(object)` | O(k) | O(1) | k = object size for strings/tuples; O(1) for int/float |
-| Hash of int/float | O(1) | O(1) | Fixed-size representation |
+| `hash(object)` | O(k) | O(1) | k depends on object representation and type |
+| Hash of int | O(1) compact, O(m) large | O(1) | m = number of internal integer digits |
+| Hash of float | O(1) | O(1) | Fixed-size floating representation |
 | Hash of string | O(n) | O(1) | n = string length; cached after first call |
 | Hash of tuple | O(n) | O(1) | n = tuple length, combines element hashes |
 | Hash of mutable | Error | - | e.g., list, dict, set (unhashable) |
@@ -20,7 +21,7 @@ The `hash()` function returns the hash value of an object, which is used by dict
 
 ```python
 # Hash immutable types
-hash(42)                    # O(1) - integer hashing is constant time
+hash(42)                    # O(1) - compact integer
 hash(3.14)                  # O(1) - float hashing is constant time
 hash("hello")               # O(n) first call, O(1) cached - string length
 hash((1, 2, 3))            # O(n) - tuple size, hashes each element
@@ -126,7 +127,7 @@ h2 = hash("hello")  # Different value (secure)
 
 ```python
 # Different values can have same hash (collision)
-# Dictionaries handle this with probing or chaining
+# CPython dictionaries handle this with open addressing + probing
 
 # Example: hash collision (rare)
 # If hash(obj1) == hash(obj2), dict stores both
@@ -196,15 +197,15 @@ class BadClass:
         return self.value == other.value
     
     def __hash__(self):
-        return 42  # Wrong! Not based on value
+        return id(self)  # Wrong for this __eq__: equal objects may hash differently
 
-# Rule violated: equal objects don't have equal hashes
+# Rule violated: equal objects can have different hashes
 a = BadClass(5)
 b = BadClass(5)
 assert a == b  # True
-assert hash(a) == hash(b)  # True (both 42) but coincidence!
+print(hash(a), hash(b))  # Typically different values
 d = {a: 1}
-d[b] += 1  # Oops, creates new key instead of updating!
+d[b] = 2  # Separate entry despite equality contract
 ```
 
 ## Hashing Different Types
@@ -216,7 +217,7 @@ d[b] += 1  # Oops, creates new key instead of updating!
 hash(None)             # O(1) - special case
 hash(True)             # O(1) - boolean
 hash(42)               # O(1) - small integer
-hash(12345678901234)   # O(1) - large integer  
+hash(12345678901234)   # O(1) for compact integer values
 hash(3.14)             # O(1) - float
 hash("hello")          # O(5) - string length
 hash(b"hello")         # O(5) - bytes length
@@ -227,7 +228,7 @@ hash(frozenset([1,2])) # O(2) - frozenset size
 ### Integers
 
 ```python
-# Integer hashing - O(1)
+# Integer hashing - O(1) for compact ints, O(m) for very large ints
 hash(0)      # 0
 hash(1)      # 1
 hash(-1)     # -2
@@ -238,7 +239,7 @@ hash(256)    # 256
 
 # Large integers
 big = 10**100
-hash(big)  # O(1) due to Python's optimization
+hash(big)  # O(m), m = number of internal digits
 ```
 
 ### Strings
@@ -272,23 +273,21 @@ except TypeError:
 
 ## Using Hash for Caching
 
-### Memoization with Hash
+### Memoization with Hashable Keys
 
 ```python
-# Cache expensive computation using hash
+# Cache expensive computation with the full key object
 cache = {}
 
 def expensive_function(arg):
-    key = hash(arg)  # O(k) for hashing
-    
-    if key in cache:  # O(1) lookup
-        return cache[key]
+    if arg in cache:  # O(1) average lookup; hashing handled by dict
+        return cache[arg]
     
     result = do_expensive_work(arg)  # Slow
-    cache[key] = result  # O(1) store
+    cache[arg] = result  # O(1) average store
     return result
 
-# Multiple calls with same hash are instant
+# Multiple calls with same argument are fast
 result1 = expensive_function(("data", 1))  # Computed
 result2 = expensive_function(("data", 1))  # From cache O(1)
 ```
@@ -318,7 +317,7 @@ unique = set(tuple(d) for d in data)  # O(n)
 # Python mitigates this with:
 # 1. Good hash functions
 # 2. Randomized hashing (Python 3.3+)
-# 3. Open addressing or chaining
+# 3. Open addressing with probing (CPython)
 
 # You shouldn't encounter O(n) in practice
 d = {}
@@ -346,8 +345,8 @@ class Efficient:
 
 # With 1000 unique objects:
 s = {Efficient(i) for i in range(1000)}
-# Each insertion: O(1) hash, then O(1) equality
-# Total: O(1000) insertions, each O(1) if no collisions
+# Constant hash causes many collisions:
+# insertion can degrade significantly (toward O(n^2) total build time)
 ```
 
 ## Avoiding Hashing
@@ -375,7 +374,7 @@ s = {frozenset([3, 4])}  # Works
 
 - **Python 2.x**: Different hash implementation
 - **Python 3.3+**: Hash randomization for security
-- **All versions**: Hash of immutable types is stable
+- **All versions**: equal objects must hash equally; hash values for str/bytes vary across processes
 
 ## Related Functions
 

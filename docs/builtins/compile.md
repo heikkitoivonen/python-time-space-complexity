@@ -135,11 +135,11 @@ result2 = eval(code_obj, {"x": 5, "y": 10})  # 15
 ## Compilation with Optimization
 
 ```python
-# O(n) - optimize flag (Python 2 feature, deprecated in 3)
-# Python 3 ignores optimize parameter
-
-# In Python 3, compile is always well-optimized
-code = compile("x = 1", "<string>", "exec", optimize=-1)
+# O(n) - optimize is active in Python 3
+# optimize=-1 (inherit), 0 (no optimization), 1, or 2
+code_default = compile("x = 1", "<string>", "exec", optimize=-1)
+code_o1 = compile("assert x > 0", "<string>", "exec", optimize=1)
+code_o2 = compile("def f():\n    'doc'\n    return 1", "<string>", "exec", optimize=2)
 ```
 
 ## Error Handling

@@ -26,7 +26,7 @@ async def async_generator():
 async def main():
     async_iter = aiter(async_generator())
     
-    # Get next item - O(n)
+    # Get next item - O(k) where k = async iterator work for this step
     value = await anext(async_iter)
     print(value)  # 0
     
@@ -52,7 +52,7 @@ async def main():
     print(await anext(async_iter))  # 1
     print(await anext(async_iter))  # 2
     
-    # Default when exhausted - O(n)
+    # Default when exhausted - O(1) once iterator is exhausted
     value = await anext(async_iter, "END")
     print(value)  # "END"
 
@@ -73,7 +73,7 @@ async def main():
     print(await anext(async_iter))  # 1
     
     try:
-        # No default - raises StopAsyncIteration - O(n)
+        # No default - raises StopAsyncIteration when exhausted (O(1) at exhaustion)
         print(await anext(async_iter))
     except StopAsyncIteration:
         print("Iterator exhausted")
@@ -95,7 +95,7 @@ async def main():
     # Create async iterator - O(1)
     iterator = aiter(fetch_items(["a", "b", "c"]))
     
-    # Get items manually - O(n) each
+    # Get items manually - O(k) each where k depends on iterator body
     first = await anext(iterator)
     print(f"First: {first}")  # First: a
     

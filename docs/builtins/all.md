@@ -44,16 +44,17 @@ result = all(x > 2 for x in numbers)  # False - stops at 1
 
 ```python
 # ✅ O(1) - stops immediately at first falsy
-result = all([False, expensive_function(), expensive_function()])
-# Doesn't call expensive_function()
+checks = [lambda: False, expensive_function, expensive_function]
+result = all(check() for check in checks)
+# expensive_function() is never called
 
 # ❌ O(n) - evaluates all
 result = all([False] + [expensive_function() for _ in range(1000)])
 # Calls expensive_function() 1000 times
 
-# ✅ O(1) - generator stops early
-result = all(x > 0 for x in range(1000000) if x < 0)
-# Stops immediately when x < 0 is False
+# ✅ O(k) - generator stops when predicate first fails
+result = all(x < 100 for x in range(1000000))
+# Stops after checking 100 items
 ```
 
 ### Generator Efficiency

@@ -7,10 +7,10 @@ The `dict()` function creates dictionaries from various sources.
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
 | Empty dict | O(1) | O(1) | dict() |
-| From keyword arguments | O(n) | O(n) | n = number of kwargs |
-| From list of pairs | O(n) | O(n) | n = number of pairs |
-| From another dict | O(n) | O(n) | n = dict size |
-| From iterable of pairs | O(n) | O(n) | n = number of pairs |
+| From keyword arguments | O(n) avg, O(n^2) worst | O(n) | n = number of kwargs |
+| From list of pairs | O(n) avg, O(n^2) worst | O(n) | n = number of pairs |
+| From another dict | O(n) avg, O(n^2) worst | O(n) | n = dict size |
+| From iterable of pairs | O(n) avg, O(n^2) worst | O(n) | n = number of pairs |
 
 ## Basic Usage
 
@@ -84,14 +84,13 @@ d = dict(pairs)  # O(4) - hash and store each pair
 ### Collision Handling
 
 ```python
-# O(n) - collisions don't affect overall complexity
-# Even with hash collisions, dict() is still O(n)
+# Average case: O(n)
+# Pathological collisions can degrade construction toward O(n^2)
 
-# worst case - all keys hash to same value
-# Still O(n) due to Python's implementation
+# Worst case: many keys map to the same hash/probe sequence
 
 pairs = [(i, i*10) for i in range(1000)]
-d = dict(pairs)  # O(1000) - even with collisions
+d = dict(pairs)  # O(n) average
 ```
 
 ### Keyword Arguments

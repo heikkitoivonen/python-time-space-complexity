@@ -7,7 +7,7 @@ The `globals()` and `locals()` functions return dictionary representations of th
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `globals()` | O(1) | O(1) | Returns reference to existing global dict |
-| `locals()` | O(m) | O(m) | Creates snapshot copy; m = number of local vars |
+| `locals()` | O(1) or O(m) | O(1) or O(m) | Module/class scope is O(1); optimized function scopes materialize locals mapping |
 | Accessing dict value | O(1) avg | O(1) | Dict key lookup; O(n) worst case with collisions |
 
 ## Understanding Namespaces
@@ -54,7 +54,7 @@ x = 10
 y = 20
 z = 30
 
-all_vars = globals()  # O(n)
+all_vars = globals()  # O(1)
 
 # Filter variables (not functions/modules) - O(n)
 my_vars = {k: v for k, v in all_vars.items() 
@@ -113,7 +113,7 @@ caller()
 ### Module Level
 
 ```python
-# At module level, locals() == globals() - O(n)
+# At module level, locals() == globals() - O(1)
 X = 100
 
 print(locals() is globals())  # True at module level
@@ -249,7 +249,7 @@ print(task())
 ### Configuration Registry
 
 ```python
-# Use globals() as simple registry - O(n)
+# Use globals() as simple registry - O(1) per lookup/update
 CONFIG = {}
 
 def register_config(name, value):
@@ -286,13 +286,16 @@ for i in range(1000):
 ### Large Namespaces
 
 ```python
-# Many variables = expensive globals() call - O(n)
-# In interactive session with many variables
+# globals() remains O(1) regardless of namespace size
+# Iterating over the returned dict is O(n)
 for i in range(10000):
     globals()[f'var_{i}'] = i  # O(1) each
 
-# Now globals() is O(10000)
-g = globals()  # Slower!
+# Still O(1): returns the same global dict object
+g = globals()
+
+# Iteration scales with number of entries - O(n)
+names = [k for k in g if k.startswith("var_")]
 
 # Prefer dict for custom data
 my_data = {}
@@ -347,13 +350,14 @@ print(obj.x)  # 10
 ## Debugging with Frame Inspection
 
 ```python
-import sys
+import inspect
 
 def get_caller_info():
     """Get information about calling function"""
-    frame = sys.exc_info()[2]  # O(1)
+    current = inspect.currentframe()  # O(1)
+    frame = current.f_back if current is not None else None  # O(1)
     if frame is None:
-        frame = sys.gettrace().f_back  # O(1)
+        return None
     
     # Access caller's locals - O(m)
     locals_dict = frame.f_locals
@@ -373,7 +377,7 @@ def example():
 
 - **Python 2.x**: Same behavior
 - **Python 3.x**: Same behavior
-- **All versions**: O(1) for globals() (returns reference), O(m) for locals() (creates copy)
+- **All versions**: `globals()` is O(1); `locals()` semantics are scope- and implementation-dependent
 
 ## Related Functions
 
@@ -386,14 +390,12 @@ def example():
 ✅ **Do**:
 
 - Use `globals()` for metaprogramming when needed
-- Cache globals() if calling multiple times
 - Use inspect module for reflection
 - Be explicit about variable scope
 
 ❌ **Avoid**:
 
 - Relying on locals() to set variables in functions
-- Calling globals() in loops (cache it)
 - Modifying globals() at module level (confusing)
 - Using globals()/locals() instead of proper parameters
 - Assuming locals() state persists after function returns

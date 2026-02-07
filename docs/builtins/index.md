@@ -44,14 +44,14 @@ Some operations like `list.append()` have **amortized O(1)** complexity. This me
 CPython uses:
 
 - **Lists**: Dynamic arrays with over-allocation
-- **Dicts**: Hash tables with open addressing (Python 3.6+)
+- **Dicts**: Hash tables with open addressing
 - **Sets**: Hash tables (similar to dicts)
 
 ## Version Notes
 
 Different Python versions have optimizations:
 
-- **Python 3.6+**: Dict insertion order guaranteed
+- **Python 3.7+**: Dict insertion order guaranteed (language spec)
 - **Python 3.9+**: New dict implementation improvements
 - **Python 3.10+**: Additional optimizations for common operations
 

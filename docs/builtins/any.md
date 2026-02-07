@@ -45,8 +45,9 @@ result = any(x > 2 for x in numbers)  # True - stops at 3 (index 2)
 
 ```python
 # ✅ O(1) - stops immediately at first truthy
-result = any([True, expensive_function(), expensive_function()])
-# Doesn't call expensive_function()
+checks = [lambda: True, expensive_function, expensive_function]
+result = any(check() for check in checks)
+# expensive_function() is never called
 
 # ❌ O(n) - evaluates all
 result = any([True] + [expensive_function() for _ in range(1000)])
