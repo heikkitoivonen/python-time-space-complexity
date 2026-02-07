@@ -2,6 +2,12 @@
 
 Welcome to the comprehensive guide for Python operation complexity. This resource documents the time and space complexity of Python's built-in operations, standard library functions, and their behavior across different Python versions and implementations.
 
+## Who This Is For
+
+This reference is designed for **Python developers** who want to write efficient code and make informed choices about data structures and algorithms. It's also a valuable resource for **computer science students** studying algorithms and data structures, and for **engineers preparing for technical interviews** where complexity analysis is commonly tested.
+
+This is **not** a Python tutorial or an introduction to Big-O notation. We assume you're already familiar with Python basics and have a general understanding of time and space complexity concepts.
+
 ## Quick Start
 
 - **[Built-in Types](builtins/index.md)** - Complexity analysis for lists, dicts, sets, strings, and tuples
