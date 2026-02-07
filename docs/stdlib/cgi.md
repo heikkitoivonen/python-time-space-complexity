@@ -18,7 +18,6 @@ The `cgi` module provides utilities for parsing CGI (Common Gateway Interface) f
 ### Query String Parsing
 
 ```python
-import cgi
 from urllib.parse import parse_qs, parse_qsl
 
 # Modern approach (use urllib.parse instead)
@@ -97,7 +96,8 @@ def main():
     name = form.getvalue('name', 'Guest')
     
     # Generate response
-    print(f"<h1>Hello, {cgi.escape(name)}!</h1>")
+    from html import escape
+    print(f"<h1>Hello, {escape(name)}!</h1>")
 
 if __name__ == "__main__":
     main()
@@ -202,6 +202,6 @@ form = cgi.FieldStorage()
 ## Related Modules
 
 - [urllib.parse Module](urllib.md) - URL parsing and encoding
-- [html Module](#) - HTML utilities
+- [html Module](html.md) - HTML utilities
 - [urllib.request Module](urllib.md) - URL requests
 - [wsgiref Module](wsgiref.md) - WSGI reference implementation

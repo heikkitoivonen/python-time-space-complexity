@@ -1,8 +1,10 @@
 # sndhdr Module
 
-The `sndhdr` module identifies the format of sound files and returns information about sound file headers. This module is deprecated and removed in Python 3.13.
+⚠️ **REMOVED IN PYTHON 3.13**: The `sndhdr` module was deprecated in Python 3.11 and removed in Python 3.13.
 
-## Deprecation Notice
+The `sndhdr` module identified the format of sound files and returned information about sound file headers.
+
+## Removal Notice
 
 ```python
 # ❌ DON'T: Use sndhdr (deprecated, removed in 3.13)
@@ -14,7 +16,6 @@ info = sndhdr.what('sound.au')
 # - soundfile library
 # - audioread library
 # - wave module (for WAV files)
-# - sunau module (for AU files)
 ```
 
 ## Complexity Reference
@@ -74,37 +75,6 @@ def inspect_wav(filepath):
 info = inspect_wav('audio.wav')
 print(f"Duration: {info['duration']:.2f} seconds")
 print(f"Sample rate: {info['sample_rate']} Hz")
-```
-
-### Using sunau Module (Built-in)
-
-```python
-# ✅ RECOMMENDED: Use sunau for AU files
-import sunau
-
-def inspect_au(filepath):
-    """
-    Inspect AU sound file header.
-    
-    Time: O(1)
-    Space: O(1)
-    """
-    with sunau.open(filepath, 'rb') as f:
-        # Get parameters - O(1)
-        (channels, sample_width, sample_rate, nframes, compression, compression_name) = f.getparams()
-        
-        return {
-            'channels': channels,
-            'sample_width': sample_width,
-            'sample_rate': sample_rate,
-            'frames': nframes,
-            'compression': compression_name,
-            'duration': nframes / sample_rate if sample_rate > 0 else 0
-        }
-
-info = inspect_au('audio.au')
-print(f"Compression: {info['compression']}")
-print(f"Duration: {info['duration']:.2f} seconds")
 ```
 
 ### Using scipy (Third-party)
@@ -195,7 +165,7 @@ def inspect_sound(filepath):
 
 ```python
 import wave
-import sunau
+import soundfile as sf
 from pathlib import Path
 
 def inspect_sound(filepath):
@@ -219,19 +189,15 @@ def inspect_sound(filepath):
                 'frames': params.nframes
             }
     
-    elif suffix == '.au':
-        with sunau.open(filepath, 'rb') as f:
-            params = f.getparams()
-            return {
-                'format': 'AU',
-                'channels': params.nchannels,
-                'sample_width': params.sampwidth,
-                'sample_rate': params.framerate,
-                'frames': params.nframes
-            }
-    
-    else:
-        raise ValueError(f"Unsupported format: {suffix}")
+    # Fallback for other audio formats (including .au, if supported)
+    info = sf.info(filepath)
+    return {
+        'format': info.format,
+        'channels': info.channels,
+        'sample_width': None,
+        'sample_rate': info.samplerate,
+        'frames': info.frames,
+    }
 
 # Usage
 info = inspect_sound('audio.wav')
@@ -241,7 +207,6 @@ print(f"Sample rate: {info['sample_rate']} Hz")
 
 ## Related Modules
 
-- [wave Module](#) - WAV file handling
-- [sunau Module](sunau.md) - AU file handling
+- [wave Module](wave.md) - WAV file handling
 - [aifc Module](aifc.md) - AIFF audio handling
 - [struct Module](struct.md) - Binary data parsing

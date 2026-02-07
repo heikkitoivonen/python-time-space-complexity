@@ -323,6 +323,6 @@ async def main():
 ## Related Documentation
 
 - [asyncio Module](asyncio.md) - **USE THIS INSTEAD**
-- [asyncore Module](asyncore.md) - Also deprecated
+- [asyncore Module](asyncore.md) - Also removed in 3.12
 - [socket Module](socket.md) - Low-level sockets
 - [concurrent.futures Module](concurrent_futures.md) - Alternative for concurrency

@@ -1,8 +1,10 @@
 # imp Module
 
-The `imp` module provides functions for importing modules. This module is deprecated since Python 3.4 and removed in Python 3.12.
+⚠️ **REMOVED IN PYTHON 3.12**: The `imp` module was deprecated since Python 3.4 and removed in Python 3.12.
 
-## Deprecation Notice
+The `imp` module provided functions for importing modules.
+
+## Removal Notice
 
 ```python
 # ❌ DON'T: Use imp module (deprecated, removed in 3.12)
@@ -223,5 +225,5 @@ print(config.DATABASE_URL)
 
 - [importlib Module](importlib.md) - Modern import machinery
 - [sys Module](sys.md) - System module list
-- [importlib.util Module](#) - Utility functions
+- [importlib Module](importlib.md) - Utility functions (`importlib.util`)
 - [pathlib Module](pathlib.md) - File path handling

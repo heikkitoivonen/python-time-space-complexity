@@ -1,6 +1,8 @@
 # lib2to3 Module
 
-The `lib2to3` module provides tools for converting Python 2 code to Python 3, using a refactoring framework with syntax tree transformations.
+⚠️ **REMOVED IN PYTHON 3.13**: The `lib2to3` module and `2to3` tool were deprecated in Python 3.11 and removed in Python 3.13.
+
+The `lib2to3` module provided tools for converting Python 2 code to Python 3, using a refactoring framework with syntax tree transformations.
 
 ## Complexity Reference
 
@@ -15,7 +17,7 @@ The `lib2to3` module provides tools for converting Python 2 code to Python 3, us
 ### Using 2to3 Tool
 
 ```bash
-# Command-line usage
+# Legacy command-line usage (Python <= 3.12)
 2to3 -w script.py          # Convert in place
 2to3 -d script.py          # Dry run (show diffs)
 2to3 -f all script.py      # Apply all fixers
@@ -25,6 +27,7 @@ The `lib2to3` module provides tools for converting Python 2 code to Python 3, us
 ### Programmatic Conversion
 
 ```python
+# Legacy API usage (Python <= 3.12)
 from lib2to3 import refactor
 
 # Create refactoring tool - O(1)

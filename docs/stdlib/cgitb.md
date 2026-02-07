@@ -231,7 +231,7 @@ cgitb.enable()
 ## Best Practices
 
 ```python
-# ✅ DO: Use error handling in development
+# ✅ Legacy only (Python <= 3.12): use cgitb in development
 import cgitb
 cgitb.enable()  # Use only in development
 
@@ -253,4 +253,4 @@ print("<p>An error occurred. Please try again later.</p>")
 - [logging Module](logging.md) - Error logging
 - [traceback Module](traceback.md) - Traceback handling
 - [sys Module](sys.md) - System information
-- [html Module](#) - HTML utilities
+- [html Module](html.md) - HTML utilities

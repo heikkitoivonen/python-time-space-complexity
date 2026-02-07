@@ -345,7 +345,7 @@ async def main():
 
 # asyncio event loop (MODERN):
 # - Uses best available: epoll/kqueue/IOCP
-# - O(log m) to check ready sockets
+# - Readiness handling is implementation-dependent (not a simple O(log m) rule)
 # - Scales to thousands of connections
 # - Coroutine-based (async/await)
 ```
@@ -360,6 +360,6 @@ async def main():
 ## Related Documentation
 
 - [asyncio Module](asyncio.md) - **USE THIS INSTEAD**
-- [asynchat Module](asynchat.md) - Also deprecated
+- [asynchat Module](asynchat.md) - Also removed in 3.12
 - [selectors Module](selectors.md) - Low-level multiplexed I/O
 - [socket Module](socket.md) - Low-level sockets
