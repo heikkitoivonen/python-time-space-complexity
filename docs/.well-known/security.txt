@@ -1,0 +1,4 @@
+Contact: https://github.com/heikkitoivonen/python-time-space-complexity/security/advisories/new
+Expires: 2027-02-08T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://pythoncomplexity.com/.well-known/security.txt
