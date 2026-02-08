@@ -1,0 +1,84 @@
+# Python Time & Space Complexity
+
+> Comprehensive documentation of time and space complexity for Python built-in operations and standard library modules.
+
+This site documents the Big-O time and space complexity of Python operations across built-in types, built-in functions, and standard library modules. It covers CPython 3.9–3.14, with notes on PyPy, Jython, and IronPython.
+
+## Built-in Types
+
+- [Lists](https://pythoncomplexity.com/builtins/list/): Time and space complexity for list operations (append, insert, pop, sort, slicing, etc.)
+- [Dictionaries](https://pythoncomplexity.com/builtins/dict/): Complexity for dict operations (lookup, insert, delete, iteration)
+- [Sets](https://pythoncomplexity.com/builtins/set/): Complexity for set operations (membership, union, intersection, difference)
+- [Tuples](https://pythoncomplexity.com/builtins/tuple/): Complexity for tuple operations (indexing, slicing, membership)
+- [Strings](https://pythoncomplexity.com/builtins/str/): Complexity for string operations (find, replace, split, join, slicing)
+- [Bytes & Bytearray](https://pythoncomplexity.com/builtins/bytes/): Complexity for bytes and bytearray operations
+- [Frozenset](https://pythoncomplexity.com/builtins/frozenset/): Complexity for frozenset operations
+- [Range](https://pythoncomplexity.com/builtins/range/): Complexity for range operations (O(1) membership testing)
+- [Integer](https://pythoncomplexity.com/builtins/int/): Complexity for arbitrary-precision integer arithmetic
+- [Float](https://pythoncomplexity.com/builtins/float/): Complexity for floating-point operations
+- [Boolean](https://pythoncomplexity.com/builtins/bool/): Complexity for boolean operations
+
+## Built-in Functions
+
+- [len()](https://pythoncomplexity.com/builtins/len/): O(1) for built-in types
+- [sorted()](https://pythoncomplexity.com/builtins/sorted/): O(n log n) Timsort
+- [max()](https://pythoncomplexity.com/builtins/max/): O(n) linear scan
+- [min()](https://pythoncomplexity.com/builtins/min/): O(n) linear scan
+- [sum()](https://pythoncomplexity.com/builtins/sum/): O(n) accumulation
+- [map()](https://pythoncomplexity.com/builtins/map/): Lazy O(1) per element
+- [filter()](https://pythoncomplexity.com/builtins/filter/): Lazy O(1) per element
+- [zip()](https://pythoncomplexity.com/builtins/zip/): Lazy O(1) per element
+- [enumerate()](https://pythoncomplexity.com/builtins/enumerate/): Lazy O(1) per element
+- [reversed()](https://pythoncomplexity.com/builtins/reversed/): O(1) iterator creation
+- [all()](https://pythoncomplexity.com/builtins/all/): O(n) short-circuit
+- [any()](https://pythoncomplexity.com/builtins/any/): O(n) short-circuit
+- [hash()](https://pythoncomplexity.com/builtins/hash/): Varies by type
+- [isinstance()](https://pythoncomplexity.com/builtins/isinstance/): O(n) MRO lookup
+
+## Standard Library (Key Modules)
+
+- [collections](https://pythoncomplexity.com/stdlib/collections/): Container datatypes (deque, Counter, OrderedDict, defaultdict, namedtuple, ChainMap)
+- [collections.deque](https://pythoncomplexity.com/stdlib/deque/): O(1) append/pop from both ends
+- [collections.Counter](https://pythoncomplexity.com/stdlib/counter/): Counting and multiset operations
+- [collections.defaultdict](https://pythoncomplexity.com/stdlib/defaultdict/): Dict with default factory
+- [collections.OrderedDict](https://pythoncomplexity.com/stdlib/ordereddict/): Insertion-ordered dict with O(1) move_to_end
+- [collections.namedtuple](https://pythoncomplexity.com/stdlib/namedtuple/): Lightweight named tuples
+- [heapq](https://pythoncomplexity.com/stdlib/heapq/): O(log n) push/pop, O(n) heapify
+- [bisect](https://pythoncomplexity.com/stdlib/bisect/): O(log n) binary search, O(n) insertion
+- [itertools](https://pythoncomplexity.com/stdlib/itertools/): Lazy iterator combinatorics
+- [functools](https://pythoncomplexity.com/stdlib/functools/): Higher-order functions (lru_cache, reduce, partial)
+- [re](https://pythoncomplexity.com/stdlib/re/): Regular expression complexity
+- [json](https://pythoncomplexity.com/stdlib/json/): JSON encoding/decoding complexity
+- [datetime](https://pythoncomplexity.com/stdlib/datetime/): Date/time operations
+- [math](https://pythoncomplexity.com/stdlib/math/): Mathematical functions
+- [hashlib](https://pythoncomplexity.com/stdlib/hashlib/): Cryptographic hash functions
+- [pathlib](https://pythoncomplexity.com/stdlib/pathlib/): Filesystem path operations
+- [sqlite3](https://pythoncomplexity.com/stdlib/sqlite3/): SQLite database operations
+- [difflib](https://pythoncomplexity.com/stdlib/difflib/): Sequence comparison (SequenceMatcher, unified_diff)
+- [copy](https://pythoncomplexity.com/stdlib/copy/): Shallow and deep copy complexity
+- [array](https://pythoncomplexity.com/stdlib/array/): Typed array operations
+- [queue](https://pythoncomplexity.com/stdlib/queue/): Thread-safe queue implementations
+- [decimal](https://pythoncomplexity.com/stdlib/decimal/): Arbitrary-precision decimal arithmetic
+- [graphlib](https://pythoncomplexity.com/stdlib/graphlib/): Topological sorting
+- [operator](https://pythoncomplexity.com/stdlib/operator/): Function versions of operators
+- [random](https://pythoncomplexity.com/stdlib/random/): Random number generation
+- [statistics](https://pythoncomplexity.com/stdlib/statistics/): Statistical functions
+- [string](https://pythoncomplexity.com/stdlib/string/): String constants and templates
+- [struct](https://pythoncomplexity.com/stdlib/struct/): Binary data packing/unpacking
+- [typing](https://pythoncomplexity.com/stdlib/typing/): Type hint support
+
+## Python Implementations
+
+- [CPython](https://pythoncomplexity.com/implementations/cpython/): Reference implementation details
+- [PyPy](https://pythoncomplexity.com/implementations/pypy/): JIT-compiled implementation differences
+- [Jython](https://pythoncomplexity.com/implementations/jython/): JVM-based implementation differences
+- [IronPython](https://pythoncomplexity.com/implementations/ironpython/): .NET-based implementation differences
+
+## Python Versions
+
+- [Python 3.14](https://pythoncomplexity.com/versions/py314/): Complexity changes in 3.14
+- [Python 3.13](https://pythoncomplexity.com/versions/py313/): Complexity changes in 3.13
+- [Python 3.12](https://pythoncomplexity.com/versions/py312/): Complexity changes in 3.12
+- [Python 3.11](https://pythoncomplexity.com/versions/py311/): Complexity changes in 3.11
+- [Python 3.10](https://pythoncomplexity.com/versions/py310/): Complexity changes in 3.10
+- [Python 3.9](https://pythoncomplexity.com/versions/py39/): Complexity changes in 3.9
