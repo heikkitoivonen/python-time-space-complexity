@@ -103,67 +103,6 @@ if x < y + 0.001:       # O(1)
     pass
 ```
 
-## Precision and Limitations
-
-### Fixed 64-bit Precision
-
-```python
-# IEEE 754 double precision (64 bits)
-# - 1 sign bit
-# - 11 exponent bits (range ~10^-308 to 10^308)
-# - 52 mantissa bits (~15-17 decimal digits precision)
-
-x = 0.1 + 0.2
-print(x == 0.3)  # False! Precision loss
-
-# Representation
-print(f"{x:.20f}")  # 0.30000000000000004443
-```
-
-### Avoiding Precision Issues
-
-```python
-from decimal import Decimal
-
-# Use Decimal for financial calculations
-price = Decimal('0.10')
-tax = Decimal('0.20')
-total = price + tax  # Exact: 0.30
-
-# Use math.isclose for float comparisons
-import math
-x = 0.1 + 0.2
-if math.isclose(x, 0.3):  # Accounts for precision
-    print("Equal within tolerance")
-```
-
-## Special Float Values
-
-| Value | Representation | Notes |
-|-------|-----------------|-------|
-| Positive infinity | `float('inf')` | Larger than any number |
-| Negative infinity | `float('-inf')` | Smaller than any number |
-| Not a Number | `float('nan')` | Unordered, `nan != nan` |
-| Zero | `0.0` or `-0.0` | Two representations |
-
-```python
-import math
-
-x = float('inf')
-y = float('nan')
-
-# Infinity operations
-print(x + 100)          # inf
-print(x - x)            # nan (indeterminate)
-print(x / x)            # nan
-
-# NaN behavior - unordered
-print(math.isnan(y))    # True
-print(y == y)           # False (NaN != NaN always)
-print(y < 5)            # False (unordered)
-print(y > 5)            # False (unordered)
-```
-
 ## Performance Characteristics
 
 ### Fixed-size Operations
@@ -211,20 +150,6 @@ for i in range(1000000):
 - **Complex** - Complex floating-point numbers
 - **[Decimal](../stdlib/decimal.md)** - Arbitrary precision decimal
 - **[Fraction](../stdlib/fractions.md)** - Rational numbers
-
-## Best Practices
-
-✅ **Do**:
-
-- Use `float` for general numerical computation
-- Use `math.isclose()` for float comparisons
-- Use `round()` for display, not comparison
-
-❌ **Avoid**:
-
-- Comparing floats with `==` directly
-- Assuming decimal representation is exact
-- Using floats for financial calculations (use `Decimal`)
 
 ## Further Reading
 

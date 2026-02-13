@@ -172,7 +172,7 @@ for word in words:
 result = "".join(words)
 
 # Also good: list comprehension with join
-result = "".join(w.upper() for w in words)
+result = "".join([w.upper() for w in words])
 ```
 
 ### String Formatting

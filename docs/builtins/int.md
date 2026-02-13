@@ -146,9 +146,9 @@ a = 100
 b = 100
 print(a is b)  # True - same object!
 
-# Large integers use arbitrary precision
-x = 10**1000
-y = 10**1000
+# Large integers not cached
+x = 300
+y = 300
 print(x is y)  # False - different objects
 ```
 
