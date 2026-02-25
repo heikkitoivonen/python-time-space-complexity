@@ -158,38 +158,6 @@ for item in items[::-1]:
 # reversed() is more memory efficient
 ```
 
-### reversed() vs Reverse Method
-
-```python
-# List has reverse() method
-items = [1, 2, 3, 4, 5]
-items.reverse()  # O(n) in-place, modifies original
-
-# reversed() doesn't modify original
-items = [1, 2, 3, 4, 5]
-for item in reversed(items):
-    process(item)
-# Original unchanged
-
-# Use reversed() to preserve original
-# Use reverse() to modify in-place
-```
-
-### reversed() vs Sorting
-
-```python
-# reversed() preserves order
-items = [3, 1, 4, 1, 5, 9, 2, 6]
-result = list(reversed(items))
-# [6, 2, 9, 5, 1, 4, 1, 3]
-
-# sorted with reverse=True sorts
-result = sorted(items, reverse=True)
-# [9, 6, 5, 4, 3, 2, 1, 1]
-
-# Different operations - don't confuse them
-```
-
 ## Supported Types
 
 ### Works With
@@ -202,29 +170,6 @@ str_rev = reversed("hello")  # O(1)
 range_rev = reversed(range(1, 4))  # O(1)
 
 # All work efficiently
-```
-
-### Doesn't Work With
-
-```python
-# Types without __reversed__ method
-try:
-    reversed({1, 2, 3})  # TypeError - sets
-except TypeError:
-    pass
-
-try:
-    reversed({'a': 1, 'b': 2})  # TypeError - dicts
-except TypeError:
-    pass
-
-try:
-    reversed(42)  # TypeError - integers
-except TypeError:
-    pass
-
-# But you can iterate them differently
-reversed(list(my_set))  # Convert first
 ```
 
 ## Edge Cases

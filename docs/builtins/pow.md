@@ -209,7 +209,7 @@ except ZeroDivisionError:
 
 - **[abs()](abs.md)** - Absolute value
 - **math.pow()** - Float-only power
-- **[**  operator** - Exponentiation (equivalent)
+- **operator\*\*** - Exponentiation (equivalent)
 - **math.isqrt()** - Integer square root
 
 ## Comparison with Alternatives

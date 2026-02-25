@@ -58,7 +58,7 @@ lst = list(range(1000000))
 result = min(lst)  # ~1M comparisons
 
 # Same complexity with generators
-result = min(x**2 for x in range(10000))  # O(n)
+result = min(x**2 for x in range(10000))  # O(n) time, O(1) space
 ```
 
 ### Working with Different Types
@@ -109,6 +109,7 @@ shortest = min(words, key=len)  # "code"
 # O(n) - compare tuples lexicographically
 coords = [(1, 5), (3, 2), (2, 8)]
 min_coord = min(coords)  # (1, 5) - compared by first element
+# If first equal, compares second element, etc.
 
 # Compare by second element instead
 min_by_y = min(coords, key=lambda c: c[1])  # (3, 2)

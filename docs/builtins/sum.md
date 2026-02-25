@@ -48,11 +48,11 @@ total = sum([x for x in range(1000000)])  # O(n) time, O(n) space
 ### Counting Items
 
 ```python
-# O(n) - count 1s
+# O(n) time, O(n) space - list comprehension
 count = sum([1 for x in range(100) if x % 2 == 0])  # 50 even numbers
 
-# Better: use len() or sum with boolean
-count = sum(1 for x in range(100) if x % 2 == 0)  # Still O(n)
+# Better: sum with boolean (True=1, False=0) - O(n) time, O(1) space
+count = sum(x % 2 == 0 for x in range(100))  # 50 even numbers
 ```
 
 ### Computing Statistics
@@ -70,17 +70,17 @@ average = sum(numbers) / len(numbers)  # Iterate twice
 ### Flattening Lists
 
 ```python
-# O(n²) - inefficient!
-# Each sum call is O(n), and we have n lists
+# O(n*k) - inefficient! n=number of lists, k=items per list
+# Each + creates a new list and copies all accumulated items
 nested = [[1, 2], [3, 4], [5, 6]]
-flat = sum(nested, [])  # O(n²) - avoid this!
+flat = sum(nested, [])  # O(n*k) - avoid this!
 
 # Better approaches:
-# O(n) - single iteration
+# O(n*k) total items, but no repeated copying
 from itertools import chain
 flat = list(chain(*nested))
 
-# O(n) - unpacking
+# O(n*k) - single pass, no repeated copying
 flat = [item for sublist in nested for item in sublist]
 ```
 
@@ -174,40 +174,6 @@ total = sum(numbers)  # 15
 totals = list(accumulate(numbers))  # [1, 3, 6, 10, 15]
 ```
 
-## Pitfalls
-
-### Floating Point Precision
-
-```python
-# Summing floats can lose precision
-numbers = [0.1] * 10
-print(sum(numbers))  # 1.0000000000000007, not exactly 1.0
-
-# Better: use decimal for financial calculations
-from decimal import Decimal
-numbers = [Decimal('0.1')] * 10
-print(sum(numbers, Decimal('0')))  # Exact: 1.0
-```
-
-### Empty Sequence
-
-```python
-# sum() of empty is 0
-result = sum([])  # 0
-
-# Or start value
-result = sum([], start=100)  # 100
-
-# But TypeError with strings if no start
-try:
-    sum(["a", "b"])  # TypeError
-except TypeError:
-    pass
-
-# Works with start=""
-result = sum(["a", "b"], start="")  # "ab"
-```
-
 ## Performance Notes
 
 ```python
@@ -233,15 +199,11 @@ fsum([0.1] * 10)  # More precise for floats
 
 - Use `sum()` for numeric aggregation
 - Use generator expressions with `sum()` for memory efficiency
-- Use `sum([], start=[])` with explicit start value
-- Use `math.fsum()` when precision matters
 
 ❌ **Avoid**:
 
 - `sum(nested_lists, [])` - O(n²) concatenation
 - `sum(strings, "")` - inefficient string concatenation
-- Forgetting start value (causes TypeError with non-numeric sequences)
-- Summing booleans when `any()` or `all()` is clearer
 
 ## Related Functions
 

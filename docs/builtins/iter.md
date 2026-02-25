@@ -15,26 +15,6 @@ The `iter()` function creates an iterator object from an iterable, and `next()` 
 
 ## Creating Iterators
 
-### Basic Iterator Creation
-
-```python
-# Create iterator from list - O(1)
-lst = [1, 2, 3, 4, 5]
-it = iter(lst)  # O(1) - returns list iterator
-
-# Create iterator from string - O(1)
-s = "hello"
-it = iter(s)  # O(1) - returns string iterator
-
-# Create iterator from dict - O(1)
-d = {'a': 1, 'b': 2}
-it = iter(d)  # O(1) - returns dict_keyiterator
-
-# Create iterator from set - O(1)
-st = {1, 2, 3}
-it = iter(st)  # O(1) - returns set iterator
-```
-
 ### Iterating Over Sequences
 
 ```python
@@ -258,6 +238,18 @@ for it in [it1, it2, it3]:
             print(item)
         except StopIteration:
             break
+```
+
+### Consuming First Item Separately
+
+```python
+# Use iter() explicitly when you need to advance past some items manually
+data = ["header", "row1", "row2", "row3"]
+it = iter(data)
+
+header = next(it)       # O(1) - consume first item separately
+for row in it:          # O(n) - continues from second item
+    print(f"Row: {row}")
 ```
 
 ### Zip with Iterators

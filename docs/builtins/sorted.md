@@ -253,7 +253,7 @@ result = sorted(original)
 original = [3, 1, 4, 1, 5]
 original.sort()
 
-# Both: O(n log n) time, O(n) space for Timsort
+# Both: O(n log n) time, O(n) space for Timsort/Powersort
 # Choose based on whether you need original
 ```
 
@@ -290,7 +290,7 @@ result = sorted([42])
 ### Already Sorted
 
 ```python
-# O(n) - Timsort detects and handles efficiently
+# O(n) - Timsort/Powersort detects and handles efficiently
 numbers = list(range(1000000))
 result = sorted(numbers)  # Nearly O(n)
 ```

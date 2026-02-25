@@ -190,18 +190,6 @@ except TypeError:
 
 ## Performance Considerations
 
-### vs ASCII Codes
-
-```python
-# ord() - works with all Unicode
-result = ord('€')  # 8364
-
-# ASCII - only 0-127
-import string
-if ord('a') in range(128):
-    print("ASCII character")
-```
-
 ### Bulk Operations
 
 ```python
@@ -218,17 +206,11 @@ codes = list(map(ord, text))  # O(n) - slightly more efficient
 
 ✅ **Do**:
 
-- Use `ord()` for getting character code points
-- Use with `chr()` for bidirectional conversion
 - Use `map(ord, string)` for bulk operations
-- Use for encoding/decoding operations
 
 ❌ **Avoid**:
 
 - Using `ord()` for character type checking (use str methods)
-- Assuming ASCII-only (support Unicode)
-- Passing multiple characters or strings
-- Building unnecessary lookup tables
 
 ## Related Functions
 

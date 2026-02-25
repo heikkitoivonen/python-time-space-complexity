@@ -177,20 +177,6 @@ round(1e20, 2)     # 1e+20
 round(123456789.123, 2)  # 123456789.12
 ```
 
-## Floating Point Pitfalls
-
-```python
-# Be aware of float representation issues
-round(2.675, 2)    # 2.67 (not 2.68!)
-# Float representation: 2.675 is actually 2.6749999...
-
-# For exact rounding use Decimal
-from decimal import Decimal, ROUND_HALF_UP
-
-result = float(Decimal("2.675").quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
-# 2.68 - exact
-```
-
 ## Performance Notes
 
 ```python
@@ -209,17 +195,10 @@ t_format = timeit.timeit(lambda: f"{3.14159:.2f}", number=10**7)
 
 ✅ **Do**:
 
-- Use `round()` for numeric rounding
-- Use `Decimal` for financial calculations
 - Use `f"{x:.2f}"` for display formatting
-- Remember banker's rounding behavior
-- Use negative digits for rounding to powers of 10
 
 ❌ **Avoid**:
 
-- Using `round()` for financial calculations (precision issues)
-- Assuming traditional rounding (0.5 rounds up) - Python uses banker's
-- Relying on exact float precision
 - Using `round()` for display (use format strings)
 
 ## Related Functions

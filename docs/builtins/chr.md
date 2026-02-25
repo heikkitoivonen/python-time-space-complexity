@@ -210,18 +210,6 @@ except TypeError:
     pass
 ```
 
-## Surrogates and Edge Cases
-
-```python
-# Valid surrogate pairs (combined characters)
-# These are valid Unicode code points
-chr(0xDC00)    # Surrogate character (valid as standalone)
-
-# But combining characters exist
-chr(0x0301)    # Combining acute accent
-# Used with other characters: 'e' + chr(0x0301) = 'é'
-```
-
 ## Performance Considerations
 
 ### vs String Literals
@@ -259,15 +247,11 @@ result = ''.join(map(chr, codes))
 
 ✅ **Do**:
 
-- Use `chr()` to create characters from code points
-- Use with `ord()` for bidirectional conversion
 - Use `map(chr, codes)` for bulk conversion
-- Use for encoding/decoding operations
 
 ❌ **Avoid**:
 
 - Creating strings character by character (use join)
-- Assuming ASCII-only (support Unicode)
 - Using string literals when code points are computed
 - Unnecessary intermediate lists
 
