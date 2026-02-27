@@ -48,55 +48,12 @@ print(x is z)      # False - different objects
 print(id(x) == id(z))  # False - different IDs
 ```
 
-## Understanding Python Objects
-
-### Immutable Types
-
-```python
-# In CPython, small integers are cached (implementation detail)
-a = 5
-b = 5
-print(id(a) == id(b))  # True - same cached object
-
-# For larger integers, identity behavior is implementation/code-path dependent
-c = int("257")
-d = int("257")
-print(id(c) == id(d))  # Typically False (distinct runtime-created objects)
-
-# String interning (same for equal strings sometimes)
-s1 = "hello"
-s2 = "hello"
-print(id(s1) == id(s2))  # Usually True (interned)
-
-t1 = "".join(['h', 'e', 'l', 'l', 'o'])
-t2 = "".join(['h', 'e', 'l', 'l', 'o'])
-print(id(t1) == id(t2))  # False (not interned)
-```
-
-### Mutable Types
-
-```python
-# Lists create new objects - O(1) to get ID
-lst1 = [1, 2, 3]
-lst2 = [1, 2, 3]
-print(id(lst1) == id(lst2))  # False - different objects
-
-# Assignment creates reference, not copy
-lst3 = lst1
-print(id(lst1) == id(lst3))  # True - same object
-print(lst1 is lst3)           # True
-
-# Modification affects both
-lst3.append(4)
-print(lst1)  # [1, 2, 3, 4] - both modified
-```
-
 ## Common Patterns
 
 ### Checking Object Identity
 
 ```python
-# Use is/is not instead of id() directly - cleaner
+# Use is/is not instead of id() directly - cleaner and faster
 x = [1, 2, 3]
 y = x
 z = [1, 2, 3]
@@ -108,7 +65,7 @@ if x is y:  # O(1) - equivalent to id(x) == id(y)
 if x is not z:  # O(1)
     print("Different objects")
 
-# Avoid - using id() directly (less readable)
+# Avoid - using id() directly (less readable and slower)
 if id(x) == id(y):
     print("Same object")
 ```
@@ -170,49 +127,6 @@ b = {'a': a}
 a['b'] = b  # Create cycle
 
 print(has_cycle(a))  # True - cycle found
-```
-
-## ID vs Equality
-
-### Difference: == vs is
-
-```python
-# == checks value equality
-x = [1, 2, 3]
-y = [1, 2, 3]
-print(x == y)  # True - same content
-
-# is checks object identity
-print(x is y)  # False - different objects
-print(id(x) == id(y))  # False - equivalent
-
-# For immutables, often same
-a = (1, 2, 3)
-b = (1, 2, 3)
-print(a == b)  # True
-print(a is b)  # Might be True or False (optimization)
-
-# For None, always same object
-c = None
-d = None
-print(c is d)  # Always True
-print(id(c) == id(d))  # Always True
-```
-
-### Hashing and ID
-
-```python
-# Hash and ID are different
-x = 42
-print(hash(x))  # Hash value - O(1)
-print(id(x))    # Object ID - O(1)
-
-# Different objects can have same hash
-# But will have different IDs
-y = [1, 2, 3]
-z = [1, 2, 3]
-# hash(y) raises TypeError (unhashable)
-# But id(y) != id(z)
 ```
 
 ## Implementation Details
@@ -281,68 +195,6 @@ cache[obj] = "data"     # O(1) - cleaner
 value = cache[obj]      # O(1)
 ```
 
-## Debugging and Inspection
-
-### Object Tracking
-
-```python
-# Use id() to track object creation - O(1)
-import sys
-
-def track_objects():
-    """Show all objects and their IDs"""
-    objects = {}
-    
-    # Get all objects (memory intensive!)
-    for obj in gc.get_objects():  # O(n)
-        obj_id = id(obj)  # O(1)
-        obj_type = type(obj).__name__
-        objects[obj_id] = obj_type
-    
-    return objects
-
-# Usage - useful for debugging memory issues
-# import gc
-# tracked = track_objects()
-```
-
-### Identity and Memory
-
-```python
-# id() shows object placement in memory
-x = "hello"
-y = "hello"
-z = x
-
-print(id(x))  # Memory address 1
-print(id(y))  # Memory address 2 or 1 (interned)
-print(id(z))  # Memory address 1 (same as x)
-
-# Shows that z and x are same object
-print(x is z)  # True
-```
-
-## Special Cases
-
-### None and Booleans
-
-```python
-# None is singleton - always same object
-a = None
-b = None
-print(id(a) == id(b))  # Always True
-print(a is b)          # Always True
-
-# Booleans are singletons
-true1 = True
-true2 = True
-print(id(true1) == id(true2))  # Always True
-
-false1 = False
-false2 = False
-print(id(false1) == id(false2))  # Always True
-```
-
 ## Version Notes
 
 - **Python 2.x**: id() available, returns memory address in CPython
@@ -362,12 +214,9 @@ print(id(false1) == id(false2))  # Always True
 - Use `is` operator instead of `id(x) == id(y)`
 - Use `is None` for None checks (standard)
 - Use id() for debugging and object tracking
-- Remember ID is implementation-dependent
 
 ❌ **Avoid**:
 
 - Using id() in regular code (use `is` instead)
-- Assuming specific ID values
 - Relying on ID across Python sessions
 - Using ID as hash for collections (use hash() or object itself)
-- Comparing IDs between different Python implementations

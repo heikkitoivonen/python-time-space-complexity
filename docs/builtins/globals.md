@@ -138,27 +138,6 @@ def func():
 func()
 ```
 
-### Nested Functions
-
-```python
-# Nested functions can access enclosing scope
-def outer():
-    x = 10
-    
-    def inner():
-        y = 20
-        
-        # locals() shows only inner's variables
-        print(locals())  # {'y': 20}
-        
-        # Access outer's x through closure, not locals()
-        print(x)  # 10 (from enclosing scope)
-    
-    inner()
-
-outer()
-```
-
 ## Modifying Namespaces
 
 ### Setting Global Variables
@@ -303,76 +282,6 @@ for i in range(10000):
     my_data[f'var_{i}'] = i  # O(1) each
 ```
 
-## Advanced Patterns
-
-### Inspecting Function Parameters
-
-```python
-import inspect
-
-def my_func(a, b, c=10):
-    # Get function signature
-    sig = inspect.signature(my_func)  # O(1)
-    
-    # Get local variables
-    local_vars = locals()  # O(m)
-    
-    # Show what was passed
-    params = {}
-    for param_name in sig.parameters:  # O(k) params
-        params[param_name] = local_vars.get(param_name)
-    
-    return params
-
-result = my_func(1, 2, 3)  # O(m)
-print(result)  # {'a': 1, 'b': 2, 'c': 3}
-```
-
-### Metaprogramming
-
-```python
-# Create class dynamically - O(k)
-def create_class(name, attrs):
-    """Create class using globals()"""
-    class_dict = {}  # O(1)
-    
-    for attr_name, attr_value in attrs.items():
-        class_dict[attr_name] = attr_value
-    
-    # Create class (simplified)
-    return type(name, (), class_dict)
-
-MyClass = create_class('MyClass', {'x': 10, 'y': 20})
-obj = MyClass()
-print(obj.x)  # 10
-```
-
-## Debugging with Frame Inspection
-
-```python
-import inspect
-
-def get_caller_info():
-    """Get information about calling function"""
-    current = inspect.currentframe()  # O(1)
-    frame = current.f_back if current is not None else None  # O(1)
-    if frame is None:
-        return None
-    
-    # Access caller's locals - O(m)
-    locals_dict = frame.f_locals
-    
-    return {
-        'line': frame.f_lineno,
-        'locals': locals_dict
-    }
-
-def example():
-    x = 10
-    y = 20
-    # info = get_caller_info()  # O(m)
-```
-
 ## Version Notes
 
 - **Python 2.x**: Same behavior
@@ -384,18 +293,3 @@ def example():
 - **[vars()](vars.md)** - Similar to locals() but for objects
 - **[dir()](dir.md)** - List names in namespace
 - **inspect.signature()** - Get function signature
-
-## Best Practices
-
-✅ **Do**:
-
-- Use `globals()` for metaprogramming when needed
-- Use inspect module for reflection
-- Be explicit about variable scope
-
-❌ **Avoid**:
-
-- Relying on locals() to set variables in functions
-- Modifying globals() at module level (confusing)
-- Using globals()/locals() instead of proper parameters
-- Assuming locals() state persists after function returns

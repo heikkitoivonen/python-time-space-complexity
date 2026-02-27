@@ -269,38 +269,19 @@ def slow_access(a, b, c):
     return locals()['a'] + locals()['b'] + locals()['c']  # Creates dict 3 times!
 ```
 
-## Best Practices
-
-```python
-# ✅ DO: Use locals() for debugging/introspection
-def debug():
-    x = 1
-    y = 2
-    print(locals())  # Good for understanding scope
-
-# ✅ DO: Use it for variable existence checks
-if 'var_name' in locals():
-    process(locals()['var_name'])
-
-# ✅ DO: Understand it's a snapshot
-local_dict = locals()
-x = 10
-print('x' in local_dict)  # False - dict is a snapshot
-
-# ❌ DON'T: Rely on modifications to locals()
-locals()['x'] = 20
-print(x)  # Still old value (except in class body)
-
-# ❌ DON'T: Use in tight loops for performance
-for i in range(1000000):
-    v = locals()['var']  # Inefficient - creates dict each time
-
-# ❌ DON'T: Serialize/pickle locals() dict
-# It contains references that may not be picklable
-```
-
 ## Related Functions
 
 - [globals() Function](globals.md) - Get global symbol table
 - [dir() Function](dir.md) - List accessible names
 - [vars() Function](vars.md) - Get __dict__ of object
+
+## Best Practices
+
+✅ **Do**:
+
+- Use locals() for debugging/introspection
+- Use it for variable existence checks
+
+❌ **Avoid**:
+
+- Use in tight loops for performance
