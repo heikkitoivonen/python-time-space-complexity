@@ -290,7 +290,7 @@ result = ",".join(format(item, '05d') for item in items)  # O(n)
 
 ```python
 # Pre-compile format specs
-items = list(range(1000000))
+items = range(1000000)
 
 # Inefficient: repeated format calls - O(n)
 results = [format(item, '010d') for item in items]
