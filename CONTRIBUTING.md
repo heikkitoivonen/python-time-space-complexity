@@ -1,4 +1,4 @@
-# Contributing to Python Time & Space Complexity
+# Contributing to Python Big-O: Time & Space Complexity
 
 Thank you for interest in contributing! This guide will help you get started.
 

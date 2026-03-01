@@ -1,7 +1,7 @@
 .PHONY: help install dev serve build lint format types check clean test audit
 
 help:
-	@echo "Python Time & Space Complexity - Development Commands"
+	@echo "Python Big-O: Time & Space Complexity - Development Commands"
 	@echo ""
 	@echo "Setup:"
 	@echo "  make install     Install dependencies with uv"
