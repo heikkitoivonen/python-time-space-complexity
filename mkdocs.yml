@@ -1,4 +1,4 @@
-site_name: Python Big-O Time & Space Complexity
+site_name: "Python Big-O: Time & Space Complexity"
 site_description: Comprehensive documentation of time and space complexity for Python built-ins and standard library
 site_url: https://pythoncomplexity.com
 repo_url: https://github.com/heikkitoivonen/python-time-space-complexity
