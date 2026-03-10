@@ -120,28 +120,6 @@ items = [Item(i) for i in range(10)]
 repr(items)  # O(10) - calls __repr__ on each item
 ```
 
-## Difference from str()
-
-```python
-# str() - human-readable, may be different
-class Value:
-    def __str__(self):
-        return "A nice value"
-    
-    def __repr__(self):
-        return "Value()"
-
-v = Value()
-print(str(v))   # "A nice value"
-print(repr(v))  # "Value()"
-
-# repr() should return valid Python code if possible
-x = 42
-assert eval(repr(x)) == x  # True for most cases
-
-s = "hello"
-assert eval(repr(s)) == s  # True - repr() is evaluable
-```
 
 ## String Escaping
 

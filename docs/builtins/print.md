@@ -115,22 +115,6 @@ print("Value: %s" % value)        # O(n) - conversion cost
 
 ## I/O Considerations
 
-### Output Buffering
-
-```python
-# I/O overhead dominates over string computation
-import sys
-
-# Unbuffered output
-for i in range(1000):
-    print(i, flush=True)  # Forces write immediately
-    # Slower due to I/O flushing
-
-# Buffered output (default)
-for i in range(1000):
-    print(i)  # Buffered, faster overall
-```
-
 ### Writing to Files
 
 ```python
@@ -219,10 +203,7 @@ print(lst)  # Output: [[...]] - handles circular refs
 
 ✅ **Do**:
 
-- Use `print()` for simple output (it's designed for this)
 - Collect strings then print once for massive output
-- Use `end=""` or `sep=""` to control formatting
-- Print to file with `file=` parameter
 
 ❌ **Avoid**:
 

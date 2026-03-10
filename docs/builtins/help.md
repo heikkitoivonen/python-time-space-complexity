@@ -154,61 +154,7 @@ docstring = obj.__doc__
 help(obj)  # O(m) - slower but formatted
 ```
 
-### pydoc Module
-
-```python
-import pydoc
-
-# O(n) - more control
-docs = pydoc.getdoc(str)  # Get formatted documentation
-pydoc.render_doc(str)     # Get as HTML
-
-# Server mode - browse documentation
-pydoc.start_server(port=8000)
-```
-
-### inspect Module
-
-```python
-import inspect
-
-# O(1) - fast attribute access
-signature = inspect.signature(my_func)
-source = inspect.getsource(my_func)
-members = inspect.getmembers(obj)  # O(n)
-
-# More programmatic than help()
-```
-
-## Interactive Help System
-
-```python
-# help() without arguments
-# Starts interactive help system
-
-# help()
-# Then type:
-# >>> list.append    (shows help for list.append)
-# >>> modules        (shows all available modules)
-# >>> keywords       (shows Python keywords)
-# >>> topics         (shows special topics)
-# >>> quit           (exits help)
-```
-
 ## Practical Examples
-
-### Documentation Lookup
-
-```python
-# O(m) - find how to use a function
-def understand_function(func):
-    help(func)
-
-# Examples:
-understand_function(len)
-understand_function(str.split)
-understand_function(dict.get)
-```
 
 ### Debugging Unknown Objects
 
@@ -267,34 +213,6 @@ def get_help(obj):
 # Faster than calling help() repeatedly
 ```
 
-## Advanced Usage
-
-### Programmatic Documentation Access
-
-```python
-# O(m) - get docs without printing
-import pydoc
-
-docs = pydoc.render_doc(str, title="String Documentation")
-# Returns formatted HTML string
-
-# Use in web server, etc.
-```
-
-### Documentation Server
-
-```python
-import pydoc
-
-# Start local documentation server
-# pydoc.start_server(port=8000)
-# Then visit http://localhost:8000
-
-# Or generate HTML
-pydoc.writedoc(str, outdir="/tmp/docs")
-# Creates HTML documentation file
-```
-
 ## Edge Cases
 
 ### Objects Without Docstrings
@@ -334,15 +252,12 @@ help(func)  # Shows custom docstring
 - Use `help()` for interactive exploration
 - Use `help(topic)` to learn about Python features
 - Check `__doc__` attribute directly in code
-- Use `inspect` module for programmatic access
-- Write clear docstrings for your functions
 
 ❌ **Avoid**:
 
 - Using `help()` in tight loops (call once, cache result)
 - Assuming `help()` output format is stable
 - Using `help()` for production code (direct access faster)
-- Forgetting to write docstrings
 
 ## Related Functions
 
