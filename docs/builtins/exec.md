@@ -151,33 +151,6 @@ compiled = time.time() - start
 # compiled is faster (no parsing overhead)
 ```
 
-## Security Implications
-
-### Why exec() is Dangerous
-
-```python
-# exec() executes arbitrary code
-user_input = "import os; os.system('delete all files')"
-# exec(user_input)  # DANGEROUS!
-
-# Only use exec() with trusted code
-# For untrusted code, there's no safe way
-```
-
-### Limited Sandboxing
-
-```python
-# Restricting builtins helps but doesn't fully protect
-restricted = {"__builtins__": {}}
-# exec("__import__('os').system('rm -rf /')", restricted)
-# Still dangerous - can access other modules
-
-# Proper security requires:
-# - Never exec() untrusted code
-# - Run in separate process with restricted permissions
-# - Use specialized sandboxing tools
-```
-
 ## Common Patterns
 
 ### Dynamic Class Creation
@@ -271,23 +244,6 @@ result = process()
 ```python
 # O(1) - no-op
 exec("")  # Nothing happens
-```
-
-### Modifying Outer Scope
-
-```python
-# exec() modifies provided scope, not outer scope by default
-x = 10
-code = "x = 20"
-
-# Using default globals
-exec(code)  # x is now 20 (modifies current namespace)
-
-# Using custom scope
-x = 10
-scope = {}
-exec(code, scope)  # x is still 10
-print(scope['x'])  # 20
 ```
 
 ### Syntax Errors

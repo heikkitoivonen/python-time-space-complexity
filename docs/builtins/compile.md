@@ -242,43 +242,6 @@ code = compile("invalid python", "script.py", "exec")
 # Use meaningful filenames for debugging
 ```
 
-## Comparison with eval()/exec()
-
-```python
-# eval(string) - compile + execute in one
-eval("x + 1")  # O(n) - includes parsing
-
-# exec(string) - compile + execute in one
-exec("x = 1")  # O(n) - includes parsing
-
-# Separate compilation - better for reuse
-code = compile("x + 1", "<string>", "eval")
-eval(code)  # O(m) - no parsing, just execution
-```
-
-## Security Considerations
-
-```python
-# compile() doesn't execute, just parses
-# Still requires careful input handling
-
-user_input = "__import__('os').system('rm -rf /')"
-try:
-    code = compile(user_input, "<string>", "eval")
-    # Code object created successfully
-    # Actual execution happens at eval(code)
-except SyntaxError:
-    pass
-
-# Use ast.parse() for safer parsing without execution
-import ast
-try:
-    tree = ast.parse(user_input)
-    # Can inspect without executing
-except SyntaxError:
-    pass
-```
-
 ## Edge Cases
 
 ### Empty Code
