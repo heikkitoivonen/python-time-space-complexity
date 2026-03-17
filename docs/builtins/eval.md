@@ -92,33 +92,6 @@ scope = {f"var{i}": i for i in range(1000)}
 eval("var0 + var1 + var2", scope)  # O(n + 1000)
 ```
 
-## Security Considerations
-
-### Why eval() is Dangerous
-
-```python
-# eval() executes arbitrary code
-user_input = "import os; os.system('rm -rf /')"
-# eval(user_input)  # DANGEROUS - would execute!
-
-# Only use eval() with trusted input
-# For untrusted input, use ast.literal_eval()
-import ast
-safe = ast.literal_eval("[1, 2, 3]")  # Safe - only literals
-```
-
-### Restricted Execution
-
-```python
-# eval() with custom globals/locals
-restricted_scope = {"__builtins__": {}}
-# eval("import os", restricted_scope)  # Still unsafe - can access builtins
-
-# Use ast.literal_eval() for truly safe evaluation
-import ast
-result = ast.literal_eval("{'key': 'value'}")  # Safe
-```
-
 ## Performance Patterns
 
 ### Repeated Evaluation
@@ -205,46 +178,6 @@ result = eval(code)  # 105
 for x in range(10):
     y = x * 2
     result = eval(code)  # Efficient
-```
-
-## Common Patterns
-
-### Dynamic Math Evaluation
-
-```python
-# O(n) - parse and evaluate user expression
-def calculate(expr, **kwargs):
-    # WARNING: Only use with trusted input!
-    return eval(expr, {"__builtins__": {}}, kwargs)
-
-# Safe because no builtins available
-result = calculate("x + y", x=10, y=20)  # 30
-```
-
-### Configuration Values
-
-```python
-import ast
-
-# O(n) - parse config safely
-config_str = '{"timeout": 30, "retries": 3, "items": [1, 2, 3]}'
-config = ast.literal_eval(config_str)
-# Safe - only allows data structures
-```
-
-### Lambda/Function Creation (Avoid!)
-
-```python
-# O(n) - can create functions at runtime
-# Generally a bad idea - use proper functions instead
-func = eval("lambda x: x ** 2")
-result = func(5)  # 25
-
-# Better - define function normally
-def square(x):
-    return x ** 2
-
-result = square(5)
 ```
 
 ## Edge Cases

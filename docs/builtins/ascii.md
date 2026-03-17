@@ -125,84 +125,6 @@ print(ascii(path))
 # "'/home/\\u7528\\u6237/\\u6587\\u4ef6.txt'"
 ```
 
-## Comparison with Alternatives
-
-### ascii() vs repr()
-
-```python
-# Both O(n), but different escaping
-
-text = "Café"
-
-# repr() - shows non-ASCII directly (Python 3)
-repr(text)   # "'Café'"
-
-# ascii() - escapes all non-ASCII
-ascii(text)  # "'Caf\\xe9'"
-
-# Use case:
-# repr() - for Python evaluation
-# ascii() - for ASCII-only output (logs, APIs)
-```
-
-### ascii() vs str()
-
-```python
-text = "Hello\nWorld"
-
-# str() - shows representation
-str(text)    # Shows actual newline
-
-# ascii() - escapes everything
-ascii(text)  # "'Hello\\nWorld'"
-
-# Use case:
-# str() - for human display
-# ascii() - for ASCII-safe output
-```
-
-## Escape Sequence Details
-
-```python
-# O(1) - understand escaping rules
-
-# Control characters
-ascii("\n")      # "'\\n'"
-ascii("\t")      # "'\\t'"
-ascii("\r")      # "'\\r'"
-ascii("\0")      # "'\\x00'"
-
-# Extended ASCII
-ascii("\x7f")    # "'\\x7f'"
-ascii("\xff")    # "'\\xff'"
-
-# Unicode BMP (Basic Multilingual Plane)
-ascii("α")       # "'\\u03b1'"
-ascii("中")      # "'\\u4e2d'"
-
-# Supplementary planes
-ascii("𝔸")      # "'\\U0001d538'"
-```
-
-## Containers with Unicode
-
-```python
-# O(n) - escapes all non-ASCII in container
-data = {
-    "name": "Josée",
-    "city": "Montréal",
-    "country": "Québec"
-}
-
-ascii(data)
-# {'name': 'Jos\\xe9e', 'city': 'Montr\\xe9al', 'country': 'Qu\\xe9bec'}
-
-# Each value is escaped separately
-lst = ["café", "naïve", "résumé"]
-ascii(lst)
-# ['caf\\xe9', 'na\\xefve', 'r\\xe9sum\\xe9']
-```
-
 ## Performance Patterns
 
 ### Batch Processing
@@ -222,50 +144,6 @@ large_text = open("file.txt", "r", encoding="utf-8").read()
 safe_version = ascii(large_text)  # O(len(large_text))
 
 # Memory: output may be larger (each non-ASCII becomes \xXX, \uXXXX, etc)
-```
-
-## Practical Examples
-
-### API Response Logging
-
-```python
-# O(n) - log safely without encoding issues
-import json
-
-response = {"name": "José", "country": "México"}
-response_json = json.dumps(response)
-
-# Log safely in ASCII-only environment
-print(ascii(response_json))
-# '{"name": "Jos\\u00e9", "country": "M\\u00e9xico"}'
-
-# vs print(response_json) which might have encoding issues
-```
-
-### Email Headers
-
-```python
-# O(n) - headers must be ASCII
-subject = "Meeting: Café ☕ Discussion"
-
-# Make safe for email
-safe_subject = ascii(subject)
-# "'Meeting: Caf\\xe9 \\u2615 Discussion'"
-
-# Email system can safely handle this
-```
-
-### Source Code Comments
-
-```python
-# O(n) - include comments with non-ASCII
-
-text = "Author: François"
-
-# Generate comment safely
-comment = f"# {ascii(text)}"
-# print(comment)
-# # 'Author: Fran\\xe7ois'
 ```
 
 ## Special Cases
