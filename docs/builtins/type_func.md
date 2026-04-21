@@ -117,64 +117,6 @@ print(obj.base_method())     # from base
 print(obj.derived_method())  # from derived
 ```
 
-## Practical Examples
-
-### Introspection
-
-```python
-class MyClass:
-    def method(self):
-        pass
-
-obj = MyClass()
-
-# Get type information - O(1)
-print(f"Type: {type(obj)}")
-print(f"Name: {type(obj).__name__}")
-print(f"Module: {type(obj).__module__}")
-print(f"Bases: {type(obj).__bases__}")
-
-# List attributes - O(n)
-print(f"Dict: {type(obj).__dict__}")
-```
-
-### Type Conversion Check
-
-```python
-def process(value):
-    # Check type and convert - O(1)
-    if type(value) is str:
-        return value.upper()
-    elif type(value) is int:
-        return value * 2
-    elif type(value) is list:
-        return len(value)
-    else:
-        raise TypeError(f"Unsupported type: {type(value)}")
-
-print(process("hello"))    # HELLO
-print(process(21))         # 42
-print(process([1, 2, 3]))  # 3
-```
-
-### Dynamic Attribute Access
-
-```python
-# Get type and access attributes - O(1)
-def get_info(obj):
-    obj_type = type(obj)
-    
-    return {
-        'type_name': obj_type.__name__,
-        'module': obj_type.__module__,
-        'dict': obj_type.__dict__,
-        'mro': obj_type.__mro__  # Method resolution order
-    }
-
-info = get_info([1, 2, 3])
-print(info['type_name'])  # 'list'
-```
-
 ## type() vs isinstance()
 
 ```python

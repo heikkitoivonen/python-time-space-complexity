@@ -112,52 +112,6 @@ print(hex(id(obj2)))
 # Different addresses shown in hex
 ```
 
-## Comparison with Alternatives
-
-### hex() vs format()
-
-```python
-# hex() - returns string with '0x' prefix
-hex(255)           # '0xff'
-
-# format() - more flexible
-format(255, 'x')   # 'ff' (no prefix)
-format(255, 'X')   # 'FF' (uppercase, no prefix)
-format(255, '#x')  # '0xff' (with prefix)
-
-# Performance - both O(log n), format slightly faster
-```
-
-### hex() vs bin() vs oct()
-
-```python
-# All O(log n) but different bases
-hex(255)    # '0xff'     (base 16)
-bin(255)    # '0b11111111' (base 2)
-oct(255)    # '0o377'    (base 8)
-
-# Which base?
-# hex - most compact, good for colors/addresses
-# bin - for bit manipulation
-# oct - rare, legacy use
-```
-
-## Builtin Integer Methods
-
-```python
-# to_bytes() - O(log n) alternative
-x = 255
-hex_bytes = x.to_bytes(2, 'big')
-# b'\x00\xff'
-
-# bit_length() - O(1) related operation
-x = 255
-bits = x.bit_length()  # 8
-hex(x)  # '0xff' - 2 digits = 8 bits
-
-# Relationship: hex digits ≈ bit_length() / 4
-```
-
 ## Bidirectional Conversion
 
 ```python
@@ -197,24 +151,6 @@ hex_values = [f"{n:x}" for n in numbers]
 values = [10, 20, 30, 40]
 hex_str = ''.join(hex(v)[2:] for v in values)
 # 'a141e28' - concatenated hex values
-```
-
-## Special Cases
-
-### Zero
-
-```python
-# O(1)
-hex(0)  # '0x0'
-```
-
-### Powers of Two
-
-```python
-# O(log n) - still efficient even for powers
-hex(2**10)    # '0x400'
-hex(2**20)    # '0x100000'
-hex(2**100)   # Very large hex number, still O(log 2**100)
 ```
 
 ## Common Use Cases

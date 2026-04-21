@@ -114,33 +114,6 @@ value = int("1010", 2)  # Also O(log n)
 assert value == 10
 ```
 
-## Comparison with Alternatives
-
-### bin() vs format()
-
-```python
-# bin() - returns string with '0b' prefix
-bin(255)           # '0b11111111'
-
-# format() - more flexible
-format(255, 'b')   # '11111111' (no prefix)
-format(255, '#b')  # '0b11111111' (with prefix)
-
-# Performance - both O(log n), similar speed
-```
-
-### bin() vs bit_length()
-
-```python
-# bin() - string representation, O(log n)
-s = bin(255)        # '0b11111111'
-
-# bit_length() - O(1) operation
-bits = (255).bit_length()  # 8
-
-# Use bit_length() for count, bin() for display
-```
-
 ## Bit Manipulation Operations
 
 ```python
@@ -257,35 +230,6 @@ print(bool(my_set & (1 << 2)))  # False (no 2)
 # Remove element (clear bit)
 my_set &= ~(1 << 3)
 print(bin(my_set))  # '0b100000'
-```
-
-## Special Cases
-
-### Zero
-
-```python
-# O(1)
-bin(0)  # '0b0'
-```
-
-### Powers of Two
-
-```python
-# O(log n) - shows single bit set
-bin(1)      # '0b1'
-bin(2)      # '0b10'
-bin(4)      # '0b100'
-bin(8)      # '0b1000'
-bin(2**10)  # Single '1' followed by zeros
-```
-
-### All Ones
-
-```python
-# O(log n) - all bits set
-bin(0xFF)      # '0b11111111' (255)
-bin(0xFFFF)    # 16 ones
-bin((1 << 32) - 1)  # 32 ones
 ```
 
 ## Best Practices
