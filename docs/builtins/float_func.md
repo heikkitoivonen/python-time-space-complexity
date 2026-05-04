@@ -158,58 +158,6 @@ float("3.14")   # O(4) - handles decimals
 # float() is more flexible
 ```
 
-## Practical Examples
-
-### CSV Parsing
-
-```python
-# O(n * m) - parse CSV with float values
-csv_line = "1.5,2.7,3.14,10.0"
-
-def parse_csv_floats(line):
-    return [float(x) for x in line.split(",")]  # O(n)
-
-values = parse_csv_floats(csv_line)
-# [1.5, 2.7, 3.14, 10.0]
-```
-
-### Decimal Arithmetic
-
-```python
-# O(n) - string parsing for precision
-def money_to_float(money_str):
-    # "$10.50" -> 10.5
-    cleaned = money_str.replace("$", "").strip()
-    return float(cleaned)  # O(n)
-
-prices = ["$10.50", "$25.00", "$5.99"]
-values = [money_to_float(p) for p in prices]
-# [10.5, 25.0, 5.99]
-```
-
-### Statistics Calculation
-
-```python
-# O(n) - convert and compute
-def calculate_average(data_str):
-    values = [float(x) for x in data_str.split(",")]  # O(n)
-    return sum(values) / len(values)  # O(n)
-
-avg = calculate_average("10.5,20.3,15.7")  # 15.5
-```
-
-### Matrix/Vector Operations
-
-```python
-# O(n) - convert all elements
-def parse_vector(vector_str):
-    # "1.5 2.7 3.14" -> [1.5, 2.7, 3.14]
-    return [float(x) for x in vector_str.split()]  # O(n)
-
-vec = parse_vector("1.5 2.7 3.14")
-magnitude = sum(x**2 for x in vec) ** 0.5
-```
-
 ## Edge Cases
 
 ### Empty String

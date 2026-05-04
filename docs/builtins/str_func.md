@@ -188,69 +188,6 @@ s = f"{x} and {y}"
 # All have similar complexity
 ```
 
-## Practical Examples
-
-### Debugging Output
-
-```python
-# O(n) - convert all values
-def debug_dict(data):
-    for key, value in data.items():
-        print(f"{key}: {str(value)}")
-
-data = {"a": 1, "b": [1, 2, 3], "c": {"nested": True}}
-debug_dict(data)
-```
-
-### CSV Export
-
-```python
-# O(n * m) - n rows, m columns
-def csv_row(values):
-    return ",".join(str(v) for v in values)  # O(m)
-
-rows = [
-    [1, 2, 3],
-    [4, 5, 6],
-    [7, 8, 9]
-]
-
-csv_output = "\n".join(csv_row(row) for row in rows)
-# O(n * m) total
-```
-
-### JSON Preparation
-
-```python
-# O(n) - convert values to strings
-def prepare_json(data):
-    result = {}
-    for key, value in data.items():
-        if isinstance(value, (int, float)):
-            result[key] = str(value)
-        else:
-            result[key] = value
-    return result
-
-data = {"count": 42, "price": 19.99, "name": "Item"}
-prepared = prepare_json(data)
-```
-
-### Configuration String
-
-```python
-# O(n) - build configuration
-def build_config_string(config_dict):
-    items = []
-    for key, value in config_dict.items():
-        items.append(f"{key}={str(value)}")
-    return "; ".join(items)  # O(n)
-
-config = {"timeout": 30, "retries": 3, "debug": True}
-config_str = build_config_string(config)
-# "timeout=30; retries=3; debug=True"
-```
-
 ## Edge Cases
 
 ### None

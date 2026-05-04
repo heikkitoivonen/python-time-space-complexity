@@ -186,58 +186,6 @@ data = bytes(message, "utf-8")  # O(n)
 # socket.send(data)  # Sends bytes
 ```
 
-## Practical Examples
-
-### HTTP Request
-
-```python
-# O(n) - build request
-def build_request(method, path, body):
-    request = f"{method} {path} HTTP/1.1\r\n"
-    request += f"Content-Length: {len(body)}\r\n\r\n"
-    request += body
-    
-    return bytes(request, "utf-8")  # O(n)
-
-req = build_request("GET", "/api", "")
-```
-
-### Cryptography
-
-```python
-# O(n) - encode for hashing
-import hashlib
-
-text = "password123"
-hashed = hashlib.sha256(bytes(text, "utf-8")).hexdigest()  # O(n)
-```
-
-### Base64 Encoding
-
-```python
-# O(n) - convert to bytes then encode
-import base64
-
-text = "Hello, World!"
-text_bytes = bytes(text, "utf-8")  # O(n)
-encoded = base64.b64encode(text_bytes)  # O(n)
-# b'SGVsbG8sIFdvcmxkIQ=='
-```
-
-### Binary Protocol
-
-```python
-# O(n) - create binary message
-def create_packet(header, payload):
-    header_bytes = bytes(header, "utf-8")  # O(h)
-    payload_bytes = bytes(payload, "utf-8")  # O(p)
-    
-    # Combine (simplified)
-    return header_bytes + payload_bytes  # O(h+p)
-
-packet = create_packet("HEADER", "DATA")
-```
-
 ## Edge Cases
 
 ### Empty String
