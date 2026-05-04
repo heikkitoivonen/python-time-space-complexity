@@ -6,7 +6,10 @@ Welcome to the comprehensive guide for Python operation complexity. This resourc
 
 This reference is designed for **Python developers** who want to write efficient code and make informed choices about data structures and algorithms. It's also a valuable resource for **computer science students** studying algorithms and data structures, and for **engineers preparing for technical interviews** where complexity analysis is commonly tested.
 
-This is **not** a Python tutorial or an introduction to Big-O notation. We assume you're already familiar with Python basics and have a general understanding of time and space complexity concepts.
+This is **not** a Python tutorial or an introduction to
+[Big-O](https://en.wikipedia.org/wiki/Big_O_notation){ target="_blank" rel="noopener" aria-label="Visit Big-O Wikipedia article" }
+:material-open-in-new:
+notation. We assume you're already familiar with Python basics and have a general understanding of time and space complexity concepts.
 
 ## Quick Start
 
