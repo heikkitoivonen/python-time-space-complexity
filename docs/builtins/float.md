@@ -153,5 +153,5 @@ for i in range(1000000):
 
 ## Further Reading
 
-- [CPython Internals: float](https://zpoint.github.io/CPython-Internals/BasicObject/float/float.html) -
+- [CPython Internals: float](https://zpoint.github.io/CPython-Internals/BasicObject/float/float.html){ target="_blank" rel="noopener" }:material-open-in-new: -
   Deep dive into CPython's float implementation

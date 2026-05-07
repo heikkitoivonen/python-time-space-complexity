@@ -143,5 +143,5 @@ filtered = [x for x in large_list if x not in exclusions_set]
 
 ## Further Reading
 
-- [CPython Internals: set](https://zpoint.github.io/CPython-Internals/BasicObject/set/set.html) -
+- [CPython Internals: set](https://zpoint.github.io/CPython-Internals/BasicObject/set/set.html){ target="_blank" rel="noopener" }:material-open-in-new: -
   Deep dive into CPython's set implementation

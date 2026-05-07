@@ -198,5 +198,5 @@ Similar performance characteristics with JIT compilation helping with:
 
 ## Further Reading
 
-- [CPython Internals: int](https://zpoint.github.io/CPython-Internals/BasicObject/long/long.html) -
+- [CPython Internals: int](https://zpoint.github.io/CPython-Internals/BasicObject/long/long.html){ target="_blank" rel="noopener" }:material-open-in-new: -
   Deep dive into CPython's int implementation

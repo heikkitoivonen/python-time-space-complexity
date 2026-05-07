@@ -211,5 +211,5 @@ if pattern.match(s):  # Reuse compiled pattern
 
 ## Further Reading
 
-- [CPython Internals: str](https://zpoint.github.io/CPython-Internals/BasicObject/str/str.html) -
+- [CPython Internals: str](https://zpoint.github.io/CPython-Internals/BasicObject/str/str.html){ target="_blank" rel="noopener" }:material-open-in-new: -
   Deep dive into CPython's str implementation

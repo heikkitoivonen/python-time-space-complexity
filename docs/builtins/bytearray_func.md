@@ -369,5 +369,5 @@ ba[0] = 72  # O(1) - OK
 
 ## Further Reading
 
-- [CPython Internals: bytearray](https://zpoint.github.io/CPython-Internals/BasicObject/bytearray/bytearray.html) -
+- [CPython Internals: bytearray](https://zpoint.github.io/CPython-Internals/BasicObject/bytearray/bytearray.html){ target="_blank" rel="noopener" }:material-open-in-new: -
   Deep dive into CPython's bytearray implementation

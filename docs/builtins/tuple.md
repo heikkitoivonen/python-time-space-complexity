@@ -148,5 +148,5 @@ for i in range(1000):
 
 ## Further Reading
 
-- [CPython Internals: tuple](https://zpoint.github.io/CPython-Internals/BasicObject/tuple/tuple.html) -
+- [CPython Internals: tuple](https://zpoint.github.io/CPython-Internals/BasicObject/tuple/tuple.html){ target="_blank" rel="noopener" }:material-open-in-new: -
   Deep dive into CPython's tuple implementation

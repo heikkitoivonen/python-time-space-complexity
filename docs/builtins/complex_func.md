@@ -400,5 +400,5 @@ c = complex.from_number(3.14)  # (3.14+0j)
 
 ## Further Reading
 
-- [CPython Internals: complex](https://zpoint.github.io/CPython-Internals/BasicObject/complex/complex.html) -
+- [CPython Internals: complex](https://zpoint.github.io/CPython-Internals/BasicObject/complex/complex.html){ target="_blank" rel="noopener" }:material-open-in-new: -
   Deep dive into CPython's complex implementation

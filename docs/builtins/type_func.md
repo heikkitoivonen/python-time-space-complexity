@@ -188,5 +188,5 @@ if type(value) is int:  # Preferred
 
 ## Further Reading
 
-- [CPython Internals: type](https://zpoint.github.io/CPython-Internals/BasicObject/type/type.html) -
+- [CPython Internals: type](https://zpoint.github.io/CPython-Internals/BasicObject/type/type.html){ target="_blank" rel="noopener" }:material-open-in-new: -
   Deep dive into CPython's type implementation

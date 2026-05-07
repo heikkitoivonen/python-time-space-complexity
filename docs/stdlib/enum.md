@@ -430,5 +430,5 @@ print(sys.getsizeof(status))  # Very small, reused instance
 
 ## Further Reading
 
-- [CPython Internals: enum](https://zpoint.github.io/CPython-Internals/BasicObject/enum/enum.html) -
+- [CPython Internals: enum](https://zpoint.github.io/CPython-Internals/BasicObject/enum/enum.html){ target="_blank" rel="noopener" }:material-open-in-new: -
   Deep dive into CPython's enum implementation

@@ -284,5 +284,5 @@ match = pattern.search(text)  # O(m)
 
 ## Further Reading
 
-- [CPython Internals: re](https://zpoint.github.io/CPython-Internals/Modules/re/re.html) -
+- [CPython Internals: re](https://zpoint.github.io/CPython-Internals/Modules/re/re.html){ target="_blank" rel="noopener" }:material-open-in-new: -
   Deep dive into CPython's re implementation

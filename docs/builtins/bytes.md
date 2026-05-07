@@ -219,5 +219,5 @@ parts = data.split(b" ")
 
 ## Further Reading
 
-- [CPython Internals: bytes](https://zpoint.github.io/CPython-Internals/BasicObject/bytes/bytes.html) -
+- [CPython Internals: bytes](https://zpoint.github.io/CPython-Internals/BasicObject/bytes/bytes.html){ target="_blank" rel="noopener" }:material-open-in-new: -
   Deep dive into CPython's bytes implementation

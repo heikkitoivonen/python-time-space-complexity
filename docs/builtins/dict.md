@@ -121,5 +121,5 @@ d = {
 
 ## Further Reading
 
-- [CPython Internals: dict](https://zpoint.github.io/CPython-Internals/BasicObject/dict/dict.html) -
+- [CPython Internals: dict](https://zpoint.github.io/CPython-Internals/BasicObject/dict/dict.html){ target="_blank" rel="noopener" }:material-open-in-new: -
   Deep dive into CPython's dict implementation

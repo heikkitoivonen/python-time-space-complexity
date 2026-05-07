@@ -420,5 +420,5 @@ restored = dill.loads(pickled)
 
 ## Further Reading
 
-- [CPython Internals: pickle](https://zpoint.github.io/CPython-Internals/Modules/pickle/pickle.html) -
+- [CPython Internals: pickle](https://zpoint.github.io/CPython-Internals/Modules/pickle/pickle.html){ target="_blank" rel="noopener" }:material-open-in-new: -
   Deep dive into CPython's pickle implementation

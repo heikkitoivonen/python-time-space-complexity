@@ -100,5 +100,5 @@ Similar, but may have different resize factors based on Java arrays.
 
 ## Further Reading
 
-- [CPython Internals: list](https://zpoint.github.io/CPython-Internals/BasicObject/list/list.html) -
+- [CPython Internals: list](https://zpoint.github.io/CPython-Internals/BasicObject/list/list.html){ target="_blank" rel="noopener" }:material-open-in-new: -
   Deep dive into CPython's list implementation
