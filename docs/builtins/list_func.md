@@ -71,8 +71,9 @@ original = [1, 2, 3, 4, 5]
 copy = list(original)  # O(5) - shallow copy
 
 # Each element is accessed once
+copy = []
 for item in iterable:  # O(n)
-    append to list
+    copy.append(item)
 
 # vs slicing - also O(n)
 copy = original[:]  # O(n) - same complexity
@@ -185,58 +186,6 @@ lst = list(nums)  # O(100) - consume generator
 lst = [x**2 for x in range(100)]  # O(100)
 
 # Comprehensions often faster
-```
-
-## Practical Examples
-
-### Parse CSV
-
-```python
-# O(n) - convert strings to list of values
-csv_line = "1,2,3,4,5"
-values = csv_line.split(",")  # ['1', '2', '3', '4', '5']
-
-# Convert to integers
-numbers = list(map(int, values))  # O(n)
-```
-
-### Remove Duplicates (Preserve Order)
-
-```python
-# O(n) - convert to set then back
-items = [1, 2, 2, 3, 3, 3, 4]
-unique = list(dict.fromkeys(items))  # [1, 2, 3, 4] - O(n)
-
-# Preserves first occurrence order
-```
-
-### Flatten Nested Lists
-
-```python
-# O(n) - flatten one level
-nested = [[1, 2], [3, 4], [5, 6]]
-flat = []
-for sublist in nested:
-    flat.extend(sublist)  # O(n) total
-
-# Using list concatenation
-flat = sum(nested, [])  # O(n) - but slower due to copying
-
-# Better - list comprehension
-flat = [x for sublist in nested for x in sublist]  # O(n)
-```
-
-### Read File Lines
-
-```python
-# O(n) - read all lines
-with open("file.txt") as f:
-    lines = list(f)  # O(n) - each line is one item
-    # lines = ["line1\n", "line2\n", ...]
-
-# vs
-with open("file.txt") as f:
-    lines = f.readlines()  # O(n) - same result
 ```
 
 ## Edge Cases
