@@ -187,67 +187,6 @@ ba[1] = 0x69  # O(1)
 modified = bytes(ba)  # O(n)
 ```
 
-## Practical Examples
-
-### Network Protocol Building
-
-```python
-# O(n) - build binary protocol message
-def build_packet(header, payload):
-    packet = bytearray()
-    
-    packet.extend(header)      # O(|header|)
-    packet.append(len(payload))  # O(1)
-    packet.extend(payload)     # O(|payload|)
-    
-    return bytes(packet)  # O(n) - convert to immutable
-```
-
-### Image Data Manipulation
-
-```python
-# O(n) - modify pixel data
-image_data = bytearray([255, 0, 0, 0, 255, 0, 0, 0, 255])
-# Three RGB pixels
-
-# Modify pixel values
-image_data[0] = 200  # O(1) - change red value
-image_data[4] = 200  # O(1) - change green value
-
-# Process efficiently without copying
-```
-
-### Cryptographic Operations
-
-```python
-# O(n) - prepare data for encryption
-import hashlib
-
-message = "Secret message"
-ba = bytearray(message, "utf-8")  # O(n)
-
-# Modify if needed
-ba[0] = ord('s')  # O(1)
-
-# Hash
-hashed = hashlib.sha256(ba).hexdigest()  # O(n)
-```
-
-### File Data Processing
-
-```python
-# O(n) - read and modify file
-with open("data.bin", "rb") as f:
-    data = bytearray(f.read())  # O(n) - read entire file
-
-# Modify specific bytes
-data[0] = 0x00  # O(1) - change magic number
-
-# Write back
-with open("output.bin", "wb") as f:
-    f.write(data)  # O(n)
-```
-
 ## Edge Cases
 
 ### Empty Bytearray
