@@ -14,6 +14,9 @@ The `frozenset()` function creates immutable sets from iterables.
 
 ## Basic Usage
 
+!!! note "Element order in examples"
+    Frozensets are unordered. The element order shown in comments below is illustrative; actual `repr()` output is not guaranteed and may differ between runs, Python versions, or hash-randomization settings.
+
 ### Create Empty Frozenset
 
 ```python
@@ -25,25 +28,25 @@ fs = frozenset()  # frozenset()
 
 ```python
 # O(n) - where n = list length
-fs = frozenset([1, 2, 3])           # frozenset({1, 2, 3})
-fs = frozenset([1, 2, 2, 3, 3, 3])  # frozenset({1, 2, 3})
+fs = frozenset([1, 2, 3])           # frozenset({2, 1, 3})
+fs = frozenset([1, 2, 2, 3, 3, 3])  # frozenset({1, 3, 2})
 ```
 
 ### From String
 
 ```python
 # O(n) - where n = string length
-fs = frozenset("hello")    # frozenset({'h', 'e', 'l', 'o'})
-fs = frozenset("aabbcc")   # frozenset({'a', 'b', 'c'})
+fs = frozenset("hello")    # frozenset({'h', 'l', 'e', 'o'})
+fs = frozenset("aabbcc")   # frozenset({'c', 'b', 'a'})
 ```
 
 ### From Other Iterables
 
 ```python
 # O(n) - where n = iterable length
-fs = frozenset((1, 2, 3))         # frozenset({1, 2, 3})
+fs = frozenset((1, 2, 3))         # frozenset({2, 1, 3})
 fs = frozenset({1, 2, 3})         # frozenset({1, 2, 3})
-fs = frozenset(range(5))          # frozenset({0, 1, 2, 3, 4})
+fs = frozenset(range(5))          # frozenset({0, 2, 1, 3, 4})
 fs = frozenset(map(str, [1, 2]))  # frozenset({'1', '2'})
 ```
 
@@ -163,93 +166,6 @@ fs2 = frozenset([2, 3, 4])
 s1 & s2        # {2, 3}
 fs1 & fs2      # frozenset({2, 3})
 s1 & fs2       # {2, 3} - mixed works
-```
-
-## Practical Examples
-
-### Config Validation
-
-```python
-# O(n) - validate against allowed values
-ALLOWED_ROLES = frozenset(["admin", "user", "guest"])
-
-def validate_roles(roles):
-    role_set = frozenset(roles)  # O(n)
-    if not role_set.issubset(ALLOWED_ROLES):  # O(n)
-        raise ValueError("Invalid roles")
-    return role_set
-
-valid = validate_roles(["admin", "user"])
-```
-
-### Cache Configuration
-
-```python
-# O(n) - use frozenset as cache key
-from functools import lru_cache
-
-@lru_cache(maxsize=256)
-def analyze_features(features):
-    # features is frozenset - hashable
-    return len(features)
-
-result = analyze_features(frozenset(["a", "b", "c"]))  # O(3)
-```
-
-### Immutable Data Structure
-
-```python
-# O(n) - create immutable set for safety
-class DataSet:
-    def __init__(self, items):
-        self._items = frozenset(items)  # O(n)
-    
-    def get_items(self):
-        return self._items  # O(1) - safe to return
-    
-    def has_item(self, item):
-        return item in self._items  # O(1)
-
-dataset = DataSet([1, 2, 3])
-items = dataset.get_items()  # frozenset({1, 2, 3})
-# Can't modify items
-```
-
-### Database Index Key
-
-```python
-# O(n) - frozenset for database queries
-def query_by_tags(tags):
-    tag_set = frozenset(tags)  # O(n)
-    
-    # Use as cache key
-    cache_key = ("tags", tag_set)  # O(1)
-    
-    # Query database
-    return db_lookup[cache_key]  # O(1)
-
-results = query_by_tags(["python", "database"])
-```
-
-### Unique Constraint
-
-```python
-# O(n) - enforce uniqueness immutably
-class User:
-    def __init__(self, permissions):
-        self.permissions = frozenset(permissions)  # O(n)
-    
-    def __hash__(self):
-        return hash(self.permissions)  # O(1) - hashable
-    
-    def __eq__(self, other):
-        return self.permissions == other.permissions
-
-user1 = User(["read", "write"])
-user2 = User(["read", "write"])
-
-# Can use in set
-unique_users = {user1, user2}  # Only one (equal)
 ```
 
 ## Edge Cases

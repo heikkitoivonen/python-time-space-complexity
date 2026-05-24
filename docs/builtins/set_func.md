@@ -14,6 +14,9 @@ The `set()` function creates sets from iterables or creates empty sets.
 
 ## Basic Usage
 
+!!! note "Element order in examples"
+    Sets are unordered. The element order shown in comments below is illustrative; actual `repr()` output is not guaranteed and may differ between runs, Python versions, or hash-randomization settings.
+
 ### Create Empty Set
 
 ```python
@@ -25,25 +28,25 @@ s = set()  # set()
 
 ```python
 # O(n) - where n = list length
-s = set([1, 2, 3])           # {1, 2, 3}
-s = set([1, 2, 2, 3, 3, 3])  # {1, 2, 3} - duplicates removed
+s = set([1, 2, 3])           # {3, 2, 1}
+s = set([1, 2, 2, 3, 3, 3])  # {2, 1, 3} - duplicates removed
 ```
 
 ### From String
 
 ```python
 # O(n) - where n = string length
-s = set("hello")      # {'h', 'e', 'l', 'o'}
-s = set("aabbcc")     # {'a', 'b', 'c'} - each char once
+s = set("hello")      # {'e', 'h', 'l', 'o'}
+s = set("aabbcc")     # {'c', 'b', 'a'} - each char once
 ```
 
 ### From Other Iterables
 
 ```python
 # O(n) - where n = iterable length
-s = set((1, 2, 3))          # {1, 2, 3} (from tuple)
-s = set({1, 2, 3})          # {1, 2, 3} (from set - copy)
-s = set(range(5))           # {0, 1, 2, 3, 4}
+s = set((1, 2, 3))          # {2, 1, 3} (from tuple)
+s = set({1, 2, 3})          # {1, 3, 2} (from set - copy)
+s = set(range(5))           # {0, 2, 1, 3, 4}
 s = set(map(str, [1, 2]))   # {'1', '2'} (from generator)
 ```
 
@@ -52,7 +55,7 @@ s = set(map(str, [1, 2]))   # {'1', '2'} (from generator)
 ```python
 # O(n) - uses dict keys
 d = {"a": 1, "b": 2, "c": 3}
-s = set(d)  # {'a', 'b', 'c'} - only keys, not values
+s = set(d)  # {'b', 'a', 'c'} - only keys, not values
 ```
 
 ## Complexity Details
@@ -76,10 +79,10 @@ s = set(items)  # O(10)
 ```python
 # O(n) - automatic deduplication
 items = [1, 1, 2, 2, 3, 3]
-s = set(items)  # O(6) - creates {1, 2, 3}
+s = set(items)  # O(6) - creates {2, 1, 3}
 
-# Useful for removing duplicates while preserving unordered
-unique = set("mississippi")  # {'m', 'i', 's', 'p'}
+# Useful for removing duplicates
+unique = set("mississippi")  # {'i', 'm', 's', 'p'}
 ```
 
 ### From String
@@ -98,7 +101,7 @@ long = set("a" * 1000)  # O(1000) - {'a'} (one item!)
 # O(n) - fastest way to remove duplicates
 items = [1, 2, 2, 3, 3, 3, 4]
 unique = set(items)  # O(7)
-# {1, 2, 3, 4}
+# {2, 1, 3, 4}
 
 # Back to list if needed
 unique_list = list(set(items))  # O(n)
@@ -120,7 +123,7 @@ s1 = set([1, 2, 3])
 s2 = set([2, 3, 4])
 
 intersection = s1 & s2      # {2, 3} - O(n)
-union = s1 | s2            # {1, 2, 3, 4} - O(n)
+union = s1 | s2            # {2, 1, 3, 4} - O(n)
 difference = s1 - s2       # {1} - O(n)
 symmetric_diff = s1 ^ s2   # {1, 4} - O(n)
 ```
@@ -164,54 +167,6 @@ s = set(items)  # O(n)
 # Then operations are fast
 if 500 in s:    # O(1)
     pass
-```
-
-## Practical Examples
-
-### Find Unique Words
-
-```python
-# O(n) - get unique words from text
-text = "the quick brown fox jumps over the lazy dog"
-words = text.split()
-unique_words = set(words)  # O(n)
-# {'the', 'quick', 'brown', 'fox', ...}
-```
-
-### Common Elements
-
-```python
-# O(n) - find common items
-list1 = [1, 2, 3, 4, 5]
-list2 = [4, 5, 6, 7, 8]
-
-set1 = set(list1)  # O(n)
-set2 = set(list2)  # O(m)
-
-common = set1 & set2  # {4, 5} - O(min(n,m))
-```
-
-### Unique Count
-
-```python
-# O(n) - count unique items
-data = [1, 1, 2, 2, 2, 3, 3, 3, 3, 4]
-unique_count = len(set(data))  # O(n) - 4 unique
-
-# Useful for analytics
-log_entries = ["error", "error", "warning", "error"]
-unique_types = set(log_entries)  # O(n)
-```
-
-### Validate Uniqueness
-
-```python
-# O(n) - check if all unique
-def has_duplicates(items):
-    return len(items) != len(set(items))  # O(n)
-
-assert not has_duplicates([1, 2, 3])     # True - unique
-assert has_duplicates([1, 2, 2])         # False - duplicates
 ```
 
 ## Edge Cases
