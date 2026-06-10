@@ -317,7 +317,7 @@ new_dt = dt + relativedelta(months=1)  # 2024-02-29
 ## Related Modules
 
 - **time** - Lower-level time functions
-- **[zoneinfo](zoneinfo.md)** - IANA timezone database (Python 3.9+)
+- **[zoneinfo](zoneinfo.md)** - IANA timezone database
 - **dateutil** - Extended datetime utilities (external)
 - **[calendar](calendar.md)** - Calendar functions
 

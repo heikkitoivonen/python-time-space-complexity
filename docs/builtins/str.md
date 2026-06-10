@@ -25,8 +25,8 @@ The `str` type is an immutable sequence of Unicode characters. Python strings ha
 | `translate(table)` | O(n) | O(n) | Single pass with table lookup |
 | `maketrans()` | O(k) | O(k) | k = number of mappings; static method |
 | `expandtabs(tabsize)` | O(n) | O(n) | Replace tabs with spaces |
-| `removeprefix(prefix)` | O(n) | O(n) | Returns slice if prefix matches (Python 3.9+) |
-| `removesuffix(suffix)` | O(n) | O(n) | Returns slice if suffix matches (Python 3.9+) |
+| `removeprefix(prefix)` | O(n) | O(n) | Returns slice if prefix matches |
+| `removesuffix(suffix)` | O(n) | O(n) | Returns slice if suffix matches |
 | **Split/Join** ||||
 | `split(sep)` | O(n) | O(n) | Single pass |
 | `rsplit(sep)` | O(n) | O(n) | Split from right |

@@ -7,7 +7,8 @@ don't become O(n), etc.
 """
 
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 
 def trimmed_mean(samples: list[float], trim_fraction: float = 0.1) -> float:

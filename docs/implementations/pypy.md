@@ -225,7 +225,6 @@ pip install package-name  # May fail on PyPy
 
 | PyPy Version | Python Version | Performance |
 |---|---|---|
-| PyPy3.9 | Python 3.9 | Good |
 | PyPy3.10 | Python 3.10 | Excellent |
 | PyPy3.11 | Python 3.11 | Excellent+ |
 

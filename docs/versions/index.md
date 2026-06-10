@@ -11,8 +11,6 @@ Different Python versions have made various optimizations and changes that affec
 | 3.12 | Oct 2023 | Security | Better specialization |
 | 3.11 | Oct 2022 | Security | Inline caching, 10-60% faster |
 | 3.10 | Oct 2021 | Security | Pattern matching |
-| 3.9 | Oct 2020 | EOL | Type hints, new parsers |
-| 3.8 | Oct 2019 | EOL | Assignment expressions (walrus) |
 
 ## Quick Links
 
@@ -21,7 +19,6 @@ Different Python versions have made various optimizations and changes that affec
 - **[Python 3.12](py312.md)** - Comprehension inlining, type parameters
 - **[Python 3.11](py311.md)** - Significant performance improvements (inline caching)
 - **[Python 3.10](py310.md)** - Pattern matching additions
-- **[Python 3.9](py39.md)** - Type hints and parser improvements
 
 ## Key Changes by Version
 
@@ -111,37 +108,6 @@ match value:
         print("other")
 ```
 
-### Python 3.9 (October 2020)
-
-Type hints and flexibility:
-
-```python
-# Type hints without import
-def add(a: list[int], b: list[int]) -> list[int]:
-    return [x + y for x, y in zip(a, b)]
-
-# Dictionary operations
-d1 = {'a': 1}
-d2 = {'b': 2}
-d3 = d1 | d2  # {'a': 1, 'b': 2}
-d1 |= d2  # Update in place
-```
-
-### Python 3.8 (October 2019)
-
-Assignment expressions:
-
-```python
-# Walrus operator :=
-if (n := len(a)) > 10:
-    print(f"List too long ({n} elements)")
-
-# Positional-only parameters
-def func(x, /, y):
-    # x is positional-only, y can be keyword
-    pass
-```
-
 ## Compatibility Considerations
 
 ### End of Life Dates
@@ -153,8 +119,6 @@ def func(x, /, y):
 | 3.12 | Oct 2028 |
 | 3.11 | Oct 2027 |
 | 3.10 | Oct 2026 |
-| 3.9 | Oct 2025 (EOL) |
-| 3.8 | Oct 2024 (EOL) |
 
 Plan upgrades before EOL.
 
@@ -173,8 +137,6 @@ Generally minimal between minor versions, but check:
 ### Upgrade Path
 
 ```
-Python 3.8 → Python 3.9    Incremental improvements
-Python 3.9 → Python 3.10   Minor improvements
 Python 3.10 → Python 3.11  10-60% faster (significant!)
 Python 3.11 → Python 3.12  5-10% faster
 Python 3.12 → Python 3.13  Similar (experimental features)
@@ -187,8 +149,8 @@ Python 3.13 → Python 3.14  Better GC pauses, new heapq functions
 
 | Feature | Version | Status |
 |---------|---------|--------|
-| Walrus operator | 3.8+ | Stable |
-| Type hints (generic) | 3.9+ | Stable |
+| Walrus operator | All | Stable |
+| Type hints (generic) | All | Stable |
 | Pattern matching | 3.10+ | Stable |
 | Inline caching | 3.11+ | Stable |
 | Exception groups | 3.11+ | Stable |
@@ -208,7 +170,7 @@ Python 3.13 → Python 3.14  Better GC pauses, new heapq functions
 | 3.5 | Unordered | O(1) lookup |
 | 3.6 (CPython) | Ordered (implementation detail) | O(1) lookup |
 | 3.7+ | Ordered (language guarantee) | O(1) lookup |
-| 3.9+ | Optimized | O(1) lookup (faster) |
+| 3.10+ | Optimized | O(1) lookup (faster) |
 
 ### List Operations
 

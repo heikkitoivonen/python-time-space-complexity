@@ -117,7 +117,7 @@ def _compute_residuals(normalized_times, theoretical):
     sum_x = sum(theoretical)
     sum_y = sum(normalized_times)
     sum_xx = sum(x * x for x in theoretical)
-    sum_xy = sum(x * y for x, y in zip(theoretical, normalized_times))
+    sum_xy = sum(x * y for x, y in zip(theoretical, normalized_times, strict=True))
 
     denom = n * sum_xx - sum_x * sum_x
     if abs(denom) < 1e-12:
@@ -130,7 +130,7 @@ def _compute_residuals(normalized_times, theoretical):
     if a <= 1e-12:
         return None
 
-    return [t - (a * x + b) for t, x in zip(normalized_times, theoretical)]
+    return [t - (a * x + b) for t, x in zip(normalized_times, theoretical, strict=True)]
 
 
 def _tie_break_linear_vs_nlogn(n_values, times, scores):
@@ -145,7 +145,7 @@ def _tie_break_linear_vs_nlogn(n_values, times, scores):
         return None, None
 
     # Filter pairs together to maintain alignment (use n > 1 to avoid log(1)=0)
-    pairs = [(n, t) for n, t in zip(n_values, times) if n > 1 and t > 0]
+    pairs = [(n, t) for n, t in zip(n_values, times, strict=True) if n > 1 and t > 0]
     if len(pairs) < 2:
         return None, None
 
@@ -158,7 +158,7 @@ def _tie_break_linear_vs_nlogn(n_values, times, scores):
     if var_ln == 0:
         return None, None
 
-    cov = sum((x - mean_ln) * (y - mean_lt) for x, y in zip(log_n, log_t))
+    cov = sum((x - mean_ln) * (y - mean_lt) for x, y in zip(log_n, log_t, strict=True))
     slope = cov / var_ln
     n_mid = math.exp(mean_ln)
     ln_mid = math.log(n_mid)

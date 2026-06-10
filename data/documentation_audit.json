@@ -1,9 +1,9 @@
 {
   "timestamp": null,
   "builtins": {
-    "total": 150,
-    "documented": 174,
-    "coverage_percent": 116.0,
+    "total": 149,
+    "documented": 173,
+    "coverage_percent": 116.1,
     "missing": [],
     "by_category": {
       "exceptions": [
@@ -52,7 +52,6 @@
         "PendingDeprecationWarning",
         "PermissionError",
         "ProcessLookupError",
-        "PythonFinalizationError",
         "RecursionError",
         "ReferenceError",
         "ResourceWarning",
@@ -167,19 +166,65 @@
     }
   },
   "stdlib": {
-    "total": 163,
+    "total": 227,
     "documented": 213,
-    "coverage_percent": 130.7,
+    "coverage_percent": 93.8,
     "missing": [
+      "81d243bd2c585b0f4821__mypyc",
       "audit_documentation",
+      "babel",
+      "backrefs",
+      "bs4",
       "cProfile",
+      "certifi",
+      "charset_normalizer",
+      "click",
+      "colorama",
+      "count_complexity_rows",
+      "dateutil",
+      "editorconfig",
+      "estimate_complexity",
+      "ghp_import",
+      "idna",
+      "iniconfig",
       "introspect",
-      "pip"
+      "jinja2",
+      "jsbeautifier",
+      "markdown",
+      "markupsafe",
+      "material",
+      "materialx",
+      "mergedeep",
+      "mermaid2",
+      "mkdocs",
+      "mkdocs_get_deps",
+      "nodeenv",
+      "packaging",
+      "paginate",
+      "pathspec",
+      "platformdirs",
+      "pluggy",
+      "py",
+      "pygments",
+      "pymdownx",
+      "pyright",
+      "pytest",
+      "requests",
+      "ruff",
+      "setuptools",
+      "six",
+      "soupsieve",
+      "test",
+      "typing_extensions",
+      "urllib3",
+      "watchdog",
+      "yaml",
+      "yaml_env_tag"
     ]
   },
   "summary": {
-    "total_items": 313,
-    "total_documented": 387,
-    "overall_coverage_percent": 123.6
+    "total_items": 376,
+    "total_documented": 386,
+    "overall_coverage_percent": 102.7
   }
 }

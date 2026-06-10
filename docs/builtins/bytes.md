@@ -24,8 +24,8 @@ The `bytes` type is an immutable sequence of bytes, while `bytearray` is the mut
 | `translate(table)` | O(n) | O(n) | Single pass with table lookup |
 | `maketrans(from, to)` | O(k) | O(k) | k = mapping size; static method |
 | `expandtabs(tabsize)` | O(n) | O(n) | Replace tabs with spaces |
-| `removeprefix(prefix)` | O(n) | O(n) | Returns slice if prefix matches (Python 3.9+) |
-| `removesuffix(suffix)` | O(n) | O(n) | Returns slice if suffix matches (Python 3.9+) |
+| `removeprefix(prefix)` | O(n) | O(n) | Returns slice if prefix matches |
+| `removesuffix(suffix)` | O(n) | O(n) | Returns slice if suffix matches |
 | **Split/Join** ||||
 | `split(sep)` | O(n) | O(n) | Single pass |
 | `rsplit(sep)` | O(n) | O(n) | Split from right |

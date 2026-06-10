@@ -353,7 +353,6 @@ nav:
     - Python 3.12: versions/py312.md
     - Python 3.11: versions/py311.md
     - Python 3.10: versions/py310.md
-    - Python 3.9: versions/py39.md
 
 plugins:
   - search

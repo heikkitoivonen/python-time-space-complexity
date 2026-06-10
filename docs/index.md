@@ -51,7 +51,7 @@ See [Built-in Types](builtins/list.md) for detailed analysis.
 
 ## Coverage
 
-- **Python Versions**: 3.9-3.14
+- **Python Versions**: 3.10-3.14
 - **Implementations**: CPython, PyPy, Jython, IronPython
 - **Operations**: 2,200+ built-in and stdlib operations
 - **Updates**: Regularly updated with new Python releases

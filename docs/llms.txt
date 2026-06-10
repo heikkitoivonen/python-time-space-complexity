@@ -2,7 +2,7 @@
 
 > Comprehensive documentation of time and space complexity for Python built-in operations and standard library modules.
 
-This site documents the Big-O time and space complexity of Python operations across built-in types, built-in functions, and standard library modules. It covers CPython 3.9–3.14, with notes on PyPy, Jython, and IronPython.
+This site documents the Big-O time and space complexity of Python operations across built-in types, built-in functions, and standard library modules. It covers CPython 3.10–3.14, with notes on PyPy, Jython, and IronPython.
 
 ## Built-in Types
 
@@ -81,4 +81,3 @@ This site documents the Big-O time and space complexity of Python operations acr
 - [Python 3.12](https://pythoncomplexity.com/versions/py312/): Complexity changes in 3.12
 - [Python 3.11](https://pythoncomplexity.com/versions/py311/): Complexity changes in 3.11
 - [Python 3.10](https://pythoncomplexity.com/versions/py310/): Complexity changes in 3.10
-- [Python 3.9](https://pythoncomplexity.com/versions/py39/): Complexity changes in 3.9
