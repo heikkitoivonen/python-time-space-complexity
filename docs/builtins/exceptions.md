@@ -11,6 +11,7 @@ BaseException (O(1) to raise and catch)
 ├── SystemExit - Program exit (exit code)
 ├── KeyboardInterrupt - User interrupt (Ctrl+C)
 ├── GeneratorExit - Generator cleanup
+├── BaseExceptionGroup - Multiple exceptions (Python 3.11+)
 └── Exception (base for most exceptions)
     ├── ArithmeticError
     │   ├── FloatingPointError - Float operation error
@@ -20,7 +21,7 @@ BaseException (O(1) to raise and catch)
     ├── AttributeError - Attribute not found
     ├── BufferError - Buffer operation failed
     ├── EOFError - End of file reached
-    ├── ExceptionGroup - Multiple exceptions
+    ├── ExceptionGroup - Multiple exceptions (also a BaseExceptionGroup; 3.11+)
     ├── ImportError
     │   └── ModuleNotFoundError - Module not found
     ├── LookupError
@@ -40,22 +41,21 @@ BaseException (O(1) to raise and catch)
     │   ├── InterruptedError - Interrupted
     │   ├── BlockingIOError - Blocking operation
     │   ├── ChildProcessError - Child process error
-    │   ├── BrokenPipeError - Broken pipe
     │   ├── ConnectionError - Connection error
     │   │   ├── BrokenPipeError
     │   │   ├── ConnectionAbortedError
     │   │   ├── ConnectionRefusedError
     │   │   └── ConnectionResetError
-    │   ├── EnvironmentError - Environment error
-    │   └── IOError - I/O error
+    │   └── (EnvironmentError and IOError are aliases of OSError)
     ├── ReferenceError - Weak reference deleted
     ├── RuntimeError - Generic runtime error
-    ├── RecursionError - Max recursion exceeded
+    │   ├── NotImplementedError - Not implemented
+    │   └── RecursionError - Max recursion exceeded
     ├── StopIteration - Iterator exhausted
     ├── StopAsyncIteration - Async iterator exhausted
     ├── SyntaxError
-    │   ├── IndentationError - Indentation error
-    │   └── TabError - Tab/space mixing
+    │   └── IndentationError - Indentation error
+    │       └── TabError - Tab/space mixing
     ├── SystemError - Internal interpreter error
     ├── TypeError - Wrong type
     ├── ValueError - Wrong value
@@ -63,7 +63,6 @@ BaseException (O(1) to raise and catch)
     │       ├── UnicodeDecodeError - Decode failed
     │       ├── UnicodeEncodeError - Encode failed
     │       └── UnicodeTranslateError - Translate failed
-    ├── NotImplementedError - Not implemented
     └── Warning (warnings don't stop execution)
         ├── DeprecationWarning - Feature deprecated
         ├── PendingDeprecationWarning - Future deprecation
@@ -115,6 +114,8 @@ except SystemExit as e:
 Raised by Ctrl+C. Not caught by `except Exception`.
 
 ```python
+import sys
+
 try:
     while True:
         process()
@@ -151,25 +152,35 @@ except ZeroDivisionError:
 ```
 
 #### `FloatingPointError` - Float Operation Error
+CPython itself no longer raises this — invalid float operations return `inf`/`nan` instead. Mainly seen with NumPy configured to raise:
+
 ```python
-import warnings
-warnings.simplefilter("error", FloatingPointError)
+import numpy as np
+
+np.seterr(all='raise')
 
 try:
-    result = float('inf') - float('inf')  # NaN
+    result = np.float64(1.0) / np.float64(0.0)
 except FloatingPointError:
     print("Invalid float operation")
 ```
 
 #### `OverflowError` - Number Too Large
+Python ints never overflow (arbitrary precision); this is raised when a *float* result is too large.
+
 ```python
-import sys
+import math
 
 try:
-    large = sys.maxsize + 1
-    power = 10 ** 1000000  # May overflow in some contexts
+    result = math.exp(1000)  # Result too large for a float
 except OverflowError:
     print("Number too large")
+
+# Also raised when converting a huge int to float
+try:
+    f = float(10 ** 1000)
+except OverflowError:
+    print("Int too large for float")
 ```
 
 #### `ArithmeticError` - Base Arithmetic Error
@@ -302,12 +313,12 @@ except UnicodeEncodeError as e:
 
 #### `UnicodeTranslateError` - Translation Failed
 ```python
-# Raised during str.translate() with invalid mapping
+# Rarely raised by Python itself; mainly seen in custom
+# codec error handlers
 try:
-    text = "hello"
-    result = text.translate({0: "x"})  # Bad mapping
-except UnicodeTranslateError:
-    print("Translation failed")
+    raise UnicodeTranslateError("hello", 0, 1, "example reason")
+except UnicodeTranslateError as e:
+    print(f"Translation failed: {e.reason}")
 ```
 
 ### I/O and OS Errors - Time: O(1)
@@ -411,7 +422,7 @@ except ChildProcessError:
 import socket
 
 try:
-    socket.send(data)  # Pipe/socket closed
+    sock.send(data)  # Pipe/socket closed
 except BrokenPipeError:
     print("Pipe broken")
 ```
@@ -421,7 +432,7 @@ Base class for connection errors.
 
 ```python
 try:
-    socket.connect(("unreachable.host", 80))
+    sock.connect(("unreachable.host", 80))
 except ConnectionError:
     print("Connection failed")
 ```
@@ -429,7 +440,7 @@ except ConnectionError:
 #### `ConnectionRefusedError` - Connection Refused
 ```python
 try:
-    socket.connect(("localhost", 12345))  # No server listening
+    sock.connect(("localhost", 12345))  # No server listening
 except ConnectionRefusedError:
     print("Server refused connection")
 ```
@@ -437,7 +448,7 @@ except ConnectionRefusedError:
 #### `ConnectionAbortedError` - Connection Aborted
 ```python
 try:
-    socket.recv(1024)  # Connection aborted
+    sock.recv(1024)  # Connection aborted
 except ConnectionAbortedError:
     print("Connection aborted")
 ```
@@ -445,7 +456,7 @@ except ConnectionAbortedError:
 #### `ConnectionResetError` - Connection Reset
 ```python
 try:
-    socket.send(data)  # Peer reset connection
+    sock.send(data)  # Peer reset connection
 except ConnectionResetError:
     print("Connection reset")
 ```
@@ -453,6 +464,7 @@ except ConnectionResetError:
 #### `ProcessLookupError` - Process Not Found
 ```python
 import os
+import signal
 
 try:
     os.kill(999999, signal.SIGTERM)  # PID doesn't exist
@@ -567,7 +579,7 @@ except ReferenceError:
 #### `MemoryError` - Out of Memory
 ```python
 try:
-    huge_list = [0] * (10 ** 100)  # Impossible to allocate
+    huge_list = [0] * (2 ** 62)  # Impossible to allocate
 except MemoryError:
     print("Out of memory")
 ```
@@ -613,8 +625,11 @@ except SystemError:
 
 #### `BufferError` - Buffer Operation Failed
 ```python
+ba = bytearray(b"data")
+view = memoryview(ba)
+
 try:
-    memoryview(5)  # Can't create memoryview of int
+    ba.extend(b"more")  # Can't resize while a view is exported
 except BufferError:
     print("Invalid buffer operation")
 ```
@@ -676,6 +691,8 @@ except NotImplementedError:
 ```
 
 ### Exception Groups - Time: O(n) where n = exceptions
+
+Available in Python 3.11+.
 
 #### `ExceptionGroup` - Multiple Exceptions
 ```python
@@ -815,6 +832,7 @@ except AppError:
 ### Finally Block - Time: O(1)
 
 ```python
+resource = None
 try:
     resource = acquire_resource()
     use_resource(resource)
@@ -823,8 +841,9 @@ except Exception as e:
 else:
     print("Success")
 finally:
-    # Always executes
-    cleanup_resource(resource)
+    # Always executes; guard in case acquire_resource() raised
+    if resource is not None:
+        cleanup_resource(resource)
 ```
 
 ### Context Managers - Time: O(1)
