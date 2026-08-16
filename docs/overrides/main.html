@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block announce %}
+  <a
+    href="{{ config.repo_url }}"
+    target="_blank"
+    rel="noopener"
+    class="announce-star"
+    onclick="if (typeof gtag === 'function') { gtag('event', 'github_star_click', { event_category: 'engagement', event_label: 'announce_bar' }); }"
+  >
+    ⭐ Did this save you a trip to the CPython source?
+    <strong>Star it on GitHub</strong> so other developers can find it too.
+  </a>
+{% endblock %}

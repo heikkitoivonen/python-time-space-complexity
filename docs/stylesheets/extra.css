@@ -1,6 +1,23 @@
-/* Hide header repo badge; show repo in footer right via override */
-.md-header__source {
+/* Show the header repo badge (top-right, above the fold on every page) as a
+   GitHub star CTA, but suppress the live star/fork counts on the header badge
+   so a low number is not displayed there. The footer keeps its full repo info,
+   including the star count. */
+.md-header__source .md-source__facts {
   display: none;
+}
+
+/* Announcement-bar star CTA */
+.announce-star {
+  color: inherit;
+  text-decoration: none;
+}
+
+.announce-star:hover {
+  text-decoration: underline;
+}
+
+.announce-star strong {
+  white-space: nowrap;
 }
 
 .footer-meta {

@@ -8,6 +8,7 @@ theme:
   name: material
   custom_dir: docs/overrides
   features:
+    - announce.dismiss
     - navigation.instant
     - navigation.tracking
     - navigation.tabs
