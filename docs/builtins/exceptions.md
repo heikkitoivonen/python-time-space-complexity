@@ -760,20 +760,6 @@ warnings.warn("Encoding not specified", EncodingWarning)
 warnings.warn("Resource not closed", ResourceWarning)
 ```
 
-### Converting Warnings to Errors
-
-```python
-import warnings
-
-# Make DeprecationWarning raise an error
-warnings.filterwarnings("error", category=DeprecationWarning)
-
-try:
-    warnings.warn("Deprecated", DeprecationWarning)
-except DeprecationWarning:
-    print("Caught as error")
-```
-
 ## Exception Handling Best Practices
 
 ### Catch Specific Exceptions - Time: O(1)

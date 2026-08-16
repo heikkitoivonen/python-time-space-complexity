@@ -204,30 +204,12 @@ isinstance(obj, object)  # True - O(1)
 Leaf.__mro__  # (Leaf, Middle, Root, object)
 ```
 
-## Comparison with type
-
-```python
-# object - base class
-# type - metaclass (creates classes)
-
-obj = object()
-MyClass = type('MyClass', (), {})  # Create class dynamically
-
-type(obj)       # <class 'object'>
-type(MyClass)   # <class 'type'>
-
-# All classes are instances of type
-# All instances are instances of object
-```
-
 ## Best Practices
 
 ✅ **Do**:
 
-- Inherit from object explicitly for clarity (Python 2 compatibility)
 - Use object() for sentinel values
 - Rely on object's default behavior
-- Check isinstance(x, object) for type checking
 
 ❌ **Avoid**:
 
