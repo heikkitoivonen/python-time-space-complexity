@@ -7,7 +7,7 @@ The `getattr()` function retrieves the value of a named attribute from an object
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | Attribute lookup | O(1) avg | O(1) | Average case for direct instance attributes (dict lookup) |
-| MRO traversal | O(d) | O(1) | d = depth of inheritance hierarchy; typically small (<10) |
+| MRO traversal | O(d=depth) | O(1) | d = depth of inheritance hierarchy; typically small (<10) |
 | Call __getattribute__ | O(1) | O(1) | Direct attribute fetch |
 | Call __getattr__ | O(k) | O(1) | k = custom __getattr__ implementation time |
 | Total operation | O(d) | O(1) | d = MRO depth, typically constant for most hierarchies |
