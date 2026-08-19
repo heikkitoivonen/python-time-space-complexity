@@ -132,56 +132,6 @@ obj = Level4()
 attrs = dir(obj)  # ~40 attributes (including inherited)
 ```
 
-## Filtering Attributes
-
-### Finding Specific Types
-
-```python
-# O(n) - filter attributes after dir() call
-class Data:
-    public_attr = 1
-    _private_attr = 2
-    __dunder_attr = 3
-    
-    def public_method(self):
-        pass
-    
-    def _private_method(self):
-        pass
-
-obj = Data()
-
-# Get all attributes - O(n log n)
-all_attrs = dir(obj)
-
-# Filter to public only - O(n)
-public = [attr for attr in all_attrs if not attr.startswith('_')]
-
-# Filter methods only - O(n)
-import inspect
-methods = [attr for attr in all_attrs if callable(getattr(obj, attr))]
-
-# Filter to dunder methods - O(n)
-dunders = [attr for attr in all_attrs if attr.startswith('__')]
-```
-
-### Exclude Special Attributes
-
-```python
-# O(n) - filter out implementation details
-class MyClass:
-    user_method = lambda self: None
-    data = "user data"
-
-def get_user_attributes(obj):
-    """Get non-dunder attributes - O(n)"""
-    return [attr for attr in dir(obj) 
-            if not attr.startswith('_')]
-
-obj = MyClass()
-user_attrs = get_user_attributes(obj)  # Only user-defined items
-```
-
 ## Performance Patterns
 
 ### vs Accessing __dict__ Directly
