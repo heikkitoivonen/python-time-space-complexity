@@ -121,6 +121,7 @@ docs/fi/builtins/list.md   ->  https://pythoncomplexity.com/fi/builtins/list/
 |--------|----------|----------------------------|
 | `en`   | English  | Complete (source of truth) |
 | `fi`   | Suomi    | Pilot - 13 pages           |
+| `zh`   | 简体中文 | Pilot - 13 pages           |
 
 Pages without a translation fall back to English automatically, so a partial
 translation is always safe to merge. You never need to translate a whole

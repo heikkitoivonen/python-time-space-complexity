@@ -405,6 +405,35 @@ plugins:
             Sum: Summa
             Sorted: Järjestäminen
             Regular Expressions: Säännölliset lausekkeet
+        - locale: zh
+          name: 简体中文
+          build: true
+          site_name: "Python 大 O 表示法：时间与空间复杂度"
+          site_description: Python 内置类型与标准库操作的时间和空间复杂度完整参考
+          nav_translations:
+            Home: 首页
+            Overview: 概览
+            Built-in Types: 内置类型
+            Built-in Functions: 内置函数
+            Standard Library: 标准库
+            Implementations: 实现
+            Versions: 版本
+            Lists: 列表
+            Dictionaries: 字典
+            Sets: 集合
+            Tuples: 元组
+            Strings: 字符串
+            Bytes & Bytearray: 字节与字节数组
+            Range: 范围
+            Integer: 整数
+            Float: 浮点数
+            Boolean: 布尔值
+            Length: 长度
+            Maximum: 最大值
+            Minimum: 最小值
+            Sum: 求和
+            Sorted: 排序
+            Regular Expressions: 正则表达式
 
 markdown_extensions:
   - admonition
@@ -429,6 +458,7 @@ markdown_extensions:
   - tables
   - toc:
       permalink: true
+      slugify: !!python/name:markdown.extensions.toc.slugify_unicode
 
 extra:
   analytics:

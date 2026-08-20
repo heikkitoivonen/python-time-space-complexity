@@ -31,6 +31,7 @@ classifiers = [
 ]
 
 dependencies = [
+    "jieba>=0.42.1",
     "mkdocs",
     "mkdocs-material",
     "mkdocs-mermaid2-plugin",
