@@ -59,3 +59,19 @@
   overflow: visible;
   text-overflow: clip;
 }
+
+/* Notice shown on localized URLs whose page is not translated yet. Kept
+   deliberately compact so it reads as context, not as a warning. */
+.admonition.translation-fallback {
+  font-size: 0.72rem;
+  margin: 0 0 1.2em;
+  padding-bottom: 0.4rem;
+}
+
+.admonition.translation-fallback > .admonition-title {
+  margin-bottom: 0.2rem;
+}
+
+.admonition.translation-fallback > p:last-child {
+  margin-bottom: 0;
+}

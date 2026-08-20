@@ -10,9 +10,51 @@
     {%- if config.theme.language == "fi" %}
       ⭐ Säästikö tämä sinulta käynnin CPythonin lähdekoodissa?
       <strong>Tähditä se GitHubissa</strong>, niin muutkin kehittäjät löytävät sen.
+    {%- elif config.theme.language == "zh" %}
+      ⭐ 这个网站帮你省去了翻阅 CPython 源码的功夫吗？
+      <strong>在 GitHub 上点个星</strong>，让更多开发者找到它。
     {%- else %}
       ⭐ Did this save you a trip to the CPython source?
       <strong>Star it on GitHub</strong> so other developers can find it too.
     {%- endif %}
   </a>
+{% endblock %}
+
+{% block content %}
+  {#-
+    A page whose source locale differs from the locale being built is an
+    untranslated page served from the English source. Tell the reader, so an
+    English page under a localized URL does not read as a bug. Add a locale
+    here when adding a language; locales with no entry simply show nothing.
+  -#}
+  {%- set fallback_notices = {
+    "fi": {
+      "title": "Ei vielä käännetty",
+      "body": "Tätä sivua ei ole vielä käännetty suomeksi, joten se näytetään englanniksi.",
+      "cta": "Auta kääntämään"
+    },
+    "zh": {
+      "title": "尚未翻译",
+      "body": "本页面尚未翻译成中文，因此显示英文原文。",
+      "cta": "帮助翻译"
+    }
+  } -%}
+  {%- if page and page.file.locale is defined
+        and page.file.locale != config.theme.language %}
+    {%- set notice = fallback_notices.get(config.theme.language) %}
+    {%- if notice %}
+      <div class="admonition info translation-fallback">
+        <p class="admonition-title">{{ notice.title }}</p>
+        <p>
+          {{ notice.body }}
+          <a
+            href="{{ config.repo_url }}/blob/main/TRANSLATING.md"
+            target="_blank"
+            rel="noopener"
+          >{{ notice.cta }}</a>
+        </p>
+      </div>
+    {%- endif %}
+  {%- endif %}
+  {{ super() }}
 {% endblock %}

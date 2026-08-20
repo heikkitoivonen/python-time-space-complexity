@@ -125,7 +125,9 @@ docs/fi/builtins/list.md   ->  https://pythoncomplexity.com/fi/builtins/list/
 
 Pages without a translation fall back to English automatically, so a partial
 translation is always safe to merge. You never need to translate a whole
-section before contributing.
+section before contributing. Those fallback pages display a short notice in
+the reader's language explaining that the page is not translated yet, so
+English text under a localized URL does not read as a bug.
 
 ### Ground rules
 

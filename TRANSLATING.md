@@ -158,70 +158,70 @@ and Python identifiers are never translated.
 
 ### Core terms
 
-| English            | Chinese      | Notes                                  |
-|--------------------|--------------|----------------------------------------|
-| time complexity    | 时间复杂度   |                                        |
-| space complexity   | 空间复杂度   |                                        |
-| Big-O notation     | 大 O 表示法  | space around the Latin `O`             |
-| amortized          | 均摊         | alternative: 摊还                      |
-| worst case         | 最坏情况     |                                        |
-| average case       | 平均情况     |                                        |
-| best case          | 最好情况     |                                        |
-| operation          | 操作         |                                        |
-| element / item     | 元素         |                                        |
-| index              | 索引         |                                        |
-| lookup             | 查找         |                                        |
-| insertion          | 插入         |                                        |
-| deletion / removal | 删除 / 移除  |                                        |
-| traversal          | 遍历         |                                        |
-| iteration          | 迭代         |                                        |
-| slice              | 切片         |                                        |
-| in place           | 原地         |                                        |
-| overhead           | 开销         |                                        |
-| trade-off          | 权衡         |                                        |
+| English            | Chinese     | Notes                      |
+|--------------------|-------------|----------------------------|
+| time complexity    | 时间复杂度  |                            |
+| space complexity   | 空间复杂度  |                            |
+| Big-O notation     | 大 O 表示法 | space around the Latin `O` |
+| amortized          | 均摊        | alternative: 摊还          |
+| worst case         | 最坏情况    |                            |
+| average case       | 平均情况    |                            |
+| best case          | 最好情况    |                            |
+| operation          | 操作        |                            |
+| element / item     | 元素        |                            |
+| index              | 索引        |                            |
+| lookup             | 查找        |                            |
+| insertion          | 插入        |                            |
+| deletion / removal | 删除 / 移除 |                            |
+| traversal          | 遍历        |                            |
+| iteration          | 迭代        |                            |
+| slice              | 切片        |                            |
+| in place           | 原地        |                            |
+| overhead           | 开销        |                            |
+| trade-off          | 权衡        |                            |
 
 ### Data structures
 
-| English         | Chinese    | Notes                                     |
-|-----------------|------------|-------------------------------------------|
-| list            | 列表       |                                           |
-| dictionary      | 字典       | the type is still written `dict`          |
-| set             | 集合       |                                           |
-| tuple           | 元组       |                                           |
-| string          | 字符串     |                                           |
-| bytes           | 字节       |                                           |
-| array           | 数组       |                                           |
-| hash table      | 哈希表     | also seen: 散列表                         |
-| hash            | 哈希       | hash value: 哈希值                        |
-| hash collision  | 哈希冲突   |                                           |
-| linked list     | 链表       |                                           |
-| heap            | 堆         |                                           |
-| binary heap     | 二叉堆     |                                           |
-| queue           | 队列       |                                           |
-| deque           | 双端队列   | usually left as `deque` in running text   |
-| stack           | 栈         |                                           |
-| tree            | 树         |                                           |
-| key / value     | 键 / 值    |                                           |
+| English        | Chinese  | Notes                                   |
+|----------------|----------|-----------------------------------------|
+| list           | 列表     |                                         |
+| dictionary     | 字典     | the type is still written `dict`        |
+| set            | 集合     |                                         |
+| tuple          | 元组     |                                         |
+| string         | 字符串   |                                         |
+| bytes          | 字节     |                                         |
+| array          | 数组     |                                         |
+| hash table     | 哈希表   | also seen: 散列表                       |
+| hash           | 哈希     | hash value: 哈希值                      |
+| hash collision | 哈希冲突 |                                         |
+| linked list    | 链表     |                                         |
+| heap           | 堆       |                                         |
+| binary heap    | 二叉堆   |                                         |
+| queue          | 队列     |                                         |
+| deque          | 双端队列 | usually left as `deque` in running text |
+| stack          | 栈       |                                         |
+| tree           | 树       |                                         |
+| key / value    | 键 / 值  |                                         |
 
 ### Implementation vocabulary
 
-| English            | Chinese    | Notes                          |
-|--------------------|------------|--------------------------------|
-| contiguous         | 连续       |                                |
-| reference counting | 引用计数   |                                |
-| garbage collection | 垃圾回收   |                                |
-| memory allocation  | 内存分配   |                                |
-| resizing           | 扩容       | shrinking: 缩容                |
-| immutable          | 不可变     |                                |
-| mutable            | 可变       |                                |
-| interned           | 驻留       | of strings                     |
-| built-in           | 内置       |                                |
-| standard library   | 标准库     |                                |
-| implementation     | 实现       |                                |
-| benchmark          | 基准测试   |                                |
-| sorting            | 排序       |                                |
-| comparison         | 比较       |                                |
-| binary search      | 二分查找   |                                |
+| English            | Chinese  | Notes           |
+|--------------------|----------|-----------------|
+| contiguous         | 连续     |                 |
+| reference counting | 引用计数 |                 |
+| garbage collection | 垃圾回收 |                 |
+| memory allocation  | 内存分配 |                 |
+| resizing           | 扩容     | shrinking: 缩容 |
+| immutable          | 不可变   |                 |
+| mutable            | 可变     |                 |
+| interned           | 驻留     | of strings      |
+| built-in           | 内置     |                 |
+| standard library   | 标准库   |                 |
+| implementation     | 实现     |                 |
+| benchmark          | 基准测试 |                 |
+| sorting            | 排序     |                 |
+| comparison         | 比较     |                 |
+| binary search      | 二分查找 |                 |
 
 ### Admonition titles
 
@@ -245,6 +245,23 @@ search token and search effectively stops working.
 1. Add the locale to the `i18n` plugin's `languages` list in `mkdocs.yml`,
    with `site_name`, `site_description`, and `nav_translations`.
 2. Confirm the locale has a lunr stemmer (`lunr.<locale>.js`) so search works;
-   the plugin wires it up automatically when one exists.
-3. Create `docs/<locale>/` and translate `index.md` first.
-4. Add the locale to `LOCALES` in `scripts/validate_translations.py`.
+   the plugin wires it up automatically when one exists. Languages without
+   word boundaries need a segmenter too - see the Chinese note above.
+3. Add the locale's strings to `fallback_notices` in
+   `docs/overrides/main.html`, and translate the announce bar in the same
+   file. A locale with no entry simply shows no notice.
+4. Create `docs/<locale>/` and translate `index.md` first.
+5. Add the locale to `LOCALES` in `scripts/validate_translations.py`.
+6. Add a row to the status table above and to the one in `CONTRIBUTING.md`.
+
+## The untranslated-page notice
+
+Pages that have no translation are served from the English source under the
+localized URL. Without a hint, that reads as a bug: the reader asked for
+Chinese and got English.
+
+`docs/overrides/main.html` therefore shows a short notice at the top of any
+page whose source locale differs from the locale being built. It keys off
+`page.file.locale`, which the i18n plugin sets per file, so it needs no front
+matter and cannot fall out of sync with the actual content. Translated pages
+and English pages show nothing.
