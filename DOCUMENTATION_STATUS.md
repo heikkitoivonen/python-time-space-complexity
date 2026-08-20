@@ -4,21 +4,23 @@ This document tracks the coverage of built-in functions, types, and standard lib
 
 ## Overview
 
-- **Total Items**: 313 (150 builtins + 163 stdlib modules)
-- **Documented**: 387 (174 builtins + 213 stdlib)
-- **Coverage**: 123.6%
+- **Total Items**: 362 (149 builtins + 213 stdlib modules)
+- **Documented**: 362 (149 builtins + 213 stdlib)
+- **Coverage**: 100.0%
 
-**Note**: Coverage exceeds 100% because comprehensive documentation files (like `exceptions.md`) cover multiple individual items, and we document deprecated/removed modules for historical reference.
+**Note**: Totals come from `sys.stdlib_module_names` and the `builtins` namespace of the running interpreter, so they reflect exactly what upstream ships. The docs also cover items that are not top-level names (`deque`, `namedtuple`, `xml.dom`, ...) and deprecated or removed modules kept for historical reference; those are extra pages, not extra coverage.
 
-Last updated: January 30, 2026 (Python 3.14 audit)
+Regenerate with `python scripts/audit_documentation.py`.
+
+Last updated: August 19, 2026 (Python 3.14 audit)
 
 ## Built-in Types & Functions
 
-**Coverage: 116.0% (174/150)**
+**Coverage: 100.0% (149/149)**
 
-All 150 built-in functions, types, and constants are fully documented, with comprehensive guides for multiple related items.
+All 149 built-in functions, types, and constants are fully documented, with comprehensive guides for multiple related items.
 
-### ✅ Documented (174 items covering 150 builtins)
+### ✅ Documented (149 builtins)
 - `bool`
 - `bytes`
 - `dict`
@@ -203,9 +205,9 @@ Complete coverage of all built-in functions, types, exceptions, and constants:
 
 ## Standard Library Modules
 
-**Coverage: 130.7% (213/163)**
+**Coverage: 100.0% (213/213)**
 
-All standard library modules are fully documented, including new Python 3.14 modules. Coverage exceeds 100% due to documentation of deprecated/removed modules for historical reference.
+All 213 standard library modules are fully documented, including new Python 3.14 modules and platform-specific ones (`msvcrt`, `winreg`, `winsound`, `nt`).
 
 ### ✅ Python 3.14 Modules (NEW)
 

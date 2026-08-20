@@ -2,8 +2,8 @@
   "timestamp": null,
   "builtins": {
     "total": 149,
-    "documented": 173,
-    "coverage_percent": 116.1,
+    "documented": 149,
+    "coverage_percent": 100.0,
     "missing": [],
     "by_category": {
       "exceptions": [
@@ -166,65 +166,14 @@
     }
   },
   "stdlib": {
-    "total": 227,
+    "total": 213,
     "documented": 213,
-    "coverage_percent": 93.8,
-    "missing": [
-      "81d243bd2c585b0f4821__mypyc",
-      "audit_documentation",
-      "babel",
-      "backrefs",
-      "bs4",
-      "cProfile",
-      "certifi",
-      "charset_normalizer",
-      "click",
-      "colorama",
-      "count_complexity_rows",
-      "dateutil",
-      "editorconfig",
-      "estimate_complexity",
-      "ghp_import",
-      "idna",
-      "iniconfig",
-      "introspect",
-      "jinja2",
-      "jsbeautifier",
-      "markdown",
-      "markupsafe",
-      "material",
-      "materialx",
-      "mergedeep",
-      "mermaid2",
-      "mkdocs",
-      "mkdocs_get_deps",
-      "nodeenv",
-      "packaging",
-      "paginate",
-      "pathspec",
-      "platformdirs",
-      "pluggy",
-      "py",
-      "pygments",
-      "pymdownx",
-      "pyright",
-      "pytest",
-      "requests",
-      "ruff",
-      "setuptools",
-      "six",
-      "soupsieve",
-      "test",
-      "typing_extensions",
-      "urllib3",
-      "watchdog",
-      "yaml",
-      "yaml_env_tag"
-    ]
+    "coverage_percent": 100.0,
+    "missing": []
   },
   "summary": {
-    "total_items": 376,
-    "total_documented": 386,
-    "overall_coverage_percent": 102.7
+    "total_items": 362,
+    "total_documented": 362,
+    "overall_coverage_percent": 100.0
   }
 }

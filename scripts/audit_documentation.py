@@ -3,7 +3,7 @@
 import builtins
 import inspect
 import json
-import pkgutil
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -40,8 +40,14 @@ def get_all_builtins() -> dict[str, list[str]]:
 
 
 def get_all_stdlib_modules() -> list[str]:
-    """Get list of all standard library modules."""
-    stdlib_modules: list[str] = []
+    """Get list of all standard library modules.
+
+    Uses ``sys.stdlib_module_names``, which is baked into the interpreter and
+    lists exactly the standard library. Do NOT use ``pkgutil.iter_modules()``
+    here: it walks ``sys.path``, so installed third-party packages and this
+    repository's own ``scripts/`` modules would be counted as stdlib and the
+    reported coverage would drift with whatever happens to be installed.
+    """
     non_public = {
         "pydoc_data",
         "sre_compile",
@@ -49,12 +55,11 @@ def get_all_stdlib_modules() -> list[str]:
         "sre_parse",
     }
 
-    for _importer, modname, _ispkg in pkgutil.iter_modules():
-        # Filter to main stdlib modules (no underscores at start)
-        if not modname.startswith("_") and modname not in non_public:
-            stdlib_modules.append(modname)
-
-    return sorted(stdlib_modules)
+    return sorted(
+        name
+        for name in sys.stdlib_module_names
+        if not name.startswith("_") and name not in non_public
+    )
 
 
 def get_documented_files(docs_dir: Path) -> dict[str, list[str]]:
@@ -127,32 +132,42 @@ def generate_audit_report(workspace_root: Path) -> dict[str, Any]:
     for _category, items in builtins_by_category.items():
         all_builtins.extend(items)
 
-    # Find gaps
-    missing_builtins = [b for b in all_builtins if b not in documented["builtins"]]
-    missing_stdlib = [s for s in stdlib_modules if s not in documented["stdlib"]]
+    # Find gaps. Page filenames are lowercase, but module names are not always
+    # (e.g. cProfile -> docs/stdlib/cprofile.md), so match case-insensitively.
+    documented_builtins = {name.lower() for name in documented["builtins"]}
+    documented_stdlib = {name.lower() for name in documented["stdlib"]}
+
+    missing_builtins = [b for b in all_builtins if b.lower() not in documented_builtins]
+    missing_stdlib = [s for s in stdlib_modules if s.lower() not in documented_stdlib]
+
+    # Coverage counts items that exist upstream and have a page. The docs also
+    # cover things that are not top-level module names (deque, namedtuple,
+    # xml.dom, ...), so len(documented) would overcount and can exceed 100%.
+    covered_builtins = len(all_builtins) - len(missing_builtins)
+    covered_stdlib = len(stdlib_modules) - len(missing_stdlib)
 
     # Create report
     report: dict[str, Any] = {
         "timestamp": None,
         "builtins": {
             "total": len(all_builtins),
-            "documented": len(documented["builtins"]),
-            "coverage_percent": round(100 * len(documented["builtins"]) / len(all_builtins), 1),
+            "documented": covered_builtins,
+            "coverage_percent": round(100 * covered_builtins / len(all_builtins), 1),
             "missing": sorted(missing_builtins),
             "by_category": builtins_by_category,
         },
         "stdlib": {
             "total": len(stdlib_modules),
-            "documented": len(documented["stdlib"]),
-            "coverage_percent": round(100 * len(documented["stdlib"]) / len(stdlib_modules), 1),
+            "documented": covered_stdlib,
+            "coverage_percent": round(100 * covered_stdlib / len(stdlib_modules), 1),
             "missing": missing_stdlib,
         },
         "summary": {
             "total_items": len(all_builtins) + len(stdlib_modules),
-            "total_documented": len(documented["builtins"]) + len(documented["stdlib"]),
+            "total_documented": covered_builtins + covered_stdlib,
             "overall_coverage_percent": round(
                 100
-                * (len(documented["builtins"]) + len(documented["stdlib"]))
+                * (covered_builtins + covered_stdlib)
                 / (len(all_builtins) + len(stdlib_modules)),
                 1,
             ),

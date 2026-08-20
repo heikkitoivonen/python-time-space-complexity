@@ -136,6 +136,7 @@ nav:
     - Ast: stdlib/ast.md
     - Asyncio: stdlib/asyncio.md
     - Atexit: stdlib/atexit.md
+    - Audioop: stdlib/audioop.md
     - Asynchat: stdlib/asynchat.md
     - Asyncore: stdlib/asyncore.md
     - Base64: stdlib/base64.md
@@ -143,6 +144,7 @@ nav:
     - Binascii: stdlib/binascii.md
     - Bz2: stdlib/bz2.md
     - Bisect: stdlib/bisect.md
+    - Builtins: stdlib/builtins.md
     - Chunk: stdlib/chunk.md
     - Cmd: stdlib/cmd.md
     - Code: stdlib/code.md
@@ -185,6 +187,7 @@ nav:
     - Enum: stdlib/enum.md
     - Errno: stdlib/errno.md
     - Fcntl: stdlib/fcntl.md
+    - Faulthandler: stdlib/faulthandler.md
     - Filecmp: stdlib/filecmp.md
     - Fileinput: stdlib/fileinput.md
     - Fnmatch: stdlib/fnmatch.md
@@ -225,14 +228,19 @@ nav:
     - Marshal: stdlib/marshal.md
     - Math: stdlib/math.md
     - Mimetypes: stdlib/mimetypes.md
+    - Msilib: stdlib/msilib.md
+    - Msvcrt: stdlib/msvcrt.md
     - Mmap: stdlib/mmap.md
     - Modulefinder: stdlib/modulefinder.md
     - Multiprocessing: stdlib/multiprocessing.md
     - Netrc: stdlib/netrc.md
+    - Nis: stdlib/nis.md
     - Nntplib: stdlib/nntplib.md
+    - Nt: stdlib/nt.md
     - Nturl2path: stdlib/nturl2path.md
     - Opcode: stdlib/opcode.md
     - Optparse: stdlib/optparse.md
+    - Ossaudiodev: stdlib/ossaudiodev.md
     - Pdb: stdlib/pdb.md
     - Pickle: stdlib/pickle.md
     - Pickletools: stdlib/pickletools.md
@@ -283,6 +291,7 @@ nav:
     - Smtpd: stdlib/smtpd.md
     - Smtplib: stdlib/smtplib.md
     - Sndhdr: stdlib/sndhdr.md
+    - Spwd: stdlib/spwd.md
     - Ssl: stdlib/ssl.md
     - Stat: stdlib/stat.md
     - Statistics: stdlib/statistics.md
@@ -328,6 +337,8 @@ nav:
     - Wave: stdlib/wave.md
     - Weakref: stdlib/weakref.md
     - Webbrowser: stdlib/webbrowser.md
+    - Winreg: stdlib/winreg.md
+    - Winsound: stdlib/winsound.md
     - Wsgiref: stdlib/wsgiref.md
     - Xml: stdlib/xml.md
     - Xml.dom: stdlib/xml.dom.md

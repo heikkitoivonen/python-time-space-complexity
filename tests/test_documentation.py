@@ -123,7 +123,7 @@ def test_minimum_builtin_coverage():
         report = json.load(f)
 
     # Coverage should not decrease below current level
-    min_coverage = 8.0  # Current: 8.1%
+    min_coverage = 100.0  # Current: 100.0% - every builtin has a page
     current = report["builtins"]["coverage_percent"]
     assert current >= min_coverage, f"Builtin coverage dropped: {current}% < {min_coverage}%"
 
@@ -135,7 +135,7 @@ def test_minimum_stdlib_coverage():
         report = json.load(f)
 
     # Coverage should not decrease below current level
-    min_coverage = 3.8  # Current: 3.9%
+    min_coverage = 100.0  # Current: 100.0% - every stdlib module has a page
     current = report["stdlib"]["coverage_percent"]
     assert current >= min_coverage, f"Stdlib coverage dropped: {current}% < {min_coverage}%"
 
