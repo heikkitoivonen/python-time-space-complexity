@@ -160,6 +160,44 @@ def test_mkdocs_build_valid():
     )
 
 
+def test_translations_valid():
+    """Test that localized pages match their English source structurally and aren't stale."""
+    if not shutil.which("uv"):
+        pytest.skip("uv not found")
+
+    project_root = Path(__file__).parent.parent
+
+    result = subprocess.run(
+        ["uv", "run", "python", "scripts/validate_translations.py"],
+        cwd=project_root,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, (
+        f"translation validation failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+
+
+def test_translated_locales_configured():
+    """Test that every docs/<locale>/ tree is declared in mkdocs.yml."""
+    project_root = Path(__file__).parent.parent
+    docs_dir = project_root / "docs"
+    mkdocs_content = (project_root / "mkdocs.yml").read_text()
+
+    # Locale directories are two-letter lowercase names holding markdown files.
+    locale_dirs = [
+        d.name
+        for d in docs_dir.iterdir()
+        if d.is_dir() and len(d.name) == 2 and d.name.isalpha() and d.name.islower()
+    ]
+
+    for locale in locale_dirs:
+        assert f"locale: {locale}" in mkdocs_content, (
+            f"docs/{locale}/ exists but 'locale: {locale}' is not configured in mkdocs.yml"
+        )
+
+
 def test_mkdocs_yaml_valid():
     """Test that mkdocs.yml has valid structure."""
     mkdocs_file = Path(__file__).parent.parent / "mkdocs.yml"

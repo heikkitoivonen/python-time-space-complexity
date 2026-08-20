@@ -14,13 +14,14 @@ This file contains instructions for AI agents (like Amp, Claude, etc.) working o
    ```
    - All ruff linting must pass
    - All pyright type checks must pass (0 errors)
-   - All pytest tests must pass (10/10)
+   - All pytest tests must pass (no failures; the suite grows over time, so
+     check for zero failures rather than a fixed count)
 
 2. Verify output shows:
    ```
    All checks passed!
    0 errors, 0 warnings, 0 informations
-   ====== 10 passed ======
+   ====== N passed ======
    ```
 
 3. Do NOT commit if checks fail
@@ -34,7 +35,7 @@ This file contains instructions for AI agents (like Amp, Claude, etc.) working o
 # Run quality checks
 make lint      # Verify: All checks passed!
 make format    # Fix any formatting issues
-make test      # Verify: 6 passed
+make test      # Verify: no failures
 
 # Only then commit
 git add .
@@ -63,7 +64,8 @@ git commit -m "Your message"
 ## Project Structure
 
 ### Key Directories
-- `/docs` - Documentation markdown files (site content)
+- `/docs` - Documentation markdown files (site content, English)
+- `/docs/<locale>` - Translations mirroring the English tree (e.g. `/docs/fi`)
 - `/tests` - Python test files
 - `/scripts` - Utility scripts (templates)
 - `/data` - JSON data files for documentation
@@ -71,7 +73,9 @@ git commit -m "Your message"
 ### Key Files
 - `pyproject.toml` - Project config, dependencies, tool settings
 - `Makefile` - Development commands
-- `mkdocs.yml` - Documentation site config
+- `mkdocs.yml` - Documentation site config (incl. `i18n` plugin locales)
+- `TRANSLATING.md` - Translation workflow and per-locale glossaries
+- `scripts/validate_translations.py` - Translation structure/staleness checker
 - `.python-version` - Python 3.11 specification
 - `uv.lock` - Dependency lock file (reproducible builds)
 
@@ -159,6 +163,52 @@ uv add --dev package-name
 - Move documented items from "Missing" to "Documented" sections
 - Never commit without updating this file - it tracks project coverage goals
 
+### Editing an English Page That Has Translations
+
+English is the source of truth. Every translated page records the SHA-256 of
+the English file it was made from, so **any** edit to an English page - even a
+typo fix or whitespace change - marks its translations stale and fails
+`make check`.
+
+When you edit `docs/<path>.md`, check for `docs/*/<path>.md`:
+
+1. Make the English edit
+2. Mirror the same change into each existing translation
+3. Re-record the hashes: `uv run python scripts/validate_translations.py --update-hashes <locale>`
+4. Run `make check`
+
+If you cannot make a faithful translation, say so and leave the page stale
+rather than guessing - a stale flag is recoverable, a wrong translation is not.
+
+**Never hand-edit `source_sha`.** Use `--update-hashes`, and only after the
+translation actually matches the new English text. Editing the hash without
+updating the content silently marks a wrong translation as current.
+
+### Translating
+
+Full workflow, glossaries, and per-locale rules: `TRANSLATING.md`.
+Contributor-facing summary: the i18n section of `CONTRIBUTING.md`.
+
+Structural rules the validator enforces (`scripts/validate_translations.py`,
+run as part of `make check`):
+
+- Code blocks must match the English source **byte for byte** - do not
+  translate comments, identifiers, or output inside fenced blocks
+- Heading count and levels must match
+- Table row counts must match
+- Link targets must match
+
+Also note:
+
+- Headings are translated, which changes anchor slugs. Keep headings that are
+  Python identifiers (`## deque`, `## Counter`) untranslated, or cross-page
+  anchor links such as `collections.md#deque` will break.
+- Translations live in `docs/<locale>/`, so the `docs/builtins/*.md` and
+  `docs/stdlib/*.md` globs in `tests/` and `scripts/audit_documentation.py`
+  do **not** see them. This is intentional - do not "fix" it.
+- Missing pages fall back to English automatically. Partial translations are
+  fine; never bulk-translate to fill gaps.
+
 ### Fixing Issues
 1. Identify the problem
 2. Make minimal changes
@@ -182,6 +232,10 @@ uv add --dev package-name
 - Manually edit lock files (use uv commands)
 - Create unnecessary files in root directory
 - Break existing tests without fixing them
+- Edit an English page without updating its translations (see above)
+- Hand-edit `source_sha` in a translation's front matter
+- Translate anything inside a fenced code block
+- Reformat English tables cosmetically - it marks every translation stale
 
 ### ✓ DO
 - Always run quality checks before committing
@@ -217,11 +271,12 @@ Before every commit, verify:
 
 - [ ] `make lint` passes (0 errors)
 - [ ] `make types` passes (0 errors)
-- [ ] `make test` passes (10/10)
+- [ ] `make test` passes (no failures)
 - [ ] No uncommitted changes
 - [ ] Commit message is clear
 - [ ] Changes are focused/minimal
 - [ ] Documentation updated if needed
+- [ ] Translations updated if an English page changed
 - [ ] No test files left uncommitted
 
 ## Examples
@@ -238,7 +293,7 @@ make serve  # View in browser
 # Quality checks
 make lint   # All checks passed!
 make types  # 0 errors, 0 warnings, 0 informations
-make test   # 10 passed
+make test   # no failures
 
 # Commit
 git add .

@@ -7,7 +7,12 @@
     rel="noopener"
     class="announce-star"
   >
-    ⭐ Did this save you a trip to the CPython source?
-    <strong>Star it on GitHub</strong> so other developers can find it too.
+    {%- if config.theme.language == "fi" %}
+      ⭐ Säästikö tämä sinulta käynnin CPythonin lähdekoodissa?
+      <strong>Tähditä se GitHubissa</strong>, niin muutkin kehittäjät löytävät sen.
+    {%- else %}
+      ⭐ Did this save you a trip to the CPython source?
+      <strong>Star it on GitHub</strong> so other developers can find it too.
+    {%- endif %}
   </a>
 {% endblock %}

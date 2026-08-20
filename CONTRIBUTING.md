@@ -26,6 +26,13 @@ Help us expand coverage for:
 - Fix typos or formatting
 - Add performance tips
 
+### Translate Documentation
+
+Help readers in other languages by translating pages, correcting an existing
+translation, or adding a new locale. See
+[Internationalization and Localization](#internationalization-and-localization)
+below and the full guide in [TRANSLATING.md](TRANSLATING.md).
+
 ## Process
 
 1. **Fork** the repository
@@ -100,6 +107,58 @@ For important notes:
 - Explain why certain approaches are preferred
 - Include both good and bad patterns
 
+## Internationalization and Localization
+
+English is the source of truth. Translations live in language subdirectories
+that mirror the English tree, and are served under a locale prefix:
+
+```
+docs/builtins/list.md      ->  https://pythoncomplexity.com/builtins/list/
+docs/fi/builtins/list.md   ->  https://pythoncomplexity.com/fi/builtins/list/
+```
+
+| Locale | Language | Status                     |
+|--------|----------|----------------------------|
+| `en`   | English  | Complete (source of truth) |
+| `fi`   | Suomi    | Pilot - 13 pages           |
+
+Pages without a translation fall back to English automatically, so a partial
+translation is always safe to merge. You never need to translate a whole
+section before contributing.
+
+### Ground rules
+
+- **Translate prose, headings, admonition titles, and the Notes column.**
+  Everything else stays as written in English.
+- **Never edit code blocks.** Identifiers, comments, and output inside fenced
+  blocks must match the English source byte for byte.
+- **Never change complexity notation.** `O(1)`, `O(n log n)`, and friends are
+  language-neutral.
+- **Keep the table shape.** Row and column counts must match the English page.
+- **Use the glossary.** Consistency across pages matters more than any single
+  word choice. Each locale has one in
+  [TRANSLATING.md](TRANSLATING.md); extend it when you settle a new term.
+
+### Checks
+
+Translations are validated automatically as part of `make check`:
+
+```bash
+uv run python scripts/validate_translations.py
+```
+
+It verifies that every translated page has an English counterpart, that code
+blocks and table structure still match, and that the page is not stale. Each
+translation records the SHA-256 of the English file it was made from, so when
+an English page changes, its translations are flagged until someone updates
+them.
+
+### Adding a language
+
+New locales are welcome, including partial ones. The steps (plugin config,
+search stemmer, first page, validator registration) are documented in
+[TRANSLATING.md](TRANSLATING.md).
+
 ## Building Locally
 
 ```bash
@@ -113,6 +172,7 @@ uv sync
 make serve
 
 # Visit http://localhost:8000
+# Translated pages live under a locale prefix, e.g. http://localhost:8000/fi/
 ```
 
 ## Commit Messages

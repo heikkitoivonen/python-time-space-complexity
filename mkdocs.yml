@@ -358,6 +358,43 @@ nav:
 plugins:
   - search
   - mermaid2
+  - i18n:
+      docs_structure: folder
+      fallback_to_default: true
+      languages:
+        - locale: en
+          name: English
+          default: true
+          build: true
+        - locale: fi
+          name: Suomi
+          build: true
+          site_name: "Pythonin O-notaatio: aika- ja tilavaativuus"
+          site_description: Kattava dokumentaatio Pythonin sisäänrakennettujen tyyppien ja standardikirjaston aika- ja tilavaativuuksista
+          nav_translations:
+            Home: Etusivu
+            Overview: Yleiskatsaus
+            Built-in Types: Sisäänrakennetut tyypit
+            Built-in Functions: Sisäänrakennetut funktiot
+            Standard Library: Standardikirjasto
+            Implementations: Toteutukset
+            Versions: Versiot
+            Lists: Listat
+            Dictionaries: Sanakirjat
+            Sets: Joukot
+            Tuples: Monikot
+            Strings: Merkkijonot
+            Bytes & Bytearray: Tavut ja tavutaulukot
+            Range: Lukualue
+            Integer: Kokonaisluku
+            Float: Liukuluku
+            Boolean: Totuusarvo
+            Length: Pituus
+            Maximum: Suurin
+            Minimum: Pienin
+            Sum: Summa
+            Sorted: Järjestäminen
+            Regular Expressions: Säännölliset lausekkeet
 
 markdown_extensions:
   - admonition
