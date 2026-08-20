@@ -134,14 +134,22 @@ def _compute_residuals(normalized_times, theoretical):
 
 
 def _tie_break_linear_vs_nlogn(n_values, times, scores):
+    """Decide between O(n) and O(n log n) using the empirical log-log slope.
+
+    RMSE cannot separate these two reliably: with a fitted intercept, n and
+    n*log(n) have nearly the same shape over any practical range of n, so
+    which one scores better is decided by timing noise rather than by the
+    data. Fitting log(t) against log(n) instead recovers the exponent
+    directly, which is stable.
+
+    This deliberately does not require the two RMSE values to be close before
+    arbitrating. An earlier version only ran when they were within 5% of each
+    other, but the measured gap is routinely 100-800%, so that condition never
+    held and this function never decided anything.
+    """
     linear_rmse = scores.get("O(n) (Linear)")
     nlogn_rmse = scores.get("O(n log n) (Linearithmic)")
     if linear_rmse is None or nlogn_rmse is None:
-        return None, None
-
-    relative_eps = 0.05
-    threshold = relative_eps * min(linear_rmse, nlogn_rmse)
-    if abs(linear_rmse - nlogn_rmse) > threshold:
         return None, None
 
     # Filter pairs together to maintain alignment (use n > 1 to avoid log(1)=0)
