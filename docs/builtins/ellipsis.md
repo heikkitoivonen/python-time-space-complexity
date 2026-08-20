@@ -10,28 +10,39 @@ The `Ellipsis` constant (also spelled `...`) is a singleton value used to repres
 | Comparison | O(1) | O(1) | Identity check with `is` |
 | Type check | O(1) | O(1) | `type(...)` |
 | Assignment | O(1) | O(1) | Single object |
-| Indexing with | O(1) | O(1) | Slice with `...` |
+| Passing to `__getitem__` | O(1) | O(1) | `obj[...]` hands over the singleton; the type decides what it means |
+| Hashing (dict key, set member) | O(1) | O(1) | Hashable singleton |
 
 ## Basic Usage
 
-### Multi-Dimensional Slicing
+### Subscripting with Ellipsis
+
+`...` is an ordinary object, and `obj[...]` simply passes it to
+`obj.__getitem__`. What it means is entirely up to the type: the builtin
+sequences reject it, while a type that opts in can give it any meaning.
 
 ```python
-# O(1) - ellipsis represents remaining dimensions
-import numpy as np
+# O(1) - the subscript is just an object handed to __getitem__
+data = [[1, 2, 3], [4, 5, 6]]
 
-array = np.arange(24).reshape(2, 3, 4)
+# Builtin sequences do not accept Ellipsis:
+#   data[...]     TypeError: list indices must be integers or slices
+#   data[1, ...]  TypeError: list indices must be integers or slices, not tuple
 
-# Standard slicing
-slice1 = array[0, :, :]  # First element, all of rest
+class Grid:
+    """A type that gives Ellipsis a meaning."""
 
-# Using ellipsis
-slice2 = array[0, ...]   # O(1) - same as above, cleaner
-slice3 = array[..., 0]   # O(1) - all elements, first in last dim
+    def __init__(self, rows):
+        self.rows = rows
 
-# Equivalent:
-# array[...] == array[:, :, :]  - O(1)
-# array[0, ...] == array[0, :, :]  - O(1)
+    def __getitem__(self, key):
+        if key is ...:        # O(1) - identity check against the singleton
+            return self.rows  # "all of it"
+        return self.rows[key]
+
+grid = Grid(data)
+grid[...]  # O(1) - [[1, 2, 3], [4, 5, 6]]
+grid[0]    # O(1) - [1, 2, 3]
 ```
 
 ### Placeholder in Code
@@ -64,10 +75,10 @@ def flexible(*args: int) -> None:
 # Callback type with ellipsis
 callback: Callable[..., int]  # O(1) - function with any args, returns int
 
-# Array shape annotation
-def process_array(arr: "np.ndarray[..., np.float64]") -> None:
-    """Process array of any shape - O(1)"""
-    pass
+# Variable-length tuple: any number of ints, all the same type
+def total(values: tuple[int, ...]) -> int:
+    """Sum a tuple of any length - O(n)"""
+    return sum(values)
 ```
 
 ## Complexity Details
@@ -119,38 +130,26 @@ if ... is ...:  # O(1) - always true (both are Ellipsis)
 
 ### vs None as Placeholder
 
-```python
-# Ellipsis - O(1) signal for "all remaining"
-def slice_dims(arr, *indices):
-    # Use ... for remaining dimensions
-    if ... in indices:  # O(k) - k = len(indices)
-        # Handle remaining dimensions
-        pass
-
-# vs None - different meaning
-def slice_with_none(arr, *indices):
-    # None means "new axis" in slicing
-    # Different semantic
-    pass
-
-# Ellipsis is clearer for "remaining" semantics
-```
-
-### Slice Operations
+`None` is the usual "no value" sentinel, which makes it ambiguous when `None`
+is itself a legitimate argument. `...` is a distinct singleton, so it can mean
+"not supplied" without colliding with a real value.
 
 ```python
-# O(1) - ellipsis in slicing
-array = [[1, 2, 3], [4, 5, 6]]
+# O(1) - Ellipsis as a sentinel that None cannot be confused with
+MISSING = ...
 
-# Standard slicing
-result = array[:]  # Full array
+def get(mapping, key, default=MISSING):
+    """Look up a key, distinguishing 'no default' from 'default is None'."""
+    if key in mapping:            # O(1) average
+        return mapping[key]       # O(1) average
+    if default is MISSING:        # O(1) - identity check
+        raise KeyError(key)
+    return default
 
-# With ellipsis (equivalent but clearer intent)
-result = array[...]  # O(1) - "all of it"
-
-# Multi-dimensional
-matrix = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
-result = matrix[1, ...]  # O(1) - second element, all nested
+data = {"a": 1, "b": None}
+get(data, "b")            # None - the stored value
+get(data, "z", None)      # None - the supplied default
+# get(data, "z")          # KeyError - no default was supplied
 ```
 
 ## Common Use Cases
@@ -190,43 +189,37 @@ class DataStore(ABC):
     @abstractmethod
     def load(self, key):
         ...  # O(1) - placeholder
-
-# Subclass must implement
-class FileStore(DataStore):
-    def save(self, data):
-        with open('file.txt', 'w') as f:
-            f.write(data)
-    
-    def load(self, key):
-        with open('file.txt', 'r') as f:
-            return f.read()
 ```
 
-### NumPy Array Slicing
+The `...` bodies are what matters here: `@abstractmethod` already prevents
+instantiation, so the body only needs to be syntactically valid.
+
+### Variable-Length Tuple Types
+
+`tuple[X, ...]` is the standard way to annotate a homogeneous tuple of any
+length. The ellipsis here means "more of the same", not "any type".
 
 ```python
-# O(n) - use ellipsis with NumPy
-import numpy as np
+# O(1) - the annotations themselves are just objects
+from typing import get_args
 
-# 4D array
-array = np.arange(120).reshape(2, 3, 4, 5)
+Row = tuple[int, ...]   # any number of ints
+Pair = tuple[int, int]  # exactly two
 
-# Get all but last dimension - all elements in last
-result = array[..., 0]  # O(n) - shape (2, 3, 4)
+def widen(row: Row) -> Row:
+    """Double every value - O(n)"""
+    return tuple(v * 2 for v in row)
 
-# Get specific slice, then all remaining
-result = array[1, ..., 2]  # O(n) - shape (3, 4)
-
-# Equivalent to:
-# array[1, :, :, 2]  - O(n)
-# But ... is cleaner for unknown dimensions
+# O(1) - the ellipsis is preserved in the type's arguments
+get_args(Row)   # (<class 'int'>, Ellipsis)
+get_args(Pair)  # (<class 'int'>, <class 'int'>)
 ```
 
 ### Callable Type Hints
 
 ```python
 # O(1) - ellipsis in type annotations
-from typing import Callable, TypeVar
+from typing import Any, Callable, TypeVar
 
 T = TypeVar('T')
 
@@ -277,87 +270,11 @@ class IterableProtocol(Protocol):
 class SizedProtocol(Protocol):
     def __len__(self):
         ...  # O(1) - placeholder
-
-# Concrete implementation
-class MyCollection:
-    def __iter__(self):
-        return iter([1, 2, 3])
-    
-    def __len__(self):
-        return 3
 ```
 
-### Variadic Generic Types
-
-```python
-# O(1) - ellipsis in generic variadic types (Python 3.11+)
-from typing import TypeVarTuple, Unpack
-
-Shape = TypeVarTuple('Shape')
-
-class Array:
-    def __init__(self, shape: tuple[Unpack[Shape]]):
-        self.shape = shape
-
-# O(1) - allows any shape tuple
-arr1 = Array((10,))        # 1D
-arr2 = Array((10, 20))     # 2D
-arr3 = Array((10, 20, 30)) # 3D
-```
-
-### Default Implementation
-
-```python
-# O(1) - ellipsis as default placeholder
-class Interface:
-    def method1(self):
-        ...  # Abstract
-    
-    def method2(self):
-        ...  # Abstract
-    
-    def method3(self):
-        print("Default implementation")
-
-# Subclass overrides what's needed
-class Implementation(Interface):
-    def method1(self):
-        return "Implemented 1"
-    
-    def method2(self):
-        return "Implemented 2"
-    
-    # Inherits method3's default
-```
+Protocol bodies are never executed, so `...` is the conventional filler.
 
 ## Practical Examples
-
-### API Stub
-
-```python
-# O(1) - create API stub with ellipsis
-class APIClient:
-    def get_user(self, user_id: int) -> dict:
-        ...  # TODO: Implement API call
-    
-    def create_user(self, data: dict) -> dict:
-        ...  # TODO: Implement
-    
-    def delete_user(self, user_id: int) -> bool:
-        ...  # TODO: Implement
-
-# Later, implement actual calls
-class RealAPIClient(APIClient):
-    def get_user(self, user_id: int) -> dict:
-        # Real implementation
-        return requests.get(f"/users/{user_id}").json()
-    
-    def create_user(self, data: dict) -> dict:
-        return requests.post("/users", json=data).json()
-    
-    def delete_user(self, user_id: int) -> bool:
-        return requests.delete(f"/users/{user_id}").status_code == 204
-```
 
 ### Data Structure with Ellipsis
 
@@ -383,27 +300,6 @@ class Matrix:
 matrix = Matrix((3, 4, 5))
 all_data = matrix[...]      # All elements
 last_dim = matrix[..., 0]   # All but last dimension
-```
-
-### Partial Application
-
-```python
-# O(1) - ellipsis in functional programming
-from functools import partial
-
-def calculate(a, b, c, d):
-    return a + b + c + d
-
-# Create partial with ellipsis (conceptual)
-# In practice, use functools.partial
-partial_calc = partial(calculate, 1)
-
-# More flexible approach
-def flexible_args(*args):
-    # Accepts any number of args
-    return sum(args)
-
-result = flexible_args(1, 2, 3, 4)  # 10
 ```
 
 ## Edge Cases
@@ -439,40 +335,6 @@ value = mapping[...]  # O(1) - 'rest'
 # Always use 'is' for ellipsis
 if value is ...:  # O(1) - correct
     print("Is ellipsis")
-```
-
-### Unpacking with Ellipsis
-
-```python
-# O(n) - unpacking with ellipsis (Python 3.9+)
-a, *middle, b = [1, 2, 3, 4, 5]
-# a=1, middle=[2,3,4], b=5
-
-# Ellipsis is not unpacking operator
-# But can use in type hints for variadic
-def flexible(*args: int) -> None:
-    # args can have any number of ints
-    pass
-```
-
-## Performance Considerations
-
-### vs None as Placeholder
-
-```python
-# Both O(1) but different semantics
-UNKNOWN = None
-REMAINING = ...
-
-# Using None (ambiguous)
-def process(value=None):
-    if value is None:  # O(1) - is this "not provided" or "actually None"?
-        use_default()
-
-# Using ... (clear)
-def process(value=...):
-    if value is ...:  # O(1) - clearly "not provided, use default"
-        use_default()
 ```
 
 ## Best Practices

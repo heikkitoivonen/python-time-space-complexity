@@ -1,316 +1,166 @@
 # exit() and quit() Functions
 
-The `exit()` and `quit()` functions terminate the Python interpreter. Typically used in interactive mode.
+The `exit()` and `quit()` objects terminate the Python interpreter. They are
+`_sitebuiltins.Quitter` instances installed into builtins by the `site` module,
+intended for interactive use. In scripts, use
+[`sys.exit()`](../stdlib/sys.md) instead.
+
+Both do exactly two things when called: close `sys.stdin`, then raise
+`SystemExit(code)`. Everything about their cost follows from that.
 
 ## Complexity Reference
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `exit()` | O(1) | O(1) | Terminate immediately |
-| `quit()` | O(1) | O(1) | Terminate immediately |
+| `exit` / `quit` (bare name) | O(1) | O(1) | Returns a fixed hint string from `__repr__` |
+| `exit()` / `quit()` (the call) | O(1) | O(1) | Closes `sys.stdin`, raises `SystemExit` |
+| Resulting stack unwinding | O(d) | O(1) | d = frames with `finally` or `__exit__` to run |
+| Resulting `atexit` handlers | O(h) + handlers | O(1) | h = registered handlers |
+| `exit(code)` with an int | O(1) | O(1) | Stored on the exception, becomes exit status |
+| `exit(message)` with a string | O(n) | O(n) | n = message length, written to `stderr`; status 1 |
 
-## Basic Usage
+The call itself is constant time. What follows it is not: raising `SystemExit`
+unwinds the stack and runs the interpreter's normal shutdown, so the real cost
+is dominated by whatever cleanup your program has registered.
 
-### Exit from Interactive Mode
-
-```python
-# In Python REPL:
->>> exit()
-# Interpreter terminates
-
-# Or:
->>> quit()
-# Interpreter terminates
-
-# Can also use Ctrl+D on Unix/Mac or Ctrl+Z+Enter on Windows
-```
-
-### Using sys.exit() in Scripts
+## What exit and quit Are
 
 ```python
-import sys
+# O(1) - type lookups
+print(type(exit))    # O(1) - <class '_sitebuiltins.Quitter'>
+print(type(quit))    # O(1) - <class '_sitebuiltins.Quitter'>
 
-def main():
-    if not valid_input():
-        sys.exit(1)  # Exit with error code
-    
-    process_data()
-    sys.exit(0)  # Exit successfully
-
-if __name__ == "__main__":
-    main()
+# The bare name prints a hint rather than exiting - O(1)
+print(repr(exit))    # Use exit() or Ctrl-D (i.e. EOF) to exit
+print(repr(quit))    # Use quit() or Ctrl-D (i.e. EOF) to exit
 ```
 
-## Exit Codes
+The two objects are identical apart from the name they print. Neither is a
+function; both are callable instances.
 
-### Exit Code Meanings
+## Availability
+
+They are installed by the `site` module, so they do not exist under `-S`:
+
+```
+$ python -c "exit(7)"; echo $?
+7
+
+$ python -S -c "exit(7)"
+NameError: name 'exit' is not defined
+```
+
+This is the main reason they do not belong in a script.
+
+## Calling Them
+
+### Exit Status
+
+`exit()` passes its argument straight to `SystemExit`, so it accepts the same
+values as any exit status.
 
 ```python
-import sys
-
-# Exit codes convention:
-# 0 = success
-# non-zero = error
-
-sys.exit(0)   # Success
-sys.exit(1)   # General error
-sys.exit(2)   # Misuse of shell command
-sys.exit(126) # Command invoked cannot execute
-sys.exit(127) # Command not found
+# All O(1) - the value is stored on the exception
+exit()      # status 0
+exit(0)     # status 0 - success
+exit(1)     # status 1 - general error
+exit(2)     # status 2 - misuse
 ```
 
-### Checking Exit Code
-
-```bash
-# In shell:
-$ python script.py
-$ echo $?  # Prints exit code
-# 0
+```
+$ python -c "exit(7)"; echo $?
+7
 ```
 
-## Difference Between exit() and quit()
+### Passing a String
 
-### exit() vs quit()
+A non-integer argument is printed to `stderr` and the status becomes `1`.
 
 ```python
-# Both behave identically in interactive mode
-# In scripts, neither should be used - use sys.exit() instead
-
-# ✅ DO: Use sys.exit() in scripts
-import sys
-sys.exit(0)
-
-# ❌ DON'T: Use exit() or quit() in scripts
-exit()  # May not work if site module not loaded
-quit()  # May not work if site module not loaded
+# O(n) - n = length of the message written to stderr; status is 1
+exit("error: config.json not found")
 ```
 
-### In Scripts vs Interactive
+### The stdin Side Effect
 
-```python
-# REPL (interactive):
->>> exit
-# <site._Printers.Quitter object at 0x...>
-
->>> exit()
-# Quits interpreter
-
-# Script (non-interactive):
-# exit and quit are only available via site module
-# Use sys.exit() instead
-```
-
-## Practical Examples
-
-### Conditional Exit
+Before raising, `Quitter` closes `sys.stdin`. `sys.exit()` does not do this,
+and it can surprise code that still expects to read input.
 
 ```python
 import sys
-
-def validate_config(config_file):
-    try:
-        with open(config_file) as f:
-            return json.load(f)
-    except FileNotFoundError:
-        print(f"Error: {config_file} not found")
-        sys.exit(1)
-    except json.JSONDecodeError:
-        print(f"Error: {config_file} is not valid JSON")
-        sys.exit(1)
-
-if __name__ == "__main__":
-    config = validate_config("config.json")
-    process(config)
-    sys.exit(0)
-```
-
-### Exit with Message
-
-```python
-import sys
-
-def process_data(filename):
-    if not filename:
-        print("Error: Filename required")
-        sys.exit(2)
-    
-    if not os.path.exists(filename):
-        print(f"Error: File not found: {filename}")
-        sys.exit(1)
-    
-    # Process file
-    with open(filename) as f:
-        data = f.read()
-    
-    return data
-
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: script.py <filename>")
-        sys.exit(2)
-    
-    data = process_data(sys.argv[1])
-    print(data)
-    sys.exit(0)
-```
-
-### Exit in Exception Handler
-
-```python
-import sys
-import logging
-
-logging.basicConfig(level=logging.INFO)
 
 try:
-    result = risky_operation()
-except Exception as e:
-    logging.error(f"Operation failed: {e}")
-    sys.exit(1)
-else:
-    logging.info("Operation succeeded")
-    sys.exit(0)
-finally:
-    cleanup()
+    exit()                     # O(1) - closes sys.stdin, then raises
+except SystemExit:
+    print(sys.stdin.closed)    # O(1) - True
 ```
 
-## Cleanup with finally
+## What Calling Them Triggers
 
-### Ensure Cleanup Runs
-
-```python
-import sys
-
-def main():
-    resource = acquire_resource()
-    
-    try:
-        process(resource)
-    except Exception as e:
-        print(f"Error: {e}")
-        sys.exit(1)
-    finally:
-        # This ALWAYS runs, even with sys.exit()
-        cleanup(resource)
-
-if __name__ == "__main__":
-    main()
-```
-
-### Using atexit Module
+`SystemExit` propagates like any other exception, so cleanup still runs before
+the process ends.
 
 ```python
-import sys
 import atexit
-
-def cleanup():
-    print("Cleaning up...")
-    # Cleanup code
-
-# Register cleanup to run before exit
-atexit.register(cleanup)
-
-# Now cleanup() will run on any exit
-sys.exit(0)
-```
-
-## Exit Status Conventions
-
-### Standard Exit Codes
-
-```python
 import sys
 
-# 0: Success
-# 1: General errors
-# 2: Misuse of shell builtin
-# 126: Command cannot execute
-# 127: Command not found
-# 128+N: Fatal signal N
-# 130: Script terminated by Ctrl+C (128 + 2)
+atexit.register(lambda: print("3. atexit handler"))   # O(1) to register
 
-def main():
-    if validation_failed():
-        sys.exit(1)  # General error
-    
-    if permission_denied():
-        sys.exit(13)  # Permission denied
-    
-    if file_not_found():
-        sys.exit(2)   # Misuse/not found
-    
-    sys.exit(0)  # Success
+class Resource:
+    def __enter__(self):
+        return self
 
-if __name__ == "__main__":
-    main()
+    def __exit__(self, *exc):
+        print("2. __exit__")                          # O(1)
+        return False
+
+try:
+    with Resource():
+        try:
+            exit(3)                                   # O(1) to raise
+        finally:
+            print("1. finally")                       # O(1)
+except SystemExit as e:
+    print("caught, code =", e.code)                   # O(1) - 3
+
+# Output order: 1. finally, 2. __exit__, caught, then 3. atexit handler
 ```
 
-## Testing Exit Behavior
+Total cost of the exit is therefore O(d + h) plus whatever those handlers do.
+`exit()` is only "immediate" in the sense that the call returns nothing.
 
-### Using pytest
+## Interactive Use
 
 ```python
-import pytest
-import sys
+# In the REPL, calling either one ends the session - O(1) to raise
+exit()
+quit()
 
-def application_exit():
-    sys.exit(42)
-
-def test_exit_code():
-    with pytest.raises(SystemExit) as exc_info:
-        application_exit()
-    
-    assert exc_info.value.code == 42
+# Ctrl-D (Unix/macOS) or Ctrl-Z then Enter (Windows) does the same
 ```
 
-### Using unittest
-
-```python
-import unittest
-import sys
-
-class TestExit(unittest.TestCase):
-    def test_exit_code(self):
-        with self.assertRaises(SystemExit) as cm:
-            sys.exit(5)
-        
-        self.assertEqual(cm.exception.code, 5)
-```
+Typing the bare name is the common mistake: it prints the hint instead of
+exiting, which is exactly what `__repr__` is there for.
 
 ## Best Practices
 
-```python
-import sys
+✅ **Do**:
 
-# ✅ DO: Use sys.exit() in scripts
-import sys
-sys.exit(0)
+- Treat `exit()` and `quit()` as REPL conveniences
+- Pass an integer for the exit status, or a string to report an error
+- Remember they raise `SystemExit`, so `finally` and `atexit` still run
 
-# ✅ DO: Use meaningful exit codes
-sys.exit(1)  # Error
+❌ **Avoid**:
 
-# ✅ DO: Print error message before exit
-print("Error: something failed", file=sys.stderr)
-sys.exit(1)
-
-# ✅ DO: Use finally for cleanup
-try:
-    code()
-finally:
-    cleanup()
-
-# ❌ DON'T: Use exit() in scripts
-exit()  # May not work
-
-# ❌ DON'T: Use exit() in libraries
-# Libraries should raise exceptions, not exit
-
-# ❌ DON'T: Exit silently
-sys.exit(0)  # Should print why before exiting
-```
+- Using them in scripts - they are absent under `-S`, and they close
+  `sys.stdin`. Use [`sys.exit()`](../stdlib/sys.md)
+- Calling either from a library - raise an exception and let the caller decide
+- Assuming the exit is instantaneous - unwinding and handlers run first
 
 ## Related Modules
 
-- [sys Module](../stdlib/sys.md) - System exit and status
-- atexit Module - Register exit handlers
-- [signal Module](../stdlib/signal.md) - Signal handling
+- [sys Module](../stdlib/sys.md) - `sys.exit()`, the form to use in scripts
+- [Atexit Module](../stdlib/atexit.md) - Handlers that run when `SystemExit` propagates
+- [OS Module](../stdlib/os.md) - `os._exit()` for termination that skips all cleanup
+- [Signal Module](../stdlib/signal.md) - Signal handling
+- [Interpreter Info](interpreter_info.md) - The other REPL-only builtins from `site`
