@@ -36,184 +36,185 @@ nav:
   - Home: index.md
   - Builtins:
     - Overview: builtins/index.md
-    - Lists: builtins/list.md
-    - Dictionaries: builtins/dict.md
-    - Sets: builtins/set.md
-    - Tuples: builtins/tuple.md
-    - Strings: builtins/str.md
-    - Bytes & Bytearray: builtins/bytes.md
-    - Frozenset: builtins/frozenset.md
-    - Range: builtins/range.md
-    - Integer: builtins/int.md
-    - Float: builtins/float.md
-    - Boolean: builtins/bool.md
-    - Length: builtins/len.md
-    - Maximum: builtins/max.md
-    - Minimum: builtins/min.md
-    - Sum: builtins/sum.md
-    - Map: builtins/map.md
-    - Filter: builtins/filter.md
-    - Zip: builtins/zip.md
-    - Sorted: builtins/sorted.md
-    - Enumerate: builtins/enumerate.md
-    - All: builtins/all.md
+    - Absolute: builtins/abs.md
     - Aiter: builtins/aiter.md
+    - All: builtins/all.md
     - Anext: builtins/anext.md
     - Any: builtins/any.md
-    - Absolute: builtins/abs.md
-    - Power: builtins/pow.md
-    - Round: builtins/round.md
-    - Ord: builtins/ord.md
-    - Chr: builtins/chr.md
-    - Reversed: builtins/reversed.md
-    - Divmod: builtins/divmod.md
-    - Slice: builtins/slice.md
-    - Iter: builtins/iter.md
-    - Issubclass: builtins/issubclass.md
-    - Open: builtins/open.md
-    - Hash: builtins/hash.md
-    - Format: builtins/format.md
-    - Isinstance: builtins/isinstance.md
-    - Next: builtins/next.md
-    - Input: builtins/input.md
-    - Id: builtins/id.md
-    - Globals: builtins/globals.md
-    - Locals: builtins/locals_func.md
-    - Print: builtins/print.md
-    - Help: builtins/help.md
-    - Repr: builtins/repr.md
     - Ascii: builtins/ascii.md
-    - Eval: builtins/eval.md
-    - Exec: builtins/exec.md
-    - Compile: builtins/compile.md
-    - Hex: builtins/hex.md
     - Bin: builtins/bin.md
-    - Breakpoint: builtins/breakpoint.md
-    - Oct: builtins/oct.md
-    - Type: builtins/type_func.md
-    - Callable: builtins/callable.md
     - Bool: builtins/bool_func.md
-    - Int: builtins/int_func.md
-    - float(): builtins/float_func.md
-    - Str: builtins/str_func.md
-    - Bytes: builtins/bytes_func.md
-    - List: builtins/list_func.md
-    - Dict: builtins/dict_func.md
-    - Set: builtins/set_func.md
-    - frozenset(): builtins/frozenset_func.md
-    - Tuple: builtins/tuple_func.md
+    - Boolean: builtins/bool.md
+    - Breakpoint: builtins/breakpoint.md
     - Bytearray: builtins/bytearray_func.md
-    - Complex: builtins/complex_func.md
-    - Memoryview: builtins/memoryview_func.md
-    - Object: builtins/object_func.md
-    - Exceptions: builtins/exceptions.md
-    - Dir: builtins/dir.md
-    - Getattr: builtins/getattr.md
-    - Hasattr: builtins/hasattr.md
-    - Setattr: builtins/setattr.md
-    - Delattr: builtins/delattr.md
-    - Vars: builtins/vars.md
+    - Bytes: builtins/bytes_func.md
+    - Bytes & Bytearray: builtins/bytes.md
+    - Callable: builtins/callable.md
+    - Chr: builtins/chr.md
     - Classmethod: builtins/classmethod.md
-    - Staticmethod: builtins/staticmethod.md
-    - Property: builtins/property.md
-    - Super: builtins/super.md
-    - None: builtins/none.md
-    - True: builtins/true.md
-    - False: builtins/false.md
-    - NotImplemented: builtins/notimplemented.md
+    - Compile: builtins/compile.md
+    - Complex: builtins/complex_func.md
+    - Delattr: builtins/delattr.md
+    - Dict: builtins/dict_func.md
+    - Dictionaries: builtins/dict.md
+    - Dir: builtins/dir.md
+    - Divmod: builtins/divmod.md
     - Ellipsis: builtins/ellipsis.md
-    - Interpreter Info: builtins/interpreter_info.md
+    - Enumerate: builtins/enumerate.md
+    - Eval: builtins/eval.md
+    - Exceptions: builtins/exceptions.md
+    - Exec: builtins/exec.md
     - Exit/Quit: builtins/exit_quit.md
+    - False: builtins/false.md
+    - Filter: builtins/filter.md
+    - Float: builtins/float.md
+    - float(): builtins/float_func.md
+    - Format: builtins/format.md
+    - Frozenset: builtins/frozenset.md
+    - frozenset(): builtins/frozenset_func.md
+    - Getattr: builtins/getattr.md
+    - Globals: builtins/globals.md
+    - Hasattr: builtins/hasattr.md
+    - Hash: builtins/hash.md
+    - Help: builtins/help.md
+    - Hex: builtins/hex.md
+    - Id: builtins/id.md
+    - Input: builtins/input.md
+    - Int: builtins/int_func.md
+    - Integer: builtins/int.md
+    - Interpreter Info: builtins/interpreter_info.md
+    - Isinstance: builtins/isinstance.md
+    - Issubclass: builtins/issubclass.md
+    - Iter: builtins/iter.md
+    - Length: builtins/len.md
+    - List: builtins/list_func.md
+    - Lists: builtins/list.md
+    - Locals: builtins/locals_func.md
+    - Map: builtins/map.md
+    - Maximum: builtins/max.md
+    - Memoryview: builtins/memoryview_func.md
+    - Minimum: builtins/min.md
+    - Next: builtins/next.md
+    - None: builtins/none.md
+    - NotImplemented: builtins/notimplemented.md
+    - Object: builtins/object_func.md
+    - Oct: builtins/oct.md
+    - Open: builtins/open.md
+    - Ord: builtins/ord.md
+    - Power: builtins/pow.md
+    - Print: builtins/print.md
+    - Property: builtins/property.md
+    - Range: builtins/range.md
+    - Repr: builtins/repr.md
+    - Reversed: builtins/reversed.md
+    - Round: builtins/round.md
+    - Set: builtins/set_func.md
+    - Setattr: builtins/setattr.md
+    - Sets: builtins/set.md
+    - Slice: builtins/slice.md
+    - Sorted: builtins/sorted.md
+    - Staticmethod: builtins/staticmethod.md
+    - Str: builtins/str_func.md
+    - Strings: builtins/str.md
+    - Sum: builtins/sum.md
+    - Super: builtins/super.md
+    - True: builtins/true.md
+    - Tuple: builtins/tuple_func.md
+    - Tuples: builtins/tuple.md
+    - Type: builtins/type_func.md
+    - Vars: builtins/vars.md
+    - Zip: builtins/zip.md
   - Standard Library:
     - Overview: stdlib/index.md
     - ABC: stdlib/abc.md
-    - Annotationlib: stdlib/annotationlib.md
-    - Argparse: stdlib/argparse.md
     - Aifc: stdlib/aifc.md
+    - Annotationlib: stdlib/annotationlib.md
     - Antigravity: stdlib/antigravity.md
+    - Argparse: stdlib/argparse.md
     - Array: stdlib/array.md
     - Ast: stdlib/ast.md
+    - Asynchat: stdlib/asynchat.md
     - Asyncio: stdlib/asyncio.md
+    - Asyncore: stdlib/asyncore.md
     - Atexit: stdlib/atexit.md
     - Audioop: stdlib/audioop.md
-    - Asynchat: stdlib/asynchat.md
-    - Asyncore: stdlib/asyncore.md
     - Base64: stdlib/base64.md
     - Bdb: stdlib/bdb.md
     - Binascii: stdlib/binascii.md
-    - Bz2: stdlib/bz2.md
     - Bisect: stdlib/bisect.md
     - Builtins (module): stdlib/builtins.md
-    - Chunk: stdlib/chunk.md
-    - Cmd: stdlib/cmd.md
-    - Code: stdlib/code.md
-    - Codeop: stdlib/codeop.md
-    - Collections: stdlib/collections.md
-    - Codecs: stdlib/codecs.md
-    - Compileall: stdlib/compileall.md
-    - Configparser: stdlib/configparser.md
-    - Concurrent: stdlib/concurrent.md
-    - Concurrent.futures: stdlib/concurrent_futures.md
-    - Contextvars: stdlib/contextvars.md
-    - Contextlib: stdlib/contextlib.md
-    - Copyreg: stdlib/copyreg.md
-    - CProfile: stdlib/cprofile.md
-    - Cmath: stdlib/cmath.md
+    - Bz2: stdlib/bz2.md
+    - Calendar: stdlib/calendar.md
     - Cgi: stdlib/cgi.md
     - Cgitb: stdlib/cgitb.md
-    - Crypt: stdlib/crypt.md
-    - Ctypes: stdlib/ctypes.md
-    - Copy: stdlib/copy.md
-    - Counter: stdlib/counter.md
-    - Curses: stdlib/curses.md
-    - Calendar: stdlib/calendar.md
+    - Chunk: stdlib/chunk.md
+    - Cmath: stdlib/cmath.md
+    - Cmd: stdlib/cmd.md
+    - Code: stdlib/code.md
+    - Codecs: stdlib/codecs.md
+    - Codeop: stdlib/codeop.md
+    - Collections: stdlib/collections.md
     - Colorsys: stdlib/colorsys.md
+    - Compileall: stdlib/compileall.md
     - Compression: stdlib/compression.md
+    - Concurrent: stdlib/concurrent.md
+    - Concurrent.futures: stdlib/concurrent_futures.md
+    - Configparser: stdlib/configparser.md
+    - Contextlib: stdlib/contextlib.md
+    - Contextvars: stdlib/contextvars.md
+    - Copy: stdlib/copy.md
+    - Copyreg: stdlib/copyreg.md
+    - Counter: stdlib/counter.md
+    - CProfile: stdlib/cprofile.md
+    - Crypt: stdlib/crypt.md
     - Csv: stdlib/csv.md
+    - Ctypes: stdlib/ctypes.md
+    - Curses: stdlib/curses.md
     - Dataclasses: stdlib/dataclasses.md
-    - DBM: stdlib/dbm.md
     - Datetime: stdlib/datetime.md
+    - DBM: stdlib/dbm.md
+    - Decimal: stdlib/decimal.md
+    - Defaultdict: stdlib/defaultdict.md
+    - Deque: stdlib/deque.md
+    - Difflib: stdlib/difflib.md
     - Dis: stdlib/dis.md
     - Distutils: stdlib/distutils.md
     - Doctest: stdlib/doctest.md
     - Email: stdlib/email.md
     - Encodings: stdlib/encodings.md
     - Ensurepip: stdlib/ensurepip.md
-    - Decimal: stdlib/decimal.md
-    - Difflib: stdlib/difflib.md
-    - Deque: stdlib/deque.md
-    - Defaultdict: stdlib/defaultdict.md
     - Enum: stdlib/enum.md
     - Errno: stdlib/errno.md
-    - Fcntl: stdlib/fcntl.md
     - Faulthandler: stdlib/faulthandler.md
+    - Fcntl: stdlib/fcntl.md
     - Filecmp: stdlib/filecmp.md
     - Fileinput: stdlib/fileinput.md
     - Fnmatch: stdlib/fnmatch.md
     - Fractions: stdlib/fractions.md
     - Ftplib: stdlib/ftplib.md
-    - Genericpath: stdlib/genericpath.md
-    - GC: stdlib/gc.md
     - Functools: stdlib/functools.md
+    - GC: stdlib/gc.md
+    - Genericpath: stdlib/genericpath.md
     - Getopt: stdlib/getopt.md
     - Getpass: stdlib/getpass.md
     - Gettext: stdlib/gettext.md
     - Glob: stdlib/glob.md
-    - Grp: stdlib/grp.md
-    - Imp: stdlib/imp.md
     - Graphlib: stdlib/graphlib.md
-    - Html: stdlib/html.md
-    - Http: stdlib/http.md
+    - Grp: stdlib/grp.md
     - Gzip: stdlib/gzip.md
     - Hashlib: stdlib/hashlib.md
     - Heapq: stdlib/heapq.md
     - Hmac: stdlib/hmac.md
-    - IO: stdlib/io.md
+    - Html: stdlib/html.md
+    - Http: stdlib/http.md
     - Idlelib: stdlib/idlelib.md
     - Imaplib: stdlib/imaplib.md
     - Imghdr: stdlib/imghdr.md
-    - Inspect: stdlib/inspect.md
+    - Imp: stdlib/imp.md
     - Importlib: stdlib/importlib.md
+    - Inspect: stdlib/inspect.md
+    - IO: stdlib/io.md
+    - Ipaddress: stdlib/ipaddress.md
     - Itertools: stdlib/itertools.md
     - JSON: stdlib/json.md
     - Keyword: stdlib/keyword.md
@@ -227,77 +228,75 @@ nav:
     - Marshal: stdlib/marshal.md
     - Math: stdlib/math.md
     - Mimetypes: stdlib/mimetypes.md
-    - Msilib: stdlib/msilib.md
-    - Msvcrt: stdlib/msvcrt.md
     - Mmap: stdlib/mmap.md
     - Modulefinder: stdlib/modulefinder.md
+    - Msilib: stdlib/msilib.md
+    - Msvcrt: stdlib/msvcrt.md
     - Multiprocessing: stdlib/multiprocessing.md
+    - Namedtuple: stdlib/namedtuple.md
     - Netrc: stdlib/netrc.md
     - Nis: stdlib/nis.md
     - Nntplib: stdlib/nntplib.md
     - Nt: stdlib/nt.md
+    - Ntpath: stdlib/ntpath.md
     - Nturl2path: stdlib/nturl2path.md
+    - Numbers: stdlib/numbers.md
     - Opcode: stdlib/opcode.md
+    - Operator: stdlib/operator.md
     - Optparse: stdlib/optparse.md
+    - OrderedDict: stdlib/ordereddict.md
+    - OS: stdlib/os.md
     - Ossaudiodev: stdlib/ossaudiodev.md
+    - Pathlib: stdlib/pathlib.md
     - Pdb: stdlib/pdb.md
     - Pickle: stdlib/pickle.md
     - Pickletools: stdlib/pickletools.md
     - Pipes: stdlib/pipes.md
-    - Plistlib: stdlib/plistlib.md
     - Pkgutil: stdlib/pkgutil.md
-    - Poplib: stdlib/poplib.md
-    - Profile: stdlib/profile.md
-    - Pstats: stdlib/pstats.md
-    - Pyclbr: stdlib/pyclbr.md
-    - Pydoc: stdlib/pydoc.md
-    - Py_compile: stdlib/py_compile.md
-    - Pyexpat: stdlib/pyexpat.md
-    - Namedtuple: stdlib/namedtuple.md
-    - Numbers: stdlib/numbers.md
-    - Ntpath: stdlib/ntpath.md
-    - Operator: stdlib/operator.md
-    - OrderedDict: stdlib/ordereddict.md
-    - OS: stdlib/os.md
     - Platform: stdlib/platform.md
-    - Pathlib: stdlib/pathlib.md
+    - Plistlib: stdlib/plistlib.md
+    - Poplib: stdlib/poplib.md
     - Posix: stdlib/posix.md
     - Posixpath: stdlib/posixpath.md
     - Pprint: stdlib/pprint.md
-    - Pwd: stdlib/pwd.md
+    - Profile: stdlib/profile.md
+    - Pstats: stdlib/pstats.md
     - Pty: stdlib/pty.md
+    - Pwd: stdlib/pwd.md
+    - Py_compile: stdlib/py_compile.md
+    - Pyclbr: stdlib/pyclbr.md
+    - Pydoc: stdlib/pydoc.md
+    - Pyexpat: stdlib/pyexpat.md
     - Queue: stdlib/queue.md
     - Quopri: stdlib/quopri.md
+    - Random: stdlib/random.md
     - Readline: stdlib/readline.md
+    - Regular Expressions: stdlib/re.md
     - Reprlib: stdlib/reprlib.md
     - Resource: stdlib/resource.md
     - Rlcompleter: stdlib/rlcompleter.md
     - Runpy: stdlib/runpy.md
     - Sched: stdlib/sched.md
-    - Shlex: stdlib/shlex.md
-    - Shutil: stdlib/shutil.md
-    - Random: stdlib/random.md
-    - Regular Expressions: stdlib/re.md
-    - Ipaddress: stdlib/ipaddress.md
+    - Secrets: stdlib/secrets.md
     - Select: stdlib/select.md
     - Selectors: stdlib/selectors.md
+    - Shelve: stdlib/shelve.md
+    - Shlex: stdlib/shlex.md
+    - Shutil: stdlib/shutil.md
     - Signal: stdlib/signal.md
     - Site: stdlib/site.md
-    - Socket: stdlib/socket.md
-    - Socketserver: stdlib/socketserver.md
-    - Secrets: stdlib/secrets.md
-    - Shelve: stdlib/shelve.md
     - Smtpd: stdlib/smtpd.md
     - Smtplib: stdlib/smtplib.md
     - Sndhdr: stdlib/sndhdr.md
+    - Socket: stdlib/socket.md
+    - Socketserver: stdlib/socketserver.md
     - Spwd: stdlib/spwd.md
+    - Sqlite3: stdlib/sqlite3.md
     - Ssl: stdlib/ssl.md
     - Stat: stdlib/stat.md
     - Statistics: stdlib/statistics.md
     - String: stdlib/string.md
     - Stringprep: stdlib/stringprep.md
-    - Tabnanny: stdlib/tabnanny.md
-    - Sqlite3: stdlib/sqlite3.md
     - Struct: stdlib/struct.md
     - Subprocess: stdlib/subprocess.md
     - Sunau: stdlib/sunau.md
@@ -305,32 +304,33 @@ nav:
     - Sys: stdlib/sys.md
     - Sysconfig: stdlib/sysconfig.md
     - Syslog: stdlib/syslog.md
+    - Tabnanny: stdlib/tabnanny.md
     - Tarfile: stdlib/tarfile.md
-    - Tempfile: stdlib/tempfile.md
     - Telnetlib: stdlib/telnetlib.md
+    - Tempfile: stdlib/tempfile.md
     - Termios: stdlib/termios.md
+    - Textwrap: stdlib/textwrap.md
+    - This: stdlib/this.md
+    - Threading: stdlib/threading.md
+    - Time: stdlib/time.md
+    - Timeit: stdlib/timeit.md
+    - Tkinter: stdlib/tkinter.md
     - Token: stdlib/token.md
     - Tokenize: stdlib/tokenize.md
+    - Tomllib: stdlib/tomllib.md
     - Trace: stdlib/trace.md
     - Traceback: stdlib/traceback.md
-    - Textwrap: stdlib/textwrap.md
-    - Threading: stdlib/threading.md
-    - Tomllib: stdlib/tomllib.md
     - Tracemalloc: stdlib/tracemalloc.md
-    - This: stdlib/this.md
-    - Time: stdlib/time.md
-    - Tkinter: stdlib/tkinter.md
+    - Tty: stdlib/tty.md
     - Turtle: stdlib/turtle.md
     - Turtledemo: stdlib/turtledemo.md
-    - Tty: stdlib/tty.md
     - Types: stdlib/types.md
     - Typing: stdlib/typing.md
-    - Timeit: stdlib/timeit.md
-    - Unittest: stdlib/unittest.md
     - Unicodedata: stdlib/unicodedata.md
-    - Uuid: stdlib/uuid.md
+    - Unittest: stdlib/unittest.md
     - Urllib: stdlib/urllib.md
     - Uu: stdlib/uu.md
+    - Uuid: stdlib/uuid.md
     - Venv: stdlib/venv.md
     - Warnings: stdlib/warnings.md
     - Wave: stdlib/wave.md
@@ -339,16 +339,16 @@ nav:
     - Winreg: stdlib/winreg.md
     - Winsound: stdlib/winsound.md
     - Wsgiref: stdlib/wsgiref.md
+    - Xdrlib: stdlib/xdrlib.md
     - Xml: stdlib/xml.md
     - Xml.dom: stdlib/xml.dom.md
     - Xml.etree.ElementTree: stdlib/xml.etree.elementtree.md
     - Xml.sax: stdlib/xml.sax.md
     - Xmlrpc: stdlib/xmlrpc.md
-    - Xdrlib: stdlib/xdrlib.md
-    - Zlib: stdlib/zlib.md
-    - Zipfile: stdlib/zipfile.md
     - Zipapp: stdlib/zipapp.md
+    - Zipfile: stdlib/zipfile.md
     - Zipimport: stdlib/zipimport.md
+    - Zlib: stdlib/zlib.md
     - Zoneinfo: stdlib/zoneinfo.md
   - Implementations:
     - Overview: implementations/index.md
