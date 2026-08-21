@@ -83,5 +83,5 @@ bisect.insort(arr, 4)  # O(n) - must shift
 
 ## See Also
 
-- [Built-in Types](../builtins/index.md)
+- [Builtins](../builtins/index.md)
 - [Implementations](../implementations/index.md)

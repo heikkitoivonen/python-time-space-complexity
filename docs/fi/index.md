@@ -1,5 +1,5 @@
 ---
-source_sha: de7f362c3fabad731fee5435a0f471b69a9972c08291bbdc9654ba4535d9242f
+source_sha: bc1c06f06cdb21735ec4f9b4470111666ef1434eb35434d61fbf4fe13e925db2
 translated: machine
 ---
 
@@ -18,7 +18,7 @@ Tämä **ei** ole Python-oppikurssi eikä johdatus
 
 ## Pikaopas
 
-- **[Sisäänrakennetut tyypit](builtins/index.md)** - Vaativuusanalyysi listoille, sanakirjoille, joukoille, merkkijonoille ja monikoille
+- **[Sisäänrakennetut](builtins/index.md)** - Vaativuusanalyysi sisäänrakennetuille tyypeille, funktioille ja vakioille
 - **[Standardikirjasto](stdlib/index.md)** - Moduulit kuten collections, heapq, bisect ja monet muut
 - **[Toteutukset](implementations/index.md)** - CPython, PyPy, Jython ja muiden toteutusten yksityiskohdat
 - **[Versiot](versions/index.md)** - Muutokset ja optimoinnit Python-versioittain
@@ -45,7 +45,7 @@ Listaoperaatioiden vaativuus vaihtelee:
 | `in` (haku) | O(n) | - |
 | `sort()` | O(n log n) | O(n) |
 
-Tarkempi analyysi löytyy osiosta [Sisäänrakennetut tyypit](builtins/list.md).
+Tarkempi analyysi löytyy osiosta [Listat](builtins/list.md).
 
 ## Oppaan käyttö
 

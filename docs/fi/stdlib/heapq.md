@@ -1,5 +1,5 @@
 ---
-source_sha: 550fffd74c75da668401e7d175d07f0824244ce6b22d5a4f83fdba6493b833c5
+source_sha: 1d32c0bc73557f532d573511d168cabf27e5adbfe0462f6e3ef602f0d67948a9
 translated: machine
 ---
 
@@ -281,4 +281,4 @@ max_val = -heapq.heappop(max_heap)  # Negate back
 - [Collections-moduuli](collections.md)
 - [Bisect-moduuli](bisect.md)
 - [Python 3.14](../versions/py314.md)
-- [sorted()-funktio](../builtins/index.md)
+- [sorted()-funktio](../builtins/sorted.md)

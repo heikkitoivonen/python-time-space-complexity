@@ -276,4 +276,4 @@ max_val = -heapq.heappop(max_heap)  # Negate back
 - [Collections Module](collections.md)
 - [Bisect Module](bisect.md)
 - [Python 3.14](../versions/py314.md)
-- [Sorted Builtin](../builtins/index.md)
+- [sorted() Function](../builtins/sorted.md)

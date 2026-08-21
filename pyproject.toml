@@ -1,6 +1,6 @@
 [project]
 name = "python-time-space-complexity"
-version = "0.2.0"
+version = "0.3.0"
 description = "Comprehensive documentation of time and space complexity for Python built-ins and standard library"
 readme = "README.md"
 license = { text = "MIT" }
@@ -9,6 +9,7 @@ authors = [
 ]
 requires-python = ">=3.10"
 keywords = [
+    "big-o",
     "complexity",
     "time-complexity",
     "space-complexity",

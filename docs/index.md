@@ -13,7 +13,7 @@ notation. We assume you're already familiar with Python basics and have a genera
 
 ## Quick Start
 
-- **[Built-in Types](builtins/index.md)** - Complexity analysis for lists, dicts, sets, strings, and tuples
+- **[Builtins](builtins/index.md)** - Complexity analysis for built-in types, functions, and constants
 - **[Standard Library](stdlib/index.md)** - Modules like collections, heapq, bisect, and more
 - **[Implementations](implementations/index.md)** - CPython, PyPy, Jython, and other implementation details
 - **[Versions](versions/index.md)** - Changes and optimizations by Python version
@@ -40,7 +40,7 @@ The complexity of list operations varies:
 | `in` (search) | O(n) | - |
 | `sort()` | O(n log n) | O(n) |
 
-See [Built-in Types](builtins/list.md) for detailed analysis.
+See [Lists](builtins/list.md) for detailed analysis.
 
 ## How to Use This Guide
 

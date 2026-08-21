@@ -226,5 +226,5 @@ print(id(s1) == id(s2))  # True - same object
 ## Related Documentation
 
 - [PyPy Implementation](pypy.md)
-- [Built-in Types](../builtins/index.md)
+- [Builtins](../builtins/index.md)
 - [Standard Library](../stdlib/index.md)

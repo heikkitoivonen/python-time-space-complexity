@@ -226,7 +226,7 @@ result = any(f() for f in [expensive1, expensive2, expensive3])
 
 - **[all()](all.md)** - Check if all items are truthy
 - **[filter()](filter.md)** - Filter items based on predicate
-- **[in operator](../builtins/index.md)** - Check membership
+- **[Builtins overview](index.md)** - Membership testing with `in` across built-in types
 
 ## Version Notes
 

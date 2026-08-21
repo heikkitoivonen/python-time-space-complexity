@@ -212,5 +212,5 @@ uv run --python 3.12 python script.py
 ## Related Documentation
 
 - [CPython Implementation](../implementations/cpython.md)
-- [Built-in Types](../builtins/index.md)
+- [Builtins](../builtins/index.md)
 - [Standard Library](../stdlib/index.md)

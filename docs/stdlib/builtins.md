@@ -88,7 +88,7 @@ finally:
 
 ## Related Documentation
 
-- [Built-in Types](../builtins/index.md)
+- [Builtins](../builtins/index.md)
 - [Globals](../builtins/globals.md)
 - [Locals](../builtins/locals_func.md)
 - [Vars](../builtins/vars.md)

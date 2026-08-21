@@ -169,4 +169,4 @@ print(calls)  # ['max', 'print']
 
 - [inspect Module](inspect.md)
 - [dis Module](dis.md)
-- [compile() Function](../builtins/index.md)
+- [compile() Function](../builtins/compile.md)

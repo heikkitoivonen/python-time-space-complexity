@@ -1,5 +1,5 @@
 ---
-source_sha: af23fe0b9cac946e96aa6bcc9954d9e77f623d1e28c497b16d52a5b78feb6b69
+source_sha: 699f54d0f15380f0acf2cc37e53cc5f55cb222c850ade1649086deaeb841be2c
 translated: machine
 ---
 
@@ -88,5 +88,5 @@ bisect.insort(arr, 4)  # O(n) - must shift
 
 ## Katso myös
 
-- [Sisäänrakennetut tyypit](../builtins/index.md)
+- [Sisäänrakennetut](../builtins/index.md)
 - [Toteutukset](../implementations/index.md)

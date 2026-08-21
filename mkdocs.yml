@@ -34,7 +34,7 @@ theme:
 
 nav:
   - Home: index.md
-  - Built-in Types:
+  - Builtins:
     - Overview: builtins/index.md
     - Lists: builtins/list.md
     - Dictionaries: builtins/dict.md
@@ -47,7 +47,6 @@ nav:
     - Integer: builtins/int.md
     - Float: builtins/float.md
     - Boolean: builtins/bool.md
-  - Built-in Functions:
     - Length: builtins/len.md
     - Maximum: builtins/max.md
     - Minimum: builtins/min.md
@@ -95,13 +94,13 @@ nav:
     - Callable: builtins/callable.md
     - Bool: builtins/bool_func.md
     - Int: builtins/int_func.md
-    - Float: builtins/float_func.md
+    - float(): builtins/float_func.md
     - Str: builtins/str_func.md
     - Bytes: builtins/bytes_func.md
     - List: builtins/list_func.md
     - Dict: builtins/dict_func.md
     - Set: builtins/set_func.md
-    - Frozenset: builtins/frozenset_func.md
+    - frozenset(): builtins/frozenset_func.md
     - Tuple: builtins/tuple_func.md
     - Bytearray: builtins/bytearray_func.md
     - Complex: builtins/complex_func.md
@@ -144,7 +143,7 @@ nav:
     - Binascii: stdlib/binascii.md
     - Bz2: stdlib/bz2.md
     - Bisect: stdlib/bisect.md
-    - Builtins: stdlib/builtins.md
+    - Builtins (module): stdlib/builtins.md
     - Chunk: stdlib/chunk.md
     - Cmd: stdlib/cmd.md
     - Code: stdlib/code.md
@@ -384,8 +383,7 @@ plugins:
           nav_translations:
             Home: Etusivu
             Overview: Yleiskatsaus
-            Built-in Types: Sisäänrakennetut tyypit
-            Built-in Functions: Sisäänrakennetut funktiot
+            Builtins: Sisäänrakennetut
             Standard Library: Standardikirjasto
             Implementations: Toteutukset
             Versions: Versiot
@@ -413,8 +411,7 @@ plugins:
           nav_translations:
             Home: 首页
             Overview: 概览
-            Built-in Types: 内置类型
-            Built-in Functions: 内置函数
+            Builtins: 内置
             Standard Library: 标准库
             Implementations: 实现
             Versions: 版本

@@ -1,5 +1,5 @@
 ---
-source_sha: de7f362c3fabad731fee5435a0f471b69a9972c08291bbdc9654ba4535d9242f
+source_sha: bc1c06f06cdb21735ec4f9b4470111666ef1434eb35434d61fbf4fe13e925db2
 translated: machine
 ---
 
@@ -18,7 +18,7 @@ translated: machine
 
 ## 快速开始
 
-- **[内置类型](builtins/index.md)** - 列表、字典、集合、字符串和元组的复杂度分析
+- **[内置](builtins/index.md)** - 内置类型、函数与常量的复杂度分析
 - **[标准库](stdlib/index.md)** - collections、heapq、bisect 等模块
 - **[实现](implementations/index.md)** - CPython、PyPy、Jython 及其他实现的细节
 - **[版本](versions/index.md)** - 各 Python 版本的变化与优化
@@ -45,7 +45,7 @@ translated: machine
 | `in`（查找） | O(n) | - |
 | `sort()` | O(n log n) | O(n) |
 
-详细分析参见[内置类型](builtins/list.md)。
+详细分析参见[列表](builtins/list.md)。
 
 ## 如何使用本指南
 

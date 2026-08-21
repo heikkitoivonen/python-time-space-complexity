@@ -34,4 +34,4 @@ except SyntaxError as e:
 ## Related Documentation
 
 - [ast Module](ast.md)
-- [compile() Function](../builtins/index.md)
+- [compile() Function](../builtins/compile.md)

@@ -54,6 +54,6 @@ See individual implementation pages for:
 
 ## Related Topics
 
-- [Built-in Types](../builtins/index.md)
+- [Builtins](../builtins/index.md)
 - [Standard Library](../stdlib/index.md)
 - [Versions](../versions/index.md)
