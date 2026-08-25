@@ -160,8 +160,9 @@ them.
 ### Adding a language
 
 New locales are welcome, including partial ones. The steps (plugin config,
-search stemmer, first page, validator registration) are documented in
-[TRANSLATING.md](TRANSLATING.md).
+search stemmer, the site chrome outside the pages - announce bar, fallback
+notice, footer attribution - first page, validator registration) are
+documented in [TRANSLATING.md](TRANSLATING.md).
 
 ## Building Locally
 
