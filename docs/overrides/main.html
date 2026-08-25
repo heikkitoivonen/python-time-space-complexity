@@ -13,6 +13,9 @@
     {%- elif config.theme.language == "zh" %}
       ⭐ 这个网站帮你省去了翻阅 CPython 源码的功夫吗？
       <strong>在 GitHub 上点个星</strong>，让更多开发者找到它。
+    {%- elif config.theme.language == "ja" %}
+      ⭐ CPython のソースを読みに行く手間が省けましたか？
+      <strong>GitHub でスターを付けて</strong>、ほかの開発者にも見つけてもらいましょう。
     {%- else %}
       ⭐ Did this save you a trip to the CPython source?
       <strong>Star it on GitHub</strong> so other developers can find it too.
@@ -37,6 +40,11 @@
       "title": "尚未翻译",
       "body": "本页面尚未翻译成中文，因此显示英文原文。",
       "cta": "帮助翻译"
+    },
+    "ja": {
+      "title": "未翻訳のページ",
+      "body": "このページはまだ日本語に翻訳されていないため、英語の原文を表示しています。",
+      "cta": "翻訳に協力する"
     }
   } -%}
   {%- if page and page.file.locale is defined

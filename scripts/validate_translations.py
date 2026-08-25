@@ -27,7 +27,7 @@ from pathlib import Path
 import yaml
 
 # Locales that have a docs/<locale>/ tree. Keep in sync with mkdocs.yml.
-LOCALES = ["fi", "zh"]
+LOCALES = ["fi", "ja", "zh"]
 
 DOCS_DIR = Path(__file__).resolve().parent.parent / "docs"
 

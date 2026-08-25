@@ -19,6 +19,7 @@ translation is always safe to ship.
 | `en`   | English  | Complete (source of truth) |
 | `fi`   | Suomi    | Pilot - 13 pages           |
 | `zh`   | 简体中文 | Pilot - 13 pages           |
+| `ja`   | 日本語   | Pilot - 13 pages           |
 
 ## Workflow
 
@@ -240,13 +241,123 @@ Material does this with `jieba`, which is a project dependency for exactly this
 reason. Without it installed, an entire Chinese sentence becomes a single
 search token and search effectively stops working.
 
+jieba marks the boundaries it finds with zero-width spaces (`U+200B`). The
+search `separator` in `mkdocs.yml` lists `\u200b` so the browser splits on
+them - JavaScript's `\s` does **not** match `U+200B`, so without it the
+zero-width spaces are indexed as part of the words and the segmentation is
+wasted.
+
+Material applies jieba unconditionally whenever it is importable, keyed on the
+Han *script*, which means it also fires on Japanese kanji. `scripts/mkdocs_hooks.py`
+therefore enables it only while the `zh` locale is being built. See the
+Japanese search note below for why that matters.
+
+## Japanese glossary (`ja`)
+
+Prose is written in polite form (です・ます体). Complexity expressions stay in
+Latin script (`O(n log n)`), and Python identifiers are never translated.
+
+### Core terms
+
+| English            | Japanese       | Notes                        |
+|--------------------|----------------|------------------------------|
+| time complexity    | 時間計算量     |                              |
+| space complexity   | 空間計算量     |                              |
+| Big-O notation     | O 記法         | space around the Latin `O`   |
+| amortized          | 償却           |                              |
+| worst case         | 最悪の場合     |                              |
+| average case       | 平均の場合     |                              |
+| best case          | 最良の場合     |                              |
+| operation          | 操作           |                              |
+| element / item     | 要素           |                              |
+| index              | 添字           | インデックス is also fine    |
+| lookup             | 探索           |                              |
+| insertion          | 挿入           |                              |
+| deletion / removal | 削除           |                              |
+| traversal          | 走査           |                              |
+| iteration          | 反復           |                              |
+| slice              | スライス       |                              |
+| in place           | その場で       |                              |
+| overhead           | オーバーヘッド |                              |
+| trade-off          | トレードオフ   |                              |
+
+### Data structures
+
+| English        | Japanese         | Notes                                   |
+|----------------|------------------|-----------------------------------------|
+| list           | リスト           |                                         |
+| dictionary     | 辞書             | the type is still written `dict`        |
+| set            | 集合             |                                         |
+| tuple          | タプル           |                                         |
+| string         | 文字列           |                                         |
+| bytes          | バイト列         |                                         |
+| array          | 配列             |                                         |
+| hash table     | ハッシュテーブル |                                         |
+| hash           | ハッシュ         |                                         |
+| hash collision | ハッシュ衝突     |                                         |
+| linked list    | 連結リスト       |                                         |
+| heap           | ヒープ           |                                         |
+| binary heap    | 二分ヒープ       |                                         |
+| queue          | キュー           |                                         |
+| deque          | 両端キュー       | usually left as `deque` in running text |
+| stack          | スタック         |                                         |
+| tree           | 木               |                                         |
+| key / value    | キー / 値        |                                         |
+
+### Implementation vocabulary
+
+| English            | Japanese             | Notes                     |
+|--------------------|----------------------|---------------------------|
+| contiguous         | 連続した             |                           |
+| reference counting | 参照カウント         |                           |
+| garbage collection | ガベージコレクション |                           |
+| memory allocation  | メモリ確保           |                           |
+| resizing           | リサイズ             |                           |
+| immutable          | 不変                 |                           |
+| mutable            | 可変                 |                           |
+| interned           | インターン           | of strings                |
+| built-in           | 組み込み             |                           |
+| standard library   | 標準ライブラリ       |                           |
+| implementation     | 実装                 |                           |
+| benchmark          | ベンチマーク         |                           |
+| sorting            | ソート               | 整列 in formal CS writing |
+| comparison         | 比較                 |                           |
+| binary search      | 二分探索             |                           |
+
+### Admonition titles
+
+| English   | Japanese |
+|-----------|----------|
+| Note      | 注意     |
+| Warning   | 警告     |
+| Tip       | ヒント   |
+| Example   | 例       |
+| Important | 重要     |
+
+### Search
+
+Japanese needs segmentation too, but not from Python: Material ships
+`lunr.ja.js` and TinySegmenter and loads both in the browser whenever `ja` is
+in the search `lang` list. No extra dependency is required.
+
+What Japanese does need is protection *from* jieba. jieba's dictionary is
+Simplified Chinese, so on Japanese text it splits kanji compounds that are not
+Chinese words - `組み込み` was indexed as 組/み/込/み and `実装` as 実/装, and
+searching for either returned nothing. Measured over the 13 Japanese pages, 41
+representative queries resolved 28 times with jieba and 40 times without it.
+`scripts/mkdocs_hooks.py` keeps jieba scoped to `zh` for that reason; if you
+add a third CJK locale, decide deliberately which side of that hook it belongs
+on.
+
 ## Adding a new locale
 
 1. Add the locale to the `i18n` plugin's `languages` list in `mkdocs.yml`,
    with `site_name`, `site_description`, and `nav_translations`.
 2. Confirm the locale has a lunr stemmer (`lunr.<locale>.js`) so search works;
    the plugin wires it up automatically when one exists. Languages without
-   word boundaries need a segmenter too - see the Chinese note above.
+   word boundaries need a segmenter too - see the Chinese and Japanese search
+   notes above, and check whether the locale belongs in `SEGMENTED_LOCALES` in
+   `scripts/mkdocs_hooks.py`.
 3. Add the locale's strings to `fallback_notices` in
    `docs/overrides/main.html`, and translate the announce bar in the same
    file. A locale with no entry simply shows no notice.

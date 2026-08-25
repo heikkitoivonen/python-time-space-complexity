@@ -364,8 +364,15 @@ nav:
     - Python 3.11: versions/py311.md
     - Python 3.10: versions/py310.md
 
+hooks:
+  - scripts/mkdocs_hooks.py
+
 plugins:
-  - search
+  # \u200b: jieba marks Chinese word boundaries with zero-width spaces when it
+  # builds the search index. JavaScript's \s does not match U+200B, so without
+  # it here a whole Chinese phrase is indexed as a single token.
+  - search:
+      separator: '[\s\u200b\-]+'
   - mermaid2
   - i18n:
       docs_structure: folder
@@ -431,6 +438,34 @@ plugins:
             Sum: 求和
             Sorted: 排序
             Regular Expressions: 正则表达式
+        - locale: ja
+          name: 日本語
+          build: true
+          site_name: "Python の O 記法：時間計算量と空間計算量"
+          site_description: Python の組み込み型と標準ライブラリの操作における時間計算量と空間計算量の完全リファレンス
+          nav_translations:
+            Home: ホーム
+            Overview: 概要
+            Builtins: 組み込み
+            Standard Library: 標準ライブラリ
+            Implementations: 実装
+            Versions: バージョン
+            Lists: リスト
+            Dictionaries: 辞書
+            Sets: 集合
+            Tuples: タプル
+            Strings: 文字列
+            Bytes & Bytearray: バイト列とバイト配列
+            Range: 範囲
+            Integer: 整数
+            Float: 浮動小数点数
+            Boolean: 真偽値
+            Length: 長さ
+            Maximum: 最大値
+            Minimum: 最小値
+            Sum: 合計
+            Sorted: ソート
+            Regular Expressions: 正規表現
 
 markdown_extensions:
   - admonition
