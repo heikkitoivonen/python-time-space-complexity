@@ -29,6 +29,8 @@ translation is always safe to ship.
 4. Leave code blocks, identifiers, and complexity expressions untouched.
 5. Run `make check` — `scripts/validate_translations.py` enforces the
    structural rules and flags stale translations.
+6. Preview with `make serve`, not `make serve-en`. The English-only targets
+   skip every locale, so they render none of your work.
 
 ## Front matter
 

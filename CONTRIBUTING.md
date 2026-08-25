@@ -173,12 +173,25 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # Install dependencies
 uv sync
 
-# Serve documentation
+# Serve documentation (all locales)
 make serve
+
+# Serve English only - roughly 4x faster, and what you want for most work
+make serve-en
 
 # Visit http://localhost:8000
 # Translated pages live under a locale prefix, e.g. http://localhost:8000/fi/
 ```
+
+The i18n plugin builds each locale as a full pass over the whole site, so every
+extra language costs about as much again as English. `make serve-en` and
+`make build-en` skip the translations and cut a full build from roughly 40
+seconds to 10.
+
+Use them freely while writing English pages. Run the plain `make serve` or
+`make build` before you commit, though - the English-only build produces no
+localized pages and no untranslated-page notices, so it cannot show you
+anything that is wrong with them.
 
 ## Commit Messages
 
