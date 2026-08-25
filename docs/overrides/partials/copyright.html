@@ -6,12 +6,31 @@
       </div>
     {% endif %}
 
+    {#-
+      The attribution is the one piece of prose in the footer, and the word
+      order around the product name differs per language, so each locale gets
+      the whole phrase rather than a translated fragment. The product name
+      itself is a proper noun and stays untranslated. Add a locale here when
+      adding a language; locales with no entry fall back to English.
+    -#}
+    {%- set material %}
+      <a
+        href="https://squidfunk.github.io/mkdocs-material/"
+        target="_blank"
+        rel="noopener"
+      >Material for MkDocs</a>
+    {%- endset %}
     {% if config.extra.generator is not defined or config.extra.generator != false %}
       <div class="md-copyright__highlight">
-        Made with
-        <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
-          Material for MkDocs
-        </a>
+        {%- if config.theme.language == "fi" %}
+          Tehty {{ material }} -työkalulla
+        {%- elif config.theme.language == "zh" %}
+          使用 {{ material }} 构建
+        {%- elif config.theme.language == "ja" %}
+          {{ material }} で作成
+        {%- else %}
+          Made with {{ material }}
+        {%- endif %}
       </div>
     {% endif %}
   </div>
