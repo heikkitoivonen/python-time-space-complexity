@@ -1,6 +1,6 @@
-**English** | [简体中文](README.zh-CN.md)
+[English](README.md) | **简体中文**
 
-# Python Big-O: Time & Space Complexity
+# Python Big-O:时间复杂度与空间复杂度
 
 [![Lint / Format](https://img.shields.io/github/actions/workflow/status/heikkitoivonen/python-time-space-complexity/deploy.yml?label=lint%20%2F%20format)](https://github.com/heikkitoivonen/python-time-space-complexity/actions/workflows/deploy.yml)
 [![Type Check](https://img.shields.io/github/actions/workflow/status/heikkitoivonen/python-time-space-complexity/deploy.yml?label=type%20check)](https://github.com/heikkitoivonen/python-time-space-complexity/actions/workflows/deploy.yml)
@@ -8,39 +8,39 @@
 [![License](https://img.shields.io/github/license/heikkitoivonen/python-time-space-complexity)](LICENSE.txt)
 [![Docs](https://img.shields.io/badge/docs-pythoncomplexity.com-brightgreen)](https://pythoncomplexity.com)
 
-A comprehensive resource documenting the time and space complexity of Python's built-in functions and standard library operations across different Python versions and implementations.
+一个全面记录 Python 内置函数和标准库操作在不同 Python 版本和实现中的时间与空间复杂度的资源。
 
-## Overview
+## 概述
 
-This project provides detailed documentation of algorithmic complexity for:
-- **Python Built-ins**: `list`, `dict`, `set`, `str`, etc.
-- **Standard Library Modules**: `collections`, `heapq`, `bisect`, `annotationlib`, `compression.zstd`, and more
-- **Python Versions**: 3.10–3.14 (including new 3.14 features)
-- **Alternative Implementations**: CPython, PyPy, Jython, IronPython
+本项目提供以下内容的详细算法复杂度文档：
+- **Python 内置类型**：`list`、`dict`、`set`、`str` 等
+- **标准库模块**：`collections`、`heapq`、`bisect`、`annotationlib`、`compression.zstd` 等
+- **Python 版本**：3.10–3.14（包含新的 3.14 特性）
+- **替代实现**：CPython、PyPy、Jython、IronPython
 
-## Features
+## 特性
 
-- 📊 Comprehensive complexity tables for all major built-in types and operations
-- 🔄 Version-specific behavior and optimization changes
-- 🚀 Implementation-specific notes (CPython vs PyPy vs others)
-- 🛠️ CLI Tool for estimating complexity of your own code
-- 🔍 Interactive search and filtering
-- 📱 Mobile-friendly responsive design
+- 📊 覆盖所有主要内置类型和操作的全面复杂度表
+- 🔄 版本特定的行为和优化变更
+- 🚀 实现特定的说明（CPython vs PyPy vs 其他）
+- 🛠️ 用于估算你自己代码复杂度的 CLI 工具
+- 🔍 交互式搜索和过滤
+- 📱 移动端友好的响应式设计
 
-## Website
+## 网站
 
-Visit the documentation at: [pythoncomplexity.com](https://pythoncomplexity.com)
+访问文档：[pythoncomplexity.com](https://pythoncomplexity.com)
 
 ---
 
-## Quick Start
+## 快速开始
 
-### Prerequisites
-- Python 3.10+ (3.14 recommended)
-- [uv](https://github.com/astral-sh/uv) - Fast Python package manager
+### 环境要求
+- Python 3.10+（推荐 3.14）
+- [uv](https://github.com/astral-sh/uv) - 快速的 Python 包管理器
 - Git
 
-### Installation
+### 安装
 
 ```bash
 # Install uv (one-time)
@@ -60,9 +60,9 @@ make serve
 
 ---
 
-## Development Commands
+## 开发命令
 
-### Using Make (Recommended)
+### 使用 Make（推荐）
 
 ```bash
 make help      # See all available commands
@@ -78,7 +78,7 @@ make clean     # Clean build artifacts
 make update    # Update dependencies
 ```
 
-### Using uv Directly
+### 直接使用 uv
 
 ```bash
 uv sync                    # Sync dependencies
@@ -88,16 +88,16 @@ uv add --dev pytest-plugin # Add dev dependency
 uv lock --upgrade          # Update dependencies
 ```
 
-### Complexity Estimator CLI
+### 复杂度估算 CLI
 
-Measure the Big-O complexity of your own Python functions:
+测量你自己 Python 函数的 Big-O 复杂度：
 
 ```bash
 # Usage: python scripts/estimate_complexity.py <module> <function>
 python scripts/estimate_complexity.py my_script my_function
 ```
 
-Example output:
+示例输出：
 ```text
 Input Size (n)  | Avg Time (s)
 -----------------------------------
@@ -109,7 +109,7 @@ Estimated Complexity: O(n) (Linear)
 
 ---
 
-## Project Structure
+## 项目结构
 
 ```
 ├── docs/                       # MkDocs documentation source
@@ -130,20 +130,20 @@ Estimated Complexity: O(n) (Linear)
 
 ---
 
-## Development Workflow
+## 开发流程
 
-### 1. Create Feature Branch
+### 1. 创建特性分支
 ```bash
 git checkout -b feature/add-numpy-complexity
 ```
 
-### 2. Make Changes & Test Locally
+### 2. 修改并在本地测试
 ```bash
 vim docs/new-module.md
 make serve  # View at http://localhost:8000
 ```
 
-### 3. Run Quality Checks
+### 3. 运行质量检查
 ```bash
 make lint    # Check code quality
 make format  # Auto-format code
@@ -152,29 +152,29 @@ make test    # Run tests
 make check   # All checks (required before commit)
 ```
 
-### 4. Commit & Push
+### 4. 提交并推送
 ```bash
 git add .
 git commit -m "Add: NumPy array complexity documentation"
 git push origin feature/add-numpy-complexity
 ```
 
-### Adding Documentation
-1. Create markdown file in `docs/`
-2. Add link to `mkdocs.yml` navigation
-3. Test locally with `make serve`
-4. Run `make check` before committing
+### 添加文档
+1. 在 `docs/` 中创建 markdown 文件
+2. 在 `mkdocs.yml` 导航中添加链接
+3. 使用 `make serve` 本地测试
+4. 提交前运行 `make check`
 
 ---
 
-## Code Quality Standards
+## 代码质量标准
 
-### Linting & Formatting
-- **ruff** for linting (line length: 100 chars, Python 3.10+ compatibility)
-- **pyright** for static type checking
-- **pytest** for testing
+### 代码检查与格式化
+- **ruff** 用于代码检查（行长度：100 字符，Python 3.10+ 兼容）
+- **pyright** 用于静态类型检查
+- **pytest** 用于测试
 
-### Commit Messages
+### 提交信息
 ```
 Type: Brief description
 
@@ -184,44 +184,44 @@ Example: Add: List complexity documentation
 
 ---
 
-## Quick Reference - Python Complexity Cheat Sheet
+## 快速参考 - Python 复杂度速查表
 
-### Lists
-| Operation | Time | Notes |
+### 列表
+| 操作 | 时间 | 备注 |
 |-----------|------|-------|
-| `append()` | O(1)* | Amortized |
-| `insert(i)` | O(n) | Shifts elements |
-| `pop()` | O(1) | Last element |
-| `pop(0)` | O(n) | First element |
-| `in` | O(n) | Linear search |
+| `append()` | O(1)* | 均摊 |
+| `insert(i)` | O(n) | 移动元素 |
+| `pop()` | O(1) | 最后一个元素 |
+| `pop(0)` | O(n) | 第一个元素 |
+| `in` | O(n) | 线性查找 |
 | `sort()` | O(n log n) | Timsort/Powersort |
 
-**Pro tip:** Use `deque.appendleft()` for O(1) prepend instead of `list.insert(0)`.
+**小贴士：** 使用 `deque.appendleft()` 进行 O(1) 前插，而不是 `list.insert(0)`。
 
-### Dictionaries & Sets
-| Operation | Time |
+### 字典与集合
+| 操作 | 时间 |
 |-----------|------|
-| `d[key]` | O(1) avg |
-| `d[key] = v` | O(1) avg |
-| `key in d` | O(1) avg |
-| `set.add()` | O(1) avg |
-| `x in set` | O(1) avg |
+| `d[key]` | 平均 O(1) |
+| `d[key] = v` | 平均 O(1) |
+| `key in d` | 平均 O(1) |
+| `set.add()` | 平均 O(1) |
+| `x in set` | 平均 O(1) |
 
-**Pro tip:** Use sets for fast membership testing, not lists.
+**小贴士：** 使用 set 进行快速的成员检测，而不是 list。
 
-### Strings
-| Operation | Time |
+### 字符串
+| 操作 | 时间 |
 |-----------|------|
 | `len()` | O(1) |
 | `s[i]` | O(1) |
-| `in` (substring) | O(n) avg |
+| `in`（子串） | 平均 O(n) |
 | `split()` / `join()` | O(n) |
 
-**Pro tip:** Use `"".join(list)` not `+=` in loops.
+**小贴士：** 在循环中使用 `"".join(list)`，不要使用 `+=`。
 
-### Standard Library
+### 标准库
 
-| Module | Operation | Time |
+| 模块 | 操作 | 时间 |
 |--------|-----------|------|
 | **deque** | `append()` / `appendleft()` | O(1) |
 | **deque** | `pop()` / `popleft()` | O(1) |
@@ -229,7 +229,7 @@ Example: Add: List complexity documentation
 | **heapq** | `heappush()` / `heappop()` | O(log n) |
 | **bisect** | `bisect_left/right()` | O(log n) |
 
-### Common Patterns
+### 常见模式
 
 ```python
 # ❌ Bad: O(n) membership check
@@ -255,7 +255,7 @@ dq = deque()
 dq.appendleft(item)
 ```
 
-### Python Version Performance
+### Python 版本性能
 ```
 Python 3.10     ← Baseline
 Python 3.11     ← +10-60% improvements (inline caching!)
@@ -264,69 +264,69 @@ Python 3.13     ← Similar (experimental free-threading)
 Python 3.14     ← Better GC pauses, new heapq max-heap
 ```
 
-### Implementation Comparison
-| Implementation | Use Case | Speed | GIL |
+### 实现对比
+| 实现 | 使用场景 | 速度 | GIL |
 |---|---|---|---|
-| CPython | Default, standard | Good | Yes |
-| PyPy | CPU-bound loops | Excellent* | No |
-| Jython | Java integration | Good | No |
-| IronPython | .NET integration | Good | No |
+| CPython | 默认，标准 | 好 | 有 |
+| PyPy | CPU 密集型循环 | 优秀* | 无 |
+| Jython | Java 集成 | 好 | 无 |
+| IronPython | .NET 集成 | 好 | 无 |
 
 ---
 
-## Deployment
+## 部署
 
-### GitHub Pages Setup
-1. Push to GitHub
-2. Go to **Settings** → **Pages**
-3. Select **Deploy from a branch** → **gh-pages**
-4. GitHub Actions automatically deploys on push
+### GitHub Pages 设置
+1. 推送到 GitHub
+2. 前往 **Settings** → **Pages**
+3. 选择 **Deploy from a branch** → **gh-pages**
+4. GitHub Actions 会在推送时自动部署
 
-### Custom Domain (Optional)
-1. Update `site_url` in `mkdocs.yml`
-2. Configure DNS to point to GitHub Pages
-3. In GitHub Settings → Pages, enter custom domain
-4. Enable HTTPS
+### 自定义域名（可选）
+1. 更新 `mkdocs.yml` 中的 `site_url`
+2. 配置 DNS 指向 GitHub Pages
+3. 在 GitHub Settings → Pages 中输入自定义域名
+4. 启用 HTTPS
 
 ---
 
-## Troubleshooting
+## 故障排查
 
-### Build Issues
+### 构建问题
 ```bash
 make clean && make build
 uv run mkdocs serve --verbose
 ```
 
-### Dependency Issues
+### 依赖问题
 ```bash
 rm -rf .venv/ && uv sync
 ```
 
-### GitHub Pages Not Updating
-1. Check GitHub Actions tab for errors
-2. Verify gh-pages branch exists
-3. Wait ~1-2 minutes for deployment
+### GitHub Pages 未更新
+1. 检查 GitHub Actions 选项卡中的错误
+2. 确认 gh-pages 分支存在
+3. 等待约 1-2 分钟完成部署
 
 ---
 
-## Sources & References
+## 来源与参考
 
-- [Python Official Documentation](https://docs.python.org/3/)
+- [Python 官方文档](https://docs.python.org/3/)
 - [TimeComplexity Wiki](https://wiki.python.org/moin/TimeComplexity)
-- [Python Enhancement Proposals (PEPs)](https://www.python.org/dev/peps/)
-- [uv Documentation](https://docs.astral.sh/uv/)
-- [MkDocs Documentation](https://www.mkdocs.org/)
+- [Python 增强提案（PEPs）](https://www.python.org/dev/peps/)
+- [uv 文档](https://docs.astral.sh/uv/)
+- [MkDocs 文档](https://www.mkdocs.org/)
 - [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/)
 
-## Contributing
+## 参与贡献
 
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+欢迎贡献！请参阅 [CONTRIBUTING.md](CONTRIBUTING.md) 了解贡献指南。
 
-## License
+## 许可证
 
-MIT License - See [LICENSE.txt](LICENSE.txt) for details
+MIT 许可证 - 详见 [LICENSE.txt](LICENSE.txt)
 
-## Disclaimer
+## 免责声明
 
-While we strive for accuracy, complexity information may vary based on specific implementations and versions. Always verify with official documentation and benchmarks for performance-critical code.
+虽然我们力求准确，但复杂度信息可能因具体实现和版本而异。对于性能关键代码，请务必参考官方文档和基准测试进行验证。
