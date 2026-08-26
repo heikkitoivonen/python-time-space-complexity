@@ -253,24 +253,6 @@ final_pos = random_walk_2d(10000)  # O(10000)
 
 ## Performance Optimization
 
-### Vectorized Operations (using numpy)
-
-```python
-import numpy as np
-import random
-
-# Single random value - O(1)
-single = random.random()  # Slow for large-scale
-
-# But for bulk operations, numpy is faster
-# Generate million random numbers - O(n)
-arr = np.random.random(1000000)  # Faster than loop
-
-# Shuffling large arrays - O(n)
-big_arr = np.arange(1000000)
-np.random.shuffle(big_arr)  # O(1000000)
-```
-
 ### Weighted Random Selection
 
 ```python
@@ -338,7 +320,6 @@ y2 = random.randint(1, 100)  # Same as y1
 
 ```python
 import random
-import numpy as np
 import secrets
 
 # Cryptographically secure random (secure but slow) - O(1)
@@ -346,9 +327,6 @@ token = secrets.token_hex(16)  # For passwords/tokens
 
 # For simulation/general use (fast)
 value = random.random()  # O(1) - standard
-
-# For scientific computing (vectorized)
-array = np.random.random(1000)  # Fast bulk generation
 ```
 
 ## Thread Safety
@@ -381,7 +359,6 @@ threads = [
 ## Related Modules
 
 - **[secrets](secrets.md)** - Cryptographically secure random numbers
-- **numpy.random** - Fast vectorized random number generation
 - **[statistics](statistics.md)** - Statistical functions
 
 ## Best Practices

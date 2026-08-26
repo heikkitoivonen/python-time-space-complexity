@@ -319,24 +319,6 @@ med = median(huge_dataset)  # O(n) memory - creates sorted copy
 std = stdev(huge_dataset)  # O(1) memory
 ```
 
-## Comparison with NumPy
-
-```python
-from statistics import mean
-import numpy as np
-
-# statistics module (simple)
-data = [1, 2, 3, 4, 5]
-avg = mean(data)  # O(n) - Python
-
-# NumPy (powerful)
-arr = np.array([1, 2, 3, 4, 5])
-avg = np.mean(arr)  # Faster - optimized C code
-
-# Use statistics for small datasets
-# Use NumPy for large datasets or advanced operations
-```
-
 ## Exception Handling
 
 ```python

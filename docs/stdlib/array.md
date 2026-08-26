@@ -154,7 +154,6 @@ arr_d = array.array('d', [1.0, 2.5, 3.14])
 
 - **[list](../builtins/list.md)** - Flexible container
 - **[struct](struct.md)** - Binary data packing
-- **numpy** - Numerical arrays (external)
 
 ## Best Practices
 
