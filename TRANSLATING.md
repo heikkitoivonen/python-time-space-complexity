@@ -29,9 +29,13 @@ translation is always safe to ship.
 2. Add the translation front matter (see below).
 3. Translate prose, headings, admonition titles, and table **Notes** cells.
 4. Leave code blocks, identifiers, and complexity expressions untouched.
-5. Run `make check` — `scripts/validate_translations.py` enforces the
+5. Add the page's nav label to your locale's `nav_translations` in
+   `mkdocs.yml`, and only to yours. A label with no entry falls back to
+   English, the same way the page does, so leaving other locales alone keeps
+   each sidebar honest about what it actually serves.
+6. Run `make check` — `scripts/validate_translations.py` enforces the
    structural rules and flags stale translations.
-6. Preview with `make serve-one LOCALE=<locale>`, which builds your locale
+7. Preview with `make serve-one LOCALE=<locale>`, which builds your locale
    exactly as it ships. `make serve-en` renders none of your work, and
    `make serve` shares one search index across every language.
 

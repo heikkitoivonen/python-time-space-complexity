@@ -411,7 +411,6 @@ plugins:
             Enumerate: Numerointi
             Length: Pituus
             Maximum: Suurin
-            Memoryview: Muistinäkymä
             Minimum: Pienin
             Sum: Summa
             Sorted: Järjestäminen
@@ -438,7 +437,6 @@ plugins:
             Integer: 整数
             Float: 浮点数
             Boolean: 布尔值
-            Enumerate: 枚举
             Length: 长度
             Maximum: 最大值
             Memoryview: 内存视图
@@ -468,10 +466,8 @@ plugins:
             Integer: 整数
             Float: 浮動小数点数
             Boolean: 真偽値
-            Enumerate: 列挙
             Length: 長さ
             Maximum: 最大値
-            Memoryview: メモリビュー
             Minimum: 最小値
             Sum: 合計
             Sorted: ソート

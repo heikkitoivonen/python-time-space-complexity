@@ -1,4 +1,4 @@
-<!-- source_sha: 6bfbd6d7d30588319dd655b3a4818b2b4d618e0d0d7a90cc46395f6a97e940ca -->
+<!-- source_sha: 181b41c0482257870e29f7ced034b4ae968252d31a8d94ddc070acd85167a907 -->
 <!-- translated: machine -->
 
 [English](TRANSLATING.md) | **简体中文**
@@ -29,8 +29,9 @@ docs/fi/builtins/list.md     -> https://pythoncomplexity.com/fi/builtins/list/
 2. 添加翻译 front matter(见下文)。
 3. 翻译正文、标题、提示块标题和表格的 **备注** 列。
 4. 保持代码块、标识符和复杂度表达式不变。
-5. 运行 `make check` —— `scripts/validate_translations.py` 强制校验结构规则，并标记过期的翻译。
-6. 用 `make serve-one LOCALE=<locale>` 预览，它会完全按照发布时的形态构建你的语言区域。`make serve-en` 不会渲染你的任何成果，而 `make serve` 会让所有语言共享同一个搜索索引。
+5. 把该页面的导航标签加到 `mkdocs.yml` 中你自己那个语言区域的 `nav_translations` 里，并且只加你自己的。没有条目的标签会回退到英文，和页面本身一样，因此不去动其他语言区域，能让每个侧边栏都如实反映它实际提供的内容。
+6. 运行 `make check` —— `scripts/validate_translations.py` 强制校验结构规则，并标记过期的翻译。
+7. 用 `make serve-one LOCALE=<locale>` 预览，它会完全按照发布时的形态构建你的语言区域。`make serve-en` 不会渲染你的任何成果，而 `make serve` 会让所有语言共享同一个搜索索引。
 
 ## Front matter
 
