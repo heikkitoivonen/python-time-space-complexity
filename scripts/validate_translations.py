@@ -8,6 +8,11 @@ Translations live in ``docs/<locale>/`` and mirror the English tree at
 * carries ``source_sha`` front matter matching that counterpart (staleness),
 * preserves code blocks, table shape, heading structure, and link targets.
 
+Repository-root documents (``README.md`` and friends) are translated in place
+as ``<stem>.<tag>.md`` and get the same checks. They cannot carry YAML front
+matter - GitHub would render it as a table - so their metadata lives in HTML
+comments at the top of the file instead.
+
 Usage::
 
     python scripts/validate_translations.py               # all locales
@@ -29,12 +34,24 @@ import yaml
 # Locales that have a docs/<locale>/ tree. Keep in sync with mkdocs.yml.
 LOCALES = ["fi", "ja", "zh"]
 
-DOCS_DIR = Path(__file__).resolve().parent.parent / "docs"
+ROOT_DIR = Path(__file__).resolve().parent.parent
+DOCS_DIR = ROOT_DIR / "docs"
+
+# Root-level docs are translated as ``<stem>.<tag>.md``. The tag is the full
+# IETF language tag rather than the bare locale, because that is the
+# convention GitHub readers expect. Locales with no root translations are
+# simply absent.
+ROOT_DOC_TAGS = {"zh": "zh-CN"}
+ROOT_DOC_STEMS = ["README", "CONTRIBUTING", "TRANSLATING"]
 
 FENCE_RE = re.compile(r"^(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
 HEADING_RE = re.compile(r"^(?P<hashes>#{1,6})\s+")
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)")
 FRONT_MATTER_RE = re.compile(r"\A---\n(?P<yaml>.*?)\n---\n", re.DOTALL)
+ROOT_META_RE = re.compile(r"^<!--\s*(?P<key>source_sha|translated):\s*(?P<value>\S+)\s*-->$")
+# Every root doc opens with a language switcher, which is the one line that is
+# *meant* to differ between a source and its translation.
+SWITCHER_RE = re.compile(r"^(\*\*English\*\*|\[English\])")
 
 
 @dataclass
@@ -111,7 +128,9 @@ def compare(source: Structure, target: Structure) -> list[str]:
             pairs = zip(source.code_blocks, target.code_blocks, strict=True)
             for index, (a, b) in enumerate(pairs):
                 if a != b:
-                    problems.append(f"code block {index + 1} was modified (code must stay verbatim)")
+                    problems.append(
+                        f"code block {index + 1} was modified (code must stay verbatim)"
+                    )
 
     if source.heading_levels != target.heading_levels:
         problems.append(
@@ -125,12 +144,35 @@ def compare(source: Structure, target: Structure) -> list[str]:
             f"translation has {target.table_rows}"
         )
 
-    missing = sorted(set(source.link_targets) - set(target.link_targets))
-    added = sorted(set(target.link_targets) - set(source.link_targets))
+    problems.extend(compare_links(source.link_targets, target.link_targets))
+
+    return problems
+
+
+def compare_links(source: list[str], target: list[str]) -> list[str]:
+    """Compare link targets, allowing same-document anchors to be translated."""
+    problems: list[str] = []
+
+    def split(targets: list[str]) -> tuple[set[str], int]:
+        # Headings are translated, so their slugs change. Only the count of
+        # same-document anchors has to line up, not the anchors themselves.
+        anchors = [link for link in targets if link.startswith("#")]
+        return {link for link in targets if not link.startswith("#")}, len(anchors)
+
+    source_links, source_anchors = split(source)
+    target_links, target_anchors = split(target)
+
+    missing = sorted(source_links - target_links)
+    added = sorted(target_links - source_links)
     if missing:
         problems.append(f"link targets missing from translation: {', '.join(missing)}")
     if added:
         problems.append(f"link targets not present in English: {', '.join(added)}")
+    if source_anchors != target_anchors:
+        problems.append(
+            f"same-document anchor count differs: English has {source_anchors}, "
+            f"translation has {target_anchors}"
+        )
 
     return problems
 
@@ -178,9 +220,79 @@ def validate_locale(locale: str) -> tuple[int, list[str]]:
             errors.append(f"{rel}: 'translated' must be 'machine' or 'reviewed'")
 
         _, source_body = split_front_matter(source.read_text(encoding="utf-8"))
-        errors.extend(f"{rel}: {problem}" for problem in compare(analyze(source_body), analyze(body)))
+        errors.extend(
+            f"{rel}: {problem}" for problem in compare(analyze(source_body), analyze(body))
+        )
 
     return len(pages), errors
+
+
+def split_root_meta(text: str) -> tuple[dict[str, str], str]:
+    """Return (metadata, body) for a root doc, whose metadata is HTML comments."""
+    meta: dict[str, str] = {}
+    lines = text.split("\n")
+    index = 0
+    while index < len(lines):
+        match = ROOT_META_RE.match(lines[index])
+        if match is None:
+            break
+        meta[match.group("key")] = match.group("value")
+        index += 1
+    return meta, "\n".join(lines[index:]).lstrip("\n")
+
+
+def strip_switcher(body: str) -> str:
+    """Drop the leading language-switcher line, which differs by design."""
+    lines = body.split("\n")
+    if lines and SWITCHER_RE.match(lines[0]):
+        lines = lines[1:]
+    return "\n".join(lines).lstrip("\n")
+
+
+def root_doc_pairs(locale: str) -> list[tuple[Path, Path]]:
+    """Return (translation, English source) for every root doc in a locale."""
+    tag = ROOT_DOC_TAGS.get(locale)
+    if tag is None:
+        return []
+    pairs = []
+    for stem in ROOT_DOC_STEMS:
+        translated = ROOT_DIR / f"{stem}.{tag}.md"
+        if translated.exists():
+            pairs.append((translated, ROOT_DIR / f"{stem}.md"))
+    return pairs
+
+
+def validate_root_docs(locale: str) -> tuple[int, list[str]]:
+    """Validate one locale's root docs. Returns (doc count, error messages)."""
+    errors: list[str] = []
+    pairs = root_doc_pairs(locale)
+
+    for translated, source in pairs:
+        name = translated.name
+
+        if not source.exists():
+            errors.append(f"{name}: no English source at {source.name}")
+            continue
+
+        meta, body = split_root_meta(translated.read_text(encoding="utf-8"))
+
+        recorded = meta.get("source_sha")
+        if recorded is None:
+            errors.append(f"{name}: missing '<!-- source_sha: ... -->' marker")
+        elif recorded != sha256_of(source):
+            errors.append(
+                f"{name}: STALE — {source.name} changed since translation "
+                f"(re-translate, then run --update-hashes {locale})"
+            )
+
+        if meta.get("translated") not in {"machine", "reviewed"}:
+            errors.append(f"{name}: 'translated' must be 'machine' or 'reviewed'")
+
+        source_body = strip_switcher(source.read_text(encoding="utf-8"))
+        problems = compare(analyze(source_body), analyze(strip_switcher(body)))
+        errors.extend(f"{name}: {problem}" for problem in problems)
+
+    return len(pairs), errors
 
 
 def update_hashes(locale: str) -> int:
@@ -204,8 +316,23 @@ def update_hashes(locale: str) -> int:
         )
         if new_yaml == match.group("yaml"):
             continue
-        page.write_text(f"---\n{new_yaml}\n---\n{text[match.end():]}", encoding="utf-8")
+        page.write_text(f"---\n{new_yaml}\n---\n{text[match.end() :]}", encoding="utf-8")
         updated += 1
+
+    for translated, source in root_doc_pairs(locale):
+        if not source.exists():
+            continue
+        text = translated.read_text(encoding="utf-8")
+        meta, body = split_root_meta(text)
+        current = sha256_of(source)
+        if meta.get("source_sha") == current:
+            continue
+        meta["source_sha"] = current
+        meta.setdefault("translated", "machine")
+        header = "".join(f"<!-- {key}: {value} -->\n" for key, value in meta.items())
+        translated.write_text(f"{header}\n{body}", encoding="utf-8")
+        updated += 1
+
     return updated
 
 
@@ -232,6 +359,12 @@ def main() -> int:
         status = "OK" if not errors else f"{len(errors)} problem(s)"
         print(f"{locale}: {count} translated page(s) — {status}")
         total_errors.extend(errors)
+
+        root_count, root_errors = validate_root_docs(locale)
+        if root_count:
+            status = "OK" if not root_errors else f"{len(root_errors)} problem(s)"
+            print(f"{locale}: {root_count} translated root doc(s) — {status}")
+            total_errors.extend(root_errors)
 
     sys.stdout.flush()
     for error in total_errors:

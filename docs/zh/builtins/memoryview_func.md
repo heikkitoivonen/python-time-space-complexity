@@ -44,8 +44,8 @@ translated: machine
 | `strides` | O(1) | 每个维度步进的字节数元组 |
 | `suboffsets` | O(1) | 用于 PIL 风格数组的元组；简单缓冲区为 None |
 | `contiguous` | O(1) | 布尔值；C 或 Fortran 连续时为 True |
-| `c_contiguous` | O(1) | 布尔值；「C 序」连续时为 True |
-| `f_contiguous` | O(1) | 布尔值；「Fortran 序」连续时为 True |
+| `c_contiguous` | O(1) | 布尔值；“C 序”连续时为 True |
+| `f_contiguous` | O(1) | 布尔值；“Fortran 序”连续时为 True |
 
 ## 基本用法
 

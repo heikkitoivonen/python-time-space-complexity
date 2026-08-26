@@ -20,7 +20,7 @@ translation is always safe to ship.
 |--------|----------|----------------------------|
 | `en`   | English  | Complete (source of truth) |
 | `fi`   | Suomi    | Pilot - 13 pages           |
-| `zh`   | 简体中文 | Pilot - 13 pages           |
+| `zh`   | 简体中文 | Pilot - 14 pages           |
 | `ja`   | 日本語   | Pilot - 13 pages           |
 
 ## Workflow
@@ -59,6 +59,27 @@ To re-bless a page after re-checking it against an updated English source:
 ```bash
 uv run python scripts/validate_translations.py --update-hashes fi
 ```
+
+## Root documents
+
+`README.md`, `CONTRIBUTING.md`, and `TRANSLATING.md` are translated in place as
+`<stem>.<tag>.md` - `README.zh-CN.md` - using the full language tag rather than
+the bare locale, because that is what GitHub readers expect. Each one opens
+with a language switcher linking to its siblings, and that first line is the
+only line allowed to differ from the English source.
+
+They cannot carry YAML front matter, because GitHub renders it as a table, so
+their metadata lives in HTML comments at the top of the file instead:
+
+```markdown
+<!-- source_sha: 26ab06b2234ef5af328ca310db336739cfcd9de23fad475459c794b9a4449591 -->
+<!-- translated: machine -->
+```
+
+The keys mean what they mean in a page's front matter, `--update-hashes`
+maintains them the same way, and the same structural rules apply. Widen the
+check by adding a stem to `ROOT_DOC_STEMS` or a locale to `ROOT_DOC_TAGS` in
+`scripts/validate_translations.py`.
 
 ## What not to translate
 
