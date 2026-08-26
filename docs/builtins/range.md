@@ -11,9 +11,9 @@ The `range` type is an immutable sequence of numbers used for iteration. It gene
 | `range(start, stop, step)` | O(1) | O(1) | Create range object |
 | `len()` | O(1) | O(1) | Calculated, not stored |
 | `access[i]` | O(1) | O(1) | Direct calculation |
-| `in` (membership) | O(1) | O(1) | Math check, not scan |
-| `index(value)` | O(1) | O(1) | Solve equation |
-| `count(value)` | O(1) | O(1) | Single check |
+| `in` (membership) | O(1)* | O(1) | *Arithmetic check for `int`/`bool`; other types fall back to an O(n) scan |
+| `index(value)` | O(1)* | O(1) | *Solves an equation for `int`/`bool`; other types scan in O(n) |
+| `count(value)` | O(1)* | O(1) | *Single check for `int`/`bool`; other types scan in O(n) |
 | `iteration` | O(n) | O(1) | n = number of items; yields on demand |
 | `reversed()` | O(1) | O(1) | Iterator, not materialized |
 | `list(range(...))` | O(n) | O(n) | Convert to list |

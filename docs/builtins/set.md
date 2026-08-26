@@ -22,7 +22,7 @@ The `set` type is an unordered collection of unique items. It's implemented as a
 | `issuperset()` | O(m) | O(1) | m = other length |
 | `isdisjoint()` | O(min(n,m)) | O(1) | Early termination |
 | `update(other)` | O(m) | O(1) | In-place union; m = len(other) |
-| `difference_update(other)` | O(m) | O(1) | In-place difference |
+| `difference_update(other)` | O(min(n,m)) | O(1) | In-place difference; scans whichever side is smaller |
 | `intersection_update(other)` | O(n) | O(1) | In-place intersection; rebuilds set |
 | `symmetric_difference_update(other)` | O(m) | O(1) | In-place symmetric difference |
 

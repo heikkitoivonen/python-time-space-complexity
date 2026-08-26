@@ -1,5 +1,5 @@
 ---
-source_sha: 481ae7e0eb06ad0f4ca7fba108eb1d8b8d8dfb70d13bf0b405746fc83f0d311c
+source_sha: 017611c2d2bcc901231a4ffb2170bb79a9c5ea0033777a6cac77c8344e2faf84
 translated: machine
 ---
 
@@ -27,7 +27,7 @@ translated: machine
 | `issuperset()` | O(m) | O(1) | m は相手の大きさ |
 | `isdisjoint()` | O(min(n,m)) | O(1) | 早期に打ち切る |
 | `update(other)` | O(m) | O(1) | その場での和、m = len(other) |
-| `difference_update(other)` | O(m) | O(1) | その場での差 |
+| `difference_update(other)` | O(min(n,m)) | O(1) | その場での差。小さいほうの側を走査する |
 | `intersection_update(other)` | O(n) | O(1) | その場での積、集合を作り直す |
 | `symmetric_difference_update(other)` | O(m) | O(1) | その場での対称差 |
 
