@@ -4,11 +4,6 @@
 #   make serve DEV_ADDR=0.0.0.0:5005
 DEV_ADDR ?= 127.0.0.1:8000
 
-# Each locale is built as its own self-contained site so that search never
-# crosses languages. Building one locale costs about a quarter of the total,
-# which is what the -en targets exploit for local work.
-EN_ONLY := BUILD_ONLY_LOCALE=en
-
 help:
 	@echo "Python Big-O: Time & Space Complexity - Development Commands"
 	@echo ""
@@ -45,12 +40,19 @@ dev:
 serve:
 	uv run mkdocs serve --dev-addr $(DEV_ADDR)
 
-serve-en:
-	$(EN_ONLY) uv run mkdocs serve --dev-addr $(DEV_ADDR)
-
-# Preview a single locale exactly as it ships, search index included.
+# Preview one locale exactly as it ships, its own search index included.
+# Each locale is a self-contained site, so building one costs about a quarter
+# of the total, which is what this and the -en targets exploit for local work.
+# Refuses to guess: an empty BUILD_ONLY_LOCALE means "every locale", which
+# would quietly serve the shared-index build this target exists to avoid.
 serve-one:
+ifndef LOCALE
+	$(error LOCALE is required, e.g. make serve-one LOCALE=ja)
+endif
 	BUILD_ONLY_LOCALE=$(LOCALE) uv run mkdocs serve --dev-addr $(DEV_ADDR)
+
+serve-en:
+	@$(MAKE) --no-print-directory serve-one LOCALE=en
 
 build:
 	uv run python scripts/build_site.py
