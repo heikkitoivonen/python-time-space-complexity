@@ -375,6 +375,10 @@ plugins:
       separator: '[\s\u200b\-]+'
   - mermaid2
   - i18n:
+      # Set by the build orchestration to build one self-contained locale at a
+      # time, each with its own search index. Unset builds every locale into a
+      # single tree that shares one index. See scripts/build_site.py.
+      build_only_locale: !ENV [BUILD_ONLY_LOCALE, null]
       docs_structure: folder
       fallback_to_default: true
       languages:
@@ -384,7 +388,7 @@ plugins:
           build: true
         - locale: fi
           name: Suomi
-          build: !ENV [BUILD_ALL_LOCALES, true]
+          build: true
           site_name: "Pythonin O-notaatio: aika- ja tilavaativuus"
           site_description: Kattava dokumentaatio Pythonin sisäänrakennettujen tyyppien ja standardikirjaston aika- ja tilavaativuuksista
           nav_translations:
@@ -412,7 +416,7 @@ plugins:
             Regular Expressions: Säännölliset lausekkeet
         - locale: zh
           name: 简体中文
-          build: !ENV [BUILD_ALL_LOCALES, true]
+          build: true
           site_name: "Python 大 O 表示法：时间与空间复杂度"
           site_description: Python 内置类型与标准库操作的时间和空间复杂度完整参考
           nav_translations:
@@ -440,7 +444,7 @@ plugins:
             Regular Expressions: 正则表达式
         - locale: ja
           name: 日本語
-          build: !ENV [BUILD_ALL_LOCALES, true]
+          build: true
           site_name: "Python の O 記法：時間計算量と空間計算量"
           site_description: Python の組み込み型と標準ライブラリの操作における時間計算量と空間計算量の完全リファレンス
           nav_translations:

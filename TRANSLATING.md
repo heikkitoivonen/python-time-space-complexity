@@ -29,8 +29,9 @@ translation is always safe to ship.
 4. Leave code blocks, identifiers, and complexity expressions untouched.
 5. Run `make check` — `scripts/validate_translations.py` enforces the
    structural rules and flags stale translations.
-6. Preview with `make serve`, not `make serve-en`. The English-only targets
-   skip every locale, so they render none of your work.
+6. Preview with `make serve-one LOCALE=<locale>`, which builds your locale
+   exactly as it ships. `make serve-en` renders none of your work, and
+   `make serve` shares one search index across every language.
 
 ## Front matter
 
@@ -369,6 +370,35 @@ on.
 5. Create `docs/<locale>/` and translate `index.md` first.
 6. Add the locale to `LOCALES` in `scripts/validate_translations.py`.
 7. Add a row to the status table above and to the one in `CONTRIBUTING.md`.
+
+## One site per locale
+
+Production does not build the locales into a single tree. `scripts/build_site.py`
+builds each one separately with the i18n plugin's `build_only_locale`, so every
+locale gets a complete site of its own: translated pages where they exist,
+English fallbacks everywhere else, and **its own search index**. The default
+locale lands at the site root and the others in their own subdirectories, which
+is the same URL layout either way.
+
+This exists because of search. Module and method names are kept verbatim in
+every translation - that is what keeps `collections.md#deque` resolving - so in
+a shared index an English search for `bisect` or `deque` matched the Finnish,
+Chinese and Japanese pages too, and matched them in the *title*, which Material
+boosts by 1000. Across a set of typical English queries, 21-74% of the matches
+were foreign-language pages. With per-locale indexes it is 0%.
+
+Two things the i18n plugin skips when it builds only one language, which
+`scripts/mkdocs_hooks.py` puts back:
+
+- **Canonical URLs.** A locale is built at the root of its own tree but served
+  from a subdirectory, so the locale prefix has to be added back to `site_url`.
+- **The language switcher.** The plugin only generates `extra.alternate` when
+  it is building more than one language. The hook rebuilds it from the
+  configured locales, and repoints each entry at the equivalent page rather
+  than the other locale's home page.
+
+Adding a locale needs no change here: the script reads the locale list out of
+`mkdocs.yml`.
 
 ## The footer
 

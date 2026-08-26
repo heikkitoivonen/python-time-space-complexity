@@ -173,25 +173,32 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # Install dependencies
 uv sync
 
-# Serve documentation (all locales)
-make serve
-
 # Serve English only - roughly 4x faster, and what you want for most work
 make serve-en
+
+# Serve one locale exactly as it ships, search index included
+make serve-one LOCALE=ja
+
+# Serve every locale in one tree (quick cross-locale browsing)
+make serve
 
 # Visit http://localhost:8000
 # Translated pages live under a locale prefix, e.g. http://localhost:8000/fi/
 ```
 
-The i18n plugin builds each locale as a full pass over the whole site, so every
-extra language costs about as much again as English. `make serve-en` and
-`make build-en` skip the translations and cut a full build from roughly 40
-seconds to 10.
+Each locale is built as its own self-contained site, so a build costs about as
+much again per language. `make serve-en` and `make build-en` do English alone
+and cut a full build from roughly 40 seconds to 10. Use them freely while
+writing English pages.
 
-Use them freely while writing English pages. Run the plain `make serve` or
-`make build` before you commit, though - the English-only build produces no
-localized pages and no untranslated-page notices, so it cannot show you
-anything that is wrong with them.
+Two caveats before you commit:
+
+- The English-only build produces no localized pages and no untranslated-page
+  notices, so it cannot show you anything wrong with them.
+- `make serve` is the one mode that puts every locale in a single tree. It is
+  convenient for clicking between languages, but its search index is shared
+  across all of them, which is *not* how the site ships. Use
+  `make serve-one LOCALE=<locale>` to check search.
 
 ## Commit Messages
 

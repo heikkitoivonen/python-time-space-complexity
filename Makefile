@@ -1,13 +1,13 @@
-.PHONY: help install dev serve serve-en build build-en lint format types check clean test audit
+.PHONY: help install dev serve serve-en serve-one build build-en lint format types check clean test audit
 
 # Address for the dev server. Override for a non-default setup, e.g.
 #   make serve DEV_ADDR=0.0.0.0:5005
 DEV_ADDR ?= 127.0.0.1:8000
 
-# The i18n plugin builds every locale as a full pass over the whole site, so
-# each extra language costs about as much as the English build. Setting this
-# to false leaves only English, which is what the -en targets do.
-EN_ONLY := BUILD_ALL_LOCALES=false
+# Each locale is built as its own self-contained site so that search never
+# crosses languages. Building one locale costs about a quarter of the total,
+# which is what the -en targets exploit for local work.
+EN_ONLY := BUILD_ONLY_LOCALE=en
 
 help:
 	@echo "Python Big-O: Time & Space Complexity - Development Commands"
@@ -19,7 +19,8 @@ help:
 	@echo "Development:"
 	@echo "  make serve       Serve docs locally, all locales (http://localhost:8000)"
 	@echo "  make serve-en    Serve English only - much faster, for most local work"
-	@echo "  make build       Build static site, all locales"
+	@echo "  make serve-one   Serve one locale as it ships, e.g. LOCALE=ja"
+	@echo "  make build       Build all locales, each self-contained"
 	@echo "  make build-en    Build English only - much faster, for most local work"
 	@echo "                   Override the address with DEV_ADDR=host:port"
 	@echo ""
@@ -47,11 +48,15 @@ serve:
 serve-en:
 	$(EN_ONLY) uv run mkdocs serve --dev-addr $(DEV_ADDR)
 
+# Preview a single locale exactly as it ships, search index included.
+serve-one:
+	BUILD_ONLY_LOCALE=$(LOCALE) uv run mkdocs serve --dev-addr $(DEV_ADDR)
+
 build:
-	uv run mkdocs build
+	uv run python scripts/build_site.py
 
 build-en:
-	$(EN_ONLY) uv run mkdocs build
+	uv run python scripts/build_site.py en
 
 lint:
 	uv run ruff check .
