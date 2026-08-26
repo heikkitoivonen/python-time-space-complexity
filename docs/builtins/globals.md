@@ -292,4 +292,4 @@ for i in range(10000):
 
 - **[vars()](vars.md)** - Similar to locals() but for objects
 - **[dir()](dir.md)** - List names in namespace
-- **inspect.signature()** - Get function signature
+- **[inspect.signature()](../stdlib/inspect.md)** - Get function signature

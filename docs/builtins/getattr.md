@@ -583,7 +583,7 @@ val2 = cached.get('x')  # O(1) - from cache
 - **[delattr()](delattr.md)** - Delete attribute
 - **[dir()](dir.md)** - List attributes
 - **[vars()](vars.md)** - Get __dict__
-- **type()** - Get object type
+- **[type()](type_func.md)** - Get object type
 
 ## Version Notes
 

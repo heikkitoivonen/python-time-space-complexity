@@ -141,7 +141,7 @@ values = input("Enter all values: ").split()  # O(k)
 ## Related Functions
 
 - **[open()](open.md)** - Read from files
-- **sys.stdin** - Direct stdin access
+- **[sys.stdin](../stdlib/sys.md)** - Direct stdin access
 - **[print()](print.md)** - Output to stdout
 
 ## Best Practices

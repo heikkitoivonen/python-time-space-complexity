@@ -316,7 +316,7 @@ new_dt = dt + relativedelta(months=1)  # 2024-02-29
 
 ## Related Modules
 
-- **time** - Lower-level time functions
+- **[time](time.md)** - Lower-level time functions
 - **[zoneinfo](zoneinfo.md)** - IANA timezone database
 - **[calendar](calendar.md)** - Calendar functions
 

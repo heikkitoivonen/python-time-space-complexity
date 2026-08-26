@@ -345,5 +345,5 @@ except StatisticsError:
 
 ## Related Documentation
 
-- Math Module - Mathematical functions
+- [Math Module](math.md) - Mathematical functions
 - [Random Module](random.md) - Random number generation

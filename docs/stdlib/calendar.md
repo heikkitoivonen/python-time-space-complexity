@@ -312,4 +312,4 @@ for day in calendar.Calendar().itermonthdays(2024, 1):
 ## Related Documentation
 
 - [Datetime Module](datetime.md) - Date/time operations
-- Time Module - Time operations
+- [Time Module](time.md) - Time operations

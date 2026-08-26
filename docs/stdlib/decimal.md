@@ -381,7 +381,7 @@ Decimal('NaN') + 5       # Decimal('NaN')
 ## Related Modules
 
 - **[fractions](fractions.md)** - Rational number arithmetic (exact but slower)
-- **math** - Mathematical functions (uses floats)
+- **[math](math.md)** - Mathematical functions (uses floats)
 - **[numbers](numbers.md)** - Numeric abstract base classes
 
 ## Best Practices

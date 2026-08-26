@@ -716,7 +716,7 @@ class Cached:
 
 - **[classmethod()](classmethod.md)** - Decorator for class methods
 - **[staticmethod()](staticmethod.md)** - Decorator for static methods
-- **type()** - Get object type
+- **[type()](type_func.md)** - Get object type
 - **[hasattr()](hasattr.md)** - Check attribute existence
 - **[getattr()](getattr.md)** - Get attribute value
 

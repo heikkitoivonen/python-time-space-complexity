@@ -205,7 +205,7 @@ value = cache[obj]      # O(1)
 
 - **[hash()](hash.md)** - Different from ID; used for dict/set
 - **[isinstance()](isinstance.md)** - Check type, not identity
-- **type()** - Get object type
+- **[type()](type_func.md)** - Get object type
 
 ## Best Practices
 

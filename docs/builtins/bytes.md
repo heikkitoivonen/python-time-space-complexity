@@ -215,7 +215,7 @@ parts = data.split(b" ")
 
 - **[Strings](str.md)** - Unicode text
 - **[Lists](list.md)** - Mutable sequences
-- **Memoryview** - Zero-copy buffer interface
+- **[Memoryview](memoryview_func.md)** - Zero-copy buffer interface
 
 ## Further Reading
 

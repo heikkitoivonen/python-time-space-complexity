@@ -476,4 +476,4 @@ encoded = codecs.encode(text, 'utf-16')
 - [base64 Module](base64.md) - Base64 encoding
 - [io Module](io.md) - I/O operations with encoding
 - [sys Module](sys.md) - Default encoding/decoding
-- unicodedata Module - Unicode information
+- [unicodedata Module](unicodedata.md) - Unicode information

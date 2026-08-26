@@ -467,7 +467,7 @@ def slow_approach(obj):
 - **[delattr()](delattr.md)** - Delete attribute
 - **[vars()](vars.md)** - Get __dict__
 - **[help()](help.md)** - Get documentation
-- **type()** - Get object type
+- **[type()](type_func.md)** - Get object type
 - **[inspect](https://docs.python.org/3/library/inspect.html)** - Advanced introspection
 
 ## Version Notes

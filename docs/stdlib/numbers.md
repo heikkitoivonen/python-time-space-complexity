@@ -308,4 +308,4 @@ def process_numbers(values):
 
 - [Decimal Module](decimal.md) - Precise decimal arithmetic
 - [Fractions Module](fractions.md) - Rational numbers
-- Math Module - Mathematical functions
+- [Math Module](math.md) - Mathematical functions

@@ -270,7 +270,7 @@ current, peak = tracemalloc.get_traced_memory()
 
 ## Related Modules
 
-- gc Module - Garbage collection control
+- [gc Module](gc.md) - Garbage collection control
 - [sys Module](sys.md) - Memory information
 - [resource Module](resource.md) - Resource limits
 - [cProfile Module](cprofile.md) - CPU profiling

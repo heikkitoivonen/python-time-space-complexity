@@ -211,7 +211,7 @@ fsum([0.1] * 10)  # More precise for floats
 - **[all()](all.md)** - Check if all items are true
 - **[max()](max.md)** - Find maximum value
 - **[min()](min.md)** - Find minimum value
-- **math.fsum()** - Precise float summation
+- **[math.fsum()](../stdlib/math.md)** - Precise float summation
 
 ## Version Notes
 

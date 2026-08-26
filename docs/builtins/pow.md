@@ -208,9 +208,9 @@ except ZeroDivisionError:
 ## Related Functions
 
 - **[abs()](abs.md)** - Absolute value
-- **math.pow()** - Float-only power
+- **[math.pow()](../stdlib/math.md)** - Float-only power
 - **operator\*\*** - Exponentiation (equivalent)
-- **math.isqrt()** - Integer square root
+- **[math.isqrt()](../stdlib/math.md)** - Integer square root
 
 ## Comparison with Alternatives
 

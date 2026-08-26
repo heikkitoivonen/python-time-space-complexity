@@ -324,7 +324,7 @@ if isinstance(lst, list):  # O(1)
 ## Related Functions
 
 - **[issubclass()](issubclass.md)** - Check class inheritance (O(1))
-- **type()** - Get exact type (O(1))
+- **[type()](type_func.md)** - Get exact type (O(1))
 - **[callable()](callable.md)** - Check if callable (O(1))
 
 ## Best Practices

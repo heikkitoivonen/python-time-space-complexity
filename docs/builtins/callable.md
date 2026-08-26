@@ -375,7 +375,7 @@ manager.emit("click")  # Output: Event: click
 
 - **[hasattr()](index.md)** - Check for attribute existence
 - **[isinstance()](isinstance.md)** - Check object type
-- **type()** - Get object type
+- **[type()](type_func.md)** - Get object type
 - **[inspect.isfunction()](https://docs.python.org/3/library/inspect.html)** - Detailed type checking
 
 ## Version Notes

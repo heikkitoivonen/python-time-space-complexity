@@ -216,6 +216,6 @@ def efficient_sort(strings):
 
 ## Related Documentation
 
-- Time Module - Date/time operations
+- [Time Module](time.md) - Date/time operations
 - [Codecs Module](codecs.md) - Encoding/decoding
-- Unicodedata Module - Unicode properties
+- [Unicodedata Module](unicodedata.md) - Unicode properties

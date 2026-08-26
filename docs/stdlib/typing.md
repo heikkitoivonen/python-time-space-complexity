@@ -401,7 +401,7 @@ def process_data(items, processor, config=None):
 ## Related Modules
 
 - **[dataclasses](dataclasses.md)** - Type hints for data classes
-- **collections.abc** - Abstract base classes
+- **[collections.abc](collections.md)** - Abstract base classes
 
 ## Best Practices
 

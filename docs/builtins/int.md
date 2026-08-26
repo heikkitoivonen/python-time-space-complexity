@@ -193,7 +193,7 @@ Similar performance characteristics with JIT compilation helping with:
 
 - **[Float](float.md)** - Fixed precision floating point
 - **[Bool](bool.md)** - Boolean (subclass of int)
-- **Complex** - Complex numbers
+- **[Complex](complex_func.md)** - Complex numbers
 - **[Decimal](../stdlib/decimal.md)** - Arbitrary precision decimal
 
 ## Further Reading

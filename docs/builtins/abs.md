@@ -205,7 +205,7 @@ t = timeit.timeit(lambda: abs(-5), number=10**7)
 - **[max()](max.md)** - Find maximum value
 - **[min()](min.md)** - Find minimum value
 - **[pow()](pow.md)** - Power function
-- **math.fabs()** - Float absolute value
+- **[math.fabs()](../stdlib/math.md)** - Float absolute value
 
 ## Version Notes
 

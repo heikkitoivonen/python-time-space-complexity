@@ -383,5 +383,5 @@ total = price1 + price2     # Exact $10
 ## Related Documentation
 
 - [Decimal Module](decimal.md)
-- Math Module
+- [Math Module](math.md)
 - [Numbers Module](numbers.md)

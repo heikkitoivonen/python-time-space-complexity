@@ -190,4 +190,4 @@ r[999999999999999] # 999999999999999
 
 - **[List](list.md)** - For materialized sequences
 - **Iteration** - For looping
-- **Enumerate** - For indexed iteration
+- **[Enumerate](enumerate.md)** - For indexed iteration

@@ -220,7 +220,7 @@ Leaf.__mro__  # (Leaf, Middle, Root, object)
 
 ## Related Functions
 
-- **type()** - Get or create types
+- **[type()](type_func.md)** - Get or create types
 - **[isinstance()](isinstance.md)** - Check instance type
 - **[id()](id.md)** - Get object identity
 
