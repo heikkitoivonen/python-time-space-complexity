@@ -157,7 +157,6 @@ elapsed = time.time() - start
 ## Related Modules
 
 - **[sys.argv](sys.md)** - Raw command-line arguments
-- **click** - Alternative argument parsing (external)
 
 ## Best Practices
 

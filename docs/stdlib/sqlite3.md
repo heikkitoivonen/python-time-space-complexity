@@ -203,11 +203,6 @@ cursor.execute('SELECT * FROM users WHERE name = ?', ('Alice',))
 - **Python 3.x**: Built-in
 - **All versions**: Query complexity depends on plan and indexes
 
-## Related Modules
-
-- **sqlalchemy** - ORM (external)
-- **pandas** - Data analysis with SQL support
-
 ## Best Practices
 
 ✅ **Do**:

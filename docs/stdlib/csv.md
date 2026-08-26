@@ -283,7 +283,6 @@ with open('large_file.csv', 'r') as file:
 
 ## Related Modules
 
-- **pandas** - Higher-level CSV with O(n) memory but faster vectorized operations
 - **[json](json.md)** - O(n) parsing; use for hierarchical data
 - **[io](io.md)** - StringIO for in-memory CSV processing
 
