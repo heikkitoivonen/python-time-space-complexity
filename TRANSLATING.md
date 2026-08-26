@@ -1,3 +1,5 @@
+**English** | [简体中文](TRANSLATING.zh-CN.md)
+
 # Translating
 
 This project serves localized documentation from language subdirectories under
