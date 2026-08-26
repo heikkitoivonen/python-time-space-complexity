@@ -140,7 +140,7 @@ numbers = [1000 - i for i in range(1000)]  # Reverse sorted
 result = sorted(numbers)  # O(n log n) - handles well
 ```
 
-## 性能模式
+## 性能典范
 
 ### sorted() 与 sort() 的对比
 

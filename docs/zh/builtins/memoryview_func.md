@@ -194,7 +194,7 @@ view = memoryview(data)  # O(1) - instant
 # send_data(view)  # Efficient
 ```
 
-## 性能模式
+## 性能典范
 
 ### 对比拷贝
 
