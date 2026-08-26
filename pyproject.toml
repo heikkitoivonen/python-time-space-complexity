@@ -72,7 +72,15 @@ exclude = [
     "site",
     ".pytest_cache",
     ".ruff_cache",
+    # `ruff format` reformats Python code blocks inside Markdown. Doc code
+    # blocks must stay byte-identical to their translations, so formatting one
+    # marks every translation of that page stale - see
+    # scripts/validate_translations.py. `ruff check` ignores Markdown anyway.
+    "*.md",
 ]
+# Honour the excludes above even when a path is named explicitly, so an editor
+# formatting a Markdown file on save cannot bypass them either.
+force-exclude = true
 
 [tool.ruff.lint]
 select = [
