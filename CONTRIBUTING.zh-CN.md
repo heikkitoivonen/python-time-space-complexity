@@ -1,4 +1,4 @@
-<!-- source_sha: 6f320435c5fdcc8dfc0d7fe9dffcd5535043df6597b8e875cd7c9f2ca486260b -->
+<!-- source_sha: 3048a12c4a1d6b50a0928a96ae83aec16f3e43118bc7a07d0ea0cdb45e013f6a -->
 <!-- translated: machine -->
 
 [English](CONTRIBUTING.md) | **简体中文**
@@ -121,7 +121,7 @@ docs/fi/builtins/list.md   ->  https://pythoncomplexity.com/fi/builtins/list/
 | 区域 | 语言 | 状态 |
 |--------|----------|----------------------------|
 | `en`   | English  | 完整(唯一权威来源) |
-| `fi`   | Suomi    | 试点 - 13 页           |
+| `fi`   | Suomi    | 试点 - 14 页           |
 | `zh`   | 简体中文 | 试点 - 14 页           |
 | `ja`   | 日本語   | 试点 - 13 页           |
 

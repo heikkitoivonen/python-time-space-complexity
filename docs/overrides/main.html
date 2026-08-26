@@ -25,10 +25,14 @@
 
 {% block content %}
   {#-
-    A page whose source locale differs from the locale being built is an
-    untranslated page served from the English source. Tell the reader, so an
-    English page under a localized URL does not read as a bug. Add a locale
-    here when adding a language; locales with no entry simply show nothing.
+    A page the current locale has no translation for is served from the
+    English source. Tell the reader, so an English page under a localized URL
+    does not read as a bug. Add a locale here when adding a language; locales
+    with no entry simply show nothing.
+
+    `i18n_is_fallback` comes from scripts/mkdocs_hooks.py. Do not compare
+    `page.file.locale` to the build locale instead: they are always equal in
+    the per-locale builds that ship, so the notice would never appear.
   -#}
   {%- set fallback_notices = {
     "fi": {
@@ -47,8 +51,7 @@
       "cta": "翻訳に協力する"
     }
   } -%}
-  {%- if page and page.file.locale is defined
-        and page.file.locale != config.theme.language %}
+  {%- if i18n_is_fallback %}
     {%- set notice = fallback_notices.get(config.theme.language) %}
     {%- if notice %}
       <div class="admonition info translation-fallback">

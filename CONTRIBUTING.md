@@ -122,7 +122,7 @@ docs/fi/builtins/list.md   ->  https://pythoncomplexity.com/fi/builtins/list/
 | Locale | Language | Status                     |
 |--------|----------|----------------------------|
 | `en`   | English  | Complete (source of truth) |
-| `fi`   | Suomi    | Pilot - 13 pages           |
+| `fi`   | Suomi    | Pilot - 14 pages           |
 | `zh`   | 简体中文 | Pilot - 14 pages           |
 | `ja`   | 日本語   | Pilot - 13 pages           |
 

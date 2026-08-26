@@ -19,7 +19,7 @@ translation is always safe to ship.
 | Locale | Name     | Stage                      |
 |--------|----------|----------------------------|
 | `en`   | English  | Complete (source of truth) |
-| `fi`   | Suomi    | Pilot - 13 pages           |
+| `fi`   | Suomi    | Pilot - 14 pages           |
 | `zh`   | 简体中文 | Pilot - 14 pages           |
 | `ja`   | 日本語   | Pilot - 13 pages           |
 
@@ -410,8 +410,8 @@ Chinese and Japanese pages too, and matched them in the *title*, which Material
 boosts by 1000. Across a set of typical English queries, 21-74% of the matches
 were foreign-language pages. With per-locale indexes it is 0%.
 
-Two things the i18n plugin skips when it builds only one language, which
-`scripts/mkdocs_hooks.py` puts back:
+Four things the i18n plugin gets wrong or skips when it builds only one
+language, which `scripts/mkdocs_hooks.py` puts back:
 
 - **Canonical URLs.** A locale is built at the root of its own tree but served
   from a subdirectory, so the locale prefix has to be added back to `site_url`.
@@ -419,6 +419,17 @@ Two things the i18n plugin skips when it builds only one language, which
   it is building more than one language. The hook rebuilds it from the
   configured locales, and repoints each entry at the equivalent page rather
   than the other locale's home page.
+- **Which file wins.** `build_only_locale` marks the locale being built as the
+  default one, so the plugin tags English sources with it too and can no
+  longer tell a translation from a fallback. Its tie-break becomes the last
+  file walked, and `docs/` is walked alphabetically - so a translation was
+  used only when its locale directory sorted after the directory it mirrors.
+  `docs/zh/` beat everything; `docs/fi/stdlib/` and `docs/ja/stdlib/` lost to
+  `docs/stdlib/` and were dropped from the site without a warning. The hook
+  sorts the locale's own files last so the tie-break lands the right way.
+- **The fallback flag.** For the same reason, a page's locale always equals
+  the build's, so the untranslated-page notice cannot be derived from it. The
+  hook sets `i18n_is_fallback` from the source path instead.
 
 Adding a locale needs no change here: the script reads the locale list out of
 `mkdocs.yml`.
@@ -452,7 +463,13 @@ localized URL. Without a hint, that reads as a bug: the reader asked for
 Chinese and got English.
 
 `docs/overrides/main.html` therefore shows a short notice at the top of any
-page whose source locale differs from the locale being built. It keys off
-`page.file.locale`, which the i18n plugin sets per file, so it needs no front
-matter and cannot fall out of sync with the actual content. Translated pages
-and English pages show nothing.
+page the current locale has no translation for. Translated pages and English
+pages show nothing.
+
+It keys off `i18n_is_fallback`, set per page by `scripts/mkdocs_hooks.py` from
+the page's source path, so it needs no front matter and cannot fall out of sync
+with the actual content. Do not swap that for a comparison against
+`page.file.locale`: `build_only_locale` makes the locale being built the
+default one, so every file in a per-locale build carries that locale and the
+comparison is never true - the notice silently disappears from the builds that
+ship, while `make serve` still shows it.
