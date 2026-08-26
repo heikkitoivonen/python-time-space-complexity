@@ -54,11 +54,19 @@ translated: machine
   speaker). This is bookkeeping for maintainers and is not surfaced on the
   site; the validator only checks that it is one of those two values.
 
-To re-bless a page after re-checking it against an updated English source:
+The same command records the hash for a brand-new translation and re-blesses
+an existing one after you have re-checked it against an updated English source:
 
 ```bash
 uv run python scripts/validate_translations.py --update-hashes fi
 ```
+
+Run it once after writing a new page - you do not have to compute the hash by
+hand, and the block above can go in without a `source_sha` line at all. Until
+you do, the validator says the hash is *not recorded yet*, which is a different
+complaint from a page it calls **STALE**: stale means the English source moved
+under a translation that was already blessed, and that one does need re-reading
+before you re-bless it.
 
 ## Root documents
 

@@ -1,4 +1,4 @@
-<!-- source_sha: 26c35b8c6b5a0b75e37d0a26cffabed46e90474c06580ed12758c38575666a3b -->
+<!-- source_sha: 6bfbd6d7d30588319dd655b3a4818b2b4d618e0d0d7a90cc46395f6a97e940ca -->
 <!-- translated: machine -->
 
 [English](TRANSLATING.md) | **简体中文**
@@ -46,11 +46,13 @@ translated: machine
 - `source_sha` — 翻译时英文文件字节的 SHA-256。当英文页面发生变化时，哈希不再匹配，验证器会将翻译标记为过期。
 - `translated` — `machine`(未经审核)或 `reviewed`(由流利母语者检查过)。这是给维护者的簿记信息，不会显示在网站上；验证器只检查其是否为这两个值之一。
 
-在对照更新后的英文源重新检查页面后，重新授权(消除过期标记):
+同一条命令既能为全新的翻译记录哈希，也能在你对照更新后的英文源重新检查页面后为它重新授权:
 
 ```bash
 uv run python scripts/validate_translations.py --update-hashes fi
 ```
+
+写完新页面后运行一次即可 - 你不需要手工计算哈希，上面的 front matter 块甚至可以完全不带 `source_sha` 行。在你运行它之前，验证器会说哈希*尚未记录*，这与它标记为 **STALE**(过期)是两回事:过期意味着英文源在一份已授权的翻译之下发生了变动，那种情况确实需要先重新阅读，再重新授权。
 
 ## 根目录文档
 

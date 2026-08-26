@@ -52,6 +52,7 @@ ROOT_META_RE = re.compile(r"^<!--\s*(?P<key>source_sha|translated):\s*(?P<value>
 # Every root doc opens with a language switcher, which is the one line that is
 # *meant* to differ between a source and its translation.
 SWITCHER_RE = re.compile(r"^(\*\*English\*\*|\[English\])")
+SHA256_RE = re.compile(r"\A[0-9a-f]{64}\Z")
 
 
 @dataclass
@@ -181,6 +182,26 @@ def sha256_of(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def hash_problem(
+    recorded: object, source: Path, locale: str, source_label: str = "English source"
+) -> str | None:
+    """Describe what is wrong with a recorded source_sha, or None if it is fine.
+
+    A brand-new translation has never had a hash recorded, so calling it stale
+    and telling the translator to re-translate is both wrong and alarming.
+    Anything that is not a SHA-256 -- absent, or the elided placeholder from
+    the docs -- means "not recorded yet", which is a different instruction.
+    """
+    if not isinstance(recorded, str) or not SHA256_RE.match(recorded):
+        return f"source_sha not recorded yet — run --update-hashes {locale}"
+    if recorded != sha256_of(source):
+        return (
+            f"STALE — {source_label} changed since translation "
+            f"(re-translate, then run --update-hashes {locale})"
+        )
+    return None
+
+
 def english_counterpart(translated: Path, locale: str) -> Path:
     return DOCS_DIR / translated.relative_to(DOCS_DIR / locale)
 
@@ -207,14 +228,9 @@ def validate_locale(locale: str) -> tuple[int, list[str]]:
 
         meta, body = split_front_matter(page.read_text(encoding="utf-8"))
 
-        recorded = meta.get("source_sha")
-        if not isinstance(recorded, str):
-            errors.append(f"{rel}: missing 'source_sha' front matter")
-        elif recorded != sha256_of(source):
-            errors.append(
-                f"{rel}: STALE — English source changed since translation "
-                f"(re-translate, then run --update-hashes {locale})"
-            )
+        problem = hash_problem(meta.get("source_sha"), source, locale)
+        if problem:
+            errors.append(f"{rel}: {problem}")
 
         if meta.get("translated") not in {"machine", "reviewed"}:
             errors.append(f"{rel}: 'translated' must be 'machine' or 'reviewed'")
@@ -276,14 +292,9 @@ def validate_root_docs(locale: str) -> tuple[int, list[str]]:
 
         meta, body = split_root_meta(translated.read_text(encoding="utf-8"))
 
-        recorded = meta.get("source_sha")
-        if recorded is None:
-            errors.append(f"{name}: missing '<!-- source_sha: ... -->' marker")
-        elif recorded != sha256_of(source):
-            errors.append(
-                f"{name}: STALE — {source.name} changed since translation "
-                f"(re-translate, then run --update-hashes {locale})"
-            )
+        problem = hash_problem(meta.get("source_sha"), source, locale, source.name)
+        if problem:
+            errors.append(f"{name}: {problem}")
 
         if meta.get("translated") not in {"machine", "reviewed"}:
             errors.append(f"{name}: 'translated' must be 'machine' or 'reviewed'")
@@ -295,6 +306,25 @@ def validate_root_docs(locale: str) -> tuple[int, list[str]]:
     return len(pairs), errors
 
 
+def stamp_front_matter(yaml_text: str, current: str) -> str:
+    """Set source_sha in a front-matter block, adding the key if it is absent.
+
+    A new translation has no hash to replace, so substitution alone would
+    silently do nothing and leave the translator following an instruction that
+    never takes effect.
+    """
+    stamped, replaced = re.subn(
+        r"^source_sha:.*$",
+        f"source_sha: {current}",
+        yaml_text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    if replaced:
+        return stamped
+    return f"source_sha: {current}\n{yaml_text}" if yaml_text else f"source_sha: {current}"
+
+
 def update_hashes(locale: str) -> int:
     """Rewrite source_sha for every page in a locale. Returns pages updated."""
     updated = 0
@@ -303,17 +333,20 @@ def update_hashes(locale: str) -> int:
         if not source.exists():
             continue
         text = page.read_text(encoding="utf-8")
+        current = sha256_of(source)
+
         match = FRONT_MATTER_RE.match(text)
         if match is None:
+            # A new translation may have no front matter at all. Give it one,
+            # so recording the hash is a single command either way.
+            page.write_text(
+                f"---\nsource_sha: {current}\ntranslated: machine\n---\n\n{text.lstrip()}",
+                encoding="utf-8",
+            )
+            updated += 1
             continue
-        current = sha256_of(source)
-        new_yaml = re.sub(
-            r"^source_sha:.*$",
-            f"source_sha: {current}",
-            match.group("yaml"),
-            count=1,
-            flags=re.MULTILINE,
-        )
+
+        new_yaml = stamp_front_matter(match.group("yaml"), current)
         if new_yaml == match.group("yaml"):
             continue
         page.write_text(f"---\n{new_yaml}\n---\n{text[match.end() :]}", encoding="utf-8")
