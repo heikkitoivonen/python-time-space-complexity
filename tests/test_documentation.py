@@ -1,6 +1,7 @@
 """Tests for documentation content and structure."""
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -140,8 +141,14 @@ def test_minimum_stdlib_coverage():
     assert current >= min_coverage, f"Stdlib coverage dropped: {current}% < {min_coverage}%"
 
 
-def test_mkdocs_build_valid():
-    """Test that mkdocs configuration and markdown files are valid."""
+def test_mkdocs_build_valid(tmp_path):
+    """Test that mkdocs configuration and markdown files are valid.
+
+    Builds into a temporary directory rather than the default ``site/``: the
+    site ships as one self-contained build per locale (scripts/build_site.py),
+    so writing a combined build to ``site/`` would quietly replace a developer's
+    real output with a differently-shaped one.
+    """
     if not shutil.which("uv"):
         pytest.skip("uv not found")
 
@@ -149,7 +156,7 @@ def test_mkdocs_build_valid():
 
     # Run mkdocs build in quiet mode to validate config and files
     result = subprocess.run(
-        ["uv", "run", "mkdocs", "build", "--quiet"],
+        ["uv", "run", "mkdocs", "build", "--quiet", "-d", str(tmp_path / "site")],
         cwd=project_root,
         capture_output=True,
         text=True,
@@ -158,6 +165,47 @@ def test_mkdocs_build_valid():
     assert result.returncode == 0, (
         f"mkdocs build failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
     )
+
+
+def test_per_locale_build_valid(tmp_path):
+    """Test that the per-locale build path used in production works.
+
+    test_mkdocs_build_valid covers the combined build. This covers the shape
+    the site actually ships in: one self-contained locale, with its own search
+    index and no other language's pages in it.
+    """
+    if not shutil.which("uv"):
+        pytest.skip("uv not found")
+
+    project_root = Path(__file__).parent.parent
+    out = tmp_path / "ja"
+
+    result = subprocess.run(
+        ["uv", "run", "mkdocs", "build", "--quiet", "-d", str(out)],
+        cwd=project_root,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "BUILD_ONLY_LOCALE": "ja"},
+    )
+
+    assert result.returncode == 0, (
+        f"per-locale build failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+
+    index = out / "search" / "search_index.json"
+    assert index.exists(), "per-locale build produced no search index of its own"
+
+    entries = json.loads(index.read_text(encoding="utf-8"))
+    langs = entries["config"]["lang"]
+    assert "ja" in langs, f"search index is not built for 'ja': {langs}"
+    for other in ("fi", "zh"):
+        assert other not in langs, f"'{other}' leaked into the 'ja' search index: {langs}"
+
+    # The locale is served from a subdirectory, so its canonical URLs need the
+    # prefix even though it was built at the root of its own tree.
+    home = (out / "index.html").read_text(encoding="utf-8")
+    assert 'rel="canonical"' in home, "no canonical URL emitted"
+    assert "/ja/" in home, "canonical URLs are missing the locale prefix"
 
 
 def test_translations_valid():
