@@ -410,6 +410,7 @@ plugins:
             Boolean: Totuusarvo
             Length: Pituus
             Maximum: Suurin
+            Memoryview: Muistinäkymä
             Minimum: Pienin
             Sum: Summa
             Sorted: Järjestäminen
@@ -438,6 +439,7 @@ plugins:
             Boolean: 布尔值
             Length: 长度
             Maximum: 最大值
+            Memoryview: 内存视图
             Minimum: 最小值
             Sum: 求和
             Sorted: 排序
@@ -466,6 +468,7 @@ plugins:
             Boolean: 真偽値
             Length: 長さ
             Maximum: 最大値
+            Memoryview: メモリビュー
             Minimum: 最小値
             Sum: 合計
             Sorted: ソート
