@@ -6,6 +6,10 @@ This file records the decisions that got it there and the traps that are easy
 to fall back into. Most of them are not obvious from reading the code, which is
 why they are written down rather than left to be rediscovered.
 
+`tests/test_accessibility.py` enforces most of what follows, and computes the
+contrast ratios from the values actually in the stylesheet - so the numbers
+below cannot drift out of date without a test failing.
+
 ## Colour
 
 ### One token cannot do three jobs
@@ -28,7 +32,7 @@ a shared token.
 | Token | Light | Dark | Sits on | Ratio |
 |---------------------------|-----------|-----------|------------------|--------|
 | `--md-primary-fg-color` | `#0b78d2` | `#0b78d2` | white text on it | 4.53:1 |
-| `--md-typeset-a-color` | `#0a6fc2` | `#4dabf7` | page / code / tint | ≥4.50:1 |
+| `--md-typeset-a-color` | `#0a6cbd` | `#4dabf7` | page / code / tint | ≥4.54:1 |
 | `--md-accent-fg-color` | `#3f51d5` | `#8ec5f2` | page ground | ≥6.27:1 |
 
 Link text is deliberately a shade darker than the chrome. That is not an
@@ -49,8 +53,13 @@ code-formatted links. A colour measured only against white will pass there and
 quietly fail everywhere else: the chrome's `#0b78d2` drops to 4.07-4.17:1 on
 those grounds, which is how `--md-typeset-a-color` ended up darker.
 
-The tightest surface is the `example` admonition tint. If a colour clears
-4.5:1 against that, it clears everything.
+Check against **every** admonition type the theme ships, not just the ones the
+docs currently use. The tightest are `bug` and `danger`, the two most saturated
+tints, and neither appears in the docs today - but a colour tuned only to the
+tints in use turns adding a `!!! danger` with a link in it into an accessibility
+regression, which is not a trap worth leaving armed. The test reads the tint
+list out of the installed theme, so a `mkdocs-material` upgrade that restyles an
+admonition is caught too.
 
 ### Never dim text with opacity
 
@@ -107,8 +116,6 @@ Heading levels must not skip. The page shape is:
 
 An `h2` followed directly by an `h4` gives screen-reader users navigating by
 heading a phantom level, and they cannot tell whether they missed content.
-Four pages had this; if you add a section with no `###` layer, promote the
-`####` headings rather than leaving the gap.
 
 ## Links
 
@@ -150,7 +157,7 @@ def contrast(fg, bg):
     return (a + 0.05) / (b + 0.05)
 
 
-contrast("#0a6fc2", "#f5f5f5")  # 4.74
+contrast("#0a6cbd", "#f5f5f5")  # 4.95
 ```
 
 For a colour over a translucent overlay, composite it first:

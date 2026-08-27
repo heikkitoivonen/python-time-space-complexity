@@ -106,12 +106,14 @@
 
 /* Link text is a shade darker than the chrome, and deliberately so. Links do
    not only sit on white: inline `code` puts them on #f5f5f5, and admonitions
-   put them on a tint (this site uses warning, tip and note heavily). Measured
-   against every one of those grounds, the header's #0b78d2 falls to 4.07-4.17:1
-   and fails. #0a6fc2 is the lightest colour on the same hue that clears 4.5:1
-   on all of them, the worst being the example admonition at exactly 4.50:1. */
+   put them on a tint. Measured against those grounds the header's #0b78d2
+   falls to 4.07-4.17:1 and fails. #0a6cbd is the lightest colour on the same
+   hue clearing 4.5:1 on all of them - every admonition type the theme ships,
+   not just the ones the docs use today, so adding a `!!! danger` with a link
+   in it cannot introduce a failure. The tightest are bug and danger, the two
+   most saturated tints. tests/test_accessibility.py enforces this. */
 [data-md-color-scheme="default"] {
-  --md-typeset-a-color: #0a6fc2;         /* white 5.17:1, code 4.74:1, tints >=4.50:1 */
+  --md-typeset-a-color: #0a6cbd;         /* white 5.39:1, code 4.95:1, tints >=4.54:1 */
   --md-accent-fg-color: #3f51d5;         /* on #fff: 6.27:1 */
   --md-accent-fg-color--transparent: #3f51d51a;
 }
