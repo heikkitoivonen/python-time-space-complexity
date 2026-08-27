@@ -32,6 +32,14 @@ theme:
         icon: material/lightbulb
         name: Switch to light mode
 
+# The theme's custom_dir lives inside docs/, so mkdocs would otherwise copy the
+# Jinja templates there into the build and serve them as pages - fragments with
+# no <html> element, no language, and unrendered {% %} markup, one copy per
+# locale. Excluding them from the docs tree does not affect custom_dir: theme
+# templates are resolved through the Jinja loader, not the file collection.
+exclude_docs: |
+  overrides/
+
 nav:
   - Home: index.md
   - Builtins:
