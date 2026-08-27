@@ -1,6 +1,7 @@
 """MkDocs build hooks.
 
-Two unrelated concerns, both driven by which locale is being built.
+Three unrelated concerns. The first two are driven by which locale is being
+built; the third is the same for every build.
 
 **jieba scoping.** Material's search plugin segments every run of Han
 characters with jieba whenever jieba is importable. That is unconditional --
@@ -24,14 +25,22 @@ skips three things we have to supply ourselves: the canonical URL prefix, the
 language switcher, and the flag marking a page as an untranslated fallback.
 It also mis-resolves which file wins for a page that has a translation, which
 ``on_files`` below corrects.
+
+**Critical path.** Two of the requests that blocked first render were ours
+rather than the theme's: our own stylesheet, and the theme's JS bundle which
+ships without ``defer``. Both are removed from the critical path here
+and in ``docs/overrides/main.html``.
 """
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin
 
 from material.plugins.search import plugin as search_plugin
+from mkdocs.exceptions import PluginError
 from mkdocs.plugins import event_priority
 from mkdocs.structure.files import Files
 
@@ -47,6 +56,63 @@ _LOCALE_ROOTS: dict[str, str] = {}
 # The locale served from the site root, i.e. the one whose pages live at the
 # top of docs/ rather than in a subdirectory. Filled in by on_config.
 _DEFAULT_LOCALE: str | None = None
+
+
+# --- Critical path ----------------------------------------------------------
+#
+# Two of the requests that blocked first render were ours to remove. Both are
+# handled here so that docs/overrides/main.html stays declarative.
+
+_CSS_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
+_CSS_ADJACENT = re.compile(r"\s*([{};,])\s*")
+
+
+def _minify_css(css: str) -> str:
+    """Strip comments and slack whitespace out of a stylesheet.
+
+    Deliberately conservative: it never touches the space around ``:``,
+    because in a selector that space is a descendant combinator -- ``.a
+    :hover`` and ``.a:hover`` are different rules -- and telling the two apart
+    needs a real parser. Comments are two thirds of extra.css, so the rest is
+    not worth the risk of silently rewriting a selector.
+    """
+    css = _CSS_COMMENT.sub("", css)
+    css = re.sub(r"\s+", " ", css)
+    css = _CSS_ADJACENT.sub(r"\1", css)
+    return css.replace(";}", "}").strip()
+
+
+def _inline_css(config: Any) -> str:
+    """extra.css, minified, for inlining into every page's head.
+
+    It was one render-blocking request for ~700 bytes of gzipped CSS, which
+    costs a whole round trip on the critical path. The comments stripped here
+    are the record of why each colour is the value it is, so they stay in the
+    source file -- which is also what tests/test_accessibility.py reads -- and
+    only the built pages lose them.
+    """
+    source = Path(config.docs_dir) / "stylesheets" / "extra.css"
+    return _minify_css(source.read_text(encoding="utf-8"))
+
+
+def _bundle_js(config: Any) -> str:
+    """The theme's hashed JS bundle, as a site-root-relative path.
+
+    base.html hardcodes the current content hash, so overriding its ``scripts``
+    block to add ``defer`` means restating the filename -- and a hardcoded hash
+    would 404 silently the next time mkdocs-material is upgraded, leaving a
+    site with no JavaScript at all. Look it up in the theme instead, and fail
+    the build loudly if it ever moves.
+    """
+    for directory in config.theme.dirs:
+        found = sorted(Path(directory).glob("assets/javascripts/bundle.*.min.js"))
+        if found:
+            return f"assets/javascripts/{found[0].name}"
+    raise PluginError(
+        "no assets/javascripts/bundle.*.min.js found in the theme: "
+        "mkdocs-material's asset layout changed, and the scripts block in "
+        "docs/overrides/main.html can no longer resolve the bundle to defer"
+    )
 
 
 def _i18n_config(config: Any) -> Any:
@@ -80,9 +146,14 @@ def _is_fallback(page: Any, config: Any) -> bool:
 # applied to the theme and its config normalized by the time we look at it.
 @event_priority(-200)
 def on_config(config: Any) -> Any:
-    """Scope jieba, and restore what i18n skips during an isolated build."""
+    """Scope jieba, trim the critical path, and restore what i18n skips."""
     language = config.theme["language"] if "language" in config.theme else None
     search_plugin.jieba = _JIEBA if language in SEGMENTED_LOCALES else None
+
+    # Before the early returns below: these apply to every build, isolated or
+    # combined, and main.html reads them out of config.extra on every page.
+    config.extra["inline_css"] = _inline_css(config)
+    config.extra["bundle_js"] = _bundle_js(config)
 
     i18n = _i18n_config(config)
     if i18n is None:

@@ -39,6 +39,7 @@ theme:
 # templates are resolved through the Jinja loader, not the file collection.
 exclude_docs: |
   overrides/
+  stylesheets/extra.css
 
 nav:
   - Home: index.md
@@ -519,7 +520,10 @@ extra:
   analytics:
     provider: google
     property: G-7QJ6R1ZTRV
-extra_css:
-  - stylesheets/extra.css
+# No extra_css: stylesheets/extra.css is minified and inlined into every page's
+# head by scripts/mkdocs_hooks.py, which removes a render-blocking request from
+# the critical path. The file below stays the source of truth -- it is what
+# tests/test_accessibility.py reads -- but is not copied into the build, since
+# nothing would link to it.
 
 copyright: "&copy; 2026 The Python Complexity Project Contributors"
