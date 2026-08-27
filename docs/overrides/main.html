@@ -1,25 +1,53 @@
 {% extends "base.html" %}
 
 {% block announce %}
+  {#-
+    One string set per locale, split around the bold call to action so the
+    visible markup and the aria-label are built from the same source and
+    cannot drift apart. `newtab` carries its own brackets so each locale
+    keeps its own punctuation (halfwidth for en/fi, fullwidth for zh/ja).
+
+    The label restates the whole sentence on purpose: aria-label *replaces*
+    the link text for screen readers, so it has to say everything the visible
+    text says, plus the one thing it cannot - that the link opens a new tab.
+    Locales with no entry fall back to English.
+  -#}
+  {%- set announcements = {
+    "fi": {
+      "lead": "Säästikö tämä sinulta käynnin CPythonin lähdekoodissa?",
+      "cta": "Tähditä se GitHubissa",
+      "tail": ", niin muutkin kehittäjät löytävät sen.",
+      "newtab": "(avautuu uuteen välilehteen)"
+    },
+    "zh": {
+      "lead": "这个网站帮你省去了翻阅 CPython 源码的功夫吗？",
+      "cta": "在 GitHub 上点个星",
+      "tail": "，让更多开发者找到它。",
+      "newtab": "（在新标签页中打开）"
+    },
+    "ja": {
+      "lead": "CPython のソースを読みに行く手間が省けましたか？",
+      "cta": "GitHub でスターを付けて",
+      "tail": "、ほかの開発者にも見つけてもらいましょう。",
+      "newtab": "（新しいタブで開きます）"
+    },
+    "en": {
+      "lead": "Did this save you a trip to the CPython source?",
+      "cta": "Star it on GitHub",
+      "tail": " so other developers can find it too.",
+      "newtab": "(opens in a new tab)"
+    }
+  } -%}
+  {%- set announcement = announcements.get(config.theme.language, announcements["en"]) %}
   <a
     href="{{ config.repo_url }}"
     target="_blank"
     rel="noopener"
     class="announce-star"
+    aria-label="{{ announcement.lead }} {{ announcement.cta }}{{ announcement.tail }} {{ announcement.newtab }}"
   >
-    {%- if config.theme.language == "fi" %}
-      ⭐ Säästikö tämä sinulta käynnin CPythonin lähdekoodissa?
-      <strong>Tähditä se GitHubissa</strong>, niin muutkin kehittäjät löytävät sen.
-    {%- elif config.theme.language == "zh" %}
-      ⭐ 这个网站帮你省去了翻阅 CPython 源码的功夫吗？
-      <strong>在 GitHub 上点个星</strong>，让更多开发者找到它。
-    {%- elif config.theme.language == "ja" %}
-      ⭐ CPython のソースを読みに行く手間が省けましたか？
-      <strong>GitHub でスターを付けて</strong>、ほかの開発者にも見つけてもらいましょう。
-    {%- else %}
-      ⭐ Did this save you a trip to the CPython source?
-      <strong>Star it on GitHub</strong> so other developers can find it too.
-    {%- endif %}
+    ⭐ {{ announcement.lead }}
+    <strong>{{ announcement.cta }}</strong>{{ announcement.tail }}
   </a>
 {% endblock %}
 
@@ -38,17 +66,20 @@
     "fi": {
       "title": "Ei vielä käännetty",
       "body": "Tätä sivua ei ole vielä käännetty suomeksi, joten se näytetään englanniksi.",
-      "cta": "Auta kääntämään"
+      "cta": "Auta kääntämään",
+      "newtab": "(avautuu uuteen välilehteen)"
     },
     "zh": {
       "title": "尚未翻译",
       "body": "本页面尚未翻译成中文，因此显示英文原文。",
-      "cta": "帮助翻译"
+      "cta": "帮助翻译",
+      "newtab": "（在新标签页中打开）"
     },
     "ja": {
       "title": "未翻訳のページ",
       "body": "このページはまだ日本語に翻訳されていないため、英語の原文を表示しています。",
-      "cta": "翻訳に協力する"
+      "cta": "翻訳に協力する",
+      "newtab": "（新しいタブで開きます）"
     }
   } -%}
   {%- if i18n_is_fallback %}
@@ -62,10 +93,21 @@
             href="{{ config.repo_url }}/blob/main/TRANSLATING.md"
             target="_blank"
             rel="noopener"
+            aria-label="{{ notice.cta }} {{ notice.newtab }}"
           >{{ notice.cta }}</a>
         </p>
       </div>
     {%- endif %}
+    {#-
+      The page body below is the English source standing in for a missing
+      translation, but the document is declared `lang="<locale>"`. Without
+      this override a screen reader reads English prose with the locale's
+      pronunciation rules, which is not accented English - it is unusable.
+      The notice above stays outside the wrapper: it really is in the page
+      language. See WCAG 2.2 SC 3.1.2 (Language of Parts).
+    -#}
+    <div lang="en">{{ super() }}</div>
+  {%- else %}
+    {{ super() }}
   {%- endif %}
-  {{ super() }}
 {% endblock %}

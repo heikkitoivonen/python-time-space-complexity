@@ -105,7 +105,7 @@ u = UUID('12345678-1234-5678-1234-567812345678')  # O(1)
 
 ## UUID Properties and Conversions
 
-#### Time Complexity: O(1)
+### Time Complexity: O(1)
 
 ```python
 from uuid import uuid4
@@ -123,7 +123,7 @@ print(u.version)    # UUID version (1-5)
 print(u.variant)    # RFC 4122, reserved, etc.
 ```
 
-#### Space Complexity: O(1)
+### Space Complexity: O(1)
 
 ```python
 from uuid import uuid4
