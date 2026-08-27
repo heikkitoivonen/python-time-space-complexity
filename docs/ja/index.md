@@ -1,5 +1,5 @@
 ---
-source_sha: bc1c06f06cdb21735ec4f9b4470111666ef1434eb35434d61fbf4fe13e925db2
+source_sha: a6420f60430b8218f2a6e14ea6d7dddb274b0d9fbf9affa7a90744e24e8b4a43
 translated: machine
 ---
 
@@ -63,7 +63,7 @@ Python の操作の計算量に関する総合ガイドへようこそ。本サ�
 
 ## このドキュメントが信頼できる理由
 
-本ドキュメントは、複数の AI コーディングエージェント（Amp、Claude、Gemini CLI、Kiro、Copilot、Codex）とモデル（Opus 4.5+、Sonnet 4.5、Gemini 3 Pro、gpt-5.2+ など）が人間のコントリビューターと協力してレビューし、改善してきたものです。エージェントごとに視点が異なり、見つける問題も異なるため、十分な相互検証が働きます。拡充を続けているユニットテスト群が、記載された計算量を実際の Python の挙動と照らし合わせて検証しています。
+本ドキュメントは、複数の AI コーディングエージェント（Amp、Claude、Gemini CLI、Kiro、Copilot、Codex など）とモデル（Opus 4.5+、Sonnet 4.5、Gemini 3 Pro、gpt-5.2+ など）が人間のコントリビューターと協力してレビューし、改善してきたものです。エージェントごとに視点が異なり、見つける問題も異なるため、十分な相互検証が働きます。拡充を続けているユニットテスト群が、記載された計算量を実際の Python の挙動と照らし合わせて検証しています。
 
 さらに本プロジェクトは**完全なオープンソース**です。誰でも内容をレビューし、[問題を報告](https://github.com/heikkitoivonen/python-time-space-complexity/issues)したり、[改善を提案](https://github.com/heikkitoivonen/python-time-space-complexity/pulls)したりできます。出典はすべて明示しており、記述は Python の公式ドキュメントと CPython のソースコードに基づいています。
 

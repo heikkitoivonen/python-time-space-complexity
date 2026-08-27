@@ -1,5 +1,5 @@
 ---
-source_sha: bc1c06f06cdb21735ec4f9b4470111666ef1434eb35434d61fbf4fe13e925db2
+source_sha: a6420f60430b8218f2a6e14ea6d7dddb274b0d9fbf9affa7a90744e24e8b4a43
 translated: machine
 ---
 
@@ -63,7 +63,7 @@ Tarkempi analyysi löytyy osiosta [Listat](builtins/list.md).
 
 ## Miksi tähän dokumentaatioon voi luottaa?
 
-Tämän dokumentaation ovat tarkistaneet ja hioneet useat tekoälyavusteiset koodausagentit (Amp, Claude, Gemini CLI, Kiro, Copilot, Codex) ja mallit (Opus 4.5+, Sonnet 4.5, Gemini 3 Pro, gpt-5.2+, ...) yhdessä ihmisavustajien kanssa. Jokainen agentti tuo oman näkökulmansa ja löytää eri ongelmia, mikä johtaa perusteelliseen ristiinvarmistukseen. Kasvava yksikkötestikokoelma varmistaa vaativuusväitteet Pythonin todellista käyttäytymistä vasten.
+Tämän dokumentaation ovat tarkistaneet ja hioneet useat tekoälyavusteiset koodausagentit (Amp, Claude, Gemini CLI, Kiro, Copilot, Codex, ...) ja mallit (Opus 4.5+, Sonnet 4.5, Gemini 3 Pro, gpt-5.2+, ...) yhdessä ihmisavustajien kanssa. Jokainen agentti tuo oman näkökulmansa ja löytää eri ongelmia, mikä johtaa perusteelliseen ristiinvarmistukseen. Kasvava yksikkötestikokoelma varmistaa vaativuusväitteet Pythonin todellista käyttäytymistä vasten.
 
 Projekti on myös **täysin avointa lähdekoodia** - kuka tahansa voi tarkistaa sisällön, [ilmoittaa ongelmista](https://github.com/heikkitoivonen/python-time-space-complexity/issues) tai [ehdottaa parannuksia](https://github.com/heikkitoivonen/python-time-space-complexity/pulls). Kaikki lähteet on mainittu, ja väitteet perustuvat viralliseen Python-dokumentaatioon sekä CPythonin lähdekoodiin.
 
