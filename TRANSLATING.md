@@ -456,13 +456,18 @@ phrase and interpolates the link, instead of translating "Made with" as a
 fragment. `Material for MkDocs` is a proper noun and stays untranslated.
 
 The copyright notice is `copyright:` in `mkdocs.yml` and is deliberately
-**not** per-locale. It is the symbol and the year, with no word in front: the
-symbol is an international mark with no localized variant and carries the
-meaning on its own, so one string reads correctly in every locale and there is
-only one place to bump the year. `mkdocs-static-i18n` does support a per-locale
+**not** per-locale. It is the symbol, the year, and the owner: the symbol is an
+international mark with no localized variant, and the owner names the project,
+a proper noun that stays untranslated for the same reason `Material for MkDocs`
+does. So one string reads correctly in every locale, and there is only one
+place to bump the year. `mkdocs-static-i18n` does support a per-locale
 `copyright`, so this is a choice, not a limitation - revisit it only if a
 locale genuinely needs different wording. Note the value has to be quoted in
 `mkdocs.yml`, because a leading `&` is YAML anchor syntax.
+
+Keep the owner identical to the one in `LICENSE.txt`. They are the same claim
+in two places, and a mismatch between them is a real inconsistency, not a
+stylistic one.
 
 Everything else down there - the repository tooltip, the previous/next labels
 when `navigation.footer` is enabled - comes from Material's own translations

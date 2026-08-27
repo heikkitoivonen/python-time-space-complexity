@@ -505,4 +505,4 @@ extra:
 extra_css:
   - stylesheets/extra.css
 
-copyright: "&copy; 2026"
+copyright: "&copy; 2026 The Python Complexity Project Contributors"
