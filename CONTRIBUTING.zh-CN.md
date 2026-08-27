@@ -1,4 +1,4 @@
-<!-- source_sha: 3048a12c4a1d6b50a0928a96ae83aec16f3e43118bc7a07d0ea0cdb45e013f6a -->
+<!-- source_sha: 071d8ffaf87d6fcebd2c00ac9eca9e06db0d876a72e4dad701278b0eb1f604ae -->
 <!-- translated: machine -->
 
 [English](CONTRIBUTING.md) | **简体中文**
@@ -42,6 +42,10 @@
 3. **修改代码**，遵循下方指南
 4. **本地测试**:`mkdocs serve`
 5. **提交 PR**，附上清晰描述
+
+## 无障碍访问
+
+本站以 WCAG 2.2 AA 级为目标，而其中若干规则无法从代码中推断出来 —— 颜色令牌是有意拆分为三个变量的，文本从不使用 `opacity` 变暗，未翻译的页面会带上 `lang` 覆盖。在修改颜色、标题层级或任何与语言相关的内容之前，请先阅读 [ACCESSIBILITY.md](ACCESSIBILITY.md)。
 
 ## 文档风格指南
 

@@ -1,4 +1,4 @@
-<!-- source_sha: e95558c3fb078a86adbf9492ed4e57d3da21cd0251fd29e2f3691b9b9b186f1a -->
+<!-- source_sha: 1fb2041396e841b9224940c25434a783a2fbbe3af4b09dec539f906dfc5a8088 -->
 <!-- translated: machine -->
 
 [English](README.md) | **简体中文**
@@ -325,6 +325,8 @@ rm -rf .venv/ && uv sync
 ## 参与贡献
 
 欢迎贡献！请参阅 [CONTRIBUTING.md](CONTRIBUTING.md) 了解贡献指南。
+
+本站以 WCAG 2.2 AA 级为目标。如果你要修改颜色、标题层级或任何与语言相关的内容，请先阅读 [ACCESSIBILITY.md](ACCESSIBILITY.md)。
 
 ## 许可证
 

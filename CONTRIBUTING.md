@@ -43,6 +43,14 @@ below and the full guide in [TRANSLATING.md](TRANSLATING.md).
 4. **Test locally**: `mkdocs serve`
 5. **Submit PR** with clear description
 
+## Accessibility
+
+The site targets WCAG 2.2 Level AA, and a few of the rules that keep it there
+are not guessable from the code - the colour tokens are split across three
+variables on purpose, text is never dimmed with `opacity`, and untranslated
+pages carry a `lang` override. Read [ACCESSIBILITY.md](ACCESSIBILITY.md)
+before changing a colour, a heading level, or anything language-related.
+
 ## Documentation Style Guide
 
 ### File Structure

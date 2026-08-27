@@ -323,6 +323,10 @@ rm -rf .venv/ && uv sync
 
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
+The site targets WCAG 2.2 Level AA. If you are changing colours, heading
+levels, or anything language-related, read
+[ACCESSIBILITY.md](ACCESSIBILITY.md) first.
+
 ## License
 
 MIT License - See [LICENSE.txt](LICENSE.txt) for details

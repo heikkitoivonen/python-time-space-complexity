@@ -75,6 +75,7 @@ git commit -m "Your message"
 - `Makefile` - Development commands
 - `mkdocs.yml` - Documentation site config (incl. `i18n` plugin locales)
 - `TRANSLATING.md` - Translation workflow and per-locale glossaries
+- `ACCESSIBILITY.md` - WCAG 2.2 AA rules: colour tokens, `lang`, headings
 - `scripts/validate_translations.py` - Translation structure/staleness checker
 - `.python-version` - Python 3.11 specification
 - `uv.lock` - Dependency lock file (reproducible builds)
@@ -236,6 +237,9 @@ Also note:
 - Hand-edit `source_sha` in a translation's front matter
 - Translate anything inside a fenced code block
 - Reformat English tables cosmetically - it marks every translation stale
+- Change a colour without measuring its contrast (see ACCESSIBILITY.md)
+- Dim text with `opacity` - it fails contrast and SC 1.4.1 both
+- Skip a heading level (`##` straight to `####`)
 
 ### ✓ DO
 - Always run quality checks before committing
@@ -277,6 +281,7 @@ Before every commit, verify:
 - [ ] Changes are focused/minimal
 - [ ] Documentation updated if needed
 - [ ] Translations updated if an English page changed
+- [ ] Accessibility rules honoured if colours/headings/`lang` changed
 - [ ] No test files left uncommitted
 
 ## Examples
@@ -317,6 +322,8 @@ If you need guidance:
 1. Check CONTRIBUTING.md for contribution guidelines
 2. Check DEV_GUIDE.md for development workflow
 3. Check README.md for project overview
+4. Check ACCESSIBILITY.md before changing any colour, heading level, or
+   `lang` attribute
 
 ---
 
