@@ -43,7 +43,7 @@ exclude_docs: |
 nav:
   - Home: index.md
   - Builtins:
-    - Overview: builtins/index.md
+    - Builtins Overview: builtins/index.md
     - Absolute: builtins/abs.md
     - Aiter: builtins/aiter.md
     - All: builtins/all.md
@@ -133,7 +133,7 @@ nav:
     - Vars: builtins/vars.md
     - Zip: builtins/zip.md
   - Standard Library:
-    - Overview: stdlib/index.md
+    - Standard Library Overview: stdlib/index.md
     - ABC: stdlib/abc.md
     - Aifc: stdlib/aifc.md
     - Annotationlib: stdlib/annotationlib.md
@@ -359,13 +359,13 @@ nav:
     - Zlib: stdlib/zlib.md
     - Zoneinfo: stdlib/zoneinfo.md
   - Implementations:
-    - Overview: implementations/index.md
+    - Implementations Overview: implementations/index.md
     - CPython: implementations/cpython.md
     - IronPython: implementations/ironpython.md
     - Jython: implementations/jython.md
     - PyPy: implementations/pypy.md
   - Versions:
-    - Overview: versions/index.md
+    - Versions Overview: versions/index.md
     - Python 3.14: versions/py314.md
     - Python 3.13: versions/py313.md
     - Python 3.12: versions/py312.md
@@ -401,7 +401,10 @@ plugins:
           site_description: Kattava dokumentaatio Pythonin sisäänrakennettujen tyyppien ja standardikirjaston aika- ja tilavaativuuksista
           nav_translations:
             Home: Etusivu
-            Overview: Yleiskatsaus
+            Builtins Overview: Sisäänrakennettujen yleiskatsaus
+            Standard Library Overview: Standardikirjaston yleiskatsaus
+            Implementations Overview: Toteutusten yleiskatsaus
+            Versions Overview: Versioiden yleiskatsaus
             Builtins: Sisäänrakennetut
             Standard Library: Standardikirjasto
             Implementations: Toteutukset
@@ -430,7 +433,10 @@ plugins:
           site_description: Python 内置类型与标准库操作的时间和空间复杂度完整参考
           nav_translations:
             Home: 首页
-            Overview: 概览
+            Builtins Overview: 内置概览
+            Standard Library Overview: 标准库概览
+            Implementations Overview: 实现概览
+            Versions Overview: 版本概览
             Builtins: 内置
             Standard Library: 标准库
             Implementations: 实现
@@ -459,7 +465,10 @@ plugins:
           site_description: Python の組み込み型と標準ライブラリの操作における時間計算量と空間計算量の完全リファレンス
           nav_translations:
             Home: ホーム
-            Overview: 概要
+            Builtins Overview: 組み込みの概要
+            Standard Library Overview: 標準ライブラリの概要
+            Implementations Overview: 実装の概要
+            Versions Overview: バージョンの概要
             Builtins: 組み込み
             Standard Library: 標準ライブラリ
             Implementations: 実装

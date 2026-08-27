@@ -381,6 +381,49 @@ def test_heading_levels_never_skip(page):
 # --------------------------------------------------------------------------
 
 
+def test_nav_labels_do_not_point_two_ways():
+    """One label must not lead to two destinations.
+
+    Regression: four sections each had a nav entry called "Overview", so a
+    screen-reader user listing the page's links saw four identical entries
+    with nothing to tell them apart (axe: identical-links-same-purpose).
+    """
+    nav = MKDOCS_YML[MKDOCS_YML.index("\nnav:") : MKDOCS_YML.index("\nhooks:")]
+    targets: dict[str, set[str]] = {}
+    for label, target in re.findall(r"^\s+- (.+?):\s*(\S+\.md)\s*$", nav, re.MULTILINE):
+        targets.setdefault(label, set()).add(target)
+
+    assert targets, "no nav entries parsed"
+    ambiguous = {label: sorted(paths) for label, paths in targets.items() if len(paths) > 1}
+    assert not ambiguous, f"nav labels leading to several pages: {ambiguous}"
+
+
+@pytest.mark.parametrize("locale", [x for x in _locales_from_mkdocs() if x != "en"])
+def test_translated_nav_labels_do_not_point_two_ways(locale):
+    """The same rule in every locale: a translation must not merge two labels.
+
+    Distinct English labels collapsing to one translated string would put the
+    defect straight back for readers of that language.
+    """
+    # Both the space class and the line body are spelled out: under DOTALL,
+    # `\s{12}` and `.*` each match newlines, and either one lets the block run
+    # straight past nav_translations into whatever is indented below it.
+    block = re.search(
+        r"- locale: " + locale + r"\b.*?nav_translations:\n((?:[ ]{12}\S[^\n]*\n)+)",
+        MKDOCS_YML,
+        re.DOTALL,
+    )
+    if block is None:
+        pytest.skip(f"{locale} has no nav_translations")
+
+    seen: dict[str, list[str]] = {}
+    for english, translated in re.findall(r"^\s+(.+?):\s*(.+?)\s*$", block.group(1), re.MULTILINE):
+        seen.setdefault(translated, []).append(english)
+
+    collisions = {t: labels for t, labels in seen.items() if len(labels) > 1}
+    assert not collisions, f"{locale}: one translation for several nav labels: {collisions}"
+
+
 def test_theme_templates_are_not_published_as_pages():
     """custom_dir lives inside docs/, so mkdocs would serve the templates.
 
