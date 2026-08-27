@@ -101,8 +101,32 @@ Every page must declare the language it is actually written in.
   `docs/overrides/partials/alternate.html` adds `lang`, which is what governs
   pronunciation of the label itself.
 
-That partial is a copy of a generated upstream file. Re-sync it when upgrading
-`mkdocs-material`.
+## Overridden theme partials
+
+`docs/overrides/partials/` holds verbatim copies of upstream partials, each
+differing from the theme's by a single attribute. Upstream marks them
+"automatically generated - do not edit", so **re-sync them when upgrading
+`mkdocs-material`** or the copies will quietly freeze an old version of the
+markup:
+
+| Partial | Adds | Why |
+|-------------------|-------------------------|--------------------------------|
+| `alternate.html` | `lang` on each option | pronounce the language names |
+| `search.html` | `aria-label` on the dialog | name the search overlay |
+
+Each carries a comment at the top saying what it adds and why.
+
+## Dialogs and ARIA names
+
+Anything with `role="dialog"` or `role="alertdialog"` needs an accessible name
+(SC 4.1.2). Material's search overlay ships without one, so assistive tech
+announces an unnamed dialog and a user who lands inside it has nothing telling
+them where they are.
+
+The name comes from `lang.t('search')` - Material's own translated string, so
+it follows the theme language ("Haku", "查找", "検索") with no per-locale
+strings of ours to maintain. Prefer an existing `lang.t()` key over inventing
+one whenever the theme already has a suitable string.
 
 ## Headings
 

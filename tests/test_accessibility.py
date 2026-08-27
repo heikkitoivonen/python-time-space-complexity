@@ -317,6 +317,20 @@ def test_every_locale_has_a_footer_new_tab_string(locale):
 # --------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("template", sorted(OVERRIDES.rglob("*.html")), ids=lambda p: p.name)
+def test_dialogs_have_an_accessible_name(template):
+    """An unnamed role="dialog" is announced with nothing to identify it.
+
+    Regression: Material's search overlay ships as a bare
+    `role="dialog"`. SC 4.1.2 (Name, Role, Value).
+    """
+    markup = template.read_text(encoding="utf-8")
+    for tag in re.findall(r"<[a-z]+\b[^>]*?\brole=\"(?:dialog|alertdialog)\"[^>]*?>", markup):
+        assert "aria-label" in tag or "aria-labelledby" in tag, (
+            f"{template.name}: dialog without an accessible name: {tag}"
+        )
+
+
 @pytest.mark.parametrize(
     "name,template",
     [("main.html", MAIN_HTML), ("copyright.html", COPYRIGHT_HTML)],
