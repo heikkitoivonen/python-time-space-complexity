@@ -11,9 +11,11 @@ theme's and stay; two were ours, and both are handled by
 Roboto is vendored rather than linked from Google, which removes two
 third-party origins and a three-hop chain from in front of first paint.
 
-Plus a ``preconnect`` to api.github.com, measured at 220 ms of LCP. Each of
-these is a quiet failure if it regresses -- the site still builds
-and still looks right -- so they are pinned here.
+And ``partials/source.html`` drops the attribute that made every page fetch
+the repository's star and fork counts from api.github.com.
+
+Each of these is a quiet failure if it regresses -- the site still builds and
+still looks right -- so they are pinned here.
 """
 
 import re
@@ -79,16 +81,56 @@ def test_extra_css_is_not_also_linked():
     assert "<style>{{ config.extra.inline_css | safe }}</style>" in OVERRIDE
 
 
-def test_github_api_preconnect_is_anonymous():
-    """The preconnect must carry `crossorigin`, or it warms the wrong socket.
+SOURCE_PARTIAL = (
+    PROJECT_ROOT / "docs" / "overrides" / "partials" / "source.html"
+).read_text(encoding="utf-8")
 
-    Material fetches the repo facts with XMLHttpRequest and leaves
-    `withCredentials` false, so those requests are anonymous. A preconnect
-    without `crossorigin` opens a credentialed connection that an anonymous
-    request may not reuse, which costs a socket instead of saving a round trip
-    -- and looks identical in the built HTML unless you know to check.
+
+def test_source_component_is_not_mounted():
+    """No `data-md-component="source"` means no api.github.com round trips.
+
+    That one attribute is the whole mechanism: Material's bundle looks for it
+    to mount the source component, which fetches the star and fork counts.
+    Restoring it silently reintroduces two cross-origin requests per page
+    load, and nothing about the rendered page would look different until the
+    counts appeared.
+
+    Checked with Jinja comments stripped: the comment there names the
+    attribute deliberately, to say what was removed and why.
     """
-    assert '<link rel="preconnect" href="https://api.github.com" crossorigin>' in OVERRIDE
+    markup = re.sub(r"\{#.*?#\}", "", SOURCE_PARTIAL, flags=re.DOTALL)
+    assert "data-md-component" not in markup
+
+
+def test_no_github_api_preconnect():
+    """Nothing contacts api.github.com now, so warming it would be waste.
+
+    A preconnect to an origin the page never uses costs a DNS lookup and a TLS
+    handshake that nothing consumes.
+    """
+    markup = re.sub(r"\{#.*?#\}", "", OVERRIDE, flags=re.DOTALL)
+    assert "api.github.com" not in markup
+
+
+def test_source_partial_matches_the_theme_apart_from_that_attribute():
+    """Our copy must not drift from the upstream partial it mirrors.
+
+    The theme generates partials/source.html and marks it "do not edit", so a
+    release that changes it would leave this override rendering stale markup
+    -- a missing icon or class, with no error.
+    """
+    import material
+
+    theme = (
+        Path(material.__file__).parent / "templates" / "partials" / "source.html"
+    ).read_text(encoding="utf-8")
+
+    def normalise(text: str) -> str:
+        text = re.sub(r"\{#.*?#\}", "", text, flags=re.DOTALL)
+        text = text.replace(' data-md-component="source"', "")
+        return re.sub(r"\s+", " ", text).strip()
+
+    assert normalise(SOURCE_PARTIAL) == normalise(theme)
 
 
 def test_bundle_is_deferred():
@@ -122,7 +164,9 @@ def test_on_config_publishes_both_values():
     config = load_config(str(PROJECT_ROOT / "mkdocs.yml"))
     config.plugins.run_event("config", config)
 
-    assert config.extra["inline_css"].startswith(".md-header__source")
+    # A specific declaration rather than the first rule in the file, so that
+    # reordering extra.css does not fail this for no reason.
+    assert "--md-typeset-a-color" in config.extra["inline_css"]
     assert config.extra["bundle_js"].endswith(".min.js")
 
 

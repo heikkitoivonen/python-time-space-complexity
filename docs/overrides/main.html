@@ -137,20 +137,13 @@
 
 {% block extrahead %}
   {#-
-    api.github.com is fetched on every page load for the repo facts (star
-    count, latest release), and it is the one origin on the critical path the
-    page never otherwise touches, so the browser only starts its DNS, TCP and
-    TLS handshake once the bundle asks for it. That wait alone measures at
-    roughly 220 ms of LCP.
-
-    `crossorigin` is load-bearing, not decorative. Material fetches the facts
-    with XMLHttpRequest and leaves `withCredentials` at its default false, so
-    those are anonymous cross-origin requests. A preconnect without
-    `crossorigin` warms a *credentialed* connection, which an anonymous
-    request may not reuse - the browser would open a second one and the hint
-    would cost a socket instead of saving a round trip.
+    No preconnect to api.github.com here on purpose. The page used to warm
+    that connection because Material fetched the repository's star and fork
+    counts from it on every load; partials/source.html now suppresses that
+    component, so there is no request left to warm a socket for. A preconnect
+    to an origin the page never contacts is not free - it costs a DNS lookup
+    and a TLS handshake that nothing consumes.
   -#}
-  <link rel="preconnect" href="https://api.github.com" crossorigin>
   {#-
     extra.css, minified, instead of the render-blocking <link> that
     `extra_css` would emit. base.html renders this block after the extra_css

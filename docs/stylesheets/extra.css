@@ -1,11 +1,3 @@
-/* Show the header repo badge (top-right, above the fold on every page) as a
-   GitHub star CTA, but suppress the live star/fork counts on the header badge
-   so a low number is not displayed there. The footer keeps its full repo info,
-   including the star count. */
-.md-header__source .md-source__facts {
-  display: none;
-}
-
 /* Announcement-bar star CTA */
 .announce-star {
   color: inherit;
@@ -49,8 +41,7 @@
   display: inline-flex;
 }
 
-.footer-meta__right .md-source__repository,
-.footer-meta__right .md-source__facts {
+.footer-meta__right .md-source__repository {
   white-space: nowrap;
   max-width: none;
 }

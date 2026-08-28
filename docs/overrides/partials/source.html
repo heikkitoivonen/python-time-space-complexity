@@ -1,0 +1,27 @@
+{#-
+  A copy of the theme's partials/source.html with one attribute removed:
+  `data-md-component="source"`.
+
+  That attribute is what Material's bundle looks for to mount the source
+  component, which fetches the repository's star and fork counts from
+  api.github.com - two cross-origin requests on every page load, before
+  anything is rendered from them. Without the attribute the component never
+  mounts and the requests are never made.
+
+  Nothing visible is lost from this markup: the icon and the repository name
+  below are static template output. Only the counts go, and those were
+  appended by script into `.md-source__facts` after the round trip.
+
+  This file mirrors the theme's own partial, which is generated upstream and
+  carries a "do not edit" banner. tests/test_critical_path.py compares the two
+  so a theme upgrade that changes the partial cannot leave this copy stale.
+-#}
+<a href="{{ config.repo_url }}" title="{{ lang.t('source') }}" class="md-source">
+  <div class="md-source__icon md-icon">
+    {% set icon = config.theme.icon.repo or "fontawesome/brands/git-alt" %}
+    {% include ".icons/" ~ icon ~ ".svg" %}
+  </div>
+  <div class="md-source__repository">
+    {{ config.repo_name }}
+  </div>
+</a>
