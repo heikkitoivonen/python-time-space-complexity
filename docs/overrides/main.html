@@ -112,6 +112,29 @@
   {%- endif %}
 {% endblock %}
 
+{% block fonts %}
+  {#-
+    Replaces base.html's Google Fonts link entirely. That link is a
+    render-blocking stylesheet on fonts.googleapis.com whose only job is to
+    point at woff2 files on fonts.gstatic.com - so the real face is three hops
+    deep, across two third-party origins, before any text can paint in it.
+    Vendoring the files collapses that to one same-origin hop.
+
+    This also removes base.html's own preconnect to fonts.gstatic.com, which
+    has nothing left to warm.
+
+    `crossorigin` on the preloads is required even though the files are
+    same-origin: fonts are always fetched in CORS mode, and a preload without
+    it is fetched a second time rather than reused - the hint would double the
+    download instead of removing a round trip. See scripts/mkdocs_hooks.py for
+    which faces are vendored and why only the `latin` subset.
+  -#}
+  {%- for face in config.extra.fonts if face.preload %}
+  <link rel="preload" href="{{ face.path | url }}" as="font" type="font/woff2" crossorigin>
+  {%- endfor %}
+  <style>{% for face in config.extra.fonts %}@font-face{font-family:"{{ face.family }}";font-style:{{ face.style }};font-weight:{{ face.weight }};{% if face.stretch %}font-stretch:{{ face.stretch }};{% endif %}font-display:fallback;src:url("{{ face.path | url }}") format("woff2");unicode-range:{{ config.extra.font_unicode_range }}}{% endfor %}:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+{% endblock %}
+
 {% block extrahead %}
   {#-
     api.github.com is fetched on every page load for the repo facts (star

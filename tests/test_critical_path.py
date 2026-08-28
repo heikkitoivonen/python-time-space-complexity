@@ -8,6 +8,9 @@ theme's and stay; two were ours, and both are handled by
 * ``docs/stylesheets/extra.css`` is minified and inlined rather than linked
 * the theme's JS bundle is emitted with ``defer``
 
+Roboto is vendored rather than linked from Google, which removes two
+third-party origins and a three-hop chain from in front of first paint.
+
 Plus a ``preconnect`` to api.github.com, measured at 220 ms of LCP. Each of
 these is a quiet failure if it regresses -- the site still builds
 and still looks right -- so they are pinned here.
@@ -121,3 +124,77 @@ def test_on_config_publishes_both_values():
 
     assert config.extra["inline_css"].startswith(".md-header__source")
     assert config.extra["bundle_js"].endswith(".min.js")
+
+
+def test_vendored_fonts_exist_and_are_woff2():
+    """Every declared face must be on disk and actually be a font.
+
+    A dead url() in the fonts block does not fail a build or look obviously
+    broken -- the browser falls back to a system sans-serif, which most
+    readers never consciously notice.
+    """
+    for face in hooks.FONTS:
+        path = PROJECT_ROOT / "docs" / hooks.FONT_DIR / face["file"]
+        assert path.is_file(), f"{face['file']} is declared but not vendored"
+        assert path.read_bytes()[:4] == b"wOF2", f"{face['file']} is not a woff2"
+
+
+def test_vendored_fonts_span_every_weight_the_theme_uses():
+    """Roboto v51 is variable: one file per style must cover 300/400/700.
+
+    If a future theme release introduced a weight outside the vendored axis
+    range, the browser would synthesise it rather than fail, so nothing would
+    look broken -- just subtly wrong.
+    """
+    import material
+
+    theme_css = sorted(Path(material.__file__).parent.rglob("assets/stylesheets/main.*.min.css"))
+    used = {int(w) for w in re.findall(r"font-weight:(\d+)", theme_css[0].read_text())}
+    assert used, "no font-weight declarations found in the theme stylesheet"
+
+    for face in hooks.FONTS:
+        low, high = (int(bound) for bound in face["weight"].split())
+        outside = sorted(weight for weight in used if not low <= weight <= high)
+        assert not outside, (
+            f"{face['file']} has a wght axis of {low}-{high}, but the theme "
+            f"renders {outside}"
+        )
+
+
+def test_fonts_block_still_suppresses_the_theme_default():
+    """The whole mechanism is overriding one block by name.
+
+    If mkdocs-material renames or restructures `fonts`, our override stops
+    being applied and the Google Fonts stylesheet and its preconnect come
+    silently back, undoing this without any visible symptom.
+    """
+    import material
+
+    base = (Path(material.__file__).parent / "templates" / "base.html").read_text()
+    assert "{% block fonts %}" in base, "the theme no longer has a `fonts` block to override"
+    assert "fonts.googleapis.com" in base, "the theme no longer links Google Fonts"
+    assert "{% block fonts %}" in OVERRIDE, "our override no longer replaces it"
+
+
+def test_font_preloads_are_crossorigin():
+    """Fonts are fetched in CORS mode even same-origin.
+
+    A preload without `crossorigin` is not reused by the font request: the
+    file is downloaded twice, so the hint costs a whole extra download rather
+    than saving a round trip.
+    """
+    preloads = re.findall(r'<link rel="preload"[^>]*>', OVERRIDE)
+    assert preloads, "no font preload found"
+    for tag in preloads:
+        assert 'as="font"' in tag and "crossorigin" in tag, tag
+
+
+def test_no_third_party_font_origin_is_emitted():
+    """No markup may reference Google's font origins.
+
+    Checked against the template with its Jinja comments stripped: those
+    comments name both origins on purpose, to say what is being replaced.
+    """
+    markup = re.sub(r"\{#.*?#\}", "", OVERRIDE, flags=re.DOTALL)
+    assert "googleapis" not in markup
+    assert "gstatic" not in markup

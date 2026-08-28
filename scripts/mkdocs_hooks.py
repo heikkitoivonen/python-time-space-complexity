@@ -26,10 +26,11 @@ language switcher, and the flag marking a page as an untranslated fallback.
 It also mis-resolves which file wins for a page that has a translation, which
 ``on_files`` below corrects.
 
-**Critical path.** Two of the requests that blocked first render were ours
-rather than the theme's: our own stylesheet, and the theme's JS bundle which
-ships without ``defer``. Both are removed from the critical path here
-and in ``docs/overrides/main.html``.
+**Critical path.** Three things the theme puts in front of first paint are
+removed here and in ``docs/overrides/main.html``: our own stylesheet, which is
+inlined rather than linked; the theme's JS bundle, which ships without
+``defer``; and Roboto, which the theme loads across two third-party origins
+and which is vendored instead.
 """
 
 from __future__ import annotations
@@ -95,6 +96,74 @@ def _inline_css(config: Any) -> str:
     return _minify_css(source.read_text(encoding="utf-8"))
 
 
+# Roboto, self-hosted. Material links it from fonts.googleapis.com, which puts
+# a render-blocking stylesheet on a third-party origin in front of the font
+# files themselves on a *second* third-party origin -- three hops deep before
+# any text can paint in its real face. Serving the files ourselves collapses
+# that to one same-origin hop that can be preloaded.
+#
+# Roboto v51 is a variable font, so one file per (family, style) covers every
+# weight Material asks for: 300/400/700 for text, 400/700 for code. The
+# `weight` below is the file's own wght axis range, not a single weight.
+#
+# `latin` is the only subset vendored. Measured across every page in docs/ it
+# covers 1,880,111 of 1,880,974 characters. The remainder is ~10 Greek and
+# Latin-Extended characters, a few dozen maths arrows, and the CJK and emoji
+# that Roboto does not contain at all -- all of which already fall back to a
+# system font today and continue to.
+#
+# Roboto is licensed Apache-2.0; see docs/stylesheets/fonts/LICENSE.txt.
+FONT_DIR = "stylesheets/fonts"
+
+FONT_UNICODE_RANGE = (
+    "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, "
+    "U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, "
+    "U+2212, U+2215, U+FEFF, U+FFFD"
+)
+
+# Only the upright faces are preloaded: they carry the body text and every
+# complexity table, so they are needed on every page. Italics are used by
+# prose emphasis and can wait for the cascade to ask for them.
+FONTS: tuple[dict[str, Any], ...] = (
+    {
+        "family": "Roboto", "style": "normal", "weight": "100 900",
+        "stretch": "100%", "file": "roboto-v51-latin.woff2", "preload": True,
+    },
+    {
+        "family": "Roboto", "style": "italic", "weight": "100 900",
+        "stretch": "100%", "file": "roboto-v51-latin-italic.woff2", "preload": False,
+    },
+    {
+        "family": "Roboto Mono", "style": "normal", "weight": "100 700",
+        "stretch": None, "file": "roboto-mono-v51-latin.woff2", "preload": True,
+    },
+    {
+        "family": "Roboto Mono", "style": "italic", "weight": "100 700",
+        "stretch": None, "file": "roboto-mono-v51-latin-italic.woff2", "preload": False,
+    },
+)
+
+
+def _fonts(config: Any) -> list[dict[str, Any]]:
+    """The vendored font faces, each with its path checked.
+
+    A missing file here fails quietly in the worst way: the build succeeds, the
+    page renders, and the browser simply falls back to a system sans-serif that
+    most readers will not consciously notice. Check at build time instead.
+    """
+    directory = Path(config.docs_dir) / FONT_DIR
+    faces = []
+    for face in FONTS:
+        if not (directory / face["file"]).is_file():
+            raise PluginError(
+                f"vendored font missing: {directory / face['file']}. The fonts "
+                f"block in docs/overrides/main.html would render a dead url() "
+                f"and every page would silently fall back to a system font."
+            )
+        faces.append({**face, "path": f"{FONT_DIR}/{face['file']}"})
+    return faces
+
+
 def _bundle_js(config: Any) -> str:
     """The theme's hashed JS bundle, as a site-root-relative path.
 
@@ -154,6 +223,8 @@ def on_config(config: Any) -> Any:
     # combined, and main.html reads them out of config.extra on every page.
     config.extra["inline_css"] = _inline_css(config)
     config.extra["bundle_js"] = _bundle_js(config)
+    config.extra["fonts"] = _fonts(config)
+    config.extra["font_unicode_range"] = FONT_UNICODE_RANGE
 
     i18n = _i18n_config(config)
     if i18n is None:
