@@ -38,7 +38,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 from material.plugins.search import plugin as search_plugin
 from mkdocs.exceptions import PluginError
@@ -184,6 +184,56 @@ def _bundle_js(config: Any) -> str:
     )
 
 
+def _site_origin(config: Any) -> str | None:
+    """The scheme and host of the site, without any path.
+
+    ``config.site_url`` cannot be used directly: an isolated build rewrites it
+    to the locale's own root (``https://example.com/fi/``), so joining against
+    it would nest every alternate under whichever locale is being built.
+    Only the origin is stable across those rewrites.
+    """
+    if not config.site_url:
+        return None
+    parts = urlsplit(config.site_url)
+    if not parts.scheme or not parts.netloc:
+        return None
+    return f"{parts.scheme}://{parts.netloc}"
+
+
+def _absolute_url(origin: str | None, link: str) -> str:
+    """Make a site-root-relative link absolute, leaving absolute ones alone.
+
+    hreflang annotations must be fully qualified: a relative ``href`` there is
+    not resolved the way it is for a browser, so search engines discard it.
+    The links also feed the language switcher, which works either way.
+
+    Idempotent, because the alternates live on ``config.extra`` and are
+    rewritten once per page rather than rebuilt.
+    """
+    if origin is None or link.startswith(("http://", "https://")):
+        return link
+    return f"{origin}{link}" if link.startswith("/") else f"{origin}/{link}"
+
+
+def _live_alternates(config: Any) -> list[dict[str, Any]]:
+    """The alternates the template will actually render.
+
+    ``config.extra`` is a ``UserDict``, so ``config.extra.alternate = ...``
+    binds a plain *attribute* rather than the mapping key -- and Jinja resolves
+    attributes before keys, so the attribute wins wherever it exists.
+    mkdocs-static-i18n does exactly that once per page in a combined build,
+    which silently shadows anything written to the key.
+
+    So read back whichever binding is live, in the same order Jinja does.
+    Rewriting the key alone would be discarded in combined builds, and the
+    symptom is invisible: valid-looking relative hreflang in the output.
+    """
+    shadowing = getattr(config.extra, "alternate", None)
+    if shadowing is not None:
+        return shadowing
+    return config.extra.get("alternate", [])
+
+
 def _i18n_config(config: Any) -> Any:
     """The i18n plugin's config, or None when the plugin is not loaded."""
     plugin = config.plugins.get("i18n")
@@ -256,10 +306,13 @@ def on_config(config: Any) -> Any:
     # i18n only builds a language switcher when it is building more than one
     # language, which is never true here. It never overwrites a switcher that
     # is already present, so supplying one is enough.
+    origin = _site_origin(config)
     config.extra["alternate"] = [
         {
             "name": language_config["name"],
-            "link": language_config["fixed_link"] or language_config["link"],
+            "link": _absolute_url(
+                origin, language_config["fixed_link"] or language_config["link"]
+            ),
             "lang": language_config["locale"],
         }
         for language_config in i18n["languages"]
@@ -295,7 +348,10 @@ def on_files(files: Any, config: Any) -> Any:
 
 @event_priority(-200)
 def on_page_context(context: Any, page: Any, config: Any, nav: Any) -> Any:
-    """Flag fallback pages, and point the language switcher at the same page.
+    """Flag fallback pages, and resolve the alternates for this page.
+
+    The alternates become both the language switcher's links and the page's
+    ``hreflang`` annotations, and the latter must be absolute URLs.
 
     Every locale mirrors the English tree, so a page's path is identical in all
     of them and the equivalent page is just the locale prefix plus that path.
@@ -304,11 +360,13 @@ def on_page_context(context: Any, page: Any, config: Any, nav: Any) -> Any:
     """
     context["i18n_is_fallback"] = _is_fallback(page, config)
 
-    if _isolated_locale(config) is None:
-        return context
+    isolated = _isolated_locale(config) is not None
+    origin = _site_origin(config)
 
-    for alternate in config.extra.get("alternate", []):
-        root = _LOCALE_ROOTS.get(alternate["lang"])
-        if root is not None:
-            alternate["link"] = f"{root}{page.url}"
+    for alternate in _live_alternates(config):
+        if isolated:
+            root = _LOCALE_ROOTS.get(alternate["lang"])
+            if root is not None:
+                alternate["link"] = f"{root}{page.url}"
+        alternate["link"] = _absolute_url(origin, alternate["link"])
     return context

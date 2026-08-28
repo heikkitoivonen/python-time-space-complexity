@@ -35,6 +35,23 @@ def _resolved_files(locale: str):
             os.environ["BUILD_ONLY_LOCALE"] = previous
 
 
+def _resolved_config(locale: str):
+    """Run a locale's config event and return the resulting config."""
+    from mkdocs.config import load_config
+
+    previous = os.environ.get("BUILD_ONLY_LOCALE")
+    os.environ["BUILD_ONLY_LOCALE"] = locale
+    try:
+        config = load_config(str(PROJECT_ROOT / "mkdocs.yml"))
+        config.plugins.run_event("config", config)
+        return config
+    finally:
+        if previous is None:
+            os.environ.pop("BUILD_ONLY_LOCALE", None)
+        else:
+            os.environ["BUILD_ONLY_LOCALE"] = previous
+
+
 def _translated_sources(locale: str) -> list[str]:
     locale_dir = DOCS_DIR / locale
     return sorted(
@@ -94,3 +111,57 @@ def test_fallback_pages_are_flagged(locale):
         f"{locale}: English fallbacks missing the notice flag: "
         f"{sorted(unflagged_fallbacks)[:5]}"
     )
+
+
+def test_hreflang_alternates_are_absolute_urls():
+    """hreflang annotations must be fully qualified.
+
+    A relative ``href`` in an hreflang link is not resolved the way a browser
+    resolves one, so search engines discard the annotation -- and the markup
+    looks perfectly valid either way, which is why this is pinned.
+    """
+    import scripts.mkdocs_hooks as hooks
+
+    for locale in ["en", *LOCALES]:
+        config = _resolved_config(locale)
+        alternates = hooks._live_alternates(config)
+        assert alternates, f"{locale}: no alternates were configured"
+        for alternate in alternates:
+            assert alternate["link"].startswith("https://"), (
+                f"{locale}: hreflang link {alternate['link']!r} is not absolute"
+            )
+
+
+def test_alternate_rewrite_survives_the_i18n_attribute_shadow():
+    """Read the binding Jinja reads, not just the mapping key.
+
+    ``config.extra`` is a UserDict, so ``config.extra.alternate = ...`` binds a
+    plain attribute rather than the key, and Jinja resolves attributes first.
+    mkdocs-static-i18n rebinds it per page in a combined build, so a rewrite
+    that only touched the key would be silently discarded there.
+    """
+    import scripts.mkdocs_hooks as hooks
+
+    config = _resolved_config("en")
+    config.extra["alternate"] = [{"link": "/from-key/", "lang": "en"}]
+    assert hooks._live_alternates(config)[0]["link"] == "/from-key/"
+
+    # The ignore is the point of the test: this binds an attribute that is not
+    # part of LegacyConfig, exactly as mkdocs-static-i18n does at runtime.
+    config.extra.alternate = [  # type: ignore[reportAttributeAccessIssue]
+        {"link": "/from-attribute/", "lang": "en"}
+    ]
+    assert hooks._live_alternates(config)[0]["link"] == "/from-attribute/"
+
+
+def test_site_origin_ignores_the_per_locale_site_url():
+    """An isolated build rewrites site_url to the locale root.
+
+    Joining alternates against that would nest every one of them under
+    whichever locale happened to be building.
+    """
+    import scripts.mkdocs_hooks as hooks
+
+    for locale in LOCALES:
+        config = _resolved_config(locale)
+        assert hooks._site_origin(config) == "https://pythoncomplexity.com"
