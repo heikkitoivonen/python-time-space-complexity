@@ -116,6 +116,11 @@ markup:
 
 Each carries a comment at the top saying what it adds and why.
 
+The same directory also holds `copyright.html`, a rewritten footer, and
+`source.html`, which *removes* an attribute for a non-accessibility reason -
+see [PERFORMANCE.md](PERFORMANCE.md). The re-sync warning above applies to
+them equally.
+
 ## Dialogs and ARIA names
 
 Anything with `role="dialog"` or `role="alertdialog"` needs an accessible name

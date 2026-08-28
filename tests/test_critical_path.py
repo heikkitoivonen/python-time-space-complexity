@@ -15,7 +15,8 @@ And ``partials/source.html`` drops the attribute that made every page fetch
 the repository's star and fork counts from api.github.com.
 
 Each of these is a quiet failure if it regresses -- the site still builds and
-still looks right -- so they are pinned here.
+still looks right -- so they are pinned here. The reasoning behind each, and
+the audits that were deliberately not acted on, are in PERFORMANCE.md.
 """
 
 import re

@@ -76,6 +76,7 @@ git commit -m "Your message"
 - `mkdocs.yml` - Documentation site config (incl. `i18n` plugin locales)
 - `TRANSLATING.md` - Translation workflow and per-locale glossaries
 - `ACCESSIBILITY.md` - WCAG 2.2 AA rules: colour tokens, `lang`, headings
+- `PERFORMANCE.md` - critical path, vendored fonts, and what was left alone
 - `scripts/validate_translations.py` - Translation structure/staleness checker
 - `.python-version` - Python 3.11 specification
 - `uv.lock` - Dependency lock file (reproducible builds)
@@ -238,6 +239,8 @@ Also note:
 - Translate anything inside a fenced code block
 - Reformat English tables cosmetically - it marks every translation stale
 - Change a colour without measuring its contrast (see ACCESSIBILITY.md)
+- Re-add `extra_css`, hardcode the JS bundle's content hash, or drop
+  `crossorigin` from a font preload (see PERFORMANCE.md)
 - Dim text with `opacity` - it fails contrast and SC 1.4.1 both
 - Skip a heading level (`##` straight to `####`)
 
@@ -322,7 +325,9 @@ If you need guidance:
 1. Check CONTRIBUTING.md for contribution guidelines
 2. Check DEV_GUIDE.md for development workflow
 3. Check README.md for project overview
-4. Check ACCESSIBILITY.md before changing any colour, heading level, or
+4. Check PERFORMANCE.md before changing how CSS, fonts or scripts are
+   delivered
+5. Check ACCESSIBILITY.md before changing any colour, heading level, or
    `lang` attribute
 
 ---
