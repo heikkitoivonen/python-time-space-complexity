@@ -326,12 +326,11 @@ git commit -m "updated docs"  # ❌ NO! Check first!
 
 If you need guidance:
 1. Check CONTRIBUTING.md for contribution guidelines
-2. Check DEV_GUIDE.md for development workflow
-3. Check README.md for project overview
-4. Check PERFORMANCE.md before changing how CSS, fonts or scripts are
+2. Check README.md for project overview
+3. Check PERFORMANCE.md before changing how CSS, fonts or scripts are
    delivered
-5. Check SEO.md before changing hreflang, canonical URLs or `robots.txt`
-6. Check ACCESSIBILITY.md before changing any colour, heading level, or
+4. Check SEO.md before changing hreflang, canonical URLs or `robots.txt`
+5. Check ACCESSIBILITY.md before changing any colour, heading level, or
    `lang` attribute
 
 ---
