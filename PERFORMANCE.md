@@ -141,3 +141,6 @@ thread.
   `mkdocs-material`; it mirrors a partial upstream marks "do not edit". A test
   compares the two, modulo the removed attribute.
 - Run `make check`. `tests/test_critical_path.py` covers the above.
+
+For how the site presents itself to crawlers - hreflang, canonical URLs,
+sitemaps - see [SEO.md](SEO.md).

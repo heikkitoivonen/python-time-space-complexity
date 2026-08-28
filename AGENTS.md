@@ -77,6 +77,7 @@ git commit -m "Your message"
 - `TRANSLATING.md` - Translation workflow and per-locale glossaries
 - `ACCESSIBILITY.md` - WCAG 2.2 AA rules: colour tokens, `lang`, headings
 - `PERFORMANCE.md` - critical path, vendored fonts, and what was left alone
+- `SEO.md` - hreflang, canonical URLs, sitemaps, `robots.txt`
 - `scripts/validate_translations.py` - Translation structure/staleness checker
 - `.python-version` - Python 3.11 specification
 - `uv.lock` - Dependency lock file (reproducible builds)
@@ -241,6 +242,8 @@ Also note:
 - Change a colour without measuring its contrast (see ACCESSIBILITY.md)
 - Re-add `extra_css`, hardcode the JS bundle's content hash, or drop
   `crossorigin` from a font preload (see PERFORMANCE.md)
+- Emit a relative `hreflang` href, or add `x-default` to `extra.alternate`
+  (see SEO.md)
 - Dim text with `opacity` - it fails contrast and SC 1.4.1 both
 - Skip a heading level (`##` straight to `####`)
 
@@ -327,7 +330,8 @@ If you need guidance:
 3. Check README.md for project overview
 4. Check PERFORMANCE.md before changing how CSS, fonts or scripts are
    delivered
-5. Check ACCESSIBILITY.md before changing any colour, heading level, or
+5. Check SEO.md before changing hreflang, canonical URLs or `robots.txt`
+6. Check ACCESSIBILITY.md before changing any colour, heading level, or
    `lang` attribute
 
 ---

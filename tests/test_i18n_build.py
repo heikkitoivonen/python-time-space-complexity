@@ -1,5 +1,7 @@
 """Tests for how a per-locale build resolves translated pages.
 
+The hreflang assertions at the bottom are explained in SEO.md.
+
 Production builds one locale at a time (``scripts/build_site.py``), and that
 mode has bitten us twice: ``build_only_locale`` makes the locale being built
 the *default* one, so mkdocs-static-i18n tags English sources with it and can
