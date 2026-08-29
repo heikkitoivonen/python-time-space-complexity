@@ -11,42 +11,68 @@
     the link text for screen readers, so it has to say everything the visible
     text says, plus the one thing it cannot - that the link opens a new tab.
     Locales with no entry fall back to English.
+
+    `leads` is a list because the opening question rotates: which one a page
+    shows is decided by `announce_index`, a hash of the page URL computed in
+    scripts/mkdocs_hooks.py. Rotating on the URL rather than at random keeps
+    the build reproducible - the same content builds to the same bytes - while
+    still giving a reader who moves between pages a different question.
+
+    Only English has more than one so far. A locale with a single-entry list
+    simply shows it everywhere; adding variety to a locale later is appending
+    to its list and needs no change here. Keep every entry a self-contained
+    question: `cta` + `tail` form a second sentence whose grammar and
+    punctuation are locale-specific, so the two must not be mixed and matched.
   -#}
   {%- set announcements = {
     "fi": {
-      "lead": "Säästikö tämä sinulta käynnin CPythonin lähdekoodissa?",
+      "leads": ["Säästikö tämä sinulta käynnin CPythonin lähdekoodissa?"],
       "cta": "Tähditä se GitHubissa",
       "tail": ", niin muutkin kehittäjät löytävät sen.",
       "newtab": "(avautuu uuteen välilehteen)"
     },
     "zh": {
-      "lead": "这个网站帮你省去了翻阅 CPython 源码的功夫吗？",
+      "leads": ["这个网站帮你省去了翻阅 CPython 源码的功夫吗？"],
       "cta": "在 GitHub 上点个星",
       "tail": "，让更多开发者找到它。",
       "newtab": "（在新标签页中打开）"
     },
     "ja": {
-      "lead": "CPython のソースを読みに行く手間が省けましたか？",
+      "leads": ["CPython のソースを読みに行く手間が省けましたか？"],
       "cta": "GitHub でスターを付けて",
       "tail": "、ほかの開発者にも見つけてもらいましょう。",
       "newtab": "（新しいタブで開きます）"
     },
     "en": {
-      "lead": "Did this save you a trip to the CPython source?",
+      "leads": [
+        "Did this save you a trip to the CPython source?",
+        "Did this save you time?",
+        "Did you learn something new?",
+        "Did this save you writing a benchmark?",
+        "Was the answer here in one lookup?",
+        "Did this settle an argument about Big-O?",
+        "Did this stop you reaching for timeit?",
+        "Did you pick a better data structure because of this?"
+      ],
       "cta": "Star it on GitHub",
       "tail": " so other developers can find it too.",
       "newtab": "(opens in a new tab)"
     }
   } -%}
   {%- set announcement = announcements.get(config.theme.language, announcements["en"]) %}
+  {#-
+    `default(0)` because `announce_index` is set by an on_page_context hook,
+    and templates rendered outside a page context have no page to hash.
+  -#}
+  {%- set lead = announcement.leads[(announce_index | default(0)) % (announcement.leads | length)] %}
   <a
     href="{{ config.repo_url }}"
     target="_blank"
     rel="noopener"
     class="announce-star"
-    aria-label="{{ announcement.lead }} {{ announcement.cta }}{{ announcement.tail }} {{ announcement.newtab }}"
+    aria-label="{{ lead }} {{ announcement.cta }}{{ announcement.tail }} {{ announcement.newtab }}"
   >
-    ⭐ {{ announcement.lead }}
+    ⭐ {{ lead }}
     <strong>{{ announcement.cta }}</strong>{{ announcement.tail }}
   </a>
 {% endblock %}

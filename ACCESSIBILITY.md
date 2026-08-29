@@ -162,8 +162,9 @@ Beyond the steps in [TRANSLATING.md](TRANSLATING.md), a new locale needs
 accessibility strings or it will silently fall back to English ones:
 
 1. `docs/overrides/main.html` - the announcement-bar string set
-   (`lead` / `cta` / `tail` / `newtab`) and the fallback notice, including its
-   own `newtab`.
+   (`leads` / `cta` / `tail` / `newtab`) and the fallback notice, including its
+   own `newtab`.  `leads` is a list of opening questions and one entry is
+   enough: the page picks from whatever the locale offers.
 2. `docs/overrides/partials/copyright.html` - the `newtab` entry.
 3. `newtab` values carry their own brackets, so each locale keeps its own
    punctuation: halfwidth for `en`/`fi`, fullwidth for `zh`/`ja`.

@@ -36,6 +36,7 @@ and which is vendored instead.
 from __future__ import annotations
 
 import re
+import zlib
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlsplit
@@ -348,7 +349,7 @@ def on_files(files: Any, config: Any) -> Any:
 
 @event_priority(-200)
 def on_page_context(context: Any, page: Any, config: Any, nav: Any) -> Any:
-    """Flag fallback pages, and resolve the alternates for this page.
+    """Flag fallback pages, resolve alternates, and pick the announce lead.
 
     The alternates become both the language switcher's links and the page's
     ``hreflang`` annotations, and the latter must be absolute URLs.
@@ -357,8 +358,20 @@ def on_page_context(context: Any, page: Any, config: Any, nav: Any) -> Any:
     of them and the equivalent page is just the locale prefix plus that path.
     In a combined build i18n resolves the switcher from the file's real
     alternates, which is more accurate, so we leave that case alone.
+
+    ``announce_index`` chooses which of the announcement bar's opening
+    questions a page shows (see ``docs/overrides/main.html``). It is a hash of
+    the page URL rather than a random draw so that rebuilding unchanged content
+    produces unchanged HTML: a random pick would rewrite every page on every
+    deploy and miss every downstream cache. ``zlib.crc32`` rather than the
+    builtin ``hash``, which is salted per process for ``str`` and so is not
+    stable across builds.
+
+    The URL carries no locale prefix in the per-locale builds that ship, so a
+    page draws the same slot in every language.
     """
     context["i18n_is_fallback"] = _is_fallback(page, config)
+    context["announce_index"] = zlib.crc32(page.url.encode("utf-8"))
 
     isolated = _isolated_locale(config) is not None
     origin = _site_origin(config)

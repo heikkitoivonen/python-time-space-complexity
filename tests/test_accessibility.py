@@ -291,8 +291,41 @@ def test_every_locale_has_announcement_strings(locale):
     """A missing entry silently falls back to English on a localized page."""
     announcements = _jinja_dict(MAIN_HTML, "announcements")
     assert locale in announcements, f"{locale} missing from the announcement strings"
-    assert set(announcements[locale]) == {"lead", "cta", "tail", "newtab"}, (
+    assert set(announcements[locale]) == {"leads", "cta", "tail", "newtab"}, (
         f"{locale} announcement entry has the wrong keys"
+    )
+
+
+@pytest.mark.parametrize("locale", _locales_from_mkdocs())
+def test_every_locale_has_at_least_one_lead(locale):
+    """`leads` is indexed modulo its own length, so an empty list is a crash.
+
+    Locales carry lists of different lengths on purpose -- only English has
+    more than one so far -- so the shared floor is one, not parity.
+    """
+    leads = _jinja_dict(MAIN_HTML, "announcements")[locale]["leads"]
+    assert isinstance(leads, list) and leads, f"{locale} has no announcement leads"
+    assert all(isinstance(lead, str) and lead.strip() for lead in leads), (
+        f"{locale} has a blank announcement lead"
+    )
+    assert len(set(leads)) == len(leads), f"{locale} repeats an announcement lead"
+
+
+def test_the_lead_and_its_label_come_from_one_variable():
+    """aria-label *replaces* the link text, so the two must say the same thing.
+
+    They used to be the same expression twice. Now the lead is chosen once,
+    and the risk is that a later edit re-inlines a different pick into one of
+    the two places -- the visible question and the announced one would then
+    disagree, with nothing to see on screen.
+    """
+    assert re.search(r"\{%-? set lead = announcement\.leads\[", MAIN_HTML), (
+        "the rotating lead must be resolved into a single `lead` variable"
+    )
+    assert 'aria-label="{{ lead }} ' in MAIN_HTML, "the label must use the chosen lead"
+    assert "⭐ {{ lead }}" in MAIN_HTML, "the visible text must use the chosen lead"
+    assert not re.search(r"announcement\.lead(?!s)", MAIN_HTML), (
+        "`announcement.lead` is gone; a reference to it would render empty"
     )
 
 

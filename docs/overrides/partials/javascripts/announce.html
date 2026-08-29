@@ -1,0 +1,23 @@
+{#-
+  Replaces the theme's generated partial of the same name, which hides the
+  banner only when the stored value equals `__md_hash` of the banner's current
+  innerHTML. That check assumes the banner always says the same thing. Ours
+  does not: the opening question rotates per page (see main.html), so every
+  page hashes differently and a reader who dismissed the bar would meet it
+  again on the very next page - the one behaviour dismissal exists to prevent.
+
+  So read the stored value and ignore what it says. The theme's bundle writes
+  it when the dismiss button is clicked, and this site has exactly one banner,
+  so its mere presence already answers the only question being asked: has this
+  reader dismissed the bar? Compared against `null` rather than tested for
+  truthiness because the stored value is a hash, and 0 is a hash it can take.
+
+  Add a second, unrelated banner some day and this has to grow a key of its
+  own - the old dismissal would otherwise suppress a notice never seen.
+
+  Kept inline, and included inside <aside class="md-banner"> exactly where the
+  original was, so a dismissed banner is hidden while the parser is still
+  inside it and never paints. Moving this to the bundle would cost a frame of
+  banner on every page load for readers who already said no.
+-#}
+<script>var el=document.querySelector("[data-md-component=announce]");if(el&&null!==__md_get("__announce"))el.hidden=!0</script>
