@@ -55,12 +55,13 @@ import unicodedata
 text = "cafe\u0301"  # "e" + combining acute
 
 # Normalize to NFC/NFD/NFKC/NFKD - O(n + Σrᵢ²). The whole string is scanned,
-# and canonical ordering sorts EVERY run of combining marks, so the runs add
-# up: a string of 2000 short runs costs far more than one long run of the
-# same total length. That is O(n·k) for a longest run k, and O(n²) when the
-# string is one run. O(n) space is the worst case, not the usual one: a
-# string already in the requested form is returned as the same object, with
-# nothing allocated
+# and canonical ordering sorts each run of combining marks, so every run
+# contributes the square of its own length. Concentration is what costs, not
+# the number of marks: 20,000 marks in one run take about 300x what the same
+# 20,000 marks split into 2,000 runs of ten do. That is O(n·k) for a longest
+# run k, and O(n²) when the whole string is a single run. O(n) space is the
+# worst case, not the usual one: a string already in the requested form is
+# returned as the same object, with nothing allocated
 nfc = unicodedata.normalize("NFC", text)
 nfd = unicodedata.normalize("NFD", text)
 

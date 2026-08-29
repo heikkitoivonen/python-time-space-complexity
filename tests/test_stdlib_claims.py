@@ -631,11 +631,13 @@ class TestUnicodeDataLookupsAreTableReads:
         assert unicodedata.normalize("NFC", ascii_text) is ascii_text
         assert unicodedata.normalize("NFC", composed) is composed
 
-    def test_many_runs_cost_more_than_one_run_of_the_same_length(self) -> None:
+    def test_longest_run_alone_does_not_bound_the_cost(self) -> None:
         """The bound is O(n + sum of squared run lengths), not O(n + k^2).
 
-        Same total length, same longest run - only the number of runs
-        differs. If the longest run were what bounded it, these would match.
+        Holds the string length AND the longest run fixed, varying only how
+        many runs there are - so the mark count differs, which is exactly
+        what the discarded O(n + k^2) form fails to account for. Under that
+        form these two would match.
         """
         marks = "".join(chr(0x0300 + (index % 40)) for index in range(100))
         unit = "a" + marks
@@ -647,8 +649,33 @@ class TestUnicodeDataLookupsAreTableReads:
         many_time = best_time(lambda: unicodedata.normalize("NFC", many_runs))
 
         assert many_time > one_time * 3, (
-            f"every run is sorted, so 2000 of them cost more than one: "
+            f"same n and same k, but 2000 runs of marks rather than one: "
             f"one={one_time:.2e}s many={many_time:.2e}s"
+        )
+
+    def test_concentrating_marks_is_what_costs_not_spreading_them(self) -> None:
+        """The same marks in one run cost far more than split across many.
+
+        This is the direction the page's prose had backwards. Sum of squares
+        is maximised by putting everything in one run: 20,000 marks in one
+        run is 400,000,000, and in 2,000 runs of ten it is 200,000.
+        """
+        total_marks = 20_000
+
+        def build(runs: int) -> str:
+            per_run = total_marks // runs
+            marks = "".join(chr(0x0300 + (index % 40)) for index in range(per_run))
+            return ("a" + marks) * runs
+
+        concentrated = build(1)
+        spread = build(2_000)
+
+        concentrated_time = best_time(lambda: unicodedata.normalize("NFC", concentrated))
+        spread_time = best_time(lambda: unicodedata.normalize("NFC", spread))
+
+        assert concentrated_time > spread_time * 20, (
+            f"one long run is the quadratic worst case, spreading is cheap: "
+            f"one run={concentrated_time:.2e}s 2000 runs={spread_time:.2e}s"
         )
 
     def test_cost_tracks_the_squared_run_lengths(self) -> None:
