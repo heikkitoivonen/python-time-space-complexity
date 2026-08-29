@@ -10,6 +10,8 @@ from difflib import (
     unified_diff,
 )
 
+import pytest
+
 
 class TestSequenceMatcher:
     """Test SequenceMatcher operations."""
@@ -185,3 +187,48 @@ class TestHtmlDiff:
         b = ["line1\n", "modified\n"]
         table = h.make_table(a, b)
         assert "<table" in table.lower()
+
+
+class TestJunkPredicateRunsPerDistinctElement:
+    """docs/stdlib/difflib.md's claim about when isjunk is called.
+
+    The page said "once per element" until a review pointed out that
+    __chain_b applies the predicate to the keys of the index it just built,
+    not to every position. With a sequence that repeats, the difference is
+    the whole length of the sequence.
+    """
+
+    def test_predicate_sees_each_distinct_element_once(self) -> None:
+        calls: list[str] = []
+
+        def isjunk(element: str) -> bool:
+            calls.append(element)
+            return element == " "
+
+        # 300 positions, 4 distinct characters.
+        sequence = "abc " * 75
+        SequenceMatcher(isjunk, "unused", sequence)
+
+        assert sorted(calls) == [" ", "a", "b", "c"], (
+            f"expected one call per distinct element, got {len(calls)} calls"
+        )
+
+    def test_predicate_is_not_called_for_the_first_sequence(self) -> None:
+        calls: list[str] = []
+
+        def isjunk(element: str) -> bool:
+            calls.append(element)
+            return False
+
+        SequenceMatcher(isjunk, "xyz", "ab")
+
+        assert set(calls) == {"a", "b"}, "only the indexed sequence is filtered"
+
+    def test_junk_elements_are_excluded_from_the_index(self) -> None:
+        matcher = SequenceMatcher(lambda element: element == " ", "a b", "a b")
+        # b2j is an implementation attribute, absent from the stubs.
+        index = getattr(matcher, "b2j", None)
+        if index is None:  # pragma: no cover - only if CPython drops it
+            pytest.skip("SequenceMatcher no longer exposes its b2j index")
+        assert " " not in index
+        assert "a" in index

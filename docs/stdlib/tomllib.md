@@ -82,9 +82,9 @@ age = 30
 """
 
 config = tomllib.loads(toml_data)  # O(n) in the text length
-# config is a dict with nested structures. Every type above parses in one
-# pass - nesting and arrays of tables cost no more per character than a
-# flat key does
+# config is a dict with nested structures. Parsing is one pass, but nesting
+# is not free: each table header creates and installs a dict, so the same
+# number of keys spread over tables costs about twice what flat keys do
 ```
 
 ## Working with Configuration Files

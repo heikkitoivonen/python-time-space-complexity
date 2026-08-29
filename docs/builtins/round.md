@@ -6,8 +6,8 @@ The `round()` function rounds a number to the nearest integer or a specified num
 
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
-| Round to nearest integer | O(1) | O(1) | Single arithmetic operation |
-| Round to n decimals | O(1) | O(1) | Fixed precision operation |
+| Round to nearest integer | O(1) float work, O(b) result | O(b) | b = bits in the resulting int; large exponents make a large int |
+| Round to n decimals | O(d) | O(1) | d = digits in the value's exact decimal expansion, which grows with the exponent |
 | Banker's rounding (.5) | O(1) | O(1) | Round to nearest even |
 
 ## Basic Usage
@@ -110,7 +110,8 @@ rounded = [round(m, 2) for m in measurements]
 ### round() vs int()
 
 ```python
-# Both are O(1) on a float - the choice is about behaviour, not cost
+# For values this size both are O(1) - the choice is about behaviour, not
+# cost. Neither stays O(1) for a huge float: the result is a big int
 # round() - rounds to nearest
 round(5.6)     # 6
 int(5.6)       # 5 - truncates
@@ -128,13 +129,15 @@ int(5.5)       # 5 (truncation)
 
 ```python
 # round() - float precision issues
-round(2.675, 2)  # O(1) - hardware float, 2.67 (not 2.68!)
+round(2.675, 2)  # 2.67 (not 2.68!) - O(d) in the exact decimal expansion,
+                 # which is short here but not for a large exponent
 
 # Decimal - precise
 from decimal import Decimal
-Decimal("2.675").quantize(Decimal("0.01"))  # 2.68, O(p) in the operand and
-                                            # context precision, not just
-                                            # the digits kept
+Decimal("2.675").quantize(Decimal("0.01"))  # 2.68 - O(d) in the digits the
+                                            # result keeps; digits in the
+                                            # operand beyond that are not
+                                            # re-examined
 
 # Use Decimal for financial calculations - but this is a change in
 # complexity, not a constant factor: float arithmetic is fixed-width O(1),
@@ -146,13 +149,15 @@ Decimal("2.675").quantize(Decimal("0.01"))  # 2.68, O(p) in the operand and
 ```python
 # round() - returns number
 x = 3.14159
-rounded = round(x, 2)  # O(1) - 3.14 (float)
+rounded = round(x, 2)  # 3.14 (float)
 
 # Format string - returns string
-formatted = f"{x:.2f}"  # O(d) in the digits produced - "3.14" (string)
+formatted = f"{x:.2f}"  # "3.14" (string)
 
-# round() for calculation, format for display: formatting also allocates a
-# string, so it is the more expensive of the two in a hot loop
+# round() for calculation, format for display. Not for speed: both run the
+# same double-to-decimal conversion, and they measure within a few percent
+# of each other. round() with no ndigits is the cheap one - it skips that
+# conversion entirely
 ```
 
 ## Edge Cases

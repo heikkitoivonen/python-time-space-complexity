@@ -212,6 +212,55 @@ Also note:
 - Missing pages fall back to English automatically. Partial translations are
   fine; never bulk-translate to fill gaps.
 
+### Adding or Changing a Complexity Claim
+
+Every page here is a complexity claim, so a wrong one is the worst defect
+this repo can ship - and `make check` cannot see it. A page can be green,
+lint-clean and confidently wrong.
+
+Two review passes over one batch of edits found 29 wrong or imprecise
+claims. Writing tests for the rest then found five more, including two the
+reviewers had missed and one where a review's suggested correction was
+itself wrong. So: **both**, and in this order.
+
+Before writing a claim, decide which of three kinds it is.
+
+**A. It says something the page's complexity table does not.** These are the
+explanatory clauses - "costs no more than a str key", "one lookup",
+"formatting is the more expensive of the two". Every wrong claim found so far
+has been one of these. **Write a test.** Prefer observation over timing: a
+counting `__eq__`, a counting `os.scandir`, an identity check, a call
+counter. Those need no tolerance and cannot flake. Where only a stopwatch
+will do, compare two input sizes and assert on the ratio, with a threshold
+far from both the behaviour you are asserting and the one you are excluding.
+
+Note that a claim of this kind is often a sentence with no `O(...)` in it at
+all. About a third of the wrong ones were. Do not filter by notation.
+
+**B. It restates a row of the page's own table.** A `# O(log n)` beside
+`heappush`. Covered by the module's complexity test file - which needs to
+exist. Add one if it does not, rather than a test per annotation.
+
+**C. It cannot be settled by running code.** Network round trips, an NSS
+backend, a module removed in a later Python, or a definitional choice such
+as which unit a bound is expressed in. Say so in the test file's docstring,
+next to the ones you did cover, and do not write a test that pretends
+otherwise.
+
+Two things worth knowing before you rely on a test:
+
+- A test pins what it asserts, not what the prose says. One asserting
+  "superlinear" stayed green when the claim above it, "quadratic", became
+  false in Python 3.12. If the prose is more specific than the assertion,
+  the gap is not covered.
+- Measure before you correct. `Decimal.quantize()` cost tracks the digits the
+  result keeps, not the operand's - the opposite of a plausible-sounding
+  review comment that was accepted here without measuring.
+
+Test files: `tests/test_<module>_complexity.py` for a module's table,
+`tests/test_builtin_claims.py` and `tests/test_stdlib_claims.py` for kind A,
+`tests/test_complexity_caveats.py` for claims that were wrong once already.
+
 ### Fixing Issues
 1. Identify the problem
 2. Make minimal changes
@@ -253,6 +302,7 @@ Also note:
 - Write clear commit messages
 - **Add Co-Authored-By trailer for agent identification**
 - Update documentation when changing functionality
+- Test a complexity claim that goes beyond the page's table, before trusting it
 - Test locally before pushing
 - Review your changes before committing
 
@@ -286,6 +336,7 @@ Before every commit, verify:
 - [ ] Commit message is clear
 - [ ] Changes are focused/minimal
 - [ ] Documentation updated if needed
+- [ ] New complexity claims tested, or recorded as untestable (see above)
 - [ ] Translations updated if an English page changed
 - [ ] Accessibility rules honoured if colours/headings/`lang` changed
 - [ ] No test files left uncommitted

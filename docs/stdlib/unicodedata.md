@@ -14,7 +14,7 @@ including character names, categories, normalization, and digit/decimal values.
 | `combining(ch)` | O(1) | O(1) | Canonical combining class |
 | `decimal(ch)` / `digit(ch)` / `numeric(ch)` | O(1) | O(1) | Numeric properties |
 | `normalize(form, s)` | O(n + k²) | O(n) | n = string length; k = longest run of combining marks, which is sorted |
-| `is_normalized(form, s)` | O(n) quick check, O(n + k²) worst | O(1) or O(n) | An inconclusive quick check falls back to `normalize()`, inheriting its bound and its space |
+| `is_normalized(form, s)` | O(1) for ASCII, else O(n) quick check, O(n + k²) worst | O(1) or O(n) | ASCII answers from a flag on the string; an inconclusive quick check falls back to `normalize()`, inheriting its bound and its space |
 
 ## Character Properties
 
@@ -64,10 +64,11 @@ nfd = unicodedata.normalize("NFD", text)
 print(text == nfc)  # False
 print(text == nfd)  # True
 
-# Check normalization - O(n) when the quick check is decisive. When it is
-# not, it falls back to normalize() and inherits that bound, O(n + k²), and
-# its O(n) allocation. Still worth it to skip a normalize() that would be a
-# no-op
+# Check normalization - O(1) for an ASCII string, which is already known to
+# be normalized from a flag, and O(n) for anything else the quick check can
+# settle. When it cannot, it falls back to normalize() and inherits that
+# bound, O(n + k²), and its O(n) allocation. Still worth it to skip a
+# normalize() that would be a no-op
 print(unicodedata.is_normalized("NFC", text))  # False
 print(unicodedata.is_normalized("NFD", text))  # True
 ```
