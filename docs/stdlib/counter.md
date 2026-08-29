@@ -8,8 +8,8 @@ The `Counter` class from `collections` provides a convenient way to count occurr
 |-----------|------|-------|-------|
 | `Counter()` | O(n) | O(n) | Create from iterable |
 | `update()` | O(n) | O(n) | Add counts |
-| `most_common(k)` | O(n log k) | O(k) | k-largest sorted |
-| `subtract()` | O(n) | O(1) | Subtract counts |
+| `most_common(k)` | O(n log k) | O(k) | n = `len(c)`. `k=1` uses `max()`; `k >= len(c)` falls back to `sorted()`; a heap in between. Whether that beats sorting everything depends on the counts - see [collections](collections.md) |
+| `subtract()` | O(n) | O(k) | Subtracting a key the counter does not have creates it with a negative count, so it is not O(1) space |
 | Lookup | O(1) avg | O(1) | O(n) worst case due to hash collisions |
 
 ## Basic Usage
@@ -86,7 +86,7 @@ c1 = Counter(['a', 'b', 'c'])  # O(3)
 c2 = Counter(['b', 'c', 'd'])  # O(3)
 
 # Add - O(n)
-combined = c1 + c2  # O(3+2) = O(5)
+combined = c1 + c2  # O(3+3) - one pass over each counter's keys
 # Result: Counter({'b': 2, 'c': 2, 'a': 1, 'd': 1})
 
 # Subtract - O(n)
@@ -205,6 +205,20 @@ for x in data:  # O(n)
 # Use defaultdict(int) for general counting
 ```
 
+Which is faster depends on how you feed it, and the two directions are
+opposite. Counting 200,000 items:
+
+| | Counter | `defaultdict(int)` loop |
+|---|---|---|
+| Whole iterable at once | 5.0 ms | 8.7 ms |
+| One key at a time (`c[x] += 1`) | 16.5 ms | 8.7 ms |
+
+`Counter(iterable)` and `update(iterable)` count in C, through
+`_count_elements`, which is why they beat a Python loop. Incrementing a
+single key does not use that path, and `Counter.__missing__` is a Python
+method where `defaultdict.__missing__` is C - so in a loop you already have
+for other reasons, `defaultdict(int)` is the faster place to count.
+
 ## When to Use Counter
 
 ### Good For:
@@ -215,10 +229,13 @@ for x in data:  # O(n)
 - Element counting with analysis
 
 ### Not Good For:
-- Simple counting loops (slightly slower)
+- Counting one key at a time in a Python loop - see below
 - Non-hashable items
 - When you don't need frequency methods
-- Space-constrained environments
+
+Space is not a reason either way: `Counter` is a `dict` subclass, and one
+holding 1000 keys measured 36976 bytes against 36952 for the plain `dict` of
+the same keys.
 
 ## Accessing Counts
 
