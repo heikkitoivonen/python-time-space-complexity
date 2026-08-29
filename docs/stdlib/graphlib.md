@@ -8,8 +8,8 @@ The `graphlib` module provides a topological sort implementation for resolving d
 |-----------|------|-------|-------|
 | `TopologicalSorter()` init | O(1) | O(1) | Create sorter |
 | `add(node, *predecessors)` | O(k) | O(k) | Add node with k predecessors |
-| `prepare()` | O(v + e) | O(v) | Prepare sort, v = vertices, e = edges |
-| `get_ready()` | O(1) amortized | O(k) | Get all ready nodes as tuple, k = ready count |
+| `prepare()` | O(v + e) | O(v) | Prepare sort, v = vertices, e = edges. Can be called only once per sorter, and `static_order()` calls it for you |
+| `get_ready()` | O(k) | O(k) | Returns all ready nodes as a tuple, k = ready count. O(1) amortized per node over the whole sort |
 | `done(node)` | O(d) | O(1) | Mark done, d = node degree |
 | `static_order()` | O(v + e) | O(v + e) | Complete topological sort |
 | `CycleError` | O(1) | O(1) | Exception raised on cycles |
@@ -30,10 +30,8 @@ ts.add('lunch', 'cook')    # lunch depends on cook
 ts.add('cook', 'shop')     # cook depends on shop
 ts.add('shop')              # shop has no dependencies
 
-# Prepare for iteration - O(v + e)
-ts.prepare()
-
-# Get nodes in dependency order - O(v)
+# Get nodes in dependency order - O(v + e)
+# static_order() calls prepare() itself; calling it first raises ValueError
 for task in ts.static_order():
     print(task)
 
@@ -66,7 +64,7 @@ ts.prepare()
 # Process nodes dynamically - O(v + e) total
 processed = []
 while ts.is_active():
-    # Get all ready nodes - O(1) amortized
+    # Get all ready nodes - O(k) for the k returned, O(1) amortized each
     ready = ts.get_ready()  # Returns tuple of ready nodes
     
     if not ready:
@@ -101,8 +99,7 @@ ts.add('prog', 'main.o', 'util.o')
 for file in ['main.c', 'util.c', 'util.h', 'defs.h']:
     ts.add(file)
 
-# Get execution order - O(v + e)
-ts.prepare()
+# Get execution order - O(v + e), prepare() is called inside static_order()
 order = list(ts.static_order())
 print(order)
 
@@ -144,7 +141,7 @@ ts.add('test', 'compile')
 
 ts.prepare()
 
-# Process dynamically - O(1) per get_ready
+# Process dynamically - each get_ready() is O(k) in what it returns
 while ts.is_active():
     ready = ts.get_ready()  # Returns tuple of ready nodes
     for node in ready:
@@ -180,52 +177,60 @@ except CycleError as e:
 ### Build System
 
 ```python
-from graphlib import TopologicalSorter
+from graphlib import CycleError, TopologicalSorter
 
 class BuildSystem:
     """Simple build system with dependency resolution"""
     
     def __init__(self):
-        self.sorter = TopologicalSorter()
+        # Keep the graph, not a sorter: a TopologicalSorter can be prepared
+        # only once, so a stored one could serve only a single traversal.
         self.targets = {}
     
     # Add build target with dependencies
     def add_target(self, target, *dependencies):
         """Register build target - O(k)"""
-        self.sorter.add(target, *dependencies)
         self.targets[target] = dependencies
+    
+    def _sorter(self):
+        """Build a fresh sorter from the graph - O(v + e)"""
+        sorter = TopologicalSorter()
+        for target, dependencies in self.targets.items():
+            sorter.add(target, *dependencies)
+        return sorter
     
     # Get build order
     def get_build_order(self):
         """Get topological order - O(v + e)"""
         try:
-            self.sorter.prepare()
-            return list(self.sorter.static_order())
-        except Exception as e:
+            # static_order() prepares internally - do not call prepare() too
+            return list(self._sorter().static_order())
+        except CycleError:
             return None
     
     # Build targets
     def build(self):
         """Build all targets in order - O(v + e)"""
-        self.sorter.prepare()
+        sorter = self._sorter()
+        sorter.prepare()
 
         built = set()
-        while self.sorter.is_active():
+        while sorter.is_active():
             # get_ready() returns a tuple of ready nodes
-            ready = self.sorter.get_ready()
+            ready = sorter.get_ready()
             if not ready:
                 break
 
             for target in ready:
                 # Skip already built
                 if target in built:
-                    self.sorter.done(target)
+                    sorter.done(target)
                     continue
 
                 print(f"Building {target}...")
                 # Simulate build
                 built.add(target)
-                self.sorter.done(target)
+                sorter.done(target)
 
         return built
 
@@ -274,7 +279,7 @@ class TaskScheduler:
         start_time = time.time()
         
         while self.sorter.is_active():
-            # Get all ready tasks - O(1) amortized
+            # Get all ready tasks - O(k) for the k returned
             ready = self.sorter.get_ready()
             if not ready:
                 break
@@ -321,28 +326,32 @@ results = scheduler.execute()
 ### Package Dependency Resolver
 
 ```python
-from graphlib import TopologicalSorter
+from graphlib import CycleError, TopologicalSorter
 
 class DependencyResolver:
     """Resolve package installation order"""
     
     def __init__(self):
-        self.sorter = TopologicalSorter()
+        # The graph, not a sorter - see BuildSystem above for why.
         self.packages = {}
     
     # Add package with dependencies
     def add_package(self, name, version='latest', *dependencies):
         """Add package - O(k)"""
-        self.sorter.add((name, version), *dependencies)
         self.packages[(name, version)] = dependencies
     
     # Get installation order
     def get_install_order(self):
         """Get topological order - O(v + e)"""
+        sorter = TopologicalSorter()
+        for package, dependencies in self.packages.items():
+            sorter.add(package, *dependencies)
         try:
-            self.sorter.prepare()
-            return list(self.sorter.static_order())
-        except Exception as e:
+            # static_order() prepares internally
+            return list(sorter.static_order())
+        except CycleError as e:
+            # Catch CycleError specifically: a bare except here would report
+            # any mistake, including a misuse of the API, as a cycle
             print(f"Circular dependency: {e}")
             return None
 
@@ -391,8 +400,7 @@ def benchmark_sort_size(num_nodes):
     ts.add(0)
     
     start = time.time()
-    ts.prepare()
-    list(ts.static_order())
+    list(ts.static_order())  # prepares internally
     elapsed = time.time() - start
     
     return elapsed
