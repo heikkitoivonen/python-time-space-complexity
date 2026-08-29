@@ -6,11 +6,10 @@ The `compileall` module compiles all Python source files in a directory tree to 
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `compile_dir()` | O(n) | O(n) | n = .py files |
-| Compile file | O(m) | O(m) | m = file size |
-| `compile_file()` | O(m) | O(m) | Compile one file |
-| `compile_path()` | O(n) | O(n) | n = files on sys.path |
-| `main()` | O(n) | O(n) | CLI entrypoint |
+| `compile_dir()` | O(n + total bytes) | O(n) | n = .py files. Per-file overhead dominates for small files: 200 ten-line files cost about nine times what 10 two-hundred-line files do, for the same total source |
+| `compile_file()` | O(m) | O(m) | m = file size; one file |
+| `compile_path()` | O(n + total bytes) | O(n) | n = .py files directly on `sys.path` entries |
+| `main()` | O(n + total bytes) | O(n) | CLI entrypoint |
 
 ## Batch Compiling Python Files
 
@@ -18,28 +17,76 @@ The `compileall` module compiles all Python source files in a directory tree to 
 
 ```python
 import compileall
+import tempfile
+from pathlib import Path
 
-# Compile directory tree - O(n)
-compileall.compile_dir('/path/to/code')
+tree = Path(tempfile.mkdtemp())
+(tree / 'example.py').write_text('value = 1\n')
+
+# Compile directory tree - O(n + total bytes)
+compileall.compile_dir(tree)
 
 # With options
 compileall.compile_dir(
-    '/path/to/code',
+    tree,
     force=True,        # Recompile all
     quiet=0            # Show progress
 )
 
+# workers=N compiles files in parallel (workers=0 uses one per CPU)
+compileall.compile_dir(tree, workers=4, quiet=1)
+
 # Or from command line:
 # python -m compileall /path/to/code
+```
+
+!!! warning "The return value only reports compilation failures"
+
+    `compile_dir()` returns `False` when a file fails to compile, and `True`
+    otherwise - including when it could not read the directory at all. A path
+    that does not exist, or that is a file rather than a directory, is
+    reported as success.
+
+```python
+import compileall
+import tempfile
+from pathlib import Path
+
+tree = Path(tempfile.mkdtemp())
+(tree / 'broken.py').write_text('def (\n')
+
+compileall.compile_dir(tree, quiet=2)               # False - a real failure
+compileall.compile_dir(tree / 'nowhere', quiet=2)   # True, despite listing nothing
+compileall.compile_dir(tree / 'broken.py', quiet=2)  # True, and it is not a directory
+
+# So check the path yourself before trusting the result
+def compile_tree(path):
+    if not path.is_dir():
+        raise NotADirectoryError(path)
+    return compileall.compile_dir(path, quiet=2)
+
+print(compile_tree(tree))  # False - broken.py is still in there
 ```
 
 ### Compile Single File
 
 ```python
 import py_compile
+import tempfile
+from pathlib import Path
 
-# Compile one file - O(m)
-py_compile.compile('myfile.py')
+source = Path(tempfile.mkdtemp()) / 'myfile.py'
+source.write_text('value = 1\n')
+
+# Compile one file - O(m) in the file's size
+py_compile.compile(source)
+
+# A missing file raises rather than returning None - doraise only controls
+# what happens to compilation errors, not to reading the source
+try:
+    py_compile.compile(source.with_name('absent.py'))
+except FileNotFoundError as error:
+    print(f'no such source: {error.filename}')
 ```
 
 ## Related Documentation
