@@ -218,11 +218,6 @@ Every page here is a complexity claim, so a wrong one is the worst defect
 this repo can ship - and `make check` cannot see it. A page can be green,
 lint-clean and confidently wrong.
 
-Two review passes over one batch of edits found 29 wrong or imprecise
-claims. Writing tests for the rest then found five more, including two the
-reviewers had missed and one where a review's suggested correction was
-itself wrong. So: **both**, and in this order.
-
 Before writing a claim, decide which of three kinds it is.
 
 **A. It says something the page's complexity table does not.** These are the
@@ -249,10 +244,7 @@ otherwise.
 
 Two things worth knowing before you rely on a test:
 
-- A test pins what it asserts, not what the prose says. One asserting
-  "superlinear" stayed green when the claim above it, "quadratic", became
-  false in Python 3.12. If the prose is more specific than the assertion,
-  the gap is not covered.
+- A test pins what it asserts, not what the prose says.
 - Measure before you correct. `Decimal.quantize()` cost tracks the digits the
   result keeps, not the operand's - the opposite of a plausible-sounding
   review comment that was accepted here without measuring.
