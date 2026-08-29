@@ -7,8 +7,8 @@ The `struct` module handles binary data conversions, packing Python values into 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `Struct()` compilation | O(m) | O(m) | m = format string length; compile once |
-| `pack()` | O(k) | O(k) | k = number of fields; add O(m) parsing if not pre-compiled |
-| `unpack()` | O(k) | O(k) | k = number of fields |
+| `pack()` | O(k) | O(k) | k = number of fields, plus a much cheaper term in bytes copied. The module caches compiled formats, so a repeated format is not re-parsed |
+| `unpack()` | O(k) | O(k) | k = number of fields; same format cache as `pack()` |
 | `pack_into()` | O(k) | O(1) | k = number of fields |
 | `unpack_from()` | O(k) | O(k) | k = number of fields |
 | `calcsize()` | O(m) | O(1) | m = format string length |
@@ -350,10 +350,12 @@ result2 = CResult.unpack(data)
 ## Performance Considerations
 
 ### Time Complexity
-- **pack()**: O(n) for n fields (linear in data size)
-- **unpack()**: O(n) for n fields
+- **pack()**: O(k) for k fields, plus a cheaper linear term in bytes. Field
+  count dominates: `'100i'` and `'400s'` both produce 400 bytes, and the
+  hundred-field version measured 5.2x the single-field one
+- **unpack()**: O(k) for k fields
 - **Struct creation**: O(m) one-time cost (m = format length)
-- **pack_into()**: O(n) for n fields
+- **pack_into()**: O(k) for k fields
 
 ### Space Complexity
 - **Output**: O(n) for packed data (n = total bytes)
@@ -361,20 +363,27 @@ result2 = CResult.unpack(data)
 
 ### Optimization Tips
 
+The module-level functions keep a cache of compiled formats, so a format you
+use repeatedly is parsed once whether or not you pre-compile it. Pre-compiling
+saves the cache lookup, which is worth about 15%.
+
 ```python
 import struct
 
-# Bad: Compiling format every time - O(n) per operation
+# Fine: the format is parsed once and then found in the cache
 for i in range(1000):
-    data = struct.pack('i', i)  # Recompile each time
+    data = struct.pack('i', i)  # 67 ns per call
 
-# Good: Compile once, reuse - O(n) compile + O(1000) use
+# Slightly better: no cache lookup either
 int_struct = struct.Struct('i')
 for i in range(1000):
-    data = int_struct.pack(i)  # O(1) per use
-
-# Benchmark difference is significant for repeated operations
+    data = int_struct.pack(i)  # 58 ns per call
 ```
+
+The saving is larger when formats churn past the cache. Sweeping 58 distinct
+formats with the cache cleared each time cost 53.9 µs against 14.7 µs for
+pre-built `Struct` objects - so pre-compile when you have many formats, or
+build them where you build the rest of your constants.
 
 ## Format Modifiers
 

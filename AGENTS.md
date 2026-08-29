@@ -261,6 +261,14 @@ Things worth knowing before you rely on a test:
 - Run it on every version the project supports, not just the pinned one.
   Tests asserting that `prepare()` may be called once passed on 3.11 and
   failed on 3.14, which relaxed it.
+- Pick the framing with the widest gap, not the one that mirrors the sentence
+  most directly. Four timing tests here had to be widened after the fact,
+  each because it compared the smallest pair that demonstrated the claim -
+  two 70ns operations, a 2x size step, a 2us baseline. The same fact usually
+  has a framing that produces a far bigger ratio.
+- A mutation check that does not apply proves nothing. Assert the
+  substitution changed the file: one here silently matched nothing after
+  `ruff format` rewrapped the assertion, and "passed" as the original test.
 
 Test files: `tests/test_<module>_complexity.py` for a module's table,
 `tests/test_builtin_claims.py` and `tests/test_stdlib_claims.py` for kind A,
