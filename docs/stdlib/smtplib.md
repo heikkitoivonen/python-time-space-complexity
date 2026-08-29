@@ -36,10 +36,12 @@ message['From'] = 'your_email@gmail.com'
 message['To'] = 'recipient@example.com'
 message.set_content('Email body')
 
-server.send_message(message)
+server.send_message(message)  # O(n) in message size, plus network time
 
 # Close connection (network-bound)
 server.quit()
+# Round trips dominate: connecting, TLS and login each cost a round trip
+# regardless of message size, so reuse one connection for many messages
 ```
 
 ### Sending with Authentication

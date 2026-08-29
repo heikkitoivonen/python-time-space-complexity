@@ -205,10 +205,10 @@ total_float = sum(prices)
 print(total_float)    # 0.6000000000000001 (wrong!)
 
 # Solution: use Fractions for exact arithmetic
-prices_frac = [Fraction(1, 10), Fraction(2, 10), Fraction(3, 10)]
-total_frac = sum(prices_frac)
+prices_frac = [Fraction(1, 10), Fraction(2, 10), Fraction(3, 10)]  # O(log n) each
+total_frac = sum(prices_frac)  # O(n log m) - a GCD reduction per addition
 print(total_frac)     # 3/5 (exact)
-print(float(total_frac))  # 0.6
+print(float(total_frac))  # O(log m) - 0.6
 ```
 
 ### Continuous Fractions
@@ -222,15 +222,17 @@ def continued_fraction(value, depth=10):
     coefficients = []
     x = Fraction(value)
     
+    # O(depth * log m) - each step is one Fraction subtraction and one
+    # reciprocal, and every operation re-reduces via GCD
     for _ in range(depth):
         a = int(x)
         coefficients.append(a)
         
-        x = x - a
+        x = x - a       # O(log m)
         if x == 0:
             break
         
-        x = 1 / x
+        x = 1 / x       # O(log m) - reciprocal is a swap plus reduction
     
     return coefficients
 
@@ -369,9 +371,9 @@ print(f_limited)      # Simplified approximation
 from fractions import Fraction
 
 # Financial: exact currency operations
-price1 = Fraction(10, 3)    # $3.33...
-price2 = Fraction(20, 3)    # $6.66...
-total = price1 + price2     # Exact $10
+price1 = Fraction(10, 3)    # O(log n) - $3.33...
+price2 = Fraction(20, 3)    # O(log n) - $6.66...
+total = price1 + price2     # O(log n) - exact $10, reduced on construction
 ```
 
 ### Avoid When

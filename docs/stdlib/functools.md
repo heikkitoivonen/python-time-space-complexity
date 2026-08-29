@@ -277,8 +277,10 @@ from functools import cmp_to_key
 def compare(a, b):
     return (a > b) - (a < b)
 
-# Convert to key function for sorted()
+# Convert to key function for sorted() - cmp_to_key() itself is O(1)
 sorted_data = sorted([3, 1, 4, 1, 5], key=cmp_to_key(compare))
+# Still O(n log n), but the wrapper calls compare() on every comparison
+# rather than computing a key once per element - a real constant-factor cost
 ```
 
 ### total_ordering

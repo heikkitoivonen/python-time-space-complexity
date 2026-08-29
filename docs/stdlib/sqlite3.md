@@ -134,8 +134,9 @@ import sqlite3
 # Automatic commit/rollback
 with sqlite3.connect('db.db') as conn:
     cursor = conn.cursor()
-    cursor.execute('INSERT INTO users VALUES (?, ?)', (1, 'Alice'))
-# Automatically commits when exiting
+    cursor.execute('INSERT INTO users VALUES (?, ?)', (1, 'Alice'))  # O(log n)
+# Automatically commits when exiting - the commit is the expensive part,
+# because it has to reach the disk
 ```
 
 ## Transactions
@@ -148,10 +149,12 @@ cursor = conn.cursor()
 
 try:
     # Multiple operations - varies by query plan
-    cursor.execute('INSERT INTO users VALUES (?, ?)', (1, 'Alice'))
-    cursor.execute('INSERT INTO orders VALUES (?, ?)', (1, 1))
+    cursor.execute('INSERT INTO users VALUES (?, ?)', (1, 'Alice'))  # O(log n)
+    cursor.execute('INSERT INTO orders VALUES (?, ?)', (1, 1))       # O(log n)
     
-    conn.commit()  # Both or nothing
+    conn.commit()  # Both or nothing - one disk sync for the whole
+                   # transaction, which is why batching inserts beats
+                   # committing each one
 except Exception as e:
     conn.rollback()  # Undo on error
 finally:

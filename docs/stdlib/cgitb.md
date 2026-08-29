@@ -56,7 +56,7 @@ import sys
 from io import StringIO
 
 def run_cgi_script():
-    cgitb.enable()
+    cgitb.enable()  # O(1) - installs the handler, costs nothing until a raise
     
     print("Content-Type: text/html\n")
     print("<h1>Processing</h1>")
@@ -233,7 +233,8 @@ cgitb.enable()
 ```python
 # ✅ Legacy only (Python <= 3.12): use cgitb in development
 import cgitb
-cgitb.enable()  # Use only in development
+cgitb.enable()  # O(1) to install; O(n) in stack depth when it formats a
+                # traceback. Use only in development
 
 # ✅ DO: Log errors in production
 import logging

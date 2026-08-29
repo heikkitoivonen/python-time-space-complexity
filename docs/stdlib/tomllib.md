@@ -81,8 +81,10 @@ name = "Bob"
 age = 30
 """
 
-config = tomllib.loads(toml_data)
-# config is a dict with nested structures
+config = tomllib.loads(toml_data)  # O(n) in the text length
+# config is a dict with nested structures. Every type above parses in one
+# pass - nesting and arrays of tables cost no more per character than a
+# flat key does
 ```
 
 ## Working with Configuration Files

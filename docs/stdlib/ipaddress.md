@@ -190,8 +190,10 @@ from ipaddress import IPv4Network
 
 def find_common_supernet(networks):
     """Find a supernet containing all networks (naive)."""
-    nets = [IPv4Network(n) for n in networks]
+    nets = [IPv4Network(n) for n in networks]  # O(k) networks, O(n) each
     candidate = nets[0]
+    # Each widening step drops one prefix bit, so at most 32 iterations for
+    # IPv4 (128 for IPv6), each rechecking every network: O(k) per step
     while not all(candidate.supernet_of(n) or candidate == n for n in nets):
         candidate = candidate.supernet()
     return candidate

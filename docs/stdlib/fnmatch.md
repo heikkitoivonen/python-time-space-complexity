@@ -42,6 +42,8 @@ print(fnmatch.fnmatch('testa.txt', 'test[!abc].txt')) # False
 ```python
 import fnmatch
 
+# Every match below is O(n) in the name length - the pattern is compiled to
+# a regex and cached, so the wildcard used does not change the cost
 # * - matches zero or more characters
 print(fnmatch.fnmatch('file.txt', 'f*le.txt'))      # True
 
@@ -290,11 +292,12 @@ print(f"List comprehension: {comp_time:.4f}s")
 ```python
 # For more complex patterns, use regex
 import re
-result = re.match(r'test[0-9]{3}\.txt', filename)
+result = re.match(r'test[0-9]{3}\.txt', filename)  # O(n), same as fnmatch
 
 # For filesystem globbing, use glob
 import glob
-files = glob.glob('*.txt')
+files = glob.glob('*.txt')  # O(n) in directory entries - it also does I/O,
+                            # which fnmatch does not
 
 # For case-insensitive matching on Windows
 # Use glob with pathlib
@@ -349,10 +352,11 @@ result = re.match(r'test_.*\.txt', filename)
 ```python
 import fnmatch
 
+# Each filter() is O(k*n) - k names, n = name length
 # Text files
 text_files = fnmatch.filter(files, '*.txt')
 
-# Python or JavaScript
+# Python or JavaScript - two passes over the list, so 2 * O(k*n)
 code_files = fnmatch.filter(files, '*.py') + fnmatch.filter(files, '*.js')
 
 # Test files
@@ -363,6 +367,7 @@ backups = fnmatch.filter(files, '*.bak') + fnmatch.filter(files, '*~')
 
 # Configuration files
 configs = fnmatch.filter(files, '*.conf') + fnmatch.filter(files, '*.ini')
+# For many patterns, one pass with a compiled alternation beats k passes
 ```
 
 ## Related Documentation

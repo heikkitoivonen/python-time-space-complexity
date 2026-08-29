@@ -47,11 +47,11 @@ import glob
 # ? - matches single character
 # ** - matches zero or more directories (recursive)
 
-# Examples
+# Examples - each scans a directory: O(n) in its entries, O(n) for the result
 print(glob.glob('test*.py'))      # test_*.py files
 print(glob.glob('file?.txt'))     # file1.txt, fileA.txt, etc.
 print(glob.glob('[a-c]*.txt'))    # a*, b*, or c* txt files
-print(glob.glob('**/*.py'))       # All .py files recursively
+print(glob.glob('**/*.py'))       # O(d) directories walked - all .py files
 ```
 
 ## Iterator vs List
@@ -230,12 +230,12 @@ import glob
 # File: test[1].txt
 
 # Escape with [brackets]
-pattern = glob.escape('test[1].txt')  # Returns 'test[[]1].txt'
-result = glob.glob(pattern)
+pattern = glob.escape('test[1].txt')  # O(n) in the name - 'test[[]1].txt'
+result = glob.glob(pattern)           # O(n) in directory entries
 
 # Escape before using in patterns
 filename = "data[backup].csv"
-pattern = glob.escape(filename)
+pattern = glob.escape(filename)  # O(n) - cheap next to the directory scan
 result = glob.glob(pattern)
 ```
 
@@ -411,7 +411,7 @@ print(f"Iterator: {time3:.4f}s")
 # For more control, use pathlib
 from pathlib import Path
 
-# glob with pathlib
+# glob with pathlib - O(d) over the tree, same work as glob.glob()
 path = Path('.')
 py_files = list(path.glob('**/*.py'))
 

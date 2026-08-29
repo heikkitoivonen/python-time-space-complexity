@@ -324,13 +324,13 @@ std = stdev(huge_dataset)  # O(1) memory
 ```python
 from statistics import mode, median, StatisticsError
 
-# mode() with no mode
+# mode() with no mode - O(n): the whole input is counted before it raises
 try:
     m = mode([1, 2, 3])  # All equally common
 except StatisticsError:
     print("No unique mode")
 
-# Empty data
+# Empty data - O(1), there is nothing to scan
 try:
     avg = statistics.mean([])
 except StatisticsError:

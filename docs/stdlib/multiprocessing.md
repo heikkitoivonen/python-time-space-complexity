@@ -289,7 +289,7 @@ def compute(data_chunk):
 
 def parallel_compute(data, num_processes=4):
     """Compute across processes."""
-    # Chunk data
+    # Chunk data - O(n), and it copies: chunks hold a second copy of data
     chunk_size = len(data) // num_processes
     chunks = [
         data[i:i+chunk_size]
@@ -297,10 +297,12 @@ def parallel_compute(data, num_processes=4):
     ]
     
     # Process chunks: includes scheduling and IPC
+    # The work is O(n/p) per process, but every chunk is pickled, sent, and
+    # unpickled - O(n) of serialization that a threaded version would not pay
     with Pool(processes=num_processes) as pool:
         results = pool.map(compute, chunks)
     
-    return sum(results)  # Aggregate
+    return sum(results)  # O(p) - aggregate
 ```
 
 ### Pipe Communication
@@ -310,6 +312,8 @@ from multiprocessing import Pipe, Process
 
 def worker(conn, task_id):
     """Worker receives and sends."""
+    # recv() and send() are O(n) in the pickled size of the message, plus a
+    # blocking wait; a Pipe carries one message at a time
     msg = conn.recv()
     result = process_message(msg)
     conn.send(result)

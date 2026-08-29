@@ -75,6 +75,8 @@ if None:             # False - always
 ## Comparison Operations
 
 ```python
+# All O(1) - True and False are cached singletons, so every comparison
+# below is a pointer or small-int check, never a scan
 # Bool values are integers: True == 1, False == 0
 print(True == 1)     # True
 print(False == 0)    # True

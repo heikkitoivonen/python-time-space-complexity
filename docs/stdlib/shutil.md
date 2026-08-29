@@ -272,7 +272,7 @@ def copy_with_progress(src, dst):
 ```python
 import shutil
 
-# Ignore patterns (glob-style)
+# Ignore patterns (glob-style) - O(1) to build the callable
 ignore = shutil.ignore_patterns(
     '*.pyc',           # All .pyc files
     '__pycache__',     # Cache directories
@@ -281,6 +281,8 @@ ignore = shutil.ignore_patterns(
     '*.egg-info',      # Package info
 )
 
+# O(n) in bytes copied; matching costs O(entries * patterns) on top, which
+# is cheap next to the copying it avoids
 shutil.copytree('src', 'dst', ignore=ignore)
 ```
 
@@ -292,6 +294,8 @@ from pathlib import Path
 
 def ignore_function(directory, contents):
     """Return list of items to ignore."""
+    # Called once per directory, O(entries) per call - but note the stat()
+    # below adds a syscall per entry, unlike a pure name match
     ignored = []
     for item in contents:
         path = Path(directory) / item
@@ -355,7 +359,7 @@ from pathlib import Path
 
 # Handle errors during tree operations
 try:
-    shutil.copytree('src', 'dst')
+    shutil.copytree('src', 'dst')  # O(n) in bytes copied
 except shutil.Error as e:
     # Multiple errors may occur
     for src, dst, err in e.args[0]:
@@ -367,7 +371,7 @@ if not Path('src').exists():
 
 # Safe move with error handling
 try:
-    shutil.move('src', 'dst')
+    shutil.move('src', 'dst')  # O(1) within a filesystem, O(n) across one
 except (OSError, shutil.Error):
     # Handle cross-filesystem move failure
     pass

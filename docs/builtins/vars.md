@@ -38,7 +38,8 @@ attrs = vars(obj)  # {'z': 3}
 # vars() with no argument is equivalent to locals()
 def f():
     x = 1
-    return vars()  # Scope-dependent: behaves like locals()
+    return vars()  # O(n) in the number of locals - builds a snapshot dict,
+                   # unlike vars(obj), which hands back __dict__ in O(1)
 ```
 
 ### Inspect Object State

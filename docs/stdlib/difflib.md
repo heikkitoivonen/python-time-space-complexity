@@ -368,12 +368,14 @@ text1 = "hello  world"
 text2 = "hello world"
 
 # Without filtering - shows difference
-matcher1 = SequenceMatcher(None, text1, text2)
-print(f"With spaces: {matcher1.ratio():.2%}")
+matcher1 = SequenceMatcher(None, text1, text2)  # O(1) to construct
+print(f"With spaces: {matcher1.ratio():.2%}")   # O(n*m) worst case
 
 # With filtering - ignores spaces
 matcher2 = SequenceMatcher(is_whitespace, text1, text2)
-print(f"Without spaces: {matcher2.ratio():.2%}")
+print(f"Without spaces: {matcher2.ratio():.2%}")  # O(n*m) worst case
+# The junk filter runs once per element, O(n); it changes the result, not
+# the worst-case complexity
 ```
 
 ## Best Practices

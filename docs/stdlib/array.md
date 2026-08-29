@@ -110,6 +110,8 @@ print(f"Array size: {arr_size}")
 ```python
 import array
 
+# Every constructor below is O(n) in the number of items; the type code
+# fixes the bytes per item, which is what array buys over list
 # Available type codes
 # 'b' = signed byte (1 byte)
 arr_b = array.array('b', [-128, 0, 127])

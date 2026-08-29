@@ -16,12 +16,14 @@ It is only available on Unix-like platforms.
 ```python
 import pwd
 
-entry = pwd.getpwnam("root")
+entry = pwd.getpwnam("root")  # One NSS lookup - O(1) in Python terms
 print(entry.pw_uid)
 print(entry.pw_dir)
 
-entry = pwd.getpwuid(0)
+entry = pwd.getpwuid(0)  # Also one lookup
 print(entry.pw_name)
+# The syscall dominates: a networked NSS backend (LDAP) can make either
+# call arbitrarily slow, so cache results rather than looking up in a loop
 ```
 
 ## Listing All Users

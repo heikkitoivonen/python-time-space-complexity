@@ -26,9 +26,11 @@ The `mmap` module provides memory-mapped file support for efficient random acces
 import mmap
 
 with open('data.bin', 'rb') as f:
+    # Mapping does not read the file: pages are faulted in on access, so
+    # this is cheap even for a file larger than memory
     mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
-    print(mm.size())  # total size
-    mm.close()
+    print(mm.size())  # O(1) - total size
+    mm.close()        # O(1)
 ```
 
 ### Reading and Writing

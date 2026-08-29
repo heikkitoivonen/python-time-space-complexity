@@ -197,11 +197,11 @@ import posixpath
 import ntpath
 
 # Use posixpath on Windows for Unix paths
-unix_path = posixpath.join('path', 'to', 'file')
+unix_path = posixpath.join('path', 'to', 'file')  # O(n) in total path length
 
 # Convert to native
 import os
-native_path = os.path.normpath(unix_path)
+native_path = os.path.normpath(unix_path)  # O(n) - string work only, no I/O
 ```
 
 ## Performance Characteristics

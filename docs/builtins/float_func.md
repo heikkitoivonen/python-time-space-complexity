@@ -219,14 +219,16 @@ near_zero = float("1e-324")  # Becomes 0.0
 
 ```python
 # int() - truncates, requires valid integer format
-int("42")       # OK
+int("42")       # O(n) in the string length - OK
 int("3.14")     # ValueError!
-int(3.14)       # 3 (truncate)
+int(3.14)       # O(1) - 3 (truncate)
 
 # float() - handles decimals, more flexible
-float("42")     # 42.0
-float("3.14")   # 3.14
-float(42)       # 42.0 (convert from int)
+float("42")     # O(n) - 42.0
+float("3.14")   # O(n) - 3.14
+float(42)       # O(1) for a small int - 42.0
+# Parsing a string costs O(n) either way; converting between the numeric
+# types is O(1) unless the int is arbitrary precision
 ```
 
 ## Mathematical Properties

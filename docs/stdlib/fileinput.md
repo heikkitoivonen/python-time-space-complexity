@@ -162,7 +162,9 @@ with fileinput.input(['file.txt']) as f:
 ```python
 import fileinput
 
-# Process lines from multiple files
+# Process lines from multiple files - O(n) in total lines, O(1) space
+# Files are opened one at a time and lines yielded on demand, so memory
+# does not grow with the input
 for line in fileinput.input(['input1.txt', 'input2.txt']):
     # Line already has newline
     if line.startswith('#'):
@@ -210,11 +212,11 @@ for line in fileinput.input(['file1.txt', 'file2.txt']):
 ```python
 import fileinput
 
-# Extract specific lines
+# Extract specific lines - O(n) over all lines, O(1) space
 for line in fileinput.input(['file1.txt', 'file2.txt']):
     if 'ERROR' in line:
-        filename = fileinput.filename()
-        lineno = fileinput.lineno()
+        filename = fileinput.filename()  # O(1)
+        lineno = fileinput.lineno()      # O(1) - a running counter
         print(f'{filename}:{lineno}: {line.rstrip()}')
 ```
 
@@ -223,8 +225,9 @@ for line in fileinput.input(['file1.txt', 'file2.txt']):
 ```python
 import fileinput
 
+# O(n) in total lines; in-place editing rewrites each file once
 for line in fileinput.input(inplace=True):
-    lineno = fileinput.lineno()
+    lineno = fileinput.lineno()  # O(1)
     print(f'{lineno:5d}: {line.rstrip()}')
 
 # Reads from stdin, writes to stdout with line numbers
@@ -238,7 +241,8 @@ for line in fileinput.input(inplace=True):
 ```python
 import fileinput
 
-# Read as text (default)
+# Read as text (default) - O(n) in total lines, O(1) space
+# Decoding is part of the per-line cost; it does not change the complexity
 for line in fileinput.input(['file.txt']):
     print(type(line))  # str
     print(line.rstrip())
@@ -262,9 +266,10 @@ with open('file.bin', 'rb') as f:
 import fileinput
 
 # Specify encoding (Python 3.10+)
+# hook_encoded() is O(1) - it builds the opener, called once per file
 for line in fileinput.input(['utf8_file.txt'], 
                            openhook=fileinput.hook_encoded("utf-8")):
-    print(line.rstrip())
+    print(line.rstrip())  # Still O(n) in total lines, O(1) space
 ```
 
 ## Performance Characteristics
@@ -313,12 +318,13 @@ import sys
 
 def process_files_safely(files):
     try:
+        # O(n) in total lines; the try/except costs nothing until it raises
         for line in fileinput.input(files):
             try:
                 process(line)
             except ValueError as e:
-                filename = fileinput.filename()
-                lineno = fileinput.lineno()
+                filename = fileinput.filename()  # O(1)
+                lineno = fileinput.lineno()      # O(1)
                 print(f'Error {filename}:{lineno}: {e}', 
                       file=sys.stderr)
     finally:
@@ -361,6 +367,7 @@ import fileinput
 import sys
 
 # Automatically use command-line files or stdin
+# O(n) in total lines, O(1) space - stdin streams the same way a file does
 for line in fileinput.input():
     # Reads from files in sys.argv[1:] or stdin
     print(line.rstrip())

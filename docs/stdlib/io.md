@@ -280,12 +280,14 @@ from io import StringIO
 
 def format_table(rows):
     """Format table without disk I/O"""
-    output = StringIO()
+    output = StringIO()  # O(1)
     
     for row in rows:
-        output.write(f"{row[0]:10} {row[1]:10} {row[2]:10}\n")
+        output.write(f"{row[0]:10} {row[1]:10} {row[2]:10}\n")  # O(k) amortized
     
-    return output.getvalue()
+    return output.getvalue()  # O(n) - one copy of the whole buffer
+    # O(n) overall. Repeated `text += row` would be O(n²), because each +=
+    # copies the string built so far
 
 data = [
     ('Name', 'Age', 'Score'),

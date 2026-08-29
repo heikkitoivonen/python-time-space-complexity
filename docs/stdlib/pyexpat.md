@@ -21,12 +21,13 @@ def start(name, attrs):
 def end(name):
     print("end", name)
 
-parser = pyexpat.ParserCreate()
+parser = pyexpat.ParserCreate()  # O(1)
 parser.StartElementHandler = start
 parser.EndElementHandler = end
 
 xml = "<root><item id='1'/></root>"
-parser.Parse(xml, True)
+parser.Parse(xml, True)  # O(n) in input size, O(d) space in nesting depth
+# Streaming: handlers fire as elements close, so no document tree is built
 ```
 
 ## Notes

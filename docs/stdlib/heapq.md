@@ -84,10 +84,10 @@ import heapq
 
 # Simple priority queue
 tasks = [(3, 'low'), (1, 'high'), (2, 'medium')]
-heapq.heapify(tasks)
+heapq.heapify(tasks)  # O(n)
 
 while tasks:
-    priority, task = heapq.heappop(tasks)
+    priority, task = heapq.heappop(tasks)  # O(log n) each, O(n log n) to drain
     print(f"Execute {task}")  # Executes high, medium, low
 
 # Output:
@@ -131,13 +131,14 @@ import heapq
 
 # Priority queue with custom objects
 heap = []
-heapq.heappush(heap, (3, 'low-priority-task'))
-heapq.heappush(heap, (1, 'high-priority-task'))
-heapq.heappush(heap, (2, 'medium-priority-task'))
+heapq.heappush(heap, (3, 'low-priority-task'))    # O(log n)
+heapq.heappush(heap, (1, 'high-priority-task'))   # O(log n)
+heapq.heappush(heap, (2, 'medium-priority-task'))  # O(log n)
 
 # Tasks ordered by priority (first element of tuple)
+# Tuples compare element by element, so ordering costs no more than an int key
 while heap:
-    priority, task = heapq.heappop(heap)
+    priority, task = heapq.heappop(heap)  # O(log n)
     print(task)
 ```
 
@@ -162,10 +163,10 @@ heap = [
     Task(1, 'high'),
     Task(2, 'medium')
 ]
-heapq.heapify(heap)
+heapq.heapify(heap)  # O(n), but each comparison is a Python __lt__ call
 
 while heap:
-    task = heapq.heappop(heap)
+    task = heapq.heappop(heap)  # O(log n)
     print(f"{task.priority}: {task.name}")
 ```
 
@@ -242,10 +243,10 @@ import heapq
 
 # Priority queue returning highest priority first
 tasks = [(1, "low"), (5, "urgent"), (3, "medium")]
-heapq.heapify_max(tasks)
+heapq.heapify_max(tasks)  # O(n)
 
 while tasks:
-    priority, task = heapq.heappop_max(tasks)
+    priority, task = heapq.heappop_max(tasks)  # O(log n) each, O(n log n) to drain
     print(f"{priority}: {task}")
 # Output: 5: urgent, 3: medium, 1: low
 ```

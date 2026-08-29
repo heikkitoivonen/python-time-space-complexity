@@ -162,10 +162,10 @@ d = {'a': 1}
 
 # defaultdict - returns default
 dd = defaultdict(int)
-dd['missing']  # Returns 0
+dd['missing']  # O(1) avg - returns 0 and inserts the key
 
 # Or handle in regular dict
-value = d.get('missing', 0)  # Same result, more verbose
+value = d.get('missing', 0)  # O(1) avg - same cost, more verbose, no insert
 ```
 
 ## Counter vs defaultdict(int)

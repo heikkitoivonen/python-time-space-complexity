@@ -26,10 +26,10 @@ The `frozenset` type is an immutable set that can be hashed and used as a dictio
 
 ```python
 # Frozenset is hashable - can be used as dict key
-fs1 = frozenset([1, 2, 3])
-fs2 = frozenset([4, 5, 6])
+fs1 = frozenset([1, 2, 3])  # O(n) to build
+fs2 = frozenset([4, 5, 6])  # O(n) to build
 
-d = {fs1: 'first', fs2: 'second'}  # Works!
+d = {fs1: 'first', fs2: 'second'}  # Works! O(n) first hash, then O(1) avg
 s = {fs1, fs2}                      # Works!
 
 # Set is not hashable
@@ -50,10 +50,12 @@ cache = {fs: 'result'}
 nested = {fs, frozenset([4, 5])}
 
 # Hash is stable (doesn't change)
-h1 = hash(fs)
+h1 = hash(fs)    # O(n) - computed once, then cached on the object
 # ... time passes ...
-h2 = hash(fs)
+h2 = hash(fs)    # O(1) - reads the cached value
 assert h1 == h2  # Always true
+# The cached hash is why a frozenset key costs no more than a str key
+# after the first lookup
 ```
 
 ## Performance Considerations
@@ -98,11 +100,11 @@ from collections import Counter
 
 # Count coordinate pairs - frozenset as key
 moves = [(0, 1), (1, 0), (0, 1), (1, 0), (0, 1)]
-move_counts = Counter(tuple(m) for m in moves)
+move_counts = Counter(tuple(m) for m in moves)  # O(n)
 
 # Or with frozenset for unordered pairs
-edges = frozenset([(0, 1), (2, 3), (0, 1)])
-print(len(edges))  # 2 - duplicate removed
+edges = frozenset([(0, 1), (2, 3), (0, 1)])  # O(n) - deduplicates while building
+print(len(edges))  # O(1) - 2, duplicate removed
 ```
 
 ### In Graph Algorithms

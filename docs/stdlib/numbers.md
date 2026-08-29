@@ -17,6 +17,9 @@ The `numbers` module provides abstract base classes for numeric types, allowing 
 ```python
 import numbers
 
+# Every isinstance() below walks the ABC registry, then caches the answer
+# per (class, ABC) pair - so the first check on a type costs more than the
+# rest, and none of them scale with the value
 # Check if number (any numeric type)
 value = 42
 is_number = isinstance(value, numbers.Number)  # True
@@ -40,14 +43,15 @@ import numbers
 from fractions import Fraction
 from decimal import Decimal
 
-# Check class hierarchy
+# Check class hierarchy - O(1) once the ABC cache is warm
 print(issubclass(int, numbers.Integral))       # True
 print(issubclass(float, numbers.Real))         # True
 print(issubclass(complex, numbers.Complex))    # True
 print(issubclass(Fraction, numbers.Rational))  # True
 print(issubclass(Decimal, numbers.Real))       # False - not by default
 
-# Type checking cascade
+# Type checking cascade - each branch is another cached ABC check, so
+# ordering the common case first is what saves time here, not the ABCs
 def process_number(value):
     if isinstance(value, numbers.Integral):
         return "Integer operation"

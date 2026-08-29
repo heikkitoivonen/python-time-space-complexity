@@ -190,6 +190,8 @@ import tempfile
 from pathlib import Path
 
 # Read, process, replace original
+# Creating the file is O(r) in name attempts; the replace() below is O(1),
+# which is what makes this pattern atomic rather than a copy
 with tempfile.NamedTemporaryFile(mode='w', dir='.', delete=False) as tmp:
     tmp_path = tmp.name
     try:
@@ -210,6 +212,7 @@ import tempfile
 from pathlib import Path
 
 # Work with multiple temporary files
+# O(r) to create the directory, then O(k) files to clean up on exit
 with tempfile.TemporaryDirectory() as tmpdir:
     tmpdir = Path(tmpdir)
     
@@ -230,9 +233,9 @@ import tempfile
 from pathlib import Path
 
 # Create file that persists until deleted
-tmp = tempfile.NamedTemporaryFile(delete=False)
+tmp = tempfile.NamedTemporaryFile(delete=False)  # O(r) name attempts
 path = tmp.name
-tmp.close()
+tmp.close()  # O(1) - delete=False means cleanup is now your job
 
 try:
     # Use the file
@@ -289,7 +292,7 @@ import tempfile
 import os
 
 # All platforms
-temp_dir = tempfile.gettempdir()
+temp_dir = tempfile.gettempdir()  # O(1) after the first call - it caches
 
 # Platform-dependent defaults
 if os.name == 'nt':  # Windows
@@ -300,7 +303,7 @@ else:  # Unix/Linux
     pass
 
 # Explicit control
-tmpdir = tempfile.mkdtemp(dir='/custom/path')
+tmpdir = tempfile.mkdtemp(dir='/custom/path')  # O(r) name attempts
 ```
 
 ## Related Documentation

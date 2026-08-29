@@ -37,11 +37,12 @@ module = importlib.import_module('json')  # Second call is cached
 import importlib
 import mymodule
 
-# Re-executes module code
+# Re-executes module code - costs whatever the module body costs, plus I/O
 importlib.reload(mymodule)
 
 # Useful for development when module changes
-# Note: only reloads that module, not dependencies
+# Note: only reloads that module, not dependencies - so the cost is one
+# module body, not the transitive import graph
 ```
 
 ### Finding Module Loaders

@@ -245,15 +245,16 @@ b = "hello".encode("utf-8")  # bytes object
 
 ```python
 # str() - text
-text = str("hello")  # "hello"
+text = str("hello")  # O(1) - already a str, returned as-is
 
 # bytes() - binary data
-binary = bytes("hello", "utf-8")  # b"hello"
+binary = bytes("hello", "utf-8")  # O(n) - encodes every character
 
 # Converting back
-text = str(binary, "utf-8")  # Requires encoding
+text = str(binary, "utf-8")  # O(n) - decodes, requires encoding
 # or
-text = binary.decode("utf-8")  # More explicit
+text = binary.decode("utf-8")  # O(n) - same work, more explicit
+# Crossing between str and bytes always copies; str() on a str does not
 ```
 
 ## Best Practices

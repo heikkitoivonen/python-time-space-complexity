@@ -146,13 +146,15 @@ old_function()  # Won't print warning
 import warnings
 
 def risky_operation():
+    # O(n) in the filter list, plus stack inspection for stacklevel
     warnings.warn(
         "This operation may cause data loss",
         RuntimeWarning,
         stacklevel=2
     )
 
-# Turn into error for critical code
+# Turn into error for critical code - O(1) to install, and it short-circuits
+# the "once" registry, so every call now pays the full warn() cost
 warnings.filterwarnings("error", category=RuntimeWarning)
 try:
     risky_operation()

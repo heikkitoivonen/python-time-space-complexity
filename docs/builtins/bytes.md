@@ -140,13 +140,14 @@ The `bytes` type is an immutable sequence of bytes, while `bytearray` is the mut
 ```python
 # Bytes: immutable
 b = b"hello"
-b[0]           # 104 (ASCII value)
+b[0]           # O(1) - 104 (ASCII value)
 b[0] = 106     # TypeError: bytes are immutable
+# Changing a bytes object means building a new one: O(n)
 
 # Bytearray: mutable
 ba = bytearray(b"hello")
-ba[0] = 106    # OK, becomes b"jello"
-ba.append(33)  # OK
+ba[0] = 106    # O(1) in place, becomes b"jello"
+ba.append(33)  # O(1) amortized - no copy of the existing bytes
 ```
 
 ### Performance Comparison

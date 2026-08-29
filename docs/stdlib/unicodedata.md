@@ -21,7 +21,7 @@ including character names, categories, normalization, and digit/decimal values.
 ```python
 import unicodedata
 
-# Basic properties
+# Basic properties - every lookup below is O(1), a table read by code point
 ch = "é"
 print(unicodedata.name(ch))       # LATIN SMALL LETTER E WITH ACUTE
 print(unicodedata.category(ch))   # Ll
@@ -39,10 +39,10 @@ print(unicodedata.numeric("Ⅷ"))   # 8.0
 ```python
 import unicodedata
 
-# Lookup by name
+# Lookup by name - O(1), the name index is hashed, not scanned
 ch = unicodedata.lookup("GREEK SMALL LETTER MU")  # "μ"
 
-# Safe name lookup with default
+# Safe name lookup with default - O(1)
 name = unicodedata.name("Ω", "UNKNOWN")  # "GREEK CAPITAL LETTER OMEGA"
 missing = unicodedata.name("😀", None)    # Name exists; returns string
 ```
@@ -54,14 +54,16 @@ import unicodedata
 
 text = "cafe\u0301"  # "e" + combining acute
 
-# Normalize to NFC/NFD/NFKC/NFKD
+# Normalize to NFC/NFD/NFKC/NFKD - O(n) in the string, and allocates a new
+# string, unlike the per-character lookups above
 nfc = unicodedata.normalize("NFC", text)
 nfd = unicodedata.normalize("NFD", text)
 
 print(text == nfc)  # False
 print(text == nfd)  # True
 
-# Check normalization
+# Check normalization - O(n) time but O(1) space; use it to skip a
+# normalize() that would be a no-op
 print(unicodedata.is_normalized("NFC", text))  # False
 print(unicodedata.is_normalized("NFD", text))  # True
 ```

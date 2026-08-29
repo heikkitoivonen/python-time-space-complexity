@@ -29,12 +29,14 @@ import bisect
 sorted_list = [1, 3, 3, 3, 5, 7, 9]
 
 # bisect_left: leftmost insertion point
-pos = bisect.bisect_left(sorted_list, 3)  # pos = 1
+pos = bisect.bisect_left(sorted_list, 3)  # O(log n), pos = 1
 # Insert here to keep list sorted (before all 3's)
 
 # bisect_right: rightmost insertion point
-pos = bisect.bisect_right(sorted_list, 3)  # pos = 4
+pos = bisect.bisect_right(sorted_list, 3)  # O(log n), pos = 4
 # Insert here to keep list sorted (after all 3's)
+# Both halve the search range each step, so a run of equal values costs no
+# more than a unique one
 ```
 
 ### Finding Elements
@@ -96,10 +98,11 @@ sorted_list = [1, 5, 10, 15, 20]
 target_range = (7, 12)
 
 # Position to insert start of range
-start_pos = bisect.bisect_right(sorted_list, target_range[0])
+start_pos = bisect.bisect_right(sorted_list, target_range[0])  # O(log n)
 
 # Position to insert end of range
-end_pos = bisect.bisect_left(sorted_list, target_range[1])
+end_pos = bisect.bisect_left(sorted_list, target_range[1])  # O(log n)
+# Two independent searches: O(log n) total, not O(n)
 
 print(f"Insert range {target_range} at positions {start_pos}-{end_pos}")
 ```
@@ -189,11 +192,13 @@ from bisect import bisect_right
 
 # Custom objects - compare by second element
 data = [('a', 1), ('b', 3), ('c', 5)]
-keys = [x[1] for x in data]
+keys = [x[1] for x in data]  # O(n) - building the key list dominates
 
 # Find position for ('d', 4)
-pos = bisect_right(keys, 4)
-data.insert(pos, ('d', 4))
+pos = bisect_right(keys, 4)  # O(log n)
+data.insert(pos, ('d', 4))  # O(n) - shifts the tail
+# Rebuilding keys per search makes the whole thing O(n); keep it alongside
+# data instead
 ```
 
 ## Important Notes

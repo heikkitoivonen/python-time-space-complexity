@@ -401,15 +401,17 @@ import struct
 
 # Format must match data size
 try:
-    struct.unpack('i', b'AB')  # Only 2 bytes, need 4
+    struct.unpack('i', b'AB')  # O(m) - size check fails before any unpacking
 except struct.error as e:
     print(f"Unpack error: {e}")
 
 # Invalid format character
 try:
-    struct.pack('z', 42)  # 'z' is invalid
+    struct.pack('z', 42)  # O(m) - rejected while parsing the format
 except struct.error as e:
     print(f"Pack error: {e}")
+# Both failures cost format parsing only; pre-compiling a Struct pays that
+# once instead of on every call
 ```
 
 ## Related Documentation

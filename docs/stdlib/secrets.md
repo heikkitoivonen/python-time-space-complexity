@@ -172,10 +172,10 @@ lucky = lottery_selection(participants, 5)
 import secrets
 
 # ✅ DO: Use secrets for security-sensitive data
-password_reset_token = secrets.token_urlsafe()
+password_reset_token = secrets.token_urlsafe()  # O(n) in bytes requested
 
 # ✅ DO: Use sufficient length
-token = secrets.token_hex(32)  # 64 hex chars (256 bits)
+token = secrets.token_hex(32)  # O(n) - 64 hex chars (256 bits)
 
 # ❌ DON'T: Use random module for security
 import random
@@ -183,6 +183,8 @@ insecure_token = random.randbytes(16)  # Don't use!
 
 # ❌ DON'T: Use insufficient entropy
 short_token = secrets.token_hex(4)  # Too short for security
+# Length is the only lever on cost here, and it is linear - a 256-bit token
+# is no reason to reach for the faster, insecure generator
 ```
 
 ## Related Modules

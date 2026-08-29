@@ -111,7 +111,7 @@ import traceback
 
 def handle_request():
     try:
-        form = cgi.FieldStorage()
+        form = cgi.FieldStorage()  # O(n) in the form data size
         # Process form
         print("Content-Type: text/html\n")
         print("<h1>Success</h1>")

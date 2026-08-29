@@ -78,15 +78,15 @@ for i in list(range(1000000)):  # Uses O(n) memory
 ### Loop Counting
 
 ```python
-# Standard range for loops
+# Standard range for loops - O(1) to create, O(n) to iterate, O(1) space
 for i in range(10):
     print(i)  # 0 to 9
 
-# With start and step
+# With start and step - same cost; step does not change it
 for i in range(10, 100, 5):
     print(i)  # 10, 15, 20, ..., 95
 
-# Reverse iteration
+# Reverse iteration - no list is built, so still O(1) space
 for i in range(100, 10, -5):
     print(i)  # 100, 95, 90, ..., 15
 ```
@@ -94,13 +94,14 @@ for i in range(100, 10, -5):
 ### Indexing
 
 ```python
-# Works with enumerate
+# Works with enumerate - O(n) total, O(1) space
 for idx, val in enumerate(items):
     print(idx, val)
 
-# Or explicit range
+# Or explicit range - O(1) for len() and range(), O(1) per items[i]
 for i in range(len(items)):
     print(i, items[i])
+# Same O(n) total; enumerate avoids one index lookup per item
 ```
 
 ## Performance Characteristics
@@ -150,25 +151,25 @@ for i in lst:  # O(1) per item, O(n) total, but O(n) memory
 ### Empty Range
 
 ```python
-r = range(0)     # Empty
-len(r)           # 0
-list(r)          # []
+r = range(0)     # O(1) - Empty
+len(r)           # O(1) - 0, computed from start/stop/step
+list(r)          # O(1) here - []
 
 r = range(5, 5)  # Empty
-len(r)           # 0
+len(r)           # O(1) - 0
 
 r = range(10, 5)  # Empty (reversed with positive step)
-len(r)           # 0
+len(r)           # O(1) - 0, no scan needed to discover emptiness
 ```
 
 ### Negative Steps
 
 ```python
-r = range(10, 0, -1)
-list(r)          # [10, 9, 8, ..., 1]
+r = range(10, 0, -1)  # O(1) - a negative step costs no more to create
+list(r)          # O(n) - [10, 9, 8, ..., 1], materializes every value
 
-r = range(10, 0, -2)
-list(r)          # [10, 8, 6, 4, 2]
+r = range(10, 0, -2)  # O(1)
+list(r)          # O(n) - [10, 8, 6, 4, 2], n = len(r), not the span
 ```
 
 ### Large Ranges

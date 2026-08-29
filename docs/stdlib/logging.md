@@ -139,14 +139,15 @@ def process_file(filename):
 ```python
 import logging
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)  # O(1) avg - cached by name
 
 try:
     result = risky_operation()  # Might fail
 except ValueError as e:
-    logger.error(f'Invalid value: {e}')
+    logger.error(f'Invalid value: {e}')  # f-string formats even if filtered out
 except Exception as e:
-    logger.exception('Unexpected error')    # Includes traceback
+    logger.exception('Unexpected error')  # O(d) in stack depth - formats a
+                                          # traceback on top of the message
 ```
 
 ## Performance Considerations

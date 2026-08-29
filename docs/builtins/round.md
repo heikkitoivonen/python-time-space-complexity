@@ -110,6 +110,7 @@ rounded = [round(m, 2) for m in measurements]
 ### round() vs int()
 
 ```python
+# Both are O(1) on a float - the choice is about behaviour, not cost
 # round() - rounds to nearest
 round(5.6)     # 6
 int(5.6)       # 5 - truncates
@@ -127,13 +128,14 @@ int(5.5)       # 5 (truncation)
 
 ```python
 # round() - float precision issues
-round(2.675, 2)  # 2.67 (not 2.68!)
+round(2.675, 2)  # O(1) - hardware float, 2.67 (not 2.68!)
 
 # Decimal - precise
 from decimal import Decimal
-Decimal("2.675").quantize(Decimal("0.01"))  # Decimal("2.68")
+Decimal("2.675").quantize(Decimal("0.01"))  # O(p) in the digits kept, 2.68
 
-# Use Decimal for financial calculations
+# Use Decimal for financial calculations - correctness costs a constant
+# factor over float, not a change in complexity
 ```
 
 ### round() vs Format String
@@ -141,12 +143,13 @@ Decimal("2.675").quantize(Decimal("0.01"))  # Decimal("2.68")
 ```python
 # round() - returns number
 x = 3.14159
-rounded = round(x, 2)  # 3.14 (float)
+rounded = round(x, 2)  # O(1) - 3.14 (float)
 
 # Format string - returns string
-formatted = f"{x:.2f}"  # "3.14" (string)
+formatted = f"{x:.2f}"  # O(d) in the digits produced - "3.14" (string)
 
-# round() for calculation, format for display
+# round() for calculation, format for display: formatting also allocates a
+# string, so it is the more expensive of the two in a hot loop
 ```
 
 ## Edge Cases

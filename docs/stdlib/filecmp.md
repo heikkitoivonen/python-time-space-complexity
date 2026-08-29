@@ -390,14 +390,15 @@ import os
 # May cause infinite recursion if circular
 
 # Use shallow comparison for large files
-dcmp = filecmp.dircmp('dir1', 'dir2')
+dcmp = filecmp.dircmp('dir1', 'dir2')  # O(1) - nothing is read yet
 # dircmp automatically uses shallow comparison
 
 # For custom handling:
 def safe_compare(dir1, dir2):
-    dcmp = filecmp.dircmp(dir1, dir2)
+    dcmp = filecmp.dircmp(dir1, dir2)  # O(1)
     
     # Filter out symlinks if needed
+    # same_files is what costs: O(k) stat calls, k = files in the directory
     same = [f for f in dcmp.same_files 
             if not os.path.islink(os.path.join(dir1, f))]
     

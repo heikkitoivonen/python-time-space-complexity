@@ -225,7 +225,7 @@ def direct_add(a, b):
 ```python
 # exec() for complex code - not ideal
 code = "x = 0\nfor i in range(10): x += i"
-exec(code)
+exec(code)  # O(n + m) every call - reparses the source before running it
 
 # Better - use functions
 def process():
@@ -234,7 +234,7 @@ def process():
         x += i
     return x
 
-result = process()
+result = process()  # O(m) - compiled once, at import
 ```
 
 ## Edge Cases

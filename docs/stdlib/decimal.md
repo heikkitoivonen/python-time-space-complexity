@@ -355,21 +355,22 @@ d.as_tuple()    # DecimalTuple(sign=0, digits=(1,2,3,4,5,6), exponent=-3)
 ```python
 from decimal import Decimal
 
-# Special values
+# Special values - O(1) to build, no digits to parse
 Decimal('Infinity')    # Positive infinity
 Decimal('-Infinity')   # Negative infinity
 Decimal('NaN')         # Not a number
 
 # Create from float
 import math
-Decimal(math.inf)      # Decimal('Infinity')
+Decimal(math.inf)      # O(1) - Decimal('Infinity')
 
 # Operations with special values
 d = Decimal('10')
 d / Decimal('0')       # Raises InvalidOperation
 
-Decimal('Infinity') + 5  # Decimal('Infinity')
-Decimal('NaN') + 5       # Decimal('NaN')
+Decimal('Infinity') + 5  # O(1) - Decimal('Infinity')
+Decimal('NaN') + 5       # O(1) - Decimal('NaN')
+# Special values short-circuit: they skip the O(n) digit arithmetic
 ```
 
 ## Version Notes
