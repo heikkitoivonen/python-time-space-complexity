@@ -219,7 +219,7 @@ near_zero = float("1e-324")  # Becomes 0.0
 
 ```python
 # int() - truncates, requires valid integer format
-int("42")       # O(n) here, but see below - OK
+int("42")       # OK - cheap for two digits, but see the note below
 int("3.14")     # ValueError!
 int(3.14)       # O(1) - 3 (truncate)
 

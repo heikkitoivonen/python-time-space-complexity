@@ -621,6 +621,22 @@ class TestUnicodeDataLookupsAreTableReads:
         assert not unicodedata.is_normalized("NFC", decomposed)
         assert unicodedata.is_normalized("NFC", unicodedata.normalize("NFC", decomposed))
 
+    def test_an_already_normalized_string_is_returned_unchanged(self) -> None:
+        # The page claimed normalize() allocates a new string. It does not
+        # when there is nothing to do - the O(n) space is the worst case.
+        ascii_text = "cafe"
+        composed = unicodedata.normalize("NFC", "cafe\u0301")
+
+        assert unicodedata.normalize("NFC", ascii_text) is ascii_text
+        assert unicodedata.normalize("NFC", composed) is composed
+
+    def test_a_string_needing_work_does_allocate(self) -> None:
+        decomposed = "cafe\u0301"
+        result = unicodedata.normalize("NFC", decomposed)
+
+        assert result is not decomposed
+        assert result != decomposed
+
 
 class TestIoStringBuilding:
     """docs/stdlib/io.md: StringIO accumulation is linear."""

@@ -13,7 +13,7 @@ including character names, categories, normalization, and digit/decimal values.
 | `bidirectional(ch)` | O(1) | O(1) | Bidi class |
 | `combining(ch)` | O(1) | O(1) | Canonical combining class |
 | `decimal(ch)` / `digit(ch)` / `numeric(ch)` | O(1) | O(1) | Numeric properties |
-| `normalize(form, s)` | O(n + k²) | O(n) | n = string length; k = longest run of combining marks, which is sorted |
+| `normalize(form, s)` | O(n + k²) | O(n) worst | n = string length; k = longest run of combining marks. Returns the original object, allocating nothing, if it is already in that form |
 | `is_normalized(form, s)` | O(1) for ASCII, else O(n) quick check, O(n + k²) worst | O(1) or O(n) | ASCII answers from a flag on the string; an inconclusive quick check falls back to `normalize()`, inheriting its bound and its space |
 
 ## Character Properties
@@ -54,10 +54,11 @@ import unicodedata
 
 text = "cafe\u0301"  # "e" + combining acute
 
-# Normalize to NFC/NFD/NFKC/NFKD - O(n + k²), and allocates a new string,
-# unlike the per-character lookups above. The whole string is scanned, and
-# canonical ordering sorts each run of combining marks, so a long run adds
-# O(k²) for that run on top of the scan
+# Normalize to NFC/NFD/NFKC/NFKD - O(n + k²). The whole string is scanned,
+# and canonical ordering sorts each run of combining marks, so a long run
+# adds O(k²) for that run on top of the scan. O(n) space is the worst case,
+# not the usual one: a string already in the requested form is returned as
+# the same object, with nothing allocated
 nfc = unicodedata.normalize("NFC", text)
 nfd = unicodedata.normalize("NFD", text)
 

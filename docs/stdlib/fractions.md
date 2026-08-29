@@ -205,13 +205,15 @@ total_float = sum(prices)
 print(total_float)    # 0.6000000000000001 (wrong!)
 
 # Solution: use Fractions for exact arithmetic
+# n below is the table's n: max(numerator, denominator) of the value at
+# hand, and the bound counts GCD steps rather than machine operations
 prices_frac = [Fraction(1, 10), Fraction(2, 10), Fraction(3, 10)]  # O(log n) each
 total_frac = sum(prices_frac)  # One GCD reduction per addition. Not n times
                                # a fixed cost: unless denominators share
                                # factors they multiply out, so both the
                                # numbers and each reduction grow as it goes
 print(total_frac)     # 3/5 (exact)
-print(float(total_frac))  # O(log m) - 0.6
+print(float(total_frac))  # O(log n) - 0.6
 ```
 
 ### Continuous Fractions
@@ -226,14 +228,14 @@ def continued_fraction(value, depth=10):
     x = Fraction(value)
     
     # depth iterations, each one Fraction subtraction plus one reciprocal.
-    # Both re-reduce via GCD, which is O(log m) steps in m, the larger of
-    # that step's numerator and denominator - and m is not fixed: it changes
-    # with x on every iteration
+    # Both re-reduce via GCD, which is O(log n) steps for that step's n - and
+    # n is not the input size here: it is the current x, which changes on
+    # every iteration, so these do not add up to depth times a fixed cost
     for _ in range(depth):
         a = int(x)
         coefficients.append(a)
         
-        x = x - a       # O(log m) GCD steps for this x
+        x = x - a       # O(log n) GCD steps for this x
         if x == 0:
             break
         

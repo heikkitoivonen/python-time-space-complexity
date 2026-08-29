@@ -7,7 +7,7 @@ The `fileinput` module provides an iterator for processing lines from multiple i
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `input(files)` | O(B) | O(L) | B = total bytes read; L = longest line held at a time |
-| `input()` with backup | O(n) | O(1) | In-place edit with backup |
+| `input()` with backup | O(B) | O(L) | In-place edit with backup; same streaming bounds as above |
 | `filename()` | O(1) | O(1) | Get current file name |
 | `filelineno()` | O(1) | O(1) | Get current line in file |
 | `lineno()` | O(1) | O(1) | Get total line count |

@@ -40,9 +40,11 @@ server.send_message(message)  # O(n) in message size, plus network time
 
 # Close connection (network-bound)
 server.quit()
-# Round trips dominate: the greeting, EHLO, the TLS handshake and the auth
-# exchange are each several round trips, and none of them depend on message
-# size - so reuse one connection for many messages
+# Round trips dominate: connection setup - greeting, EHLO, STARTTLS and its
+# handshake, then EHLO again and the auth exchange - is collectively several
+# latency-bound exchanges, how many depending on the TLS and auth mechanisms.
+# None of them depend on message size, so reuse one connection for many
+# messages
 ```
 
 ### Sending with Authentication
