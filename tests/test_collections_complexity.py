@@ -527,3 +527,200 @@ class TestUserStringComplexity:
         assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
             f"UserString count doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
+
+
+class TestChainMapScalesWithMapCount:
+    """The ChainMap table is written in the number of maps, not their size.
+
+    TestChainMapComplexity above varies the size of a single mapping, which
+    leaves the table's actual claims - access O(n), `in` O(n), len() O(N) -
+    untested.
+    """
+
+    FEW_MAPS = 2
+    MANY_MAPS = 200
+    KEYS_PER_MAP = 100
+
+    def _chain(self, map_count: int) -> ChainMap:
+        return ChainMap(
+            *[
+                {f"k{index}_{key}": key for key in range(self.KEYS_PER_MAP)}
+                for index in range(map_count)
+            ]
+        )
+
+    def test_lookup_scales_with_the_number_of_maps(self) -> None:
+        """A key in the last map is found only after searching the rest."""
+        few, many = self._chain(self.FEW_MAPS), self._chain(self.MANY_MAPS)
+        few_key = f"k{self.FEW_MAPS - 1}_50"
+        many_key = f"k{self.MANY_MAPS - 1}_50"
+
+        few_time = measure_time(lambda: few[few_key], iterations=200)
+        many_time = measure_time(lambda: many[many_key], iterations=200)
+
+        assert many_time > few_time * 3, (
+            f"lookup should search map by map: {self.FEW_MAPS} maps "
+            f"{few_time:.2e}s, {self.MANY_MAPS} maps {many_time:.2e}s"
+        )
+
+    def test_a_miss_visits_every_map(self) -> None:
+        few, many = self._chain(self.FEW_MAPS), self._chain(self.MANY_MAPS)
+
+        few_time = measure_time(lambda: "absent" in few, iterations=200)
+        many_time = measure_time(lambda: "absent" in many, iterations=200)
+
+        assert many_time > few_time * 3, (
+            f"a miss is the worst case for `in`: {few_time:.2e}s vs {many_time:.2e}s"
+        )
+
+    def test_len_builds_a_union_of_every_key(self) -> None:
+        """The table's O(N) in total keys, not O(1) like a dict's len()."""
+        few, many = self._chain(self.FEW_MAPS), self._chain(self.MANY_MAPS)
+
+        few_time = measure_time(lambda: len(few), iterations=20)
+        many_time = measure_time(lambda: len(many), iterations=20)
+
+        assert many_time > few_time * 10, (
+            f"len() unions every key: {few_time:.2e}s vs {many_time:.2e}s"
+        )
+
+    def test_lookup_finds_the_first_match(self) -> None:
+        first = {"shared": "first", "only_first": 1}
+        second = {"shared": "second", "only_second": 2}
+        chained = ChainMap(first, second)
+
+        assert chained["shared"] == "first"
+        assert chained["only_second"] == 2
+
+    def test_writes_go_to_the_first_map_only(self) -> None:
+        first: dict[str, int] = {}
+        second = {"key": 1}
+        chained = ChainMap(first, second)
+
+        chained["key"] = 99
+
+        assert first == {"key": 99}
+        assert second == {"key": 1}, "the underlying map is untouched"
+
+
+class TestCounterOperations:
+    """The Counter table rows that had no test.
+
+    most_common() is the interesting one: the O(n log k) bound is right, and
+    it is still the slower choice for any k above 1.
+    """
+
+    SIZE = 200_000
+
+    def _counter(self, size: int) -> Counter:
+        return Counter({f"k{index}": index for index in range(size)})
+
+    def test_construction_is_on(self) -> None:
+        small_items = list(range(1_000))
+        large_items = list(range(100_000))
+
+        small_time = measure_time(lambda: Counter(small_items), iterations=10)
+        large_time = measure_time(lambda: Counter(large_items), iterations=10)
+
+        assert is_linear_time(small_time, large_time, 100), (
+            f"Counter() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
+        )
+
+    def test_most_common_with_k_is_slower_than_sorting_everything(self) -> None:
+        """The bound is O(n log k), but the constant loses to Timsort.
+
+        heapq.nlargest builds a (key, order, element) tuple per element and
+        calls the key in Python - CPython's own comment calls that path the
+        "General case, slowest method". Sorting the raw items beats it.
+        """
+        counter = self._counter(self.SIZE)
+
+        sorted_time = measure_time(counter.most_common, iterations=3)
+        heap_time = measure_time(lambda: counter.most_common(10), iterations=3)
+
+        assert heap_time > sorted_time, (
+            f"most_common(10) should measure slower than most_common(): "
+            f"k=10 {heap_time:.2e}s all {sorted_time:.2e}s"
+        )
+
+    def test_most_common_one_is_special_cased(self) -> None:
+        """nlargest routes n == 1 to max(), which does beat sorting."""
+        counter = self._counter(self.SIZE)
+
+        sorted_time = measure_time(counter.most_common, iterations=3)
+        single_time = measure_time(lambda: counter.most_common(1), iterations=3)
+
+        assert single_time < sorted_time, (
+            f"most_common(1) should beat a full sort: k=1 {single_time:.2e}s all {sorted_time:.2e}s"
+        )
+
+    def test_most_common_returns_what_it_claims(self) -> None:
+        counter = Counter("aaabbc")
+        assert counter.most_common(1) == [("a", 3)]
+        assert counter.most_common() == [("a", 3), ("b", 2), ("c", 1)]
+
+    def test_total_is_on(self) -> None:
+        small, large = self._counter(1_000), self._counter(100_000)
+
+        small_time = measure_time(small.total, iterations=20)
+        large_time = measure_time(large.total, iterations=20)
+
+        assert is_linear_time(small_time, large_time, 100), (
+            f"total() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
+        )
+
+    def test_elements_is_lazy_to_create(self) -> None:
+        """The table: O(1) init, O(total) to iterate."""
+        counter = self._counter(self.SIZE)
+
+        create_time = measure_time(counter.elements, iterations=20)
+        drain_time = measure_time(lambda: sum(1 for _ in Counter("aaab").elements()))
+
+        assert create_time < drain_time * 50, (
+            f"elements() should not do the work up front: {create_time:.2e}s"
+        )
+
+    def test_addition_is_linear_in_the_keys(self) -> None:
+        small, large = self._counter(1_000), self._counter(100_000)
+
+        small_time = measure_time(lambda: small + small, iterations=5)
+        large_time = measure_time(lambda: large + large, iterations=5)
+
+        assert is_linear_time(small_time, large_time, 100), (
+            f"Counter addition doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
+        )
+
+    def test_addition_drops_non_positive_counts(self) -> None:
+        assert Counter(a=1) + Counter(a=-1) == Counter()
+        assert (Counter(a=1) - Counter(a=5)) == Counter()
+
+
+class TestNamedTupleCreationCosts:
+    """The table's "Creation | O(1)" is about instances, not the class.
+
+    Building the class execs generated source and costs about thirty times
+    what an instance does, so it belongs at import time, not in a loop.
+    """
+
+    def test_building_the_class_costs_far_more_than_an_instance(self) -> None:
+        point_class = namedtuple("Point", ["x", "y", "z"])
+
+        class_time = measure_time(lambda: namedtuple("Point", ["x", "y", "z"]), iterations=20)
+        instance_time = measure_time(lambda: point_class(1, 2, 3), iterations=200)
+
+        assert class_time > instance_time * 10, (
+            f"namedtuple() generates and execs a class: class={class_time:.2e}s "
+            f"instance={instance_time:.2e}s"
+        )
+
+    def test_instance_creation_does_not_scale_with_field_count(self) -> None:
+        few = namedtuple("Few", ["a", "b"])
+        many = namedtuple("Many", [f"f{index}" for index in range(50)])
+        many_values = tuple(range(50))
+
+        few_time = measure_time(lambda: few(1, 2), iterations=200)
+        many_time = measure_time(lambda: many(*many_values), iterations=200)
+
+        assert many_time < few_time * 10, (
+            f"a wider namedtuple is still a tuple: few={few_time:.2e}s many={many_time:.2e}s"
+        )

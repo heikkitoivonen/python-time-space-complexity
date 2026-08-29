@@ -1,5 +1,5 @@
 ---
-source_sha: 44dad968fd1e81d00e6af845df3bc043d1b664b29f48be37d89a04bc8936fdc1
+source_sha: f43208b32ebe4144adb55b7eb744985d72325b37cd3f82bde46534a8971094d1
 translated: machine
 ---
 
@@ -84,21 +84,21 @@ queue.pop()  # O(1) - remove from back
 ### 使いどころ
 
 ```python
-# Avoid: Manual checking
 from collections import defaultdict
 
+# Avoid: manual checking
 data = defaultdict(list)
 data['key'].append('value')  # O(1) avg - key auto-created as empty list
 
-# Avoid: Clunky dict.get()
+# Avoid: clunky dict.get()
+d = {}
 count = d.get('key', 0)  # O(1) avg, but two statements per increment
 count += 1
 
 # Better: defaultdict with int
-from collections import defaultdict
-count = defaultdict(int)
-count['key'] += 1  # O(1) avg - still a get plus a set, but one statement
-                   # and no default to pass in
+counts = defaultdict(int)
+counts['key'] += 1  # O(1) avg - still a get plus a set, but one statement
+                    # and no default to pass in
 ```
 
 ## Counter
@@ -109,7 +109,7 @@ count['key'] += 1  # O(1) avg - still a get plus a set, but one statement
 |-----------|------|-------|-------|
 | `Counter(iterable)` | O(n) | O(k) | n はイテラブルの長さ、k は異なる要素の個数 |
 | `c[item]` | 平均 O(1) | O(1) | なければ 0 を返す。ハッシュ衝突により最悪は O(n) |
-| `c.most_common(k)` | O(n log k) | O(k) | ヒープを使う。k が None なら O(n log n) |
+| `c.most_common(k)` | O(n log k) | O(k) | ヒープを使うが定数倍が大きく、k >= 2 では `most_common()` の O(n log n) のソートより遅く計測される。k=1 は `max()` による特別扱い |
 | `c.update(iterable)` | O(n) | O(k) | n はイテラブルの長さ |
 | `c.subtract(iterable)` | O(n) | O(1) | 個数を引く。負の値も保持する |
 | `c.total()` | O(n) | O(1) | すべての個数の合計（Python 3.10+） |
@@ -129,7 +129,8 @@ words = ['apple', 'banana', 'apple', 'cherry', 'apple']
 c = Counter(words)
 # Counter({'apple': 3, 'banana': 1, 'cherry': 1})
 
-# Most common items - O(n log k) for k items, O(n log n) if k is None
+# Most common items - O(n log k) for k items, O(n log n) if k is None.
+# The bound favours passing k; the measured time does not, except for k=1
 top_3 = c.most_common(3)  # [('apple', 3), ('banana', 1), ('cherry', 1)]
 
 # Arithmetic - O(n) over the combined keys

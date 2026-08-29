@@ -79,21 +79,21 @@ Same as `dict`:
 ### Use Cases
 
 ```python
-# Avoid: Manual checking
 from collections import defaultdict
 
+# Avoid: manual checking
 data = defaultdict(list)
 data['key'].append('value')  # O(1) avg - key auto-created as empty list
 
-# Avoid: Clunky dict.get()
+# Avoid: clunky dict.get()
+d = {}
 count = d.get('key', 0)  # O(1) avg, but two statements per increment
 count += 1
 
 # Better: defaultdict with int
-from collections import defaultdict
-count = defaultdict(int)
-count['key'] += 1  # O(1) avg - still a get plus a set, but one statement
-                   # and no default to pass in
+counts = defaultdict(int)
+counts['key'] += 1  # O(1) avg - still a get plus a set, but one statement
+                    # and no default to pass in
 ```
 
 ## Counter
@@ -104,7 +104,7 @@ count['key'] += 1  # O(1) avg - still a get plus a set, but one statement
 |-----------|------|-------|-------|
 | `Counter(iterable)` | O(n) | O(k) | n = iterable length, k = unique items |
 | `c[item]` | O(1) avg | O(1) | Returns 0 if missing; O(n) worst case due to hash collisions |
-| `c.most_common(k)` | O(n log k) | O(k) | Heap-based; O(n log n) if k is None |
+| `c.most_common(k)` | O(n log k) | O(k) | Heap-based, but with a large constant: for k >= 2 it measures slower than the O(n log n) sort that `most_common()` does. k=1 is special-cased to `max()` |
 | `c.update(iterable)` | O(n) | O(k) | n = iterable length |
 | `c.subtract(iterable)` | O(n) | O(1) | Subtract counts; keeps negative values |
 | `c.total()` | O(n) | O(1) | Sum of all counts (Python 3.10+) |
@@ -124,7 +124,8 @@ words = ['apple', 'banana', 'apple', 'cherry', 'apple']
 c = Counter(words)
 # Counter({'apple': 3, 'banana': 1, 'cherry': 1})
 
-# Most common items - O(n log k) for k items, O(n log n) if k is None
+# Most common items - O(n log k) for k items, O(n log n) if k is None.
+# The bound favours passing k; the measured time does not, except for k=1
 top_3 = c.most_common(3)  # [('apple', 3), ('banana', 1), ('cherry', 1)]
 
 # Arithmetic - O(n) over the combined keys
