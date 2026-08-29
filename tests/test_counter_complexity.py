@@ -71,9 +71,9 @@ class TestCountingSpeedDependsOnHowYouFeedIt:
     """The page's "slightly slower" claim, in both directions.
 
     Counter.update() dispatches to _count_elements, which has a C
-    implementation, but only when handed an iterable. Incrementing a single
-    key goes through Counter.__missing__, which is written in Python, where
-    defaultdict.__missing__ is not.
+    implementation, but only when handed an iterable - that half has a known
+    cause. The per-key half is a measurement without one: __missing__ is not
+    the explanation, as test_missing_is_not_the_explanation below shows.
     """
 
     def test_counting_a_whole_iterable_beats_a_python_loop(self) -> None:
@@ -109,6 +109,42 @@ class TestCountingSpeedDependsOnHowYouFeedIt:
         assert counter_time > default_time, (
             f"per-key increments miss the C path: Counter {counter_time:.2e}s "
             f"defaultdict {default_time:.2e}s"
+        )
+
+    def test_missing_is_not_the_explanation(self) -> None:
+        """__missing__ fires once per distinct key, not once per increment.
+
+        The page originally blamed Counter.__missing__ being written in
+        Python. Over 200,000 increments of 1,000 keys it runs 1,000 times,
+        and a Counter that never misses at all is still the slower one.
+        """
+        calls = {"n": 0}
+
+        class Counted(Counter):
+            def __missing__(self, key: Any) -> int:
+                calls["n"] += 1
+                return 0
+
+        counted: Counted = Counted()
+        for value in SAMPLE:
+            counted[value] += 1
+
+        assert calls["n"] == 1_000, f"once per distinct key, got {calls['n']}"
+
+        seeded = dict.fromkeys(range(1000), 0)
+        warm_counter = Counter(seeded)
+        warm_default = defaultdict(int, seeded)
+
+        def loop(mapping: Any) -> None:
+            for value in SAMPLE:
+                mapping[value] += 1
+
+        counter_time = best_time(lambda: loop(warm_counter), repeats=3)
+        default_time = best_time(lambda: loop(warm_default), repeats=3)
+
+        assert counter_time > default_time, (
+            f"with zero misses the gap remains, so __missing__ is not it: "
+            f"Counter {counter_time:.2e}s defaultdict {default_time:.2e}s"
         )
 
     def test_update_uses_the_same_fast_path_as_the_constructor(self) -> None:

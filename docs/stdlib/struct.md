@@ -7,10 +7,10 @@ The `struct` module handles binary data conversions, packing Python values into 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `Struct()` compilation | O(m) | O(m) | m = format string length; compile once |
-| `pack()` | O(k) | O(k) | k = number of fields, plus a much cheaper term in bytes copied. The module caches compiled formats, so a repeated format is not re-parsed |
-| `unpack()` | O(k) | O(k) | k = number of fields; same format cache as `pack()` |
-| `pack_into()` | O(k) | O(1) | k = number of fields |
-| `unpack_from()` | O(k) | O(k) | k = number of fields |
+| `pack()` | O(k + B) | O(B) | k = fields, B = total byte width. Output is B bytes however few fields produce it. The module caches compiled formats, so a repeated format is not re-parsed |
+| `unpack()` | O(k + B) | O(k + B) | The tuple holds k elements, but byte-string fields carry their bytes with them |
+| `pack_into()` | O(k + B) | O(1) | Writes into a caller-supplied buffer, so no output is allocated |
+| `unpack_from()` | O(k + B) | O(k + B) | Same result space as `unpack()` |
 | `calcsize()` | O(m) | O(1) | m = format string length |
 
 ## Format Strings
@@ -350,12 +350,15 @@ result2 = CResult.unpack(data)
 ## Performance Considerations
 
 ### Time Complexity
-- **pack()**: O(k) for k fields, plus a cheaper linear term in bytes. Field
-  count dominates: `'100i'` and `'400s'` both produce 400 bytes, and the
-  hundred-field version measured 5.2x the single-field one
-- **unpack()**: O(k) for k fields
+All timings on this page are from CPython 3.11 on one Linux machine and are illustrative, not portable.
+
+- **pack()**: O(k + B) for k fields and B bytes. Field count carries the
+  larger constant: `'100i'` and `'400s'` both produce 400 bytes, and the
+  hundred-field version measured 5.2x the single-field one - but `'40000s'`
+  is one field and still costs 9.6x `'400s'`, so B is not negligible
+- **unpack()**: O(k + B), and the returned tuple holds the bytes too
 - **Struct creation**: O(m) one-time cost (m = format length)
-- **pack_into()**: O(k) for k fields
+- **pack_into()**: O(k + B) time, O(1) extra space
 
 ### Space Complexity
 - **Output**: O(n) for packed data (n = total bytes)
@@ -380,10 +383,11 @@ for i in range(1000):
     data = int_struct.pack(i)  # 58 ns per call
 ```
 
-The saving is larger when formats churn past the cache. Sweeping 58 distinct
-formats with the cache cleared each time cost 53.9 µs against 14.7 µs for
-pre-built `Struct` objects - so pre-compile when you have many formats, or
-build them where you build the rest of your constants.
+The saving is larger when the format is not in the cache. Sweeping 58
+distinct formats with `_clearcache()` called each time - a forced cold cache,
+not natural capacity churn - cost 53.9 µs against 14.7 µs for pre-built
+`Struct` objects. So pre-compile when a format is used once, or build your
+`Struct` objects where you build the rest of your constants.
 
 ## Format Modifiers
 

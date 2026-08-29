@@ -137,6 +137,26 @@ class TestCompileDirComplexity:
             f"forty times the source in the same file count: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    def test_non_python_entries_cost_too(self, tmp_path: Path) -> None:
+        """The table is priced in entries examined, not .py files.
+
+        compile_dir lists the directory, so files it will never compile
+        still cost a walk: 5000 of them made an otherwise identical tree
+        about ten times slower.
+        """
+        lean = build_tree(tmp_path / "lean", files=20, lines_each=5)
+        cluttered = build_tree(tmp_path / "cluttered", files=20, lines_each=5)
+        for index in range(5_000):
+            (cluttered / f"data{index}.txt").write_text("x", encoding="utf-8")
+
+        lean_time = best_time(lambda: compile_fresh(lean))
+        cluttered_time = best_time(lambda: compile_fresh(cluttered))
+
+        assert cluttered_time > lean_time * 3, (
+            f"identical Python source, and the other entries still cost: "
+            f"lean {lean_time:.2e}s cluttered {cluttered_time:.2e}s"
+        )
+
     def test_force_controls_whether_cached_bytecode_is_reused(self, tmp_path: Path) -> None:
         tree = build_tree(tmp_path / "cached", files=100, lines_each=40)
         compileall.compile_dir(tree, quiet=2)  # warm the cache

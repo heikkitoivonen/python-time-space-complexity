@@ -6,10 +6,11 @@ The `compileall` module compiles all Python source files in a directory tree to 
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `compile_dir()` | O(n + total bytes) | O(n) | n = .py files. Per-file overhead dominates for small files: 200 ten-line files cost about nine times what 10 two-hundred-line files do, for the same total source |
+| `compile_dir()` | O(E + B) | O(E) | E = every directory entry examined, not just `.py` files; B = source bytes compiled. Adding 5000 non-Python files to a directory of 20 modules made it 10.9x slower. Per-`.py` overhead also dominates B for small files: 200 ten-line files cost about nine times 10 two-hundred-line files |
 | `compile_file()` | O(m) | O(m) | m = file size; one file |
-| `compile_path()` | O(n + total bytes) | O(n) | n = .py files directly on `sys.path` entries |
-| `main()` | O(n + total bytes) | O(n) | CLI entrypoint |
+| `workers=N` | - | O(N * working set) | Each process holds its own source and compiler state |
+| `compile_path()` | O(E + B) | O(E) | Same walk, over the entries of each `sys.path` directory |
+| `main()` | O(E + B) | O(E) | CLI entrypoint |
 
 ## Batch Compiling Python Files
 

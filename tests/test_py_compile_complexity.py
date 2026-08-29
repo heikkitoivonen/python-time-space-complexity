@@ -5,10 +5,12 @@ raised FileNotFoundError, and which never mentioned what `compile()` returns
 - the path it wrote, or None on a compilation error. That is the whole
 success protocol.
 
-The finding worth having is `invalidation_mode`. The default, TIMESTAMP,
-records the source's mtime and size; an edit that changes neither is not
-noticed, and the stale bytecode is imported. CHECKED_HASH records a hash
-instead and costs about 3% more to write.
+The finding worth having is `invalidation_mode`. TIMESTAMP records the
+source's mtime and size; an edit that changes neither is not noticed, and the
+stale bytecode is imported. CHECKED_HASH records a hash instead and costs
+about 3% more to write. Which one you get by default depends on the
+environment: `SOURCE_DATE_EPOCH` selects CHECKED_HASH, so a reproducible
+build already has hash invalidation.
 
 The py_compile tests previously in tests/test_compileall_complexity.py moved
 here, now that the module has a file of its own.
@@ -187,6 +189,31 @@ class TestInvalidationModes:
 
         assert before == "first"
         assert after == "secnd", "the hash changed, so the bytecode was rebuilt"
+
+    def test_the_default_mode_follows_source_date_epoch(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """TIMESTAMP is only the default when SOURCE_DATE_EPOCH is unset.
+
+        A reproducible build already gets hash invalidation without asking,
+        which the page claimed the opposite of.
+        """
+        modes = py_compile.PycInvalidationMode
+
+        monkeypatch.delenv("SOURCE_DATE_EPOCH", raising=False)
+        assert py_compile._get_default_invalidation_mode() is modes.TIMESTAMP
+
+        monkeypatch.setenv("SOURCE_DATE_EPOCH", "1600000000")
+        assert py_compile._get_default_invalidation_mode() is modes.CHECKED_HASH
+
+    def test_doraise_raises_at_quiet_zero_and_one(self, tmp_path: Path) -> None:
+        """quiet=1 is not required for doraise, only quiet<2."""
+        broken = tmp_path / "broken.py"
+        broken.write_text("def (\n", encoding="utf-8")
+
+        for quiet in (0, 1):
+            with pytest.raises(py_compile.PyCompileError):
+                py_compile.compile(str(broken), doraise=True, quiet=quiet)
 
     def test_the_modes_are_recorded_in_the_header(self, tmp_path: Path) -> None:
         """Flags in bytes 4..8 distinguish them, per PEP 552."""

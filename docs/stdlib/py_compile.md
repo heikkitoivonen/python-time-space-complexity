@@ -24,7 +24,8 @@ module.write_text('value = 1\n')
 
 # Compile file - O(n). Returns the path it wrote, or None on failure
 written = py_compile.compile(module)
-print(written)  # .../__pycache__/module.cpython-313.pyc (PEP 3147)
+print(written)  # .../__pycache__/module.<cache_tag>.pyc (PEP 3147)
+# the tag is sys.implementation.cache_tag, so it changes with the version
 
 # Compile with custom output
 py_compile.compile(module, cfile=work / 'module.pyc')
@@ -33,15 +34,16 @@ py_compile.compile(module, cfile=work / 'module.pyc')
 ### Reporting Failures
 
 `compile()` returns the path of the bytecode it wrote. On a compilation
-error it returns `None` and prints the traceback; `doraise=True` raises
-`PyCompileError` instead.
+error it returns `None` and writes a formatted syntax-error diagnostic to
+stderr - not a traceback. `doraise=True` raises `PyCompileError` instead of
+writing anything, at any `quiet` below 2.
 
 !!! warning "`quiet=2` overrides `doraise`"
 
     The raise is inside an `if quiet < 2:` branch, so `quiet=2` swallows the
     error entirely and returns `None` - a build step asking for both gets
-    neither the exception nor the message. Use `quiet=1`, which suppresses
-    the printed traceback but still raises.
+    neither the exception nor the diagnostic. `quiet=0` and `quiet=1` both
+    raise when `doraise` is set.
 
 A missing source file raises `FileNotFoundError` under every combination:
 `doraise` governs compilation errors, not reading the file.
@@ -57,9 +59,9 @@ broken.write_text('def (\n')
 
 print(py_compile.compile(broken, quiet=2))  # None, and nothing printed
 
-# quiet=1 still raises; quiet=2 would return None without raising
+# doraise raises at quiet=0 and quiet=1 alike; quiet=2 would return None
 try:
-    py_compile.compile(broken, doraise=True, quiet=1)
+    py_compile.compile(broken, doraise=True)
 except py_compile.PyCompileError as error:
     print(f'failed: {error.file}')
 
@@ -73,11 +75,15 @@ except FileNotFoundError as error:
 
 ### Choosing How Bytecode Is Invalidated
 
-The default, `TIMESTAMP`, records the source's modification time and size.
-That is the cheapest check, and it misses an edit that changes neither -
-which a checkout, a restore, or a generator writing the same-length content
-can produce. `CHECKED_HASH` records a hash of the source instead and costs
-about 3% more to write.
+`TIMESTAMP` records the source's modification time and size. That is the
+cheapest check, and it misses an edit that changes neither - which a
+checkout, a restore, or a generator writing the same-length content can
+produce. `CHECKED_HASH` records a hash of the source instead and costs about
+3% more to write (CPython 3.11, one machine; illustrative).
+
+The default is not fixed: `py_compile` chooses `CHECKED_HASH` when
+`SOURCE_DATE_EPOCH` is set in the environment, and `TIMESTAMP` otherwise. So
+a reproducible build already gets hash invalidation without asking.
 
 ```python
 import py_compile
@@ -88,7 +94,7 @@ modes = py_compile.PycInvalidationMode
 module = Path(tempfile.mkdtemp()) / 'module.py'
 module.write_text('value = 1\n')
 
-# Default: mtime and size, and nothing else
+# mtime and size, and nothing else - the default without SOURCE_DATE_EPOCH
 py_compile.compile(module, invalidation_mode=modes.TIMESTAMP)
 
 # Verify the source hash on every import - immune to mtime games

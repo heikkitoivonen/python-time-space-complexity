@@ -206,7 +206,8 @@ for x in data:  # O(n)
 ```
 
 Which is faster depends on how you feed it, and the two directions are
-opposite. Counting 200,000 items:
+opposite. Counting 200,000 items, on CPython 3.11 on one Linux machine -
+illustrative, not portable:
 
 | | Counter | `defaultdict(int)` loop |
 |---|---|---|
@@ -214,10 +215,15 @@ opposite. Counting 200,000 items:
 | One key at a time (`c[x] += 1`) | 16.5 ms | 8.7 ms |
 
 `Counter(iterable)` and `update(iterable)` count in C, through
-`_count_elements`, which is why they beat a Python loop. Incrementing a
-single key does not use that path, and `Counter.__missing__` is a Python
-method where `defaultdict.__missing__` is C - so in a loop you already have
-for other reasons, `defaultdict(int)` is the faster place to count.
+`_count_elements`, which is why they beat a Python loop.
+
+The second row is a workload-specific measurement, not a rule with a known
+cause. `Counter.__missing__` is not the explanation: over 200,000 increments
+of 1,000 distinct keys it runs 1,000 times, and a pre-populated `Counter`
+that never misses is still about twice as slow as `defaultdict`. A plain
+`dict` subclass defining `__missing__` sits between them, so it is not simply
+subclass overhead either. Measure your own workload before rewriting one into
+the other.
 
 ## When to Use Counter
 
@@ -229,13 +235,15 @@ for other reasons, `defaultdict(int)` is the faster place to count.
 - Element counting with analysis
 
 ### Not Good For:
-- Counting one key at a time in a Python loop - see below
+- Counting one key at a time in a Python loop - see the comparison above
 - Non-hashable items
 - When you don't need frequency methods
 
-Space is not a reason either way: `Counter` is a `dict` subclass, and one
-holding 1000 keys measured 36976 bytes against 36952 for the plain `dict` of
-the same keys.
+For the same set of keys, space is not a reason either way: `Counter` is a
+`dict` subclass, and one holding 1000 keys measured 36976 bytes against 36952
+for the plain `dict`. It can end up holding *more keys*, though - `subtract()`
+creates absent keys, and zero and negative counts are retained until you drop
+them.
 
 ## Accessing Counts
 

@@ -221,12 +221,13 @@ ordered_dict.move_to_end('a')  # Available in OrderedDict
 - Python 3.7+ without special ordering needs (use `dict`)
 - When order doesn't matter (use `dict`)
 - Memory-constrained environments: the linked list roughly doubles it, at
-  100,000 entries 9.1 MB against a `dict`'s 3.8 MB
+  100,000 entries 9.1 MB against a `dict`'s 3.8 MB (64-bit CPython)
 - Iteration-heavy code, where the gap is largest
 
 ### How much slower, exactly
 
-"Regular `dict` is faster" is true but uneven. Measured at 100,000 entries:
+"Regular `dict` is faster" is true but uneven. Measured at 100,000 entries
+on CPython 3.11 on one Linux machine - illustrative, not portable:
 
 | Operation | `dict` | `OrderedDict` | |
 |---|---|---|---|
