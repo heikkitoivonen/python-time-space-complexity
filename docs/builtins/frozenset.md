@@ -54,8 +54,8 @@ h1 = hash(fs)    # O(n) - computed once, then cached on the object
 # ... time passes ...
 h2 = hash(fs)    # O(1) - reads the cached value
 assert h1 == h2  # Always true
-# The cached hash is why a frozenset key costs no more than a str key
-# after the first lookup
+# Caching removes the rehash from every later lookup. It does not make a
+# collision free: comparing two equal-hashing frozensets still scans them
 ```
 
 ## Performance Considerations

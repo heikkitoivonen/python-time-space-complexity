@@ -147,7 +147,8 @@ b[0] = 106     # TypeError: bytes are immutable
 # Bytearray: mutable
 ba = bytearray(b"hello")
 ba[0] = 106    # O(1) in place, becomes b"jello"
-ba.append(33)  # O(1) amortized - no copy of the existing bytes
+ba.append(33)  # O(1) amortized - most appends touch only the free slot,
+               # but a resize reallocates and copies the buffer
 ```
 
 ### Performance Comparison

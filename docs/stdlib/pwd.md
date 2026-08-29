@@ -16,7 +16,8 @@ It is only available on Unix-like platforms.
 ```python
 import pwd
 
-entry = pwd.getpwnam("root")  # One NSS lookup - O(1) in Python terms
+entry = pwd.getpwnam("root")  # One NSS lookup - a constant number of calls,
+                              # but the backend decides what each one costs
 print(entry.pw_uid)
 print(entry.pw_dir)
 

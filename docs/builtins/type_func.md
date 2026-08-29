@@ -157,8 +157,9 @@ MyClass = MyMeta('MyClass', (), {})
 ## Best Practices
 
 ```python
-# All of these are O(1) - type() reads a pointer on the object, and
-# isinstance() walks the MRO, which is short and fixed per class
+# type() is O(1) - it reads a pointer on the object. isinstance() is O(k*d)
+# in the number of candidate types and the MRO length, and an ABC or a custom
+# __instancecheck__ can do arbitrary work
 # ✅ DO: Use isinstance() for type checking
 if isinstance(value, (int, float)):
     print("Is number")

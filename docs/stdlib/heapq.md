@@ -136,7 +136,8 @@ heapq.heappush(heap, (1, 'high-priority-task'))   # O(log n)
 heapq.heappush(heap, (2, 'medium-priority-task'))  # O(log n)
 
 # Tasks ordered by priority (first element of tuple)
-# Tuples compare element by element, so ordering costs no more than an int key
+# Tuples compare element by element: equal priorities fall through to the
+# next field, so a tie costs more to order than a plain int key would
 while heap:
     priority, task = heapq.heappop(heap)  # O(log n)
     print(task)

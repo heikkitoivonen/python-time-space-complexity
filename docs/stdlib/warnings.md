@@ -7,7 +7,7 @@ The `warnings` module provides a framework for issuing and filtering warning mes
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `warn()` | O(n) | O(1) | n = filters to check; includes stack inspection |
-| `simplefilter()` | O(1) | O(1) | Prepends to filter list |
+| `simplefilter()` / `filterwarnings()` | O(f) | O(1) | f = filters; removes any duplicate, then prepends |
 | Filter matching | O(n) | O(1) | n = filters; checked in order until match |
 
 ## Core Functions
@@ -153,8 +153,9 @@ def risky_operation():
         stacklevel=2
     )
 
-# Turn into error for critical code - O(1) to install, and it short-circuits
-# the "once" registry, so every call now pays the full warn() cost
+# Turn into error for critical code - O(f): it scans the filter list to drop
+# a duplicate, then prepends. It also short-circuits the "once" registry, so
+# every call now pays the full warn() cost
 warnings.filterwarnings("error", category=RuntimeWarning)
 try:
     risky_operation()

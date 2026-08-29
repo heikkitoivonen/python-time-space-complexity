@@ -9,7 +9,7 @@ The `glob` module provides Unix shell-style pathname expansion using wildcard pa
 | `glob()` function | O(n) | O(n) | n = matching files |
 | `iglob()` function | O(1) init | O(1) per item | Iterator, lazy evaluation |
 | Pattern matching | O(n) | O(1) | n = files in directory |
-| Recursive search `**` | O(d) | O(1) per file | d = depth of directory tree |
+| Recursive search `**` | O(E) | O(1) per file | E = entries examined across the walked tree |
 | `escape()` | O(n) | O(n) | Escape metacharacters |
 | `has_magic()` | O(n) | O(1) | Detect pattern magic |
 | `glob0()` | O(1) | O(1) | Single-directory literal/implicit match |
@@ -51,7 +51,8 @@ import glob
 print(glob.glob('test*.py'))      # test_*.py files
 print(glob.glob('file?.txt'))     # file1.txt, fileA.txt, etc.
 print(glob.glob('[a-c]*.txt'))    # a*, b*, or c* txt files
-print(glob.glob('**/*.py'))       # O(d) directories walked - all .py files
+print(glob.glob('**/*.py'))       # O(E) - every entry in the tree is looked
+                                  # at, not just every directory
 ```
 
 ## Iterator vs List
@@ -99,7 +100,7 @@ for file in file_iter:
 ```python
 import glob
 
-# Recursive search with ** - O(d) where d = tree depth
+# Recursive search with ** - O(E), E = entries examined in the whole tree
 # Must use recursive=True parameter
 
 # Find all Python files recursively
@@ -361,7 +362,7 @@ print("Found packages:", packages)
 - **glob()**: O(n) where n = total matching files
 - **iglob()**: O(1) initialization + O(k) for first k items
 - **Pattern matching**: O(n) to scan all files
-- **Recursive search**: O(d) proportional to directory depth
+- **Recursive search**: O(E) proportional to entries examined, not tree depth
 
 ### Space Complexity
 - **glob()**: O(n) for result list
@@ -411,7 +412,7 @@ print(f"Iterator: {time3:.4f}s")
 # For more control, use pathlib
 from pathlib import Path
 
-# glob with pathlib - O(d) over the tree, same work as glob.glob()
+# glob with pathlib - O(E) over the tree, same work as glob.glob()
 path = Path('.')
 py_files = list(path.glob('**/*.py'))
 

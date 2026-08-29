@@ -6,7 +6,7 @@ The `difflib` module provides tools for comparing sequences (lists, strings) and
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `SequenceMatcher()` init | O(1) | O(n) | Create matcher, n = combined length |
+| `SequenceMatcher()` init | O(m) | O(m) | Indexes the second sequence into `b2j`, m = len(b) |
 | `find_longest_match()` | O(n*m) worst | O(min(n,m)) | Nested loop over both sequences |
 | `get_matching_blocks()` | O(n*m) worst | O(n+m) | Calls find_longest_match recursively |
 | `get_opcodes()` | O(n*m) worst | O(n+m) | Uses get_matching_blocks |
@@ -368,14 +368,15 @@ text1 = "hello  world"
 text2 = "hello world"
 
 # Without filtering - shows difference
-matcher1 = SequenceMatcher(None, text1, text2)  # O(1) to construct
+matcher1 = SequenceMatcher(None, text1, text2)  # O(m) - indexes text2 now
 print(f"With spaces: {matcher1.ratio():.2%}")   # O(n*m) worst case
 
 # With filtering - ignores spaces
 matcher2 = SequenceMatcher(is_whitespace, text1, text2)
 print(f"Without spaces: {matcher2.ratio():.2%}")  # O(n*m) worst case
-# The junk filter runs once per element, O(n); it changes the result, not
-# the worst-case complexity
+# The junk filter runs once per element while indexing; it changes the
+# result, not the worst-case complexity. Reuse one matcher via set_seq1()
+# to avoid re-indexing b for every comparison
 ```
 
 ## Best Practices

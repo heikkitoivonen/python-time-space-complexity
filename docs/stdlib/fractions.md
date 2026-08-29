@@ -206,7 +206,10 @@ print(total_float)    # 0.6000000000000001 (wrong!)
 
 # Solution: use Fractions for exact arithmetic
 prices_frac = [Fraction(1, 10), Fraction(2, 10), Fraction(3, 10)]  # O(log n) each
-total_frac = sum(prices_frac)  # O(n log m) - a GCD reduction per addition
+total_frac = sum(prices_frac)  # One GCD reduction per addition. Not n times
+                               # a fixed cost: unless denominators share
+                               # factors they multiply out, so both the
+                               # numbers and each reduction grow as it goes
 print(total_frac)     # 3/5 (exact)
 print(float(total_frac))  # O(log m) - 0.6
 ```

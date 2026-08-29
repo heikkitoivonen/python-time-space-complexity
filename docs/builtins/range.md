@@ -98,10 +98,12 @@ for i in range(100, 10, -5):
 for idx, val in enumerate(items):
     print(idx, val)
 
-# Or explicit range - O(1) for len() and range(), O(1) per items[i]
+# Or explicit range - O(1) for len() and range(); items[i] is O(1) for a
+# list or tuple, but not for every sequence
 for i in range(len(items)):
     print(i, items[i])
-# Same O(n) total; enumerate avoids one index lookup per item
+# Same O(n) total; enumerate avoids one index lookup per item, and works on
+# sequences that index in worse than constant time
 ```
 
 ## Performance Characteristics

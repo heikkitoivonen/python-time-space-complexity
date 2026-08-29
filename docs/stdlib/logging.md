@@ -146,8 +146,10 @@ try:
 except ValueError as e:
     logger.error(f'Invalid value: {e}')  # f-string formats even if filtered out
 except Exception as e:
-    logger.exception('Unexpected error')  # O(d) in stack depth - formats a
-                                          # traceback on top of the message
+    logger.exception('Unexpected error')  # Formats a traceback on top of the
+                                          # message, once per emitting
+                                          # handler, and scales with the
+                                          # traceback text, not just depth
 ```
 
 ## Performance Considerations

@@ -9,7 +9,7 @@ The `sqlite3` module provides a lightweight embedded SQL database interface for 
 | `connect()` | O(1) | O(1) | Open database (filesystem work varies) |
 | `execute()` | Varies | Varies | Depends on query plan, indexes, sorting |
 | SELECT | O(n) or O(log n) | O(n) | O(log n) lookup with index, O(n) full scan |
-| INSERT | O(log n) | O(1) | B-tree insert (plus I/O) |
+| INSERT | O(log n) per index | O(1) | One B-tree insert per index, plus constraints, triggers and page splits |
 | UPDATE/DELETE | O(n) or O(log n) | O(1) | O(log n) with indexed WHERE; O(n) full scan |
 
 ## Basic Usage
@@ -135,8 +135,8 @@ import sqlite3
 with sqlite3.connect('db.db') as conn:
     cursor = conn.cursor()
     cursor.execute('INSERT INTO users VALUES (?, ?)', (1, 'Alice'))  # O(log n)
-# Automatically commits when exiting - the commit is the expensive part,
-# because it has to reach the disk
+# Automatically commits when exiting. The commit is usually the expensive
+# part, because durability means reaching the disk
 ```
 
 ## Transactions
@@ -149,12 +149,14 @@ cursor = conn.cursor()
 
 try:
     # Multiple operations - varies by query plan
-    cursor.execute('INSERT INTO users VALUES (?, ?)', (1, 'Alice'))  # O(log n)
-    cursor.execute('INSERT INTO orders VALUES (?, ?)', (1, 1))       # O(log n)
+    # O(log n) per index on the table, plus any constraints and triggers
+    cursor.execute('INSERT INTO users VALUES (?, ?)', (1, 'Alice'))
+    cursor.execute('INSERT INTO orders VALUES (?, ?)', (1, 1))
     
-    conn.commit()  # Both or nothing - one disk sync for the whole
-                   # transaction, which is why batching inserts beats
-                   # committing each one
+    conn.commit()  # Both or nothing - the durability cost is paid once for
+                   # the transaction rather than once per insert, which is
+                   # why batching wins. How many syncs that is depends on the
+                   # journal mode and the synchronous pragma
 except Exception as e:
     conn.rollback()  # Undo on error
 finally:

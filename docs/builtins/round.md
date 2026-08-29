@@ -132,10 +132,13 @@ round(2.675, 2)  # O(1) - hardware float, 2.67 (not 2.68!)
 
 # Decimal - precise
 from decimal import Decimal
-Decimal("2.675").quantize(Decimal("0.01"))  # O(p) in the digits kept, 2.68
+Decimal("2.675").quantize(Decimal("0.01"))  # 2.68, O(p) in the operand and
+                                            # context precision, not just
+                                            # the digits kept
 
-# Use Decimal for financial calculations - correctness costs a constant
-# factor over float, not a change in complexity
+# Use Decimal for financial calculations - but this is a change in
+# complexity, not a constant factor: float arithmetic is fixed-width O(1),
+# while Decimal is linear in its digits and worse for multiply and divide
 ```
 
 ### round() vs Format String

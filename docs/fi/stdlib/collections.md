@@ -1,5 +1,5 @@
 ---
-source_sha: 8bfb851d8a96095493ad930e71dce6a005258780f53354bdce9f6aba331e6613
+source_sha: 44dad968fd1e81d00e6af845df3bc043d1b664b29f48be37d89a04bc8936fdc1
 translated: machine
 ---
 
@@ -97,7 +97,8 @@ count += 1
 # Better: defaultdict with int
 from collections import defaultdict
 count = defaultdict(int)
-count['key'] += 1  # O(1) avg - one lookup, default supplied by the factory
+count['key'] += 1  # O(1) avg - still a get plus a set, but one statement
+                   # and no default to pass in
 ```
 
 ## Counter

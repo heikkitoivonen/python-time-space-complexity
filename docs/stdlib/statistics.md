@@ -322,17 +322,16 @@ std = stdev(huge_dataset)  # O(1) memory
 ## Exception Handling
 
 ```python
-from statistics import mode, median, StatisticsError
+from statistics import mean, mode, multimode, StatisticsError
 
-# mode() with no mode - O(n): the whole input is counted before it raises
-try:
-    m = mode([1, 2, 3])  # All equally common
-except StatisticsError:
-    print("No unique mode")
+# A tie does NOT raise (Python 3.8+) - mode() returns the first value with
+# the highest count. O(n) either way: the whole input is counted first
+m = mode([1, 2, 3])               # 1, not an error
+ties = multimode([1, 2, 3])       # O(n) - [1, 2, 3], use this to spot a tie
 
-# Empty data - O(1), there is nothing to scan
+# Empty data raises - O(1), there is nothing to count
 try:
-    avg = statistics.mean([])
+    avg = mean([])
 except StatisticsError:
     print("No data")
 ```

@@ -292,7 +292,9 @@ print(f"List comprehension: {comp_time:.4f}s")
 ```python
 # For more complex patterns, use regex
 import re
-result = re.match(r'test[0-9]{3}\.txt', filename)  # O(n), same as fnmatch
+# Anchored and fixed length, so this examines a bounded prefix - O(1) in the
+# filename length. A general pattern can be far worse, up to exponential
+result = re.match(r'test[0-9]{3}\.txt', filename)
 
 # For filesystem globbing, use glob
 import glob

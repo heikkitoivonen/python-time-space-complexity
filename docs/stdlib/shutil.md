@@ -8,7 +8,7 @@ The `shutil` module provides high-level file operations like copying and removin
 |-----------|------|-------|-------|
 | `copy(src, dst)` | O(n) | O(1) | Copy file contents + basic metadata |
 | `copy2(src, dst)` | O(n) | O(1) | Copy with full metadata |
-| `copytree(src, dst)` | O(n) | O(d) | n = total bytes copied, d = entries |
+| `copytree(src, dst)` | O(n + E) | O(E) | n = total bytes copied; E = entries walked, each needing metadata work |
 | `rmtree(path)` | O(d) | O(d) | Remove directory tree |
 | `move(src, dst)` | O(1) or O(n) | O(1) | O(1) same filesystem (rename); O(n) cross-filesystem (copy+delete) |
 | `disk_usage(path)` | O(1) | O(1) | Single statvfs syscall |
@@ -281,8 +281,8 @@ ignore = shutil.ignore_patterns(
     '*.egg-info',      # Package info
 )
 
-# O(n) in bytes copied; matching costs O(entries * patterns) on top, which
-# is cheap next to the copying it avoids
+# O(n + E) - bytes copied plus every entry walked and stat'd; matching costs
+# O(E * patterns) on top, which is cheap next to the copying it avoids
 shutil.copytree('src', 'dst', ignore=ignore)
 ```
 
@@ -359,7 +359,7 @@ from pathlib import Path
 
 # Handle errors during tree operations
 try:
-    shutil.copytree('src', 'dst')  # O(n) in bytes copied
+    shutil.copytree('src', 'dst')  # O(n + E) - bytes copied, entries walked
 except shutil.Error as e:
     # Multiple errors may occur
     for src, dst, err in e.args[0]:

@@ -286,8 +286,9 @@ def format_table(rows):
         output.write(f"{row[0]:10} {row[1]:10} {row[2]:10}\n")  # O(k) amortized
     
     return output.getvalue()  # O(n) - one copy of the whole buffer
-    # O(n) overall. Repeated `text += row` would be O(n²), because each +=
-    # copies the string built so far
+    # O(n) overall. Repeated `text += row` can be O(n²), because each +=
+    # copies the string built so far - CPython can extend in place instead,
+    # but only when the target string has a single reference
 
 data = [
     ('Name', 'Age', 'Score'),

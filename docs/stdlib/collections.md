@@ -92,7 +92,8 @@ count += 1
 # Better: defaultdict with int
 from collections import defaultdict
 count = defaultdict(int)
-count['key'] += 1  # O(1) avg - one lookup, default supplied by the factory
+count['key'] += 1  # O(1) avg - still a get plus a set, but one statement
+                   # and no default to pass in
 ```
 
 ## Counter
