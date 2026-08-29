@@ -26,6 +26,10 @@ from typing import Any
 
 import pytest
 
+# CPython 3.14 allows repeated prepare() calls until the first get_ready();
+# every earlier version allows exactly one. See TestApiContract.
+RELAXED_PREPARE = sys.version_info >= (3, 14)
+
 PROJECT_ROOT = Path(__file__).parent.parent
 GRAPHLIB_PAGE = PROJECT_ROOT / "docs" / "stdlib" / "graphlib.md"
 
@@ -94,9 +98,26 @@ class TestApiContract:
     These are cheap, deterministic, and pin the mistake directly.
     """
 
-    def test_prepare_can_only_be_called_once(self) -> None:
+    def test_repeated_prepare_is_version_dependent(self) -> None:
+        """3.14 relaxed this; up to 3.13 a second prepare() raises.
+
+        The page stated the restriction unconditionally, which is wrong on
+        3.14 - and an earlier version of this test asserted the same thing
+        and failed there.
+        """
         sorter = chain(3)
         sorter.prepare()
+        if RELAXED_PREPARE:
+            sorter.prepare()  # allowed: the sort has not started
+        else:
+            with pytest.raises(ValueError, match="cannot prepare"):
+                sorter.prepare()
+
+    def test_prepare_after_the_sort_starts_always_fails(self) -> None:
+        """What every supported version agrees on."""
+        sorter = chain(3)
+        sorter.prepare()
+        sorter.get_ready()
         with pytest.raises(ValueError, match="cannot prepare"):
             sorter.prepare()
 
@@ -104,15 +125,26 @@ class TestApiContract:
         # No prepare() call, and it still sorts.
         assert list(chain(4).static_order()) == [0, 1, 2, 3]
 
-    def test_preparing_first_then_calling_static_order_fails(self) -> None:
-        """Exactly the page's bug, in five blocks."""
+    def test_preparing_first_then_calling_static_order(self) -> None:
+        """Exactly the page's bug, in five blocks - up to 3.13.
+
+        On 3.14 the same code happens to work, which is why the page needs
+        the version qualification rather than a flat prohibition.
+        """
         sorter = chain(4)
         sorter.prepare()
-        with pytest.raises(ValueError, match="cannot prepare"):
-            list(sorter.static_order())
+        if RELAXED_PREPARE:
+            assert list(sorter.static_order()) == [0, 1, 2, 3]
+        else:
+            with pytest.raises(ValueError, match="cannot prepare"):
+                list(sorter.static_order())
 
     def test_a_sorter_cannot_be_reused_for_a_second_traversal(self) -> None:
-        """Why a class must keep the graph rather than a prepared sorter."""
+        """Why a class must keep the graph rather than a prepared sorter.
+
+        True on every version, including 3.14 - which relaxed prepare() but
+        not this. The message differs, so match on the type only.
+        """
         sorter = chain(4)
         assert list(sorter.static_order()) == [0, 1, 2, 3]
         with pytest.raises(ValueError):

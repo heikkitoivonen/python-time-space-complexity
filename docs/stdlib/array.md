@@ -88,11 +88,16 @@ bytes_data = arr.tobytes()  # O(3)
 
 ## Performance Comparison
 
+Every byte count below is from a 64-bit CPython build. Object headers,
+pointer width, `int` size and the C type behind each type code all vary with
+implementation, build and architecture, so treat them as one worked example
+rather than as constants.
+
 ```python
 import array
 import sys
 
-# An array's header is larger - 80 bytes against a list's 56 - so for a
+# An array's header is larger - 80 bytes against a list's 56 here - so for a
 # handful of elements the array is the bigger object. The saving arrives at
 # a few dozen, and grows from there.
 lst = [1, 2, 3, 4, 5]
@@ -104,11 +109,12 @@ lst = list(range(10_000))
 arr = array.array('i', range(10_000))
 print(sys.getsizeof(lst), sys.getsizeof(arr))  # 80056 vs 40420 bytes
 
-# But that 2x understates it. getsizeof() counts the list's pointers, not
-# the int objects they point at - 28 bytes each, and only small ints are
-# shared. Counting those, the list holds 360056 bytes against 40420.
+# But that 2x understates it: getsizeof() counts the list's pointers, not the
+# int objects they point at, at 28 bytes each. Summing those gives the
+# reachable deep size - not memory the list owns, since CPython shares small
+# ints (-5..256), which is 257 of these 10,000 and about 2% of the total.
 deep = sys.getsizeof(lst) + sum(sys.getsizeof(x) for x in lst)
-print(deep // sys.getsizeof(arr))  # 8x, not 2x
+print(deep // sys.getsizeof(arr))  # 8x reachable, against 2x by getsizeof
 ```
 
 ## Type Codes

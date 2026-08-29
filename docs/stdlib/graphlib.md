@@ -8,7 +8,7 @@ The `graphlib` module provides a topological sort implementation for resolving d
 |-----------|------|-------|-------|
 | `TopologicalSorter()` init | O(1) | O(1) | Create sorter |
 | `add(node, *predecessors)` | O(k) | O(k) | Add node with k predecessors |
-| `prepare()` | O(v + e) | O(v) | Prepare sort, v = vertices, e = edges. Can be called only once per sorter, and `static_order()` calls it for you |
+| `prepare()` | O(v + e) | O(v) | Prepare sort, v = vertices, e = edges. Up to 3.13 it may be called only once; 3.14 allows repeated calls until the first `get_ready()`. `static_order()` calls it for you on every version |
 | `get_ready()` | O(k) | O(k) | Returns all ready nodes as a tuple, k = ready count. O(1) amortized per node over the whole sort |
 | `done(node)` | O(d) | O(1) | Mark done, d = node degree |
 | `static_order()` | O(v + e) | O(v + e) | Complete topological sort |
@@ -31,7 +31,8 @@ ts.add('cook', 'shop')     # cook depends on shop
 ts.add('shop')              # shop has no dependencies
 
 # Get nodes in dependency order - O(v + e)
-# static_order() calls prepare() itself; calling it first raises ValueError
+# static_order() calls prepare() itself. Do not call prepare() first: up to
+# 3.13 that raises ValueError, and 3.14 only tolerates it
 for task in ts.static_order():
     print(task)
 
@@ -99,7 +100,7 @@ ts.add('prog', 'main.o', 'util.o')
 for file in ['main.c', 'util.c', 'util.h', 'defs.h']:
     ts.add(file)
 
-# Get execution order - O(v + e), prepare() is called inside static_order()
+# Get execution order - O(v + e); static_order() prepares the sorter itself
 order = list(ts.static_order())
 print(order)
 
@@ -183,8 +184,10 @@ class BuildSystem:
     """Simple build system with dependency resolution"""
     
     def __init__(self):
-        # Keep the graph, not a sorter: a TopologicalSorter can be prepared
-        # only once, so a stored one could serve only a single traversal.
+        # Keep the graph, not a sorter: a sorter cannot be traversed twice,
+        # so a stored one could serve only a single caller. (Up to 3.13 even
+        # a second prepare() raises; 3.14 allows that but still not a second
+        # traversal.)
         self.targets = {}
     
     # Add build target with dependencies

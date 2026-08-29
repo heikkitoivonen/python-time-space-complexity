@@ -385,6 +385,26 @@ class TestMemoryFootprint:
         values = list(range(50))
         assert sys.getsizeof(array.array("i", values)) < sys.getsizeof(values)
 
+    def test_small_ints_are_shared_so_deep_size_is_reachable_not_owned(self) -> None:
+        """Why the page calls it reachable deep size, not memory owned.
+
+        CPython caches the ints -5..256, so summing getsizeof over a list's
+        elements counts objects the list does not own. Over range(10_000)
+        that is 257 of them, about 2% - it does not move the conclusion, but
+        the total is reachable size rather than the list's own footprint.
+        """
+
+        def freshly_built(value: int) -> int:
+            """An int built at runtime, so identity shows whether it is cached."""
+            return int(str(value))
+
+        assert all(freshly_built(value) is value for value in range(0, 257)), (
+            "small ints are shared, so they are not the list's to own"
+        )
+        assert freshly_built(10_000) is not 10_000, (  # noqa: F632 - identity is the point
+            "outside the cache every element is a distinct 28-byte object"
+        )
+
     def test_getsizeof_understates_the_saving(self) -> None:
         """A list also pays for the int objects, which getsizeof omits."""
         count = 10_000
