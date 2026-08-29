@@ -235,13 +235,13 @@ the other.
 - Element counting with analysis
 
 ### Not Good For:
-- Counting one key at a time in a Python loop - see the comparison above
+- Counting one key at a time in a Python loop, on the workload measured below - benchmark your own before rewriting
 - Non-hashable items
 - When you don't need frequency methods
 
 For the same set of keys, space is not a reason either way: `Counter` is a
 `dict` subclass, and one holding 1000 keys measured 36976 bytes against 36952
-for the plain `dict`. It can end up holding *more keys*, though - `subtract()`
+for the plain `dict` (64-bit CPython 3.11). It can end up holding *more keys*, though - `subtract()`
 creates absent keys, and zero and negative counts are retained until you drop
 them.
 

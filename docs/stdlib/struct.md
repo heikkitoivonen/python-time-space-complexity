@@ -361,8 +361,9 @@ All timings on this page are from CPython 3.11 on one Linux machine and are illu
 - **pack_into()**: O(k + B) time, O(1) extra space
 
 ### Space Complexity
-- **Output**: O(n) for packed data (n = total bytes)
-- **Input**: O(n) for unpacked tuple
+- **Packed bytes**: O(B) produced by `pack()`, or none by `pack_into()`
+- **Unpacked tuple**: O(k + B) returned by `unpack()`, since byte-string
+  fields carry their bytes
 
 ### Optimization Tips
 
@@ -383,11 +384,20 @@ for i in range(1000):
     data = int_struct.pack(i)  # 58 ns per call
 ```
 
-The saving is larger when the format is not in the cache. Sweeping 58
-distinct formats with `_clearcache()` called each time - a forced cold cache,
-not natural capacity churn - cost 53.9 µs against 14.7 µs for pre-built
-`Struct` objects. So pre-compile when a format is used once, or build your
-`Struct` objects where you build the rest of your constants.
+The saving is larger when the format is not in the cache, but only if the
+`Struct` is reused. Sweeping 58 distinct formats, with `_clearcache()` called
+each time - a forced cold cache, not natural capacity churn:
+
+| | µs per sweep |
+|---|---|
+| Module call, cold cache | 46.2 |
+| Build a `Struct` then pack, per format | 42.9 |
+| Reuse `Struct` objects built beforehand | 14.2 |
+
+Pre-compiling a format you use **once** saves nothing: you pay the same parse,
+just at a different moment. The 3x is for reuse. So build your `Struct`
+objects where you build the rest of your constants, and do not bother for a
+one-shot format.
 
 ## Format Modifiers
 

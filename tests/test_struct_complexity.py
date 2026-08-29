@@ -85,6 +85,43 @@ class TestFormatCaching:
             f"warm {warm_time:.2e}s"
         )
 
+    def test_precompiling_a_one_shot_format_saves_nothing(self) -> None:
+        """The 3x is for reuse, not for pre-compiling as such.
+
+        The page recommended pre-compiling "when a format is used once",
+        which is backwards: building the Struct pays the same parse the
+        module call would have, just at a different moment.
+        """
+        formats = ["i" * count for count in range(2, 60)]
+        values = {fmt: tuple(range(len(fmt))) for fmt in formats}
+        prepared = [struct.Struct(fmt) for fmt in formats]
+
+        def module_call() -> None:
+            struct._clearcache()  # type: ignore[attr-defined]
+            for fmt in formats:
+                struct.pack(fmt, *values[fmt])
+
+        def build_each_time() -> None:
+            struct._clearcache()  # type: ignore[attr-defined]
+            for fmt in formats:
+                struct.Struct(fmt).pack(*values[fmt])
+
+        def reuse() -> None:
+            for built, fmt in zip(prepared, formats, strict=True):
+                built.pack(*values[fmt])
+
+        one_shot_module = per_call(module_call, number=200)
+        one_shot_built = per_call(build_each_time, number=200)
+        reused = per_call(reuse, number=200)
+
+        assert one_shot_built > one_shot_module / 2, (
+            f"building per use is not a saving over the cold module call: "
+            f"module {one_shot_module:.2e}s built {one_shot_built:.2e}s"
+        )
+        assert reused < one_shot_built / 2, (
+            f"reuse is where the saving is: built {one_shot_built:.2e}s reused {reused:.2e}s"
+        )
+
 
 class TestFieldCountDominates:
     """The table's O(k) in fields, plus a cheaper term in bytes."""

@@ -226,16 +226,16 @@ ordered_dict.move_to_end('a')  # Available in OrderedDict
 
 ### How much slower, exactly
 
-"Regular `dict` is faster" is true but uneven. Measured at 100,000 entries
-on CPython 3.11 on one Linux machine - illustrative, not portable:
+"Regular `dict` is faster" is true but uneven. Mappings of 100,000 entries,
+on 64-bit CPython 3.11 on one Linux machine - illustrative, not portable:
 
-| Operation | `dict` | `OrderedDict` | |
+| Measured | `dict` | `OrderedDict` | |
 |---|---|---|---|
-| `d[key]` lookup | 240 µs | 252 µs | 1.05x - the same code, inherited |
-| `d[key] = value` | 599 µs | 722 µs | 1.21x |
-| build then delete | 54 µs | 102 µs | 1.89x |
-| construction | 4970 µs | 12961 µs | 2.61x |
-| iterate the keys | 619 µs | 3522 µs | **5.69x** |
+| 10,000 lookups of one key | 240 µs | 252 µs | 1.05x - the same code, inherited |
+| 10,000 assignments to one key | 599 µs | 722 µs | 1.21x |
+| build 1,000 entries, then delete all | 54 µs | 102 µs | 1.89x |
+| one construction from 100,000 pairs | 4970 µs | 12961 µs | 2.61x |
+| one `list()` over all 100,000 keys | 619 µs | 3522 µs | **5.69x** |
 
 Lookups cost the same, because `OrderedDict` inherits them unchanged. What
 you pay for is maintaining and walking the doubly-linked list, so the cost
