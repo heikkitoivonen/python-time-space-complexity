@@ -9,11 +9,11 @@ that is a file rather than a directory, both come back `True`. The most
 likely mistake - a typo in the path - is reported as success.
 
 Everything here runs against trees built in `tmp_path`, so nothing touches
-the repository or writes `__pycache__` into it.
+the repository or writes `__pycache__` into it. Single-file compilation lives
+in tests/test_py_compile_complexity.py.
 """
 
 import compileall
-import py_compile
 import shutil
 import time
 from collections.abc import Callable
@@ -155,50 +155,6 @@ class TestCompileDirComplexity:
         cache = tree / "__pycache__"
         assert cache.is_dir()
         assert len(list(cache.glob("*.pyc"))) == 3
-
-
-class TestCompileFileComplexity:
-    """The table's O(m) in the file's size."""
-
-    def test_scales_with_the_source_size(self, tmp_path: Path) -> None:
-        def source_of(lines: int) -> Path:
-            path = tmp_path / f"mod{lines}.py"
-            path.write_text(
-                "\n".join(f"y{index} = {index} * 2" for index in range(lines)),
-                encoding="utf-8",
-            )
-            return path
-
-        small, large = source_of(100), source_of(1_600)
-
-        small_time = best_time(lambda: py_compile.compile(str(small), doraise=True))
-        large_time = best_time(lambda: py_compile.compile(str(large), doraise=True))
-
-        assert large_time > small_time * 4, (
-            f"sixteen times the source: {small_time:.2e}s vs {large_time:.2e}s"
-        )
-
-    def test_a_missing_source_raises_regardless_of_doraise(self, tmp_path: Path) -> None:
-        """doraise governs compilation errors, not reading the file.
-
-        The str() calls in this class are for typeshed, which stubs
-        py_compile.compile as taking AnyStr; it accepts a path-like at
-        runtime, which is what the page's example passes.
-        """
-        absent = tmp_path / "absent.py"
-
-        with pytest.raises(FileNotFoundError):
-            py_compile.compile(str(absent))
-        with pytest.raises(FileNotFoundError):
-            py_compile.compile(str(absent), doraise=True)
-
-    def test_doraise_governs_syntax_errors(self, tmp_path: Path) -> None:
-        broken = tmp_path / "broken.py"
-        broken.write_text("def (\n", encoding="utf-8")
-
-        assert py_compile.compile(str(broken)) is None, "quietly reports failure by default"
-        with pytest.raises(py_compile.PyCompileError):
-            py_compile.compile(str(broken), doraise=True)
 
 
 class TestParallelCompilation:
