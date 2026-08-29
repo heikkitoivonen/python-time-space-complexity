@@ -134,9 +134,7 @@ def test_dismissal_ignores_what_the_banner_says():
     )
     script = OVERRIDE_PARTIAL.read_text(encoding="utf-8")
     body = re.sub(r"\{#-.*?-#\}", "", script, flags=re.DOTALL)
-    assert "__md_hash" not in body, (
-        "the override must not compare the banner's content hash"
-    )
+    assert "__md_hash" not in body, "the override must not compare the banner's content hash"
     assert '__md_get("__announce")' in body, "the override must read the stored dismissal"
     assert "hidden" in body, "the override must hide the banner"
 

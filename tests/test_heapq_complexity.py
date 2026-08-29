@@ -10,6 +10,8 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+import pytest
+
 
 def trimmed_mean(samples: list[float], trim_fraction: float = 0.1) -> float:
     """Return the trimmed mean to reduce outlier impact."""
@@ -80,6 +82,7 @@ class TestHeapqComplexity:
     LARGE_SIZE = 100_000
     SIZE_RATIO = LARGE_SIZE / SMALL_SIZE
 
+    @pytest.mark.timing
     def test_heapify_is_on(self) -> None:
         """heapify() should be O(n)."""
         small_list = list(range(self.SMALL_SIZE, 0, -1))
@@ -100,6 +103,7 @@ class TestHeapqComplexity:
             f"heapify() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_heappush_is_ologn(self) -> None:
         """heappush() should be O(log n)."""
         small_heap = list(range(self.SMALL_SIZE))
@@ -122,6 +126,7 @@ class TestHeapqComplexity:
             f"heappush() doesn't appear O(log n): {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_heappop_is_ologn(self) -> None:
         """heappop() should be O(log n)."""
         small_heap = list(range(self.SMALL_SIZE))
@@ -144,6 +149,7 @@ class TestHeapqComplexity:
             f"heappop() doesn't appear O(log n): {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_heappushpop_is_ologn(self) -> None:
         """heappushpop() should be O(log n)."""
         small_heap = list(range(self.SMALL_SIZE))
@@ -166,6 +172,7 @@ class TestHeapqComplexity:
             f"heappushpop() doesn't appear O(log n): {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_heapreplace_is_ologn(self) -> None:
         """heapreplace() should be O(log n)."""
         small_heap = list(range(self.SMALL_SIZE))
@@ -190,6 +197,7 @@ class TestHeapqComplexity:
             f"heapreplace() doesn't appear O(log n): {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_nlargest_scales_with_n(self) -> None:
         """nlargest(k, iterable) should be O(N log k) where N = iterable length."""
         small_data = list(range(self.SMALL_SIZE))
@@ -203,6 +211,7 @@ class TestHeapqComplexity:
             f"nlargest() doesn't scale linearly with N: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_nsmallest_scales_with_n(self) -> None:
         """nsmallest(k, iterable) should be O(N log k) where N = iterable length."""
         small_data = list(range(self.SMALL_SIZE))
@@ -216,6 +225,7 @@ class TestHeapqComplexity:
             f"nsmallest() doesn't scale linearly with N: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_nlargest_scales_with_k(self) -> None:
         """nlargest with larger k should be slower (O(N log k))."""
         data = list(range(self.LARGE_SIZE))
@@ -228,6 +238,7 @@ class TestHeapqComplexity:
             f"k=10: {small_k_time:.2e}s vs k=1000: {large_k_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_merge_scales_with_total_items(self) -> None:
         """merge() should scale with total items O(n log k)."""
         small_lists = [list(range(i, i + 100)) for i in range(10)]

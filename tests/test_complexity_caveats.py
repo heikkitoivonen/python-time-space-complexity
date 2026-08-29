@@ -109,6 +109,7 @@ class TestSequenceMatcherIndexesOnConstruction:
         matcher = SequenceMatcher(None, "qqq", "ab")
         assert set(_b2j(matcher)) == {"a", "b"}
 
+    @pytest.mark.timing
     def test_construction_cost_follows_the_second_sequence(self) -> None:
         small, large = "x" * 1_000, "x" * 200_000
         long_b = best_time(lambda: SequenceMatcher(None, small, large))
@@ -295,6 +296,7 @@ class TestIsinstanceIsNotUniversallyConstant:
         assert isinstance(1, _Expensive) is False
         assert _ExpensiveMeta.checks == 1, "__instancecheck__ is user code on the hot path"
 
+    @pytest.mark.timing
     def test_cost_grows_with_the_candidate_tuple(self) -> None:
         few = tuple(type(f"C{i}", (), {}) for i in range(2))
         many = tuple(type(f"C{i}", (), {}) for i in range(500))
@@ -330,6 +332,7 @@ class TestUnicodeDataCaveats:
             # A prefix of a valid name fails, so the whole name is examined.
             unicodedata.lookup("GREEK SMALL LETTER M")
 
+    @pytest.mark.timing
     def test_normalizing_a_combining_run_is_superlinear(self) -> None:
         def run(marks: int) -> Callable[[], str]:
             text = "a" + "".join(chr(0x0300 + (i % 40)) for i in range(marks))
@@ -368,6 +371,7 @@ class TestIntFromStringIsSuperlinear:
     DIGIT_MULTIPLE = 4
     SUPERLINEAR_AT_4X = 6.0
 
+    @pytest.mark.timing
     def test_parsing_four_times_the_digits_costs_far_more(self) -> None:
         limit = sys.get_int_max_str_digits()
         sys.set_int_max_str_digits(2_000_000)
@@ -400,6 +404,7 @@ class TestDecimalIsNotAConstantFactorOverFloat:
     """docs/builtins/round.md called Decimal "a constant factor over float,
     not a change in complexity". It is a change in complexity."""
 
+    @pytest.mark.timing
     def test_multiplication_scales_with_the_digit_count(self) -> None:
         precision = getcontext().prec
         getcontext().prec = 200_000
@@ -415,6 +420,7 @@ class TestDecimalIsNotAConstantFactorOverFloat:
             f"Decimal multiplication should grow with digits: {small:.2e}s vs {large:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_float_multiplication_does_not(self) -> None:
         small, large = 1.9, 1.9e300
         small_time = best_time(lambda: [small * small for _ in range(10_000)])
@@ -426,6 +432,7 @@ class TestAnchoredRegexIsBoundedByThePattern:
     """docs/stdlib/fnmatch.md called a fixed anchored re.match() O(n) in the
     filename. It examines a bounded prefix."""
 
+    @pytest.mark.timing
     def test_match_cost_ignores_the_rest_of_the_string(self) -> None:
         pattern = re.compile(r"test[0-9]{3}\.txt")
         short, long = "x" * 10, "x" * 100_000
@@ -445,6 +452,7 @@ class TestIndexingIsNotConstantForEverySequence:
     deque is the stdlib counterexample: indexing walks blocks.
     """
 
+    @pytest.mark.timing
     def test_deque_middle_indexing_is_far_slower_than_list(self) -> None:
         size = 100_000
         as_list = list(range(size))
@@ -567,6 +575,7 @@ class TestCopytreeCostsPerEntry:
 class TestSqliteInsertTouchesEveryIndex:
     """docs/stdlib/sqlite3.md priced INSERT at an unconditional O(log n)."""
 
+    @pytest.mark.timing
     def test_more_indexes_make_inserts_slower(self) -> None:
         rows = [(i, i, i, i, i) for i in range(4_000)]
 

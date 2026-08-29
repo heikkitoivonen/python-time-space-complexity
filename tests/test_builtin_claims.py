@@ -17,6 +17,8 @@ from collections.abc import Callable
 from decimal import Decimal
 from typing import Any
 
+import pytest
+
 
 def best_time(func: Callable[[], Any], repeats: int = 5) -> float:
     """Return the fastest of several runs, which is the least noisy estimate."""
@@ -70,6 +72,7 @@ class TestBytesImmutabilityCosts:
         assert buffer == bytearray(b"jello")
         assert id(buffer) == identity, "no new object, so no copy of the contents"
 
+    @pytest.mark.timing
     def test_growing_a_bytes_scales_but_a_bytearray_does_not(self) -> None:
         small, large = b"x" * 1_000, b"x" * 1_000_000
 
@@ -92,6 +95,7 @@ class TestExecReparsesEveryCall:
 
     SOURCE = "x = 0\nfor i in range(10): x += i"
 
+    @pytest.mark.timing
     def test_exec_on_source_is_slower_than_on_a_code_object(self) -> None:
         compiled = compile(self.SOURCE, "<test>", "exec")
 
@@ -118,6 +122,7 @@ class TestRoundVersusAlternatives:
     round(x) with no ndigits the cheap one, since it skips the conversion.
     """
 
+    @pytest.mark.timing
     def test_rounding_to_decimals_scales_with_the_exponent(self) -> None:
         small = best_time(lambda: [round(3.14159, 2) for _ in range(20_000)])
         huge = best_time(lambda: [round(3.14159e300, 2) for _ in range(20_000)])
@@ -127,6 +132,7 @@ class TestRoundVersusAlternatives:
             f"far more: 1e0={small:.2e}s 1e300={huge:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_rounding_to_an_int_is_much_cheaper(self) -> None:
         value = 3.14159
         with_digits = best_time(lambda: [round(value, 2) for _ in range(20_000)])
@@ -137,6 +143,7 @@ class TestRoundVersusAlternatives:
             f"round(x)={without:.2e}s round(x, 2)={with_digits:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_formatting_costs_about_the_same_as_rounding(self) -> None:
         # The page used to claim formatting was the pricier of the two. Both
         # run the same conversion, so they land within a few percent.
@@ -150,6 +157,7 @@ class TestRoundVersusAlternatives:
             f"format={format_time:.2e}s ratio={ratio:.2f}x"
         )
 
+    @pytest.mark.timing
     def test_quantize_follows_the_digits_kept_not_the_operand(self) -> None:
         # The other correction these tests forced: quantize() does not
         # re-examine operand digits below the target exponent.
@@ -180,6 +188,7 @@ class TestRoundVersusAlternatives:
             f"2 places={few_places:.2e}s 5000 places={many_places:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_decimal_arithmetic_is_still_a_complexity_change(self) -> None:
         # Unchanged and still true: float is fixed width, Decimal is not.
         from decimal import getcontext
@@ -212,6 +221,7 @@ class TestStrConversionAvoidsACopy:
         text = "hello"
         assert text.encode("utf-8") is not text.encode("utf-8")
 
+    @pytest.mark.timing
     def test_crossing_the_boundary_scales_with_length(self) -> None:
         short, long = "x" * 1_000, "x" * 1_000_000
 
@@ -245,6 +255,7 @@ class TestVarsSnapshotsLocals:
         vars(instance)["added"] = 2
         assert instance.added == 2  # type: ignore[attr-defined]
 
+    @pytest.mark.timing
     def test_no_argument_form_scales_with_the_locals(self) -> None:
         few: dict[str, Any] = {}
         many: dict[str, Any] = {}
@@ -278,6 +289,7 @@ class TestIntFloatParsingAsymmetry:
     """docs/builtins/float_func.md: float() only scans, because its result is
     fixed width. int() has to build an arbitrary-precision value."""
 
+    @pytest.mark.timing
     def test_float_parsing_is_linear(self) -> None:
         short, long = "9" * 100, "9" * 400
 

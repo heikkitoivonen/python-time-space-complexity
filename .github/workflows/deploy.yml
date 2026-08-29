@@ -33,8 +33,13 @@ jobs:
       - name: Type check
         run: uv run pyright
 
+      # Everything except the stopwatch tests. Those are correct but not
+      # reliable on a shared runner, and a mis-timed measurement is not a
+      # reason to stop publishing documentation -- three deploys were lost
+      # that way. They run in the `timing` job below, which does not gate
+      # the deploy. `make check` still runs the whole suite before a commit.
       - name: Run tests
-        run: uv run pytest
+        run: uv run pytest -m "not timing"
 
       - name: Build site
         # Not a plain `mkdocs build`: that puts every locale in one tree
@@ -46,6 +51,23 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: 'site'
+
+  # Reports, but deliberately does not gate: `deploy` needs `build` only.
+  # A red run here means a complexity claim needs looking at -- check whether
+  # the measurement missed by a hair (noise) or by a wide margin (the claim).
+  timing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run timing tests
+        run: uv run pytest -m timing
 
   deploy:
     environment:

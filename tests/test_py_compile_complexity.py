@@ -50,6 +50,7 @@ def source_of(directory: Path, name: str, lines: int) -> Path:
 class TestCompileComplexity:
     """The table's O(n) in the source length."""
 
+    @pytest.mark.timing
     def test_scales_with_the_source_size(self, tmp_path: Path) -> None:
         small = source_of(tmp_path, "small.py", 100)
         large = source_of(tmp_path, "large.py", 1_600)
@@ -61,6 +62,7 @@ class TestCompileComplexity:
             f"sixteen times the source: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_hashing_the_source_is_a_small_surcharge(self, tmp_path: Path) -> None:
         """The page says about 3%, so this only checks it is not a new pass."""
         module = source_of(tmp_path, "big.py", 4_000)

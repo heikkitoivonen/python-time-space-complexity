@@ -22,6 +22,8 @@ from collections import Counter, defaultdict
 from collections.abc import Callable
 from typing import Any
 
+import pytest
+
 
 def best_time(func: Callable[[], Any], repeats: int = 5) -> float:
     """Return the fastest of several runs, which is the least noisy estimate."""
@@ -76,6 +78,7 @@ class TestCountingSpeedDependsOnHowYouFeedIt:
     the explanation, as test_missing_is_not_the_explanation below shows.
     """
 
+    @pytest.mark.timing
     def test_counting_a_whole_iterable_beats_a_python_loop(self) -> None:
         def manual() -> defaultdict[int, int]:
             counts: defaultdict[int, int] = defaultdict(int)
@@ -90,6 +93,7 @@ class TestCountingSpeedDependsOnHowYouFeedIt:
             f"Counter(iterable) counts in C: {bulk_time:.2e}s vs loop {loop_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_counting_one_key_at_a_time_loses_to_defaultdict(self) -> None:
         def with_counter() -> Counter:
             counts: Counter = Counter()
@@ -111,6 +115,7 @@ class TestCountingSpeedDependsOnHowYouFeedIt:
             f"defaultdict {default_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_missing_is_not_the_explanation(self) -> None:
         """__missing__ fires once per distinct key, not once per increment.
 
@@ -147,6 +152,7 @@ class TestCountingSpeedDependsOnHowYouFeedIt:
             f"Counter {counter_time:.2e}s defaultdict {default_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_update_uses_the_same_fast_path_as_the_constructor(self) -> None:
         construct_time = best_time(lambda: Counter(SAMPLE), repeats=3)
 
@@ -183,6 +189,7 @@ class TestCounterIsADictSubclass:
             f"Counter {sys.getsizeof(counter)} vs dict {sys.getsizeof(plain)}"
         )
 
+    @pytest.mark.timing
     def test_lookup_is_constant_time(self) -> None:
         small = Counter(range(1_000))
         large = Counter(range(1_000_000))
@@ -194,6 +201,7 @@ class TestCounterIsADictSubclass:
             f"lookup is a dict lookup: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_construction_is_linear(self) -> None:
         small = list(range(100_000))
         large = list(range(1_000_000))

@@ -133,6 +133,7 @@ class TestCostAgainstAPlainDict:
         items = [(f"k{index}", index) for index in range(self.SIZE)]
         return dict(items), OrderedDict(items)
 
+    @pytest.mark.timing
     def test_lookups_cost_about_the_same(self) -> None:
         plain, od = self._pair()
 
@@ -144,6 +145,7 @@ class TestCostAgainstAPlainDict:
             f"dict {plain_time:.2e}s OrderedDict {ordered_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_iteration_is_where_it_hurts(self) -> None:
         plain, od = self._pair()
 
@@ -155,6 +157,7 @@ class TestCostAgainstAPlainDict:
             f"dict {plain_time:.2e}s OrderedDict {ordered_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_construction_costs_more(self) -> None:
         items = [(f"k{index}", index) for index in range(self.SIZE)]
 

@@ -96,6 +96,7 @@ class TestReturnValueOnlyReportsCompilationFailures:
 class TestCompileDirComplexity:
     """The table's O(n + total bytes)."""
 
+    @pytest.mark.timing
     def test_scales_with_the_file_count(self, tmp_path: Path) -> None:
         few = build_tree(tmp_path / "few", files=50, lines_each=20)
         many = build_tree(tmp_path / "many", files=400, lines_each=20)
@@ -108,6 +109,7 @@ class TestCompileDirComplexity:
             f"50 {few_time:.2e}s 400 {many_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_per_file_overhead_dominates_for_small_files(self, tmp_path: Path) -> None:
         """Same total source, split two ways.
 
@@ -125,6 +127,7 @@ class TestCompileDirComplexity:
             f"200 files {many_time:.2e}s, 10 files {few_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_file_size_still_counts(self, tmp_path: Path) -> None:
         """The other term: at a fixed file count, bigger files cost more."""
         small = build_tree(tmp_path / "small_files", files=20, lines_each=20)
@@ -137,6 +140,7 @@ class TestCompileDirComplexity:
             f"forty times the source in the same file count: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_non_python_entries_cost_too(self, tmp_path: Path) -> None:
         """The table is priced in entries examined, not .py files.
 
@@ -157,6 +161,7 @@ class TestCompileDirComplexity:
             f"lean {lean_time:.2e}s cluttered {cluttered_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_force_controls_whether_cached_bytecode_is_reused(self, tmp_path: Path) -> None:
         tree = build_tree(tmp_path / "cached", files=100, lines_each=40)
         compileall.compile_dir(tree, quiet=2)  # warm the cache

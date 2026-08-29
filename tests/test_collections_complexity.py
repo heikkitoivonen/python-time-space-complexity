@@ -19,6 +19,8 @@ from collections import (
 from collections.abc import Callable
 from typing import Any
 
+import pytest
+
 
 def trimmed_mean(samples: list[float], trim_fraction: float = 0.1) -> float:
     """Return the trimmed mean to reduce outlier impact."""
@@ -74,6 +76,7 @@ class TestDequeComplexity:
     LARGE_SIZE = 100_000
     SIZE_RATIO = LARGE_SIZE / SMALL_SIZE
 
+    @pytest.mark.timing
     def test_append_is_o1(self) -> None:
         """append() should be O(1)."""
         small_deque: deque[int] = deque()
@@ -94,6 +97,7 @@ class TestDequeComplexity:
             f"append() appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_appendleft_is_o1(self) -> None:
         """appendleft() should be O(1)."""
         small_deque: deque[int] = deque()
@@ -114,6 +118,7 @@ class TestDequeComplexity:
             f"appendleft() appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_pop_is_o1(self) -> None:
         """pop() should be O(1)."""
         small_deque: deque[int] = deque(range(self.SMALL_SIZE))
@@ -134,6 +139,7 @@ class TestDequeComplexity:
             f"pop() appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_popleft_is_o1(self) -> None:
         """popleft() should be O(1)."""
         small_deque: deque[int] = deque(range(self.SMALL_SIZE))
@@ -154,6 +160,7 @@ class TestDequeComplexity:
             f"popleft() appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_index_ends_is_o1(self) -> None:
         """Indexing at ends should be O(1)."""
         small_deque: deque[int] = deque(range(self.SMALL_SIZE))
@@ -166,6 +173,7 @@ class TestDequeComplexity:
             f"End indexing appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_index_middle_is_on(self) -> None:
         """Indexing in middle should be O(n) due to block structure."""
         small_deque: deque[int] = deque(range(self.SMALL_SIZE))
@@ -181,6 +189,7 @@ class TestDequeComplexity:
             f"Middle indexing doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_len_is_o1(self) -> None:
         """len() should be O(1)."""
         small_deque: deque[int] = deque(range(self.SMALL_SIZE))
@@ -193,6 +202,7 @@ class TestDequeComplexity:
             f"len() appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_extend_is_ok(self) -> None:
         """extend() should be O(k) where k = len(iterable)."""
         base_deque: deque[int] = deque()
@@ -214,6 +224,7 @@ class TestDequeComplexity:
             f"extend() doesn't scale linearly: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_extendleft_is_ok(self) -> None:
         """extendleft() should be O(k) where k = len(iterable)."""
         base_deque: deque[int] = deque()
@@ -235,6 +246,7 @@ class TestDequeComplexity:
             f"extendleft() doesn't scale linearly: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_rotate_is_ok(self) -> None:
         """rotate(k) should be O(k)."""
         dq: deque[int] = deque(range(self.LARGE_SIZE))
@@ -246,6 +258,7 @@ class TestDequeComplexity:
             f"rotate() doesn't scale linearly with k: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_clear_is_on(self) -> None:
         """clear() should be O(n)."""
 
@@ -266,6 +279,7 @@ class TestDequeComplexity:
             f"clear() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_copy_is_on(self) -> None:
         """copy() should be O(n)."""
         small_deque: deque[int] = deque(range(self.SMALL_SIZE))
@@ -278,6 +292,7 @@ class TestDequeComplexity:
             f"copy() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_count_is_on(self) -> None:
         """count() should be O(n)."""
         small_deque: deque[int] = deque(range(self.SMALL_SIZE))
@@ -290,6 +305,7 @@ class TestDequeComplexity:
             f"count() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_in_membership_is_on(self) -> None:
         """'in' membership should be O(n)."""
         small_deque: deque[int] = deque(range(self.SMALL_SIZE))
@@ -304,6 +320,7 @@ class TestDequeComplexity:
             f"'in' doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_reverse_is_on(self) -> None:
         """reverse() should be O(n)."""
         small_deque: deque[int] = deque(range(self.SMALL_SIZE))
@@ -324,6 +341,7 @@ class TestNamedTupleComplexity:
     LARGE_SIZE = 100_000
     SIZE_RATIO = LARGE_SIZE / SMALL_SIZE
 
+    @pytest.mark.timing
     def test_attribute_access_is_o1(self) -> None:
         """Field access should be O(1)."""
         Point = namedtuple("Point", ["x", "y"])
@@ -338,6 +356,7 @@ class TestNamedTupleComplexity:
             f"{small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_asdict_is_on(self) -> None:
         """_asdict() should be O(n) in number of fields."""
         SmallNT = namedtuple("SmallNT", [f"f{i}" for i in range(10)])
@@ -359,6 +378,7 @@ class TestChainMapComplexity:
     SMALL_SIZE = 1_000
     LARGE_SIZE = 100_000
 
+    @pytest.mark.timing
     def test_lookup_is_o1_avg(self) -> None:
         """Lookup should be O(1) average (first mapping)."""
         small_map = ChainMap({i: i for i in range(self.SMALL_SIZE)})
@@ -379,6 +399,7 @@ class TestCounterComplexity:
     LARGE_SIZE = 100_000
     SIZE_RATIO = LARGE_SIZE / SMALL_SIZE
 
+    @pytest.mark.timing
     def test_update_is_on(self) -> None:
         """update(iterable) should be O(n)."""
         small_items = list(range(self.SMALL_SIZE))
@@ -401,6 +422,7 @@ class TestOrderedDictComplexity:
     SMALL_SIZE = 1_000
     LARGE_SIZE = 100_000
 
+    @pytest.mark.timing
     def test_get_is_o1_avg(self) -> None:
         """Key lookup should be O(1) average."""
         small_od = OrderedDict((i, i) for i in range(self.SMALL_SIZE))
@@ -413,6 +435,7 @@ class TestOrderedDictComplexity:
             f"OrderedDict lookup appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_move_to_end_is_o1(self) -> None:
         """move_to_end() should be O(1) average."""
         small_od = OrderedDict((i, i) for i in range(self.SMALL_SIZE))
@@ -432,6 +455,7 @@ class TestDefaultDictComplexity:
     SMALL_SIZE = 1_000
     LARGE_SIZE = 100_000
 
+    @pytest.mark.timing
     def test_missing_key_is_o1_avg(self) -> None:
         """Missing key access should be O(1) average."""
         small_dd: defaultdict[int, int] = defaultdict(int, {i: i for i in range(self.SMALL_SIZE)})
@@ -452,6 +476,7 @@ class TestUserDictComplexity:
     SMALL_SIZE = 1_000
     LARGE_SIZE = 100_000
 
+    @pytest.mark.timing
     def test_get_is_o1_avg(self) -> None:
         """UserDict key lookup should be O(1) average."""
         small_ud = UserDict({i: i for i in range(self.SMALL_SIZE)})
@@ -472,6 +497,7 @@ class TestUserListComplexity:
     LARGE_SIZE = 100_000
     SIZE_RATIO = LARGE_SIZE / SMALL_SIZE
 
+    @pytest.mark.timing
     def test_len_is_o1(self) -> None:
         """len() should be O(1)."""
         small_ul = UserList(range(self.SMALL_SIZE))
@@ -484,6 +510,7 @@ class TestUserListComplexity:
             f"UserList len appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_count_is_on(self) -> None:
         """count() should be O(n)."""
         small_ul = UserList(range(self.SMALL_SIZE))
@@ -504,6 +531,7 @@ class TestUserStringComplexity:
     LARGE_SIZE = 100_000
     SIZE_RATIO = LARGE_SIZE / SMALL_SIZE
 
+    @pytest.mark.timing
     def test_len_is_o1(self) -> None:
         """len() should be O(1)."""
         small_us = UserString("a" * self.SMALL_SIZE)
@@ -516,6 +544,7 @@ class TestUserStringComplexity:
             f"UserString len appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_count_is_on(self) -> None:
         """count() should be O(n)."""
         small_us = UserString("a" * self.SMALL_SIZE)
@@ -549,6 +578,7 @@ class TestChainMapScalesWithMapCount:
             ]
         )
 
+    @pytest.mark.timing
     def test_lookup_scales_with_the_number_of_maps(self) -> None:
         """A key in the last map is found only after searching the rest."""
         few, many = self._chain(self.FEW_MAPS), self._chain(self.MANY_MAPS)
@@ -563,6 +593,7 @@ class TestChainMapScalesWithMapCount:
             f"{few_time:.2e}s, {self.MANY_MAPS} maps {many_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_a_miss_visits_every_map(self) -> None:
         few, many = self._chain(self.FEW_MAPS), self._chain(self.MANY_MAPS)
 
@@ -573,6 +604,7 @@ class TestChainMapScalesWithMapCount:
             f"a miss is the worst case for `in`: {few_time:.2e}s vs {many_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_len_builds_a_union_of_every_key(self) -> None:
         """The table's O(N) in total keys, not O(1) like a dict's len()."""
         few, many = self._chain(self.FEW_MAPS), self._chain(self.MANY_MAPS)
@@ -615,6 +647,7 @@ class TestCounterOperations:
     def _counter(self, size: int) -> Counter:
         return Counter({f"k{index}": index for index in range(size)})
 
+    @pytest.mark.timing
     def test_construction_is_on(self) -> None:
         small_items = list(range(1_000))
         large_items = list(range(100_000))
@@ -626,6 +659,7 @@ class TestCounterOperations:
             f"Counter() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_heap_path_beats_sorting_on_realistic_data(self) -> None:
         """most_common(k) is the faster choice on data that looks like data.
 
@@ -647,6 +681,7 @@ class TestCounterOperations:
             f"on random counts the heap should win: k=10 {heap_time:.2e}s all {sorted_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_heap_path_loses_when_counts_rise_in_iteration_order(self) -> None:
         """The adversarial ordering, kept because it is what misled us.
 
@@ -670,6 +705,7 @@ class TestCounterOperations:
         assert counter.most_common(1) == [("a", 3)]
         assert counter.most_common() == [("a", 3), ("b", 2), ("c", 1)]
 
+    @pytest.mark.timing
     def test_total_is_on(self) -> None:
         small, large = self._counter(1_000), self._counter(100_000)
 
@@ -680,6 +716,7 @@ class TestCounterOperations:
             f"total() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_elements_is_lazy_to_create(self) -> None:
         """The table: O(1) init, O(total) to iterate."""
         counter = self._counter(self.SIZE)
@@ -691,6 +728,7 @@ class TestCounterOperations:
             f"elements() should not do the work up front: {create_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_addition_is_linear_in_the_keys(self) -> None:
         small, large = self._counter(1_000), self._counter(100_000)
 
@@ -713,6 +751,7 @@ class TestNamedTupleCreationCosts:
     what an instance does, so it belongs at import time, not in a loop.
     """
 
+    @pytest.mark.timing
     def test_building_the_class_costs_far_more_than_an_instance(self) -> None:
         point_class = namedtuple("Point", ["x", "y", "z"])
 
@@ -724,6 +763,7 @@ class TestNamedTupleCreationCosts:
             f"instance={instance_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_instance_creation_does_not_scale_with_field_count(self) -> None:
         few = namedtuple("Few", ["a", "b"])
         many = namedtuple("Many", [f"f{index}" for index in range(50)])

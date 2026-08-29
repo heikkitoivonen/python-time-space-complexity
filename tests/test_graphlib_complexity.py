@@ -189,6 +189,7 @@ class TestCycleDetection:
         with pytest.raises(CycleError):
             list(sorter.static_order())
 
+    @pytest.mark.timing
     def test_detection_costs_a_traversal_not_a_search(self) -> None:
         """Cycle finding rides along with prepare(), so it is O(v + e)."""
         small_time = measure_fresh(lambda: chain(25_000), lambda s: s.prepare())
@@ -207,9 +208,11 @@ class TestGraphlibComplexity:
     LARGE_SIZE = 100_000
     SIZE_RATIO = LARGE_SIZE / SMALL_SIZE
 
+    @pytest.mark.timing
     def test_init_is_o1(self) -> None:
         assert measure(TopologicalSorter, repeats=20) < 1e-4
 
+    @pytest.mark.timing
     def test_add_does_not_depend_on_graph_size(self) -> None:
         small, large = chain(self.SMALL_SIZE), chain(self.LARGE_SIZE)
 
@@ -221,6 +224,7 @@ class TestGraphlibComplexity:
             f"{small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_add_is_ok_in_its_predecessors(self) -> None:
         few = list(range(2))
         many = list(range(200))
@@ -233,6 +237,7 @@ class TestGraphlibComplexity:
             f"few={few_time:.2e}s many={many_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_prepare_is_linear_in_the_graph(self) -> None:
         small_time = measure_fresh(lambda: chain(self.SMALL_SIZE), lambda s: s.prepare())
         large_time = measure_fresh(lambda: chain(self.LARGE_SIZE), lambda s: s.prepare())
@@ -242,6 +247,7 @@ class TestGraphlibComplexity:
             f"prepare() doesn't appear O(v + e): {ratio:.1f}x for {self.SIZE_RATIO:.0f}x the graph"
         )
 
+    @pytest.mark.timing
     def test_prepare_is_linear_for_a_shallow_graph_too(self) -> None:
         """Depth should not matter: chain and fan-out are both O(v + e)."""
         small_time = measure_fresh(lambda: fan_out(self.SMALL_SIZE), lambda s: s.prepare())
@@ -251,6 +257,7 @@ class TestGraphlibComplexity:
             f"fan-out prepare() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_static_order_is_linear_in_the_graph(self) -> None:
         small_time = measure_fresh(lambda: chain(self.SMALL_SIZE), lambda s: list(s.static_order()))
         large_time = measure_fresh(lambda: chain(self.LARGE_SIZE), lambda s: list(s.static_order()))
@@ -259,6 +266,7 @@ class TestGraphlibComplexity:
             f"static_order() doesn't appear O(v + e): {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_get_ready_scales_with_what_it_returns(self) -> None:
         """The table said O(1) amortized; one call is O(k) in the k returned.
 
@@ -303,6 +311,7 @@ class TestGraphlibComplexity:
 
         assert handed_out == size
 
+    @pytest.mark.timing
     def test_done_scales_with_the_node_degree(self) -> None:
         def done_on_root_with(degree: int) -> float:
             sorter: TopologicalSorter = TopologicalSorter()

@@ -140,6 +140,7 @@ class TestMembershipIsConstantOnlyForIntegers:
     LARGE_SIZE = 1_000_000
     SIZE_RATIO = LARGE_SIZE / SMALL_SIZE
 
+    @pytest.mark.timing
     def test_int_membership_is_constant_time(self) -> None:
         small, large = range(self.SMALL_SIZE), range(self.LARGE_SIZE)
 
@@ -151,6 +152,7 @@ class TestMembershipIsConstantOnlyForIntegers:
             f"{small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_float_membership_scales_with_the_range(self) -> None:
         small, large = range(self.SMALL_SIZE), range(self.LARGE_SIZE)
 
@@ -164,6 +166,7 @@ class TestMembershipIsConstantOnlyForIntegers:
             "a ten times longer range should cost visibly more for a float"
         )
 
+    @pytest.mark.timing
     def test_float_is_dramatically_slower_than_the_equal_int(self) -> None:
         values = range(self.LARGE_SIZE)
         target = self.LARGE_SIZE - 1
@@ -187,6 +190,7 @@ class TestOnlyExactIntsAndBoolsTakeTheFastPath:
 
     SIZE = 1_000_000
 
+    @pytest.mark.timing
     def test_bool_takes_the_fast_path(self) -> None:
         values = range(self.SIZE)
 
@@ -197,6 +201,7 @@ class TestOnlyExactIntsAndBoolsTakeTheFastPath:
             f"bool is special cased alongside int: int={int_time:.2e}s bool={bool_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_int_subclass_does_not(self) -> None:
         values = range(self.SIZE)
         target = self.SIZE - 1
@@ -218,6 +223,7 @@ class TestIndexAndCountSplitTheSameWay:
 
     SIZE = 200_000
 
+    @pytest.mark.timing
     def test_index_is_constant_for_an_int(self) -> None:
         values = range(self.SIZE)
 
@@ -228,6 +234,7 @@ class TestIndexAndCountSplitTheSameWay:
             f"index() should solve for k, not search: {early:.2e}s vs {late:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_index_scans_for_a_float(self) -> None:
         values = range(self.SIZE)
 
@@ -240,6 +247,7 @@ class TestIndexAndCountSplitTheSameWay:
             f"index() falls back to a scan for a float: int={int_time:.2e}s float={float_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_count_scans_for_a_float(self) -> None:
         values = range(self.SIZE)
 
@@ -280,6 +288,7 @@ class TestTheSlowPathStillGivesTheRightAnswer:
         assert Decimal("2") in range(3)
         assert Fraction(5, 2) not in range(3)
 
+    @pytest.mark.timing
     def test_a_missing_float_still_costs_a_full_scan(self) -> None:
         # The worst case for the slow path is an answer of False: every value
         # has to be compared before the range can say no.

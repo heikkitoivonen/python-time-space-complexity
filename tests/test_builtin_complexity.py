@@ -10,6 +10,8 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+import pytest
+
 
 def trimmed_mean(samples: list[float], trim_fraction: float = 0.1) -> float:
     """Return the trimmed mean to reduce outlier impact."""
@@ -65,6 +67,7 @@ class TestListComplexity:
     LARGE_SIZE = 100_000
     SIZE_RATIO = LARGE_SIZE / SMALL_SIZE
 
+    @pytest.mark.timing
     def test_len_is_o1(self) -> None:
         """len() should be O(1) - direct lookup."""
         small_list = list(range(self.SMALL_SIZE))
@@ -77,6 +80,7 @@ class TestListComplexity:
             f"len() appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_index_access_is_o1(self) -> None:
         """list[i] should be O(1) - direct indexing."""
         small_list = list(range(self.SMALL_SIZE))
@@ -89,6 +93,7 @@ class TestListComplexity:
             f"Index access appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_append_is_o1_amortized(self) -> None:
         """append() should be O(1) amortized."""
         small_list: list[int] = []
@@ -114,6 +119,7 @@ class TestListComplexity:
             f"append() appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_pop_last_is_o1(self) -> None:
         """pop() (last element) should be O(1)."""
         small_list = list(range(self.SMALL_SIZE))
@@ -134,6 +140,7 @@ class TestListComplexity:
             f"pop() appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_pop_first_is_on(self) -> None:
         """pop(0) should be O(n) - must shift all elements."""
         small_list = list(range(self.SMALL_SIZE))
@@ -157,6 +164,7 @@ class TestListComplexity:
             f"pop(0) should be slower for larger list: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_insert_at_beginning_is_on(self) -> None:
         """insert(0, x) should be O(n) - must shift all elements."""
         small_list = list(range(self.SMALL_SIZE))
@@ -180,6 +188,7 @@ class TestListComplexity:
             f"insert(0, x) should be slower for larger list: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_in_membership_is_on(self) -> None:
         """'in' membership should be O(n) - linear search."""
         small_list = list(range(self.SMALL_SIZE))
@@ -197,6 +206,7 @@ class TestListComplexity:
             f"'in' should be slower for larger list: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_index_search_is_on(self) -> None:
         """list.index(x) should be O(n) - linear search."""
         small_list = list(range(self.SMALL_SIZE))
@@ -215,6 +225,7 @@ class TestListComplexity:
             f"index() should be slower for larger list: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_count_is_on(self) -> None:
         """list.count(x) should be O(n) - linear scan."""
         small_list = list(range(self.SMALL_SIZE))
@@ -227,6 +238,7 @@ class TestListComplexity:
             f"count() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_copy_is_on(self) -> None:
         """list.copy() should be O(n) - shallow copy."""
         small_list = list(range(self.SMALL_SIZE))
@@ -239,6 +251,7 @@ class TestListComplexity:
             f"copy() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_reverse_is_on(self) -> None:
         """list.reverse() should be O(n) - in-place reversal."""
         small_list = list(range(self.SMALL_SIZE))
@@ -251,6 +264,7 @@ class TestListComplexity:
             f"reverse() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_clear_is_on(self) -> None:
         """list.clear() should be O(n) - deallocate memory."""
 
@@ -271,6 +285,7 @@ class TestListComplexity:
             f"clear() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_extend_is_ok(self) -> None:
         """extend(iterable) should be O(k) where k = len(iterable)."""
         base_list: list[int] = []
@@ -293,6 +308,7 @@ class TestListComplexity:
             f"{small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_slice_is_ok(self) -> None:
         """Slicing should be O(k) where k = slice length."""
         large_list = list(range(self.LARGE_SIZE))
@@ -305,6 +321,7 @@ class TestListComplexity:
             f"{small_slice_time:.2e}s vs {large_slice_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_sort_average_case(self) -> None:
         """sort() should be O(n log n) average case."""
         import random
@@ -331,6 +348,7 @@ class TestListComplexity:
             f"sort() appears worse than O(n log n): {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_sort_best_case_already_sorted(self) -> None:
         """sort() should be O(n) for already sorted data (Timsort adaptive)."""
         small_list = list(range(self.SMALL_SIZE))
@@ -360,6 +378,7 @@ class TestTupleComplexity:
     LARGE_SIZE = 100_000
     SIZE_RATIO = LARGE_SIZE / SMALL_SIZE
 
+    @pytest.mark.timing
     def test_len_is_o1(self) -> None:
         """len() should be O(1) - direct lookup."""
         small_tuple = tuple(range(self.SMALL_SIZE))
@@ -372,6 +391,7 @@ class TestTupleComplexity:
             f"len() appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_index_access_is_o1(self) -> None:
         """tuple[i] should be O(1) - direct indexing."""
         small_tuple = tuple(range(self.SMALL_SIZE))
@@ -384,6 +404,7 @@ class TestTupleComplexity:
             f"Index access appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_in_membership_is_on(self) -> None:
         """'in' membership should be O(n) - linear search."""
         small_tuple = tuple(range(self.SMALL_SIZE))
@@ -401,6 +422,7 @@ class TestTupleComplexity:
             f"'in' should be slower for larger tuple: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_index_search_is_on(self) -> None:
         """tuple.index(x) should be O(n) - linear search."""
         small_tuple = tuple(range(self.SMALL_SIZE))
@@ -419,6 +441,7 @@ class TestTupleComplexity:
             f"index() should be slower for larger tuple: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_count_is_on(self) -> None:
         """tuple.count(x) should be O(n) - linear scan."""
         small_tuple = tuple(range(self.SMALL_SIZE))
@@ -431,6 +454,7 @@ class TestTupleComplexity:
             f"count() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_hash_is_on(self) -> None:
         """hash() should be O(n) - iterates all elements."""
         small_tuple = tuple(range(self.SMALL_SIZE))
@@ -443,6 +467,7 @@ class TestTupleComplexity:
             f"hash() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_concatenation_is_omn(self) -> None:
         """Concatenation should be O(m+n)."""
         small_tuple = tuple(range(self.SMALL_SIZE))
@@ -455,6 +480,7 @@ class TestTupleComplexity:
             f"Concatenation doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_slice_is_ok(self) -> None:
         """Slicing should be O(k) where k = slice length."""
         large_tuple = tuple(range(self.LARGE_SIZE))
@@ -467,6 +493,7 @@ class TestTupleComplexity:
             f"{small_slice_time:.2e}s vs {large_slice_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_constructor_is_on(self) -> None:
         """tuple() constructor should be O(n)."""
         small_list = list(range(self.SMALL_SIZE))
@@ -479,6 +506,7 @@ class TestTupleComplexity:
             f"tuple() constructor doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_repetition_is_on(self) -> None:
         """Repetition (t * n) should be O(n * len(t))."""
         base_tuple = tuple(range(100))
@@ -498,6 +526,7 @@ class TestStrComplexity:
     LARGE_SIZE = 100_000
     SIZE_RATIO = LARGE_SIZE / SMALL_SIZE
 
+    @pytest.mark.timing
     def test_len_is_o1(self) -> None:
         """len() should be O(1) - direct lookup."""
         small_str = "a" * self.SMALL_SIZE
@@ -510,6 +539,7 @@ class TestStrComplexity:
             f"len() appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_index_access_is_o1(self) -> None:
         """str[i] should be O(1) - direct indexing."""
         small_str = "a" * self.SMALL_SIZE
@@ -522,6 +552,7 @@ class TestStrComplexity:
             f"Index access appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_find_is_on(self) -> None:
         """str.find() should be O(n) for substring search."""
         small_str = "a" * self.SMALL_SIZE + "b"
@@ -534,6 +565,7 @@ class TestStrComplexity:
             f"find() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_rfind_is_on(self) -> None:
         """str.rfind() should be O(n) for reverse substring search."""
         small_str = "b" + "a" * self.SMALL_SIZE
@@ -546,6 +578,7 @@ class TestStrComplexity:
             f"rfind() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_count_is_on(self) -> None:
         """str.count() should be O(n) - scans entire string."""
         small_str = "a" * self.SMALL_SIZE
@@ -558,6 +591,7 @@ class TestStrComplexity:
             f"count() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_replace_is_on(self) -> None:
         """str.replace() should be O(n) - single pass."""
         small_str = "a" * self.SMALL_SIZE
@@ -570,6 +604,7 @@ class TestStrComplexity:
             f"replace() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_split_is_on(self) -> None:
         """str.split() should be O(n) - single pass."""
         small_str = "a " * self.SMALL_SIZE
@@ -582,6 +617,7 @@ class TestStrComplexity:
             f"split() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_join_is_on(self) -> None:
         """str.join() should be O(n) - n = total chars."""
         small_list = ["a"] * self.SMALL_SIZE
@@ -594,6 +630,7 @@ class TestStrComplexity:
             f"join() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_upper_is_on(self) -> None:
         """str.upper() should be O(n) - processes each char."""
         small_str = "a" * self.SMALL_SIZE
@@ -606,6 +643,7 @@ class TestStrComplexity:
             f"upper() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_strip_is_on(self) -> None:
         """str.strip() should be O(n)."""
         small_str = " " * 100 + "a" * self.SMALL_SIZE + " " * 100
@@ -618,6 +656,7 @@ class TestStrComplexity:
             f"strip() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_startswith_is_om(self) -> None:
         """str.startswith() should be O(m) where m = prefix length."""
         large_str = "a" * self.LARGE_SIZE
@@ -631,6 +670,7 @@ class TestStrComplexity:
             f"startswith() doesn't scale with prefix: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_concatenation_is_on(self) -> None:
         """String concatenation should be O(n+m)."""
         small_str = "a" * self.SMALL_SIZE
@@ -643,6 +683,7 @@ class TestStrComplexity:
             f"Concatenation doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_slice_is_ok(self) -> None:
         """Slicing should be O(k) where k = slice length."""
         large_str = "a" * self.LARGE_SIZE
@@ -654,6 +695,7 @@ class TestStrComplexity:
             f"Slicing doesn't scale linearly: {small_slice_time:.2e}s vs {large_slice_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_in_substring_is_on(self) -> None:
         """'in' substring check should be O(n)."""
         small_str = "a" * self.SMALL_SIZE + "b"
@@ -666,6 +708,7 @@ class TestStrComplexity:
             f"'in' doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_encode_is_on(self) -> None:
         """str.encode() should be O(n)."""
         small_str = "a" * self.SMALL_SIZE
@@ -686,6 +729,7 @@ class TestBytesComplexity:
     LARGE_SIZE = 100_000
     SIZE_RATIO = LARGE_SIZE / SMALL_SIZE
 
+    @pytest.mark.timing
     def test_len_is_o1(self) -> None:
         """len() should be O(1) - direct lookup."""
         small_bytes = b"a" * self.SMALL_SIZE
@@ -698,6 +742,7 @@ class TestBytesComplexity:
             f"len() appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_index_access_is_o1(self) -> None:
         """bytes[i] should be O(1) - direct indexing."""
         small_bytes = b"a" * self.SMALL_SIZE
@@ -710,6 +755,7 @@ class TestBytesComplexity:
             f"Index access appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_in_membership_is_on(self) -> None:
         """'in' membership should be O(n) - linear search."""
         small_bytes = b"a" * self.SMALL_SIZE
@@ -722,6 +768,7 @@ class TestBytesComplexity:
             f"'in' doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_count_is_on(self) -> None:
         """bytes.count() should be O(n) - linear scan."""
         small_bytes = b"a" * self.SMALL_SIZE
@@ -734,6 +781,7 @@ class TestBytesComplexity:
             f"count() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_slice_is_ok(self) -> None:
         """Slicing should be O(k) where k = slice length."""
         large_bytes = b"a" * self.LARGE_SIZE
@@ -753,6 +801,7 @@ class TestBytearrayComplexity:
     LARGE_SIZE = 100_000
     SIZE_RATIO = LARGE_SIZE / SMALL_SIZE
 
+    @pytest.mark.timing
     def test_len_is_o1(self) -> None:
         """len() should be O(1) - direct lookup."""
         small_ba = bytearray(b"a" * self.SMALL_SIZE)
@@ -765,6 +814,7 @@ class TestBytearrayComplexity:
             f"len() appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_index_access_is_o1(self) -> None:
         """bytearray[i] should be O(1) - direct indexing."""
         small_ba = bytearray(b"a" * self.SMALL_SIZE)
@@ -777,6 +827,7 @@ class TestBytearrayComplexity:
             f"Index access appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_in_membership_is_on(self) -> None:
         """'in' membership should be O(n) - linear search."""
         small_ba = bytearray(b"a" * self.SMALL_SIZE)
@@ -789,6 +840,7 @@ class TestBytearrayComplexity:
             f"'in' doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_count_is_on(self) -> None:
         """bytearray.count() should be O(n) - linear scan."""
         small_ba = bytearray(b"a" * self.SMALL_SIZE)
@@ -808,6 +860,7 @@ class TestSetComplexity:
     SMALL_SIZE = 1_000
     LARGE_SIZE = 100_000
 
+    @pytest.mark.timing
     def test_len_is_o1(self) -> None:
         """len() should be O(1) - direct count."""
         small_set = set(range(self.SMALL_SIZE))
@@ -820,6 +873,7 @@ class TestSetComplexity:
             f"len() appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_in_membership_is_o1_avg(self) -> None:
         """'in' membership should be O(1) average - hash lookup."""
         small_set = set(range(self.SMALL_SIZE))
@@ -840,6 +894,7 @@ class TestFrozensetComplexity:
     LARGE_SIZE = 100_000
     SIZE_RATIO = LARGE_SIZE / SMALL_SIZE
 
+    @pytest.mark.timing
     def test_constructor_is_on(self) -> None:
         """frozenset(iterable) should be O(n)."""
         small_list = list(range(self.SMALL_SIZE))
@@ -852,6 +907,7 @@ class TestFrozensetComplexity:
             f"frozenset() constructor doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_in_membership_is_o1_avg(self) -> None:
         """'in' membership should be O(1) average - hash lookup."""
         small_fs = frozenset(range(self.SMALL_SIZE))
@@ -871,6 +927,7 @@ class TestDictComplexity:
     SMALL_SIZE = 1_000
     LARGE_SIZE = 100_000
 
+    @pytest.mark.timing
     def test_len_is_o1(self) -> None:
         """len() should be O(1) - direct count."""
         small_dict = {i: i for i in range(self.SMALL_SIZE)}
@@ -883,6 +940,7 @@ class TestDictComplexity:
             f"len() appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_access_is_o1_avg(self) -> None:
         """dict[key] should be O(1) average - hash lookup."""
         small_dict = {i: i for i in range(self.SMALL_SIZE)}
@@ -895,6 +953,7 @@ class TestDictComplexity:
             f"dict access appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_in_membership_is_o1_avg(self) -> None:
         """'key in dict' should be O(1) average - hash lookup."""
         small_dict = {i: i for i in range(self.SMALL_SIZE)}
@@ -914,6 +973,7 @@ class TestRangeComplexity:
     SMALL_SIZE = 1_000
     LARGE_SIZE = 100_000
 
+    @pytest.mark.timing
     def test_len_is_o1(self) -> None:
         """len() should be O(1) - calculated."""
         small_range = range(self.SMALL_SIZE)
@@ -926,6 +986,7 @@ class TestRangeComplexity:
             f"len() appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_index_access_is_o1(self) -> None:
         """range[i] should be O(1) - direct calculation."""
         small_range = range(self.SMALL_SIZE)
@@ -938,6 +999,7 @@ class TestRangeComplexity:
             f"Index access appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_in_membership_is_o1(self) -> None:
         """'in' membership should be O(1) - arithmetic check."""
         small_range = range(self.SMALL_SIZE)
@@ -958,6 +1020,7 @@ class TestIntComplexity:
     LARGE_BITS = 10_000
     SIZE_RATIO = LARGE_BITS / SMALL_BITS
 
+    @pytest.mark.timing
     def test_addition_scales_with_bit_length(self) -> None:
         """Large int addition should scale with bit length."""
         small_a = (1 << self.SMALL_BITS) - 1
@@ -976,6 +1039,7 @@ class TestIntComplexity:
 class TestFloatComplexity:
     """Test float operation complexities as documented in docs/builtins/float.md."""
 
+    @pytest.mark.timing
     def test_addition_is_o1(self) -> None:
         """Float addition should be O(1)."""
         small_float = 1.2345
@@ -992,6 +1056,7 @@ class TestFloatComplexity:
 class TestBoolComplexity:
     """Test bool operation complexities as documented in docs/builtins/bool.md."""
 
+    @pytest.mark.timing
     def test_logical_ops_are_o1(self) -> None:
         """Boolean logic should be O(1)."""
         small_bool = True

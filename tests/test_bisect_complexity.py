@@ -15,6 +15,8 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+import pytest
+
 
 def trimmed_mean(samples: list[float], trim_fraction: float = 0.1) -> float:
     """Return the trimmed mean to reduce outlier impact."""
@@ -69,6 +71,7 @@ class TestBisectComplexity:
     SMALL_SIZE = 1_000
     LARGE_SIZE = 1_000_000
 
+    @pytest.mark.timing
     def test_bisect_left_is_ologn(self) -> None:
         """bisect_left() should be O(log n)."""
         small = list(range(self.SMALL_SIZE))
@@ -81,6 +84,7 @@ class TestBisectComplexity:
             f"bisect_left() doesn't appear O(log n): {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_bisect_right_is_ologn(self) -> None:
         """bisect_right() should be O(log n)."""
         small = list(range(self.SMALL_SIZE))
@@ -93,6 +97,7 @@ class TestBisectComplexity:
             f"bisect_right() doesn't appear O(log n): {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_a_run_of_equal_values_costs_no_more(self) -> None:
         """The page claims equal values do not degrade the search.
 
@@ -122,6 +127,7 @@ class TestBisectComplexity:
         values = [1, 3, 3, 5]
         assert bisect.bisect(values, 3) == bisect.bisect_right(values, 3)
 
+    @pytest.mark.timing
     def test_two_searches_cost_two_logs_not_a_scan(self) -> None:
         """The range example does two searches; that is still logarithmic."""
         large = list(range(self.LARGE_SIZE))
@@ -146,6 +152,7 @@ class TestInsortCostIsTheInsertNotTheSearch:
     SMALL_SIZE = 10_000
     LARGE_SIZE = 200_000
 
+    @pytest.mark.timing
     def test_insort_scales_with_the_list(self) -> None:
         def insert_into(size: int) -> float:
             values = list(range(size))
@@ -164,6 +171,7 @@ class TestInsortCostIsTheInsertNotTheSearch:
             f"{small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_the_search_inside_insort_does_not(self) -> None:
         """Contrast: the bisect_left that insort performs is flat."""
         small = list(range(self.SMALL_SIZE))
@@ -199,6 +207,7 @@ class TestKeyFunctionCosts:
 
     SIZE = 200_000
 
+    @pytest.mark.timing
     def test_building_the_key_list_dominates_the_search(self) -> None:
         data = [(str(i), i) for i in range(self.SIZE)]
 

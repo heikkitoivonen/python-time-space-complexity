@@ -24,6 +24,8 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+import pytest
+
 
 def trimmed_mean(samples: list[float], trim_fraction: float = 0.1) -> float:
     """Return the trimmed mean to reduce outlier impact."""
@@ -83,6 +85,7 @@ class TestArrayComplexity:
     LARGE_SIZE = 1_000_000
     SIZE_RATIO = LARGE_SIZE / SMALL_SIZE
 
+    @pytest.mark.timing
     def test_creation_is_on(self) -> None:
         """array.array() should be O(n)."""
         small_source = [0] * self.SMALL_SIZE
@@ -95,6 +98,7 @@ class TestArrayComplexity:
             f"array() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_indexing_is_o1(self) -> None:
         """Indexing should be O(1) - direct offset into the buffer."""
         small = array.array("i", range(self.SMALL_SIZE))
@@ -107,6 +111,7 @@ class TestArrayComplexity:
             f"indexing appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_len_is_o1(self) -> None:
         small = array.array("i", range(self.SMALL_SIZE))
         large = array.array("i", range(self.LARGE_SIZE))
@@ -118,6 +123,7 @@ class TestArrayComplexity:
             f"len() appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_append_is_o1_amortized(self) -> None:
         """append() should be O(1) amortized."""
         small = array.array("i", range(self.SMALL_SIZE))
@@ -147,6 +153,7 @@ class TestArrayComplexity:
             f"expected occasional reallocation, saw {len(sizes)} distinct sizes"
         )
 
+    @pytest.mark.timing
     def test_extend_is_ok_not_on(self) -> None:
         """extend() should be O(k) in what is added, not O(n) in the array."""
         small = array.array("i", range(self.SMALL_SIZE))
@@ -165,6 +172,7 @@ class TestArrayComplexity:
             f"{small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_search_is_on(self) -> None:
         """Search should be O(n) - linear scan."""
         small = array.array("i", range(self.SMALL_SIZE))
@@ -177,6 +185,7 @@ class TestArrayComplexity:
             f"membership doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_index_is_on(self) -> None:
         small = array.array("i", range(self.SMALL_SIZE))
         large = array.array("i", range(self.LARGE_SIZE))
@@ -194,6 +203,7 @@ class TestArrayComplexity:
     SHIFT_SMALL_SIZE = 100_000
     SHIFT_SIZE_RATIO = LARGE_SIZE / SHIFT_SMALL_SIZE
 
+    @pytest.mark.timing
     def test_insert_is_on(self) -> None:
         """Insert should be O(n) - the tail shifts."""
         small = array.array("i", range(self.SHIFT_SMALL_SIZE))
@@ -210,6 +220,7 @@ class TestArrayComplexity:
             f"insert() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_remove_is_on(self) -> None:
         small = array.array("i", range(self.SMALL_SIZE))
         large = array.array("i", range(self.LARGE_SIZE))
@@ -242,6 +253,7 @@ class TestPopPosition:
     LARGE_SIZE = 1_000_000
     SIZE_RATIO = LARGE_SIZE / SMALL_SIZE
 
+    @pytest.mark.timing
     def test_pop_from_the_end_is_o1(self) -> None:
         small = array.array("i", range(self.SMALL_SIZE))
         large = array.array("i", range(self.LARGE_SIZE))
@@ -257,6 +269,7 @@ class TestPopPosition:
             f"pop() at the end appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_pop_from_the_front_is_on(self) -> None:
         # Same noise floor as insert above, so the same larger small case.
         small_size = 100_000

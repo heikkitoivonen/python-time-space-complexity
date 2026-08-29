@@ -103,4 +103,14 @@ known-first-party = ["python_time_space_complexity"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --strict-markers"
+markers = [
+    # Tests that settle a claim with a stopwatch rather than by observation.
+    # They are correct but not reliable on a shared CI runner, so they do not
+    # gate deployment -- see the `timing` job in .github/workflows/deploy.yml.
+    # A test earns this marker by reaching time.perf_counter(), directly or
+    # through a helper; nothing else belongs here. Prefer removing the marker
+    # by rewriting the test to observe (a call counter, an identity check)
+    # over leaving it in the non-blocking job forever.
+    "timing: settles its claim by measuring elapsed time",
+]

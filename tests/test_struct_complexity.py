@@ -32,6 +32,7 @@ def per_call(func: Callable[[], Any], number: int = 100_000) -> float:
 class TestFormatCaching:
     """The module caches compiled formats; pre-compiling saves the lookup."""
 
+    @pytest.mark.timing
     def test_a_repeated_format_is_not_reparsed(self) -> None:
         """A cached call beats one that rebuilds the Struct every time.
 
@@ -51,6 +52,7 @@ class TestFormatCaching:
             f"cached {cached:.2e}s rebuilt {rebuilt:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_precompiling_saves_only_the_lookup(self) -> None:
         prepared = struct.Struct("i")
 
@@ -63,6 +65,7 @@ class TestFormatCaching:
             f"prepared {struct_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_the_saving_is_real_when_formats_churn(self) -> None:
         formats = ["i" * count for count in range(2, 60)]
         values = {fmt: tuple(range(len(fmt))) for fmt in formats}
@@ -85,6 +88,7 @@ class TestFormatCaching:
             f"warm {warm_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_precompiling_a_one_shot_format_saves_nothing(self) -> None:
         """The 3x is for reuse, not for pre-compiling as such.
 
@@ -126,6 +130,7 @@ class TestFormatCaching:
 class TestFieldCountDominates:
     """The table's O(k) in fields, plus a cheaper term in bytes."""
 
+    @pytest.mark.timing
     def test_same_bytes_more_fields_costs_more(self) -> None:
         many = struct.Struct("100i")  # 100 fields, 400 bytes
         one = struct.Struct("400s")  # 1 field, 400 bytes
@@ -139,6 +144,7 @@ class TestFieldCountDominates:
             f"100 fields {many_time:.2e}s, 1 field {one_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_bytes_still_count_but_less(self) -> None:
         small = struct.Struct("400s")
         large = struct.Struct("40000s")
@@ -152,6 +158,7 @@ class TestFieldCountDominates:
             f"hundred times: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_unpack_splits_the_same_way(self) -> None:
         many = struct.Struct("100i")
         one = struct.Struct("400s")
@@ -208,6 +215,7 @@ class TestByteOrderAffectsSizeNotCost:
             assert struct.calcsize(f"{prefix}i") == 4
             assert struct.calcsize(f"{prefix}q") == 8
 
+    @pytest.mark.timing
     def test_byte_order_does_not_change_the_cost(self) -> None:
         little = struct.Struct("<100i")
         big = struct.Struct(">100i")

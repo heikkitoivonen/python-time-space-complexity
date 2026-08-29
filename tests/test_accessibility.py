@@ -267,7 +267,7 @@ def test_fallback_pages_declare_english():
     """
     assert "i18n_is_fallback" in MAIN_HTML, "the fallback branch is gone"
     assert re.search(r'<div lang="en">\s*\{\{\s*super\(\)\s*\}\}', MAIN_HTML), (
-        "the English fallback body must be wrapped in lang=\"en\" (SC 3.1.2)"
+        'the English fallback body must be wrapped in lang="en" (SC 3.1.2)'
     )
 
 

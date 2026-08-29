@@ -64,6 +64,7 @@ class TestDecimalSpecialValues:
     """docs/stdlib/decimal.md: special values short-circuit, skipping the
     O(n) digit arithmetic."""
 
+    @pytest.mark.timing
     def test_infinity_arithmetic_skips_the_digits(self) -> None:
         precision = getcontext().prec
         getcontext().prec = 50_000
@@ -134,6 +135,7 @@ class TestFnmatchPatternCost:
     """docs/stdlib/fnmatch.md: patterns are compiled and cached, so the
     wildcard used does not change the cost; filter() is O(k*n)."""
 
+    @pytest.mark.timing
     def test_wildcard_choice_does_not_change_the_cost(self) -> None:
         name = "some_moderately_long_filename.txt"
         star = best_time(lambda: [fnmatch.fnmatch(name, "*.txt") for _ in range(20_000)])
@@ -144,6 +146,7 @@ class TestFnmatchPatternCost:
             f"both compile to a cached regex: star={star:.2e}s classes={classes:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_filter_scales_with_the_number_of_names(self) -> None:
         few = [f"file{i}.txt" for i in range(100)]
         many = [f"file{i}.txt" for i in range(10_000)]
@@ -155,6 +158,7 @@ class TestFnmatchPatternCost:
             f"filter() is O(k) in names: {few_time:.2e}s vs {many_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_two_patterns_means_two_passes(self) -> None:
         names = [f"file{i}.py" for i in range(20_000)]
         one = best_time(lambda: fnmatch.filter(names, "*.py"))
@@ -238,6 +242,7 @@ class TestIpaddressSupernetIsBounded:
         assert steps == 24, "one bit per step, from /24 to /0"
         assert steps <= 32, "and never more than the address width"
 
+    @pytest.mark.timing
     def test_membership_does_not_scan_the_network(self) -> None:
         from ipaddress import IPv4Address
 
@@ -315,6 +320,7 @@ class TestNumbersAbcCaching:
     """docs/stdlib/numbers.md: isinstance() against an ABC caches per
     (class, ABC) pair, so the first check on a type costs more."""
 
+    @pytest.mark.timing
     def test_first_check_on_a_class_costs_more_than_the_rest(self) -> None:
         firsts: list[float] = []
         laters: list[float] = []
@@ -351,6 +357,7 @@ class TestPosixpathIsPureStringWork:
         assert posixpath.join("/nowhere", "a", "b") == "/nowhere/a/b"
         assert posixpath.normpath("/nowhere/../a//b") == "/a/b"
 
+    @pytest.mark.timing
     def test_cost_follows_the_string_length(self) -> None:
         short = "/".join(["seg"] * 10)
         long = "/".join(["seg"] * 5_000)
@@ -367,6 +374,7 @@ class TestPprintSortingCost:
     """docs/stdlib/pprint.md: constructing a printer is O(1); sort_dicts adds
     O(k log k) per dict printed."""
 
+    @pytest.mark.timing
     def test_constructing_a_printer_is_trivial(self) -> None:
         printer_time = best_time(lambda: pprint.PrettyPrinter(indent=4, width=100))
         data = {f"k{i}": i for i in range(2_000)}
@@ -377,6 +385,7 @@ class TestPprintSortingCost:
             f"construct={printer_time:.2e}s format={format_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_sorting_keys_costs_extra(self) -> None:
         data = {f"key{i:05d}": i for i in range(3_000)}
 
@@ -403,6 +412,7 @@ class TestPyexpatStreams:
 
         assert seen == ["root", "a", "b"]
 
+    @pytest.mark.timing
     def test_parsing_scales_with_the_input(self) -> None:
         import pyexpat
 
@@ -421,6 +431,7 @@ class TestSecretsLengthIsTheOnlyLever:
     """docs/stdlib/secrets.md: token generation is linear in the bytes asked
     for, and that is the only thing that moves the cost."""
 
+    @pytest.mark.timing
     def test_cost_follows_the_requested_size(self) -> None:
         import secrets
 
@@ -440,6 +451,7 @@ class TestSqliteCommitBatching:
     """docs/stdlib/sqlite3.md: the durability cost is paid per transaction,
     which is why batching beats committing each insert."""
 
+    @pytest.mark.timing
     def test_one_commit_beats_one_commit_per_row(self) -> None:
         def run(commit_each: bool) -> float:
             connection = sqlite3.connect(":memory:")
@@ -475,6 +487,7 @@ class TestStructFormatCaching:
 
     FORMAT = "iiii"
 
+    @pytest.mark.timing
     def test_precompiled_saves_only_the_cache_lookup(self) -> None:
         compiled = struct.Struct(self.FORMAT)
         data = compiled.pack(1, 2, 3, 4)
@@ -488,6 +501,7 @@ class TestStructFormatCaching:
             f"module={module_time:.2e}s struct={struct_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_the_parse_is_only_re_paid_on_a_cache_miss(self) -> None:
         formats = ["i" * n for n in range(2, 60)]
         payloads = {f: struct.pack(f, *range(len(f))) for f in formats}
@@ -519,6 +533,7 @@ class TestTempfileCachesTheDirectory:
     """docs/stdlib/tempfile.md: gettempdir() is O(1) after the first call,
     because it caches the search it had to do."""
 
+    @pytest.mark.timing
     def test_the_first_lookup_is_the_expensive_one(self) -> None:
         saved = tempfile.tempdir
         try:
@@ -556,6 +571,7 @@ class TestTomllibNestingIsNotFree:
 
     KEYS = 2_000
 
+    @pytest.mark.timing
     def test_tables_cost_more_than_flat_keys(self) -> None:
         flat = "\n".join(f"k{i} = {i}" for i in range(self.KEYS))
         nested = "\n".join(f"[t{i}]\nk = {i}" for i in range(self.KEYS))
@@ -567,6 +583,7 @@ class TestTomllibNestingIsNotFree:
             f"a table per key is not free: flat={flat_time:.2e}s nested={nested_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_parsing_scales_with_the_text(self) -> None:
         small = "\n".join(f"k{i} = {i}" for i in range(500))
         large = "\n".join(f"k{i} = {i}" for i in range(5_000))
@@ -583,6 +600,7 @@ class TestUnicodeDataLookupsAreTableReads:
     """docs/stdlib/unicodedata.md: the per-character properties are O(1)
     table reads, and an ASCII string answers is_normalized from a flag."""
 
+    @pytest.mark.timing
     def test_property_lookups_do_not_depend_on_the_code_point(self) -> None:
         low = best_time(lambda: [unicodedata.category("a") for _ in range(20_000)])
         high = best_time(lambda: [unicodedata.category("\U0001f600") for _ in range(20_000)])
@@ -590,6 +608,7 @@ class TestUnicodeDataLookupsAreTableReads:
         ratio = max(low, high) / min(low, high)
         assert ratio < 3.0, f"both are table reads: ascii={low:.2e}s astral={high:.2e}s"
 
+    @pytest.mark.timing
     def test_ascii_is_normalized_answers_from_a_flag(self) -> None:
         ascii_text = "a" * 200_000
         accented = "é" * 200_000
@@ -616,6 +635,7 @@ class TestUnicodeDataLookupsAreTableReads:
         assert unicodedata.normalize("NFC", ascii_text) is ascii_text
         assert unicodedata.normalize("NFC", composed) is composed
 
+    @pytest.mark.timing
     def test_longest_run_alone_does_not_bound_the_cost(self) -> None:
         """The bound is O(n + sum of squared run lengths), not O(n + k^2).
 
@@ -638,6 +658,7 @@ class TestUnicodeDataLookupsAreTableReads:
             f"one={one_time:.2e}s many={many_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_concentrating_marks_is_what_costs_not_spreading_them(self) -> None:
         """The same marks in one run cost far more than split across many.
 
@@ -663,6 +684,7 @@ class TestUnicodeDataLookupsAreTableReads:
             f"one run={concentrated_time:.2e}s 2000 runs={spread_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_cost_tracks_the_squared_run_lengths(self) -> None:
         """Hold the total length fixed and lengthen the runs."""
 
@@ -689,6 +711,7 @@ class TestUnicodeDataLookupsAreTableReads:
 class TestIoStringBuilding:
     """docs/stdlib/io.md: StringIO accumulation is linear."""
 
+    @pytest.mark.timing
     def test_stringio_accumulation_is_linear(self) -> None:
         def build(rows: int) -> str:
             buffer = io.StringIO()
@@ -712,6 +735,7 @@ class TestBisectKeyListDominates:
     about the surrounding code, not about bisect.
     """
 
+    @pytest.mark.timing
     def test_sorting_once_beats_rebuilding_keys_per_search(self) -> None:
         size = 50_000
         data = [(str(i), i) for i in range(size)]
