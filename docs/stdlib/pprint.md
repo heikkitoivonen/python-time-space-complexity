@@ -131,54 +131,6 @@ safe = saferepr(large_data)  # O(n) space
 
 ## Common Patterns
 
-### Pretty Print With Width Control
-
-```python
-from pprint import pprint
-
-# Narrow width: more lines, better for narrow terminals
-pprint(data, width=40)
-
-# Wide width: fewer lines
-pprint(data, width=120)
-
-# Auto-fit to terminal
-import shutil
-width = shutil.get_terminal_size().columns
-pprint(data, width=width)
-```
-
-### Limit Depth for Large Structures
-
-```python
-from pprint import pprint
-
-# Limit depth to avoid huge output
-data = {f'key_{i}': {f'nested_{j}': j for j in range(100)} for i in range(100)}
-
-# Deep structure - avoid printing all
-pprint(data, depth=1)  # Only show first level
-# Output: {'key_0': {...}, 'key_1': {...}, ...}
-
-# Show 2 levels
-pprint(data, depth=2)  # Shows keys and first nested level
-```
-
-### Debug Complex Data Structures
-
-```python
-from pprint import pformat
-
-def process_data(data):
-    """Process and debug data."""
-    result = calculate(data)
-    
-    # Use pformat for logging
-    print(f"Result:\n{pformat(result)}")
-    
-    return result
-```
-
 ### Format for Output/Logging
 
 ```python
@@ -248,16 +200,18 @@ pformat(data)  # O(n) - formatted, multiple lines
 ```python
 from pprint import PrettyPrinter
 
+# Constructing a printer is O(1); the settings change what each later
+# pprint() call costs
 # Compact output (Python 3.8+)
 pp = PrettyPrinter(compact=True)
 
-# Sort dictionary keys
+# Sort dictionary keys - adds O(k log k) per dict printed
 pp = PrettyPrinter(sort_dicts=True)
 
 # Indent level
 pp = PrettyPrinter(indent=4)
 
-# Recursion depth limit
+# Recursion depth limit - bounds the output, so deep structures stop early
 pp = PrettyPrinter(depth=3)
 ```
 
