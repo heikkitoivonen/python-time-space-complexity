@@ -9,6 +9,9 @@ Several are settled by observation rather than timing, which is the better
 kind of test: `filecmp.dircmp` accepting a directory that does not exist
 proves it reads nothing at construction, and no tolerance is involved.
 
+docs/stdlib/array.md's claims live in tests/test_array_complexity.py, which
+covers that module's table as well.
+
 Deliberately not covered, because a unit test cannot settle them:
 
 * docs/stdlib/pwd.md - lookup cost is decided by the NSS backend, which may
@@ -20,7 +23,6 @@ Deliberately not covered, because a unit test cannot settle them:
   test would have to be skipped on any current interpreter
 """
 
-import array
 import bisect
 import filecmp
 import fnmatch
@@ -56,23 +58,6 @@ def best_time(func: Callable[[], Any], repeats: int = 5) -> float:
         func()
         times.append(time.perf_counter() - start)
     return min(times)
-
-
-class TestArrayTypeCodes:
-    """docs/stdlib/array.md: the type code fixes the bytes per item, which is
-    what array buys over list."""
-
-    def test_type_code_fixes_the_item_size(self) -> None:
-        assert array.array("b").itemsize == 1
-        assert array.array("i").itemsize in (2, 4)
-        assert array.array("d").itemsize == 8
-
-    def test_storage_follows_item_size(self) -> None:
-        import sys
-
-        bytes_array = array.array("b", range(100))
-        doubles = array.array("d", [float(i) for i in range(100)])
-        assert sys.getsizeof(doubles) > sys.getsizeof(bytes_array)
 
 
 class TestDecimalSpecialValues:

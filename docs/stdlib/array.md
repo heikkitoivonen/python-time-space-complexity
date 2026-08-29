@@ -92,17 +92,23 @@ bytes_data = arr.tobytes()  # O(3)
 import array
 import sys
 
-# List (flexible type) - O(8) bytes per reference
+# An array's header is larger - 80 bytes against a list's 56 - so for a
+# handful of elements the array is the bigger object. The saving arrives at
+# a few dozen, and grows from there.
 lst = [1, 2, 3, 4, 5]
-lst_size = sys.getsizeof(lst)  # Larger
-
-# Array (homogeneous) - O(4) or O(8) bytes per element
 arr = array.array('i', [1, 2, 3, 4, 5])
-arr_size = sys.getsizeof(arr)  # Smaller
+print(sys.getsizeof(lst), sys.getsizeof(arr))  # too close to call at n=5
 
-# Array is more memory efficient for numeric data
-print(f"List size: {lst_size}")
-print(f"Array size: {arr_size}")
+# List of references (8 bytes each) vs packed elements (4 for 'i', 8 for 'd')
+lst = list(range(10_000))
+arr = array.array('i', range(10_000))
+print(sys.getsizeof(lst), sys.getsizeof(arr))  # 80056 vs 40420 bytes
+
+# But that 2x understates it. getsizeof() counts the list's pointers, not
+# the int objects they point at - 28 bytes each, and only small ints are
+# shared. Counting those, the list holds 360056 bytes against 40420.
+deep = sys.getsizeof(lst) + sum(sys.getsizeof(x) for x in lst)
+print(deep // sys.getsizeof(arr))  # 8x, not 2x
 ```
 
 ## Type Codes
