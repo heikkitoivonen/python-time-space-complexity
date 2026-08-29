@@ -3,7 +3,7 @@ revision = 3
 requires-python = ">=3.10"
 
 [options]
-exclude-newer = "2026-08-11T05:10:34.871691408Z"
+exclude-newer = "2026-08-13T05:19:54.641485413Z"
 exclude-newer-span = "P15D"
 
 [[package]]
@@ -561,7 +561,7 @@ wheels = [
 
 [[package]]
 name = "python-time-space-complexity"
-version = "0.5.0"
+version = "0.8.0"
 source = { virtual = "." }
 dependencies = [
     { name = "jieba" },

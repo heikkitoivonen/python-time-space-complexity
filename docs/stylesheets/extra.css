@@ -1,11 +1,3 @@
-/* Show the header repo badge (top-right, above the fold on every page) as a
-   GitHub star CTA, but suppress the live star/fork counts on the header badge
-   so a low number is not displayed there. The footer keeps its full repo info,
-   including the star count. */
-.md-header__source .md-source__facts {
-  display: none;
-}
-
 /* Announcement-bar star CTA */
 .announce-star {
   color: inherit;
@@ -49,8 +41,7 @@
   display: inline-flex;
 }
 
-.footer-meta__right .md-source__repository,
-.footer-meta__right .md-source__facts {
+.footer-meta__right .md-source__repository {
   white-space: nowrap;
   max-width: none;
 }
@@ -74,4 +65,108 @@
 
 .admonition.translation-fallback > p:last-child {
   margin-bottom: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Colour contrast (WCAG 2.2 SC 1.4.3)
+
+   Material derives the link colour, the header background and the tab bar
+   background from one token, --md-primary-fg-color. At the stock `blue`
+   (#2094f3) that single value has to do three jobs it cannot do at once:
+   white text sits on it in the header and tabs, which wants a dark value; it
+   is the link colour on the white page ground, which also wants a dark value;
+   and it is the link colour on the dark slate ground, which wants a light one.
+
+   So darken the primary for the chrome in both schemes, and set the link
+   colour explicitly per scheme instead of letting it inherit the primary.
+   Ratios in comments are against the surface each colour actually sits on.
+   --------------------------------------------------------------------------- */
+
+/* #0b78d2 is the lightest colour on Material blue's own hue (207deg) that
+   still clears 4.5:1 against white. Both jobs reduce to that one number:
+   ratio(white, X) and ratio(X, white) are the same ratio, so the tab label
+   sitting on the header and the link sitting on the page are one constraint.
+
+   The margin is deliberately thin - 4.53:1 against a 4.5:1 requirement. Any
+   future adjustment to this value has to be re-measured, not eyeballed. */
+[data-md-color-primary="blue"] {
+  --md-primary-fg-color: #0b78d2;        /* white on it: 4.53:1 */
+  --md-primary-fg-color--light: #3d92dd;
+  --md-primary-fg-color--dark: #0a5fa8;
+}
+
+/* Link text is a shade darker than the chrome, and deliberately so. Links do
+   not only sit on white: inline `code` puts them on #f5f5f5, and admonitions
+   put them on a tint. Measured against those grounds the header's #0b78d2
+   falls to 4.07-4.17:1 and fails. #0a6cbd is the lightest colour on the same
+   hue clearing 4.5:1 on all of them - every admonition type the theme ships,
+   not just the ones the docs use today, so adding a `!!! danger` with a link
+   in it cannot introduce a failure. The tightest are bug and danger, the two
+   most saturated tints. tests/test_accessibility.py enforces this. */
+[data-md-color-scheme="default"] {
+  --md-typeset-a-color: #0a6cbd;         /* white 5.39:1, code 4.95:1, tints >=4.54:1 */
+  --md-accent-fg-color: #3f51d5;         /* on #fff: 6.27:1 */
+  --md-accent-fg-color--transparent: #3f51d51a;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-typeset-a-color: #4dabf7;         /* on slate: 6.54:1 */
+  --md-accent-fg-color: #8ec5f2;         /* on slate: 8.81:1 */
+  --md-accent-fg-color--transparent: #8ec5f21a;
+}
+
+/* Search placeholder. Material sets this three times and only one of them is
+   the failing case, so the fix has to be scoped or it breaks the others:
+
+     - base/mobile   dark grey on a white form   - already fine, leave alone
+     - >=60em        white@70% over the header   - about 2.3:1, the failure
+     - search open   transparent, deliberately hidden
+
+   Only the desktop rule is overridden, inside the same breakpoint Material
+   declares it in. The search-open rule outranks this on specificity, so the
+   placeholder still hides when the search panel opens. */
+@media screen and (min-width: 60em) {
+  .md-search__input::placeholder {
+    color: var(--md-primary-bg-color);
+  }
+}
+
+/* The form lightens on hover (#ffffff1f), which drops the white placeholder to
+   3.7:1 - and that single state, not the header, is what would otherwise force
+   a much darker primary. Darkening on hover instead keeps the placeholder on a
+   ground at least as dark as its resting one, and reads as a press affordance
+   rather than a wash-out. */
+@media screen and (min-width: 60em) {
+  .md-search__form:hover {
+    background-color: #0000005e;
+  }
+}
+
+/* Tabs: Material dims inactive tabs to opacity .7, which at 14px over the
+   header is the worst ratio on the site. Opacity is also a colour-only
+   distinction. Drop it and mark the selected tab by weight instead, which
+   reads without colour vision (SC 1.4.1).
+
+   Scoped to :not([hidden]) so the sticky tab bar keeps its slide-away
+   animation, which is driven by opacity on .md-tabs[hidden]. */
+.md-tabs:not([hidden]) .md-tabs__link {
+  opacity: 1;
+}
+
+.md-tabs__item--active .md-tabs__link {
+  font-weight: 700;
+}
+
+/* Hover and focus read as bold too, but not via font-weight: a real weight
+   change alters glyph metrics, so the hovered tab widens and every tab after
+   it shifts sideways under the cursor. Painting the stroke twice, offset by a
+   hair either side, thickens the text at exactly the same width.
+
+   The active tab is already bold and is the page you are on, so it is excluded
+   rather than stacking a second effect on top. */
+.md-tabs__item:not(.md-tabs__item--active) .md-tabs__link:hover,
+.md-tabs__item:not(.md-tabs__item--active) .md-tabs__link:focus {
+  text-shadow:
+    0.02em 0 0 currentColor,
+    -0.02em 0 0 currentColor;
 }

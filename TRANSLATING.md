@@ -19,7 +19,7 @@ translation is always safe to ship.
 | Locale | Name     | Stage                      |
 |--------|----------|----------------------------|
 | `en`   | English  | Complete (source of truth) |
-| `fi`   | Suomi    | Pilot - 13 pages           |
+| `fi`   | Suomi    | Pilot - 14 pages           |
 | `zh`   | 简体中文 | Pilot - 14 pages           |
 | `ja`   | 日本語   | Pilot - 13 pages           |
 
@@ -29,9 +29,13 @@ translation is always safe to ship.
 2. Add the translation front matter (see below).
 3. Translate prose, headings, admonition titles, and table **Notes** cells.
 4. Leave code blocks, identifiers, and complexity expressions untouched.
-5. Run `make check` — `scripts/validate_translations.py` enforces the
+5. Add the page's nav label to your locale's `nav_translations` in
+   `mkdocs.yml`, and only to yours. A label with no entry falls back to
+   English, the same way the page does, so leaving other locales alone keeps
+   each sidebar honest about what it actually serves.
+6. Run `make check` — `scripts/validate_translations.py` enforces the
    structural rules and flags stale translations.
-6. Preview with `make serve-one LOCALE=<locale>`, which builds your locale
+7. Preview with `make serve-one LOCALE=<locale>`, which builds your locale
    exactly as it ships. `make serve-en` renders none of your work, and
    `make serve` shares one search index across every language.
 
@@ -54,11 +58,19 @@ translated: machine
   speaker). This is bookkeeping for maintainers and is not surfaced on the
   site; the validator only checks that it is one of those two values.
 
-To re-bless a page after re-checking it against an updated English source:
+The same command records the hash for a brand-new translation and re-blesses
+an existing one after you have re-checked it against an updated English source:
 
 ```bash
 uv run python scripts/validate_translations.py --update-hashes fi
 ```
+
+Run it once after writing a new page - you do not have to compute the hash by
+hand, and the block above can go in without a `source_sha` line at all. Until
+you do, the validator says the hash is *not recorded yet*, which is a different
+complaint from a page it calls **STALE**: stale means the English source moved
+under a translation that was already blessed, and that one does need re-reading
+before you re-bless it.
 
 ## Root documents
 
@@ -410,8 +422,8 @@ Chinese and Japanese pages too, and matched them in the *title*, which Material
 boosts by 1000. Across a set of typical English queries, 21-74% of the matches
 were foreign-language pages. With per-locale indexes it is 0%.
 
-Two things the i18n plugin skips when it builds only one language, which
-`scripts/mkdocs_hooks.py` puts back:
+Four things the i18n plugin gets wrong or skips when it builds only one
+language, which `scripts/mkdocs_hooks.py` puts back:
 
 - **Canonical URLs.** A locale is built at the root of its own tree but served
   from a subdirectory, so the locale prefix has to be added back to `site_url`.
@@ -419,6 +431,17 @@ Two things the i18n plugin skips when it builds only one language, which
   it is building more than one language. The hook rebuilds it from the
   configured locales, and repoints each entry at the equivalent page rather
   than the other locale's home page.
+- **Which file wins.** `build_only_locale` marks the locale being built as the
+  default one, so the plugin tags English sources with it too and can no
+  longer tell a translation from a fallback. Its tie-break becomes the last
+  file walked, and `docs/` is walked alphabetically - so a translation was
+  used only when its locale directory sorted after the directory it mirrors.
+  `docs/zh/` beat everything; `docs/fi/stdlib/` and `docs/ja/stdlib/` lost to
+  `docs/stdlib/` and were dropped from the site without a warning. The hook
+  sorts the locale's own files last so the tie-break lands the right way.
+- **The fallback flag.** For the same reason, a page's locale always equals
+  the build's, so the untranslated-page notice cannot be derived from it. The
+  hook sets `i18n_is_fallback` from the source path instead.
 
 Adding a locale needs no change here: the script reads the locale list out of
 `mkdocs.yml`.
@@ -433,13 +456,18 @@ phrase and interpolates the link, instead of translating "Made with" as a
 fragment. `Material for MkDocs` is a proper noun and stays untranslated.
 
 The copyright notice is `copyright:` in `mkdocs.yml` and is deliberately
-**not** per-locale. It is the symbol and the year, with no word in front: the
-symbol is an international mark with no localized variant and carries the
-meaning on its own, so one string reads correctly in every locale and there is
-only one place to bump the year. `mkdocs-static-i18n` does support a per-locale
+**not** per-locale. It is the symbol, the year, and the owner: the symbol is an
+international mark with no localized variant, and the owner names the project,
+a proper noun that stays untranslated for the same reason `Material for MkDocs`
+does. So one string reads correctly in every locale, and there is only one
+place to bump the year. `mkdocs-static-i18n` does support a per-locale
 `copyright`, so this is a choice, not a limitation - revisit it only if a
 locale genuinely needs different wording. Note the value has to be quoted in
 `mkdocs.yml`, because a leading `&` is YAML anchor syntax.
+
+Keep the owner identical to the one in `LICENSE.txt`. They are the same claim
+in two places, and a mismatch between them is a real inconsistency, not a
+stylistic one.
 
 Everything else down there - the repository tooltip, the previous/next labels
 when `navigation.footer` is enabled - comes from Material's own translations
@@ -452,7 +480,13 @@ localized URL. Without a hint, that reads as a bug: the reader asked for
 Chinese and got English.
 
 `docs/overrides/main.html` therefore shows a short notice at the top of any
-page whose source locale differs from the locale being built. It keys off
-`page.file.locale`, which the i18n plugin sets per file, so it needs no front
-matter and cannot fall out of sync with the actual content. Translated pages
-and English pages show nothing.
+page the current locale has no translation for. Translated pages and English
+pages show nothing.
+
+It keys off `i18n_is_fallback`, set per page by `scripts/mkdocs_hooks.py` from
+the page's source path, so it needs no front matter and cannot fall out of sync
+with the actual content. Do not swap that for a comparison against
+`page.file.locale`: `build_only_locale` makes the locale being built the
+default one, so every file in a per-locale build carries that locale and the
+comparison is never true - the notice silently disappears from the builds that
+ship, while `make serve` still shows it.

@@ -45,7 +45,7 @@ result = operator.add(a, b)  # Same as a + b
 
 ## Comparison Operators
 
-#### Time Complexity: Varies by operand type
+### Time Complexity: Varies by operand type
 
 ```python
 import operator
@@ -63,7 +63,7 @@ items = [(5,), (2,), (8,), (1,), (9,)]
 sorted_items = sorted(items, key=operator.itemgetter(0))  # O(n log n)
 ```
 
-#### Space Complexity: O(1)
+### Space Complexity: O(1)
 
 ```python
 import operator
@@ -173,7 +173,7 @@ result = caller(string)  # Same as string.upper()
 
 ## In-Place Operations
 
-#### Time Complexity: O(1)
+### Time Complexity: O(1)
 
 ```python
 import operator
@@ -191,7 +191,7 @@ x = 3
 x = operator.imul(x, 4)  # x *= 4 - O(1)
 ```
 
-#### Space Complexity: O(1)
+### Space Complexity: O(1)
 
 ```python
 import operator

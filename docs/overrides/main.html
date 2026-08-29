@@ -1,54 +1,88 @@
 {% extends "base.html" %}
 
 {% block announce %}
+  {#-
+    One string set per locale, split around the bold call to action so the
+    visible markup and the aria-label are built from the same source and
+    cannot drift apart. `newtab` carries its own brackets so each locale
+    keeps its own punctuation (halfwidth for en/fi, fullwidth for zh/ja).
+
+    The label restates the whole sentence on purpose: aria-label *replaces*
+    the link text for screen readers, so it has to say everything the visible
+    text says, plus the one thing it cannot - that the link opens a new tab.
+    Locales with no entry fall back to English.
+  -#}
+  {%- set announcements = {
+    "fi": {
+      "lead": "Säästikö tämä sinulta käynnin CPythonin lähdekoodissa?",
+      "cta": "Tähditä se GitHubissa",
+      "tail": ", niin muutkin kehittäjät löytävät sen.",
+      "newtab": "(avautuu uuteen välilehteen)"
+    },
+    "zh": {
+      "lead": "这个网站帮你省去了翻阅 CPython 源码的功夫吗？",
+      "cta": "在 GitHub 上点个星",
+      "tail": "，让更多开发者找到它。",
+      "newtab": "（在新标签页中打开）"
+    },
+    "ja": {
+      "lead": "CPython のソースを読みに行く手間が省けましたか？",
+      "cta": "GitHub でスターを付けて",
+      "tail": "、ほかの開発者にも見つけてもらいましょう。",
+      "newtab": "（新しいタブで開きます）"
+    },
+    "en": {
+      "lead": "Did this save you a trip to the CPython source?",
+      "cta": "Star it on GitHub",
+      "tail": " so other developers can find it too.",
+      "newtab": "(opens in a new tab)"
+    }
+  } -%}
+  {%- set announcement = announcements.get(config.theme.language, announcements["en"]) %}
   <a
     href="{{ config.repo_url }}"
     target="_blank"
     rel="noopener"
     class="announce-star"
+    aria-label="{{ announcement.lead }} {{ announcement.cta }}{{ announcement.tail }} {{ announcement.newtab }}"
   >
-    {%- if config.theme.language == "fi" %}
-      ⭐ Säästikö tämä sinulta käynnin CPythonin lähdekoodissa?
-      <strong>Tähditä se GitHubissa</strong>, niin muutkin kehittäjät löytävät sen.
-    {%- elif config.theme.language == "zh" %}
-      ⭐ 这个网站帮你省去了翻阅 CPython 源码的功夫吗？
-      <strong>在 GitHub 上点个星</strong>，让更多开发者找到它。
-    {%- elif config.theme.language == "ja" %}
-      ⭐ CPython のソースを読みに行く手間が省けましたか？
-      <strong>GitHub でスターを付けて</strong>、ほかの開発者にも見つけてもらいましょう。
-    {%- else %}
-      ⭐ Did this save you a trip to the CPython source?
-      <strong>Star it on GitHub</strong> so other developers can find it too.
-    {%- endif %}
+    ⭐ {{ announcement.lead }}
+    <strong>{{ announcement.cta }}</strong>{{ announcement.tail }}
   </a>
 {% endblock %}
 
 {% block content %}
   {#-
-    A page whose source locale differs from the locale being built is an
-    untranslated page served from the English source. Tell the reader, so an
-    English page under a localized URL does not read as a bug. Add a locale
-    here when adding a language; locales with no entry simply show nothing.
+    A page the current locale has no translation for is served from the
+    English source. Tell the reader, so an English page under a localized URL
+    does not read as a bug. Add a locale here when adding a language; locales
+    with no entry simply show nothing.
+
+    `i18n_is_fallback` comes from scripts/mkdocs_hooks.py. Do not compare
+    `page.file.locale` to the build locale instead: they are always equal in
+    the per-locale builds that ship, so the notice would never appear.
   -#}
   {%- set fallback_notices = {
     "fi": {
       "title": "Ei vielä käännetty",
       "body": "Tätä sivua ei ole vielä käännetty suomeksi, joten se näytetään englanniksi.",
-      "cta": "Auta kääntämään"
+      "cta": "Auta kääntämään",
+      "newtab": "(avautuu uuteen välilehteen)"
     },
     "zh": {
       "title": "尚未翻译",
       "body": "本页面尚未翻译成中文，因此显示英文原文。",
-      "cta": "帮助翻译"
+      "cta": "帮助翻译",
+      "newtab": "（在新标签页中打开）"
     },
     "ja": {
       "title": "未翻訳のページ",
       "body": "このページはまだ日本語に翻訳されていないため、英語の原文を表示しています。",
-      "cta": "翻訳に協力する"
+      "cta": "翻訳に協力する",
+      "newtab": "（新しいタブで開きます）"
     }
   } -%}
-  {%- if page and page.file.locale is defined
-        and page.file.locale != config.theme.language %}
+  {%- if i18n_is_fallback %}
     {%- set notice = fallback_notices.get(config.theme.language) %}
     {%- if notice %}
       <div class="admonition info translation-fallback">
@@ -59,10 +93,85 @@
             href="{{ config.repo_url }}/blob/main/TRANSLATING.md"
             target="_blank"
             rel="noopener"
+            aria-label="{{ notice.cta }} {{ notice.newtab }}"
           >{{ notice.cta }}</a>
         </p>
       </div>
     {%- endif %}
+    {#-
+      The page body below is the English source standing in for a missing
+      translation, but the document is declared `lang="<locale>"`. Without
+      this override a screen reader reads English prose with the locale's
+      pronunciation rules, which is not accented English - it is unusable.
+      The notice above stays outside the wrapper: it really is in the page
+      language. See WCAG 2.2 SC 3.1.2 (Language of Parts).
+    -#}
+    <div lang="en">{{ super() }}</div>
+  {%- else %}
+    {{ super() }}
   {%- endif %}
-  {{ super() }}
+{% endblock %}
+
+{% block fonts %}
+  {#-
+    Replaces base.html's Google Fonts link entirely. That link is a
+    render-blocking stylesheet on fonts.googleapis.com whose only job is to
+    point at woff2 files on fonts.gstatic.com - so the real face is three hops
+    deep, across two third-party origins, before any text can paint in it.
+    Vendoring the files collapses that to one same-origin hop.
+
+    This also removes base.html's own preconnect to fonts.gstatic.com, which
+    has nothing left to warm.
+
+    `crossorigin` on the preloads is required even though the files are
+    same-origin: fonts are always fetched in CORS mode, and a preload without
+    it is fetched a second time rather than reused - the hint would double the
+    download instead of removing a round trip. See scripts/mkdocs_hooks.py for
+    which faces are vendored and why only the `latin` subset.
+  -#}
+  {%- for face in config.extra.fonts if face.preload %}
+  <link rel="preload" href="{{ face.path | url }}" as="font" type="font/woff2" crossorigin>
+  {%- endfor %}
+  <style>{% for face in config.extra.fonts %}@font-face{font-family:"{{ face.family }}";font-style:{{ face.style }};font-weight:{{ face.weight }};{% if face.stretch %}font-stretch:{{ face.stretch }};{% endif %}font-display:fallback;src:url("{{ face.path | url }}") format("woff2");unicode-range:{{ config.extra.font_unicode_range }}}{% endfor %}:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+{% endblock %}
+
+{% block extrahead %}
+  {#-
+    No preconnect to api.github.com here on purpose. The page used to warm
+    that connection because Material fetched the repository's star and fork
+    counts from it on every load; partials/source.html now suppresses that
+    component, so there is no request left to warm a socket for. A preconnect
+    to an origin the page never contacts is not free - it costs a DNS lookup
+    and a TLS handshake that nothing consumes.
+  -#}
+  {#-
+    extra.css, minified, instead of the render-blocking <link> that
+    `extra_css` would emit. base.html renders this block after the extra_css
+    loop it replaces, so the cascade order is exactly what it was. See
+    scripts/mkdocs_hooks.py for why the comments are stripped on the way in.
+  -#}
+  <style>{{ config.extra.inline_css | safe }}</style>
+{% endblock %}
+
+{% block scripts %}
+  {#-
+    base.html's own block, with `defer` added. The bundle is already the last
+    element before </body> so it blocks little in practice, but without the
+    attribute it is a parser-blocking script and is reported as render-
+    blocking.
+
+    Deferring is safe here because nothing between this tag and
+    DOMContentLoaded needs the bundle: the only inline code that touches its
+    globals (`document$` and `location$`, in the head's integration script)
+    does so inside a DOMContentLoaded handler, and deferred scripts run before
+    execute before that event fires.
+
+    The filename carries mkdocs-material's content hash, so it is resolved
+    from the installed theme rather than copied out of base.html, which would
+    404 silently on the next upgrade.
+  -#}
+  <script src="{{ config.extra.bundle_js | url }}" defer></script>
+  {% for script in config.extra_javascript %}
+    {{ script | script_tag }}
+  {% endfor %}
 {% endblock %}

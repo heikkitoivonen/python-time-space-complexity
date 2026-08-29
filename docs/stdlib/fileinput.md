@@ -133,7 +133,7 @@ for line in fileinput.input():
 
 ## Context Manager Usage
 
-#### Time Complexity: O(n)
+### Time Complexity: O(n)
 
 ```python
 import fileinput
@@ -145,7 +145,7 @@ with fileinput.input(['file1.txt', 'file2.txt']) as f:
 # Auto-cleanup
 ```
 
-#### Space Complexity: O(1)
+### Space Complexity: O(1)
 
 ```python
 import fileinput

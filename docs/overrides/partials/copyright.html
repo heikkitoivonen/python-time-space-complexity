@@ -12,12 +12,24 @@
       the whole phrase rather than a translated fragment. The product name
       itself is a proper noun and stays untranslated. Add a locale here when
       adding a language; locales with no entry fall back to English.
+
+      `newtab` labels the link as opening a new tab, which its visible text
+      cannot convey. It carries its own brackets so each locale keeps its own
+      punctuation. See WCAG 2.2 SC 3.2.5 (Change on Request).
     -#}
+    {%- set newtabs = {
+      "fi": "(avautuu uuteen välilehteen)",
+      "zh": "（在新标签页中打开）",
+      "ja": "（新しいタブで開きます）",
+      "en": "(opens in a new tab)"
+    } -%}
+    {%- set newtab = newtabs.get(config.theme.language, newtabs["en"]) -%}
     {%- set material %}
       <a
         href="https://squidfunk.github.io/mkdocs-material/"
         target="_blank"
         rel="noopener"
+        aria-label="Material for MkDocs {{ newtab }}"
       >Material for MkDocs</a>
     {%- endset %}
     {% if config.extra.generator is not defined or config.extra.generator != false %}

@@ -262,3 +262,47 @@ def test_mkdocs_yaml_valid():
         if line and not line.startswith("#"):
             if "\t" in line:
                 raise AssertionError(f"mkdocs.yml line {i} contains tabs instead of spaces")
+
+
+def test_new_translation_is_not_reported_as_stale(tmp_path):
+    """A never-recorded hash must not tell the translator to re-translate."""
+    import scripts.validate_translations as validate
+    source = tmp_path / "page.md"
+    source.write_text("# Title\n", encoding="utf-8")
+
+    # The elided placeholder printed in TRANSLATING.md, and no key at all.
+    for recorded in ["3f8a1c...", None, "", "not-a-hash"]:
+        problem = validate.hash_problem(recorded, source, "fi")
+        assert problem is not None
+        assert "not recorded yet" in problem, problem
+        assert "STALE" not in problem
+        assert "re-translate" not in problem
+
+
+def test_changed_source_is_reported_as_stale(tmp_path):
+    """A real recorded hash that no longer matches is genuine staleness."""
+    import scripts.validate_translations as validate
+    source = tmp_path / "page.md"
+    source.write_text("# Title\n", encoding="utf-8")
+
+    problem = validate.hash_problem("0" * 64, source, "fi")
+    assert problem is not None and problem.startswith("STALE")
+
+    assert validate.hash_problem(validate.sha256_of(source), source, "fi") is None
+
+
+def test_update_hashes_can_record_a_first_hash():
+    """--update-hashes must work from every state the error points at."""
+    import scripts.validate_translations as validate
+    current = "a" * 64
+
+    # Existing key is replaced.
+    assert validate.stamp_front_matter(
+        "source_sha: old\ntranslated: machine", current
+    ) == f"source_sha: {current}\ntranslated: machine"
+
+    # Missing key is added rather than silently skipped.
+    assert validate.stamp_front_matter("translated: machine", current) == (
+        f"source_sha: {current}\ntranslated: machine"
+    )
+    assert validate.stamp_front_matter("", current) == f"source_sha: {current}"

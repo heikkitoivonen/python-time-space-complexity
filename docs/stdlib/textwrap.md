@@ -284,7 +284,7 @@ for paragraph in huge_text.split("\n\n"):
 
 ## TextWrapper Class
 
-#### Time Complexity: O(1) init, O(n) per format
+### Time Complexity: O(1) init, O(n) per format
 
 ```python
 from textwrap import TextWrapper

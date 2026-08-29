@@ -43,6 +43,14 @@ below and the full guide in [TRANSLATING.md](TRANSLATING.md).
 4. **Test locally**: `mkdocs serve`
 5. **Submit PR** with clear description
 
+## Accessibility
+
+The site targets WCAG 2.2 Level AA, and a few of the rules that keep it there
+are not guessable from the code - the colour tokens are split across three
+variables on purpose, text is never dimmed with `opacity`, and untranslated
+pages carry a `lang` override. Read [ACCESSIBILITY.md](ACCESSIBILITY.md)
+before changing a colour, a heading level, or anything language-related.
+
 ## Documentation Style Guide
 
 ### File Structure
@@ -122,7 +130,7 @@ docs/fi/builtins/list.md   ->  https://pythoncomplexity.com/fi/builtins/list/
 | Locale | Language | Status                     |
 |--------|----------|----------------------------|
 | `en`   | English  | Complete (source of truth) |
-| `fi`   | Suomi    | Pilot - 13 pages           |
+| `fi`   | Suomi    | Pilot - 14 pages           |
 | `zh`   | 简体中文 | Pilot - 14 pages           |
 | `ja`   | 日本語   | Pilot - 13 pages           |
 
