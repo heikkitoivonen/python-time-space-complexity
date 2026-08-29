@@ -235,7 +235,7 @@ the other.
 - Element counting with analysis
 
 ### Not Good For:
-- Counting one key at a time in a Python loop, on the workload measured below - benchmark your own before rewriting
+- Counting one key at a time in a Python loop, on the workload measured in the comparison above - benchmark your own before rewriting
 - Non-hashable items
 - When you don't need frequency methods
 

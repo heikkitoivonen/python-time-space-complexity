@@ -6,11 +6,11 @@ The `compileall` module compiles all Python source files in a directory tree to 
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `compile_dir()` | O(E + B) | O(E) | E = every directory entry examined, not just `.py` files; B = source bytes compiled. Both terms measured on CPython 3.11, one Linux machine, tmpfs - illustrative: adding 5000 non-Python files to a directory of 20 modules made it 10.9x slower, and 200 ten-line files cost about nine times 10 two-hundred-line files |
+| `compile_dir()` | O(E + B) | O(E + M) | E = every directory entry examined, not just `.py` files; B = source bytes compiled; M = the largest single file's compilation working set, which dominates. Measured on CPython 3.11, one Linux machine, tmpfs - illustrative: 5000 non-Python files added to 20 modules made it 10.9x slower, 200 ten-line files cost about nine times 10 two-hundred-line files, and one 1.8 MB module peaked at 232 MB |
 | `compile_file()` | O(m) | O(m) | m = file size; one file |
-| `workers=N` | - | O(N * working set) | Each process holds its own source and compiler state |
-| `compile_path()` | O(E + B) | O(E) | Same walk, over the entries of each `sys.path` directory |
-| `main()` | O(E + B) | O(E) | CLI entrypoint |
+| `workers=N` | - | O(E + N*M) | Each process holds its own copy of M, so peak memory scales with the worker count |
+| `compile_path()` | O(E + B) | O(E + M) | Same walk, over the entries of each `sys.path` directory |
+| `main()` | O(E + B) | O(E + M) | CLI entrypoint |
 
 ## Batch Compiling Python Files
 
@@ -24,7 +24,7 @@ from pathlib import Path
 tree = Path(tempfile.mkdtemp())
 (tree / 'example.py').write_text('value = 1\n')
 
-# Compile directory tree - O(n + total bytes)
+# Compile directory tree - O(E + B)
 compileall.compile_dir(tree)
 
 # With options

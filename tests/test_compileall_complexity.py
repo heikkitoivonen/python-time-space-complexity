@@ -168,6 +168,37 @@ class TestCompileDirComplexity:
             f"force=True recompiles everything: cached {cached_time:.2e}s forced {forced_time:.2e}s"
         )
 
+    def test_memory_follows_the_largest_file_not_the_entry_count(self, tmp_path: Path) -> None:
+        """The space bound needs M, the per-file compilation working set.
+
+        With one directory entry and one file, E is constant while peak
+        memory tracks the source: a 1.8 MB module peaked around 232 MB here,
+        which O(E) does not describe at all.
+        """
+        import tracemalloc
+
+        def peak_for(lines: int) -> int:
+            directory = tmp_path / f"n{lines}"
+            directory.mkdir()
+            (directory / "big.py").write_text(
+                "\n".join(f"x{index} = {index} + 1" for index in range(lines)),
+                encoding="utf-8",
+            )
+            tracemalloc.start()
+            try:
+                compileall.compile_dir(directory, quiet=2, force=True)
+                return tracemalloc.get_traced_memory()[1]
+            finally:
+                tracemalloc.stop()
+
+        small_peak = peak_for(1_000)
+        large_peak = peak_for(20_000)
+
+        assert large_peak > small_peak * 3, (
+            f"one entry either way, and peak memory still grew: "
+            f"{small_peak / 1e6:.1f} MB vs {large_peak / 1e6:.1f} MB"
+        )
+
     def test_it_writes_the_bytecode_it_claims_to(self, tmp_path: Path) -> None:
         tree = build_tree(tmp_path / "written", files=3, lines_each=2)
         compileall.compile_dir(tree, quiet=2)
