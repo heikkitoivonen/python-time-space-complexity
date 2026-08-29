@@ -188,9 +188,15 @@ class TestArrayComplexity:
             f"index() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    # Shifting the tail of a 10k array takes about two microseconds, which is
+    # close enough to timer noise that the ratio wandered out of band under
+    # full-suite load. These two use a bigger small case instead.
+    SHIFT_SMALL_SIZE = 100_000
+    SHIFT_SIZE_RATIO = LARGE_SIZE / SHIFT_SMALL_SIZE
+
     def test_insert_is_on(self) -> None:
         """Insert should be O(n) - the tail shifts."""
-        small = array.array("i", range(self.SMALL_SIZE))
+        small = array.array("i", range(self.SHIFT_SMALL_SIZE))
         large = array.array("i", range(self.LARGE_SIZE))
 
         def insert_then_remove(target: array.array) -> None:
@@ -200,7 +206,7 @@ class TestArrayComplexity:
         small_time = measure_time(lambda: insert_then_remove(small), iterations=20)
         large_time = measure_time(lambda: insert_then_remove(large), iterations=20)
 
-        assert scales_with_size(small_time, large_time, self.SIZE_RATIO), (
+        assert scales_with_size(small_time, large_time, self.SHIFT_SIZE_RATIO), (
             f"insert() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
@@ -252,7 +258,9 @@ class TestPopPosition:
         )
 
     def test_pop_from_the_front_is_on(self) -> None:
-        small = array.array("i", range(self.SMALL_SIZE))
+        # Same noise floor as insert above, so the same larger small case.
+        small_size = 100_000
+        small = array.array("i", range(small_size))
         large = array.array("i", range(self.LARGE_SIZE))
 
         def pop_front_and_restore(target: array.array) -> None:
@@ -262,7 +270,7 @@ class TestPopPosition:
         small_time = measure_time(lambda: pop_front_and_restore(small), iterations=20)
         large_time = measure_time(lambda: pop_front_and_restore(large), iterations=20)
 
-        assert scales_with_size(small_time, large_time, self.SIZE_RATIO), (
+        assert scales_with_size(small_time, large_time, self.LARGE_SIZE / small_size), (
             f"pop(0) doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 

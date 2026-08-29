@@ -1,5 +1,5 @@
 ---
-source_sha: e32210f0b30cd99aa404b93423279e38f89a907a66f182d9e3df1cd3ed5357f2
+source_sha: f99a7f1db066324adce1ef1c4d66432c20d2c2889467ceb9f2910ca4212c8768
 translated: machine
 ---
 
@@ -86,18 +86,24 @@ queue.pop()  # O(1) - remove from back
 ```python
 from collections import defaultdict
 
-# Avoid: manual checking
+# Avoid: manual checking - a membership test, then a store, then the append
+groups = {}
+if 'key' not in groups:
+    groups['key'] = []
+groups['key'].append('value')
+
+# Better: the factory supplies the list - O(1) avg, one lookup
 data = defaultdict(list)
-data['key'].append('value')  # O(1) avg - key auto-created as empty list
+data['key'].append('value')
 
 # Avoid: clunky dict.get()
-d = {}
-d['key'] = d.get('key', 0) + 1  # O(1) avg, but a get and a set spelled out
+counts = {}
+counts['key'] = counts.get('key', 0) + 1  # O(1) avg, a get and a set spelled out
 
 # Better: defaultdict with int
-counts = defaultdict(int)
-counts['key'] += 1  # O(1) avg - still a get plus a set, but one statement
-                    # and no default to pass in
+tally = defaultdict(int)
+tally['key'] += 1  # O(1) avg - still a get plus a set, but one statement
+                   # and no default to pass in
 ```
 
 ## Counter
@@ -108,7 +114,7 @@ counts['key'] += 1  # O(1) avg - still a get plus a set, but one statement
 |-----------|------|-------|-------|
 | `Counter(iterable)` | O(n) | O(k) | n はイテラブルの長さ、k は異なる要素の個数 |
 | `c[item]` | 平均 O(1) | O(1) | なければ 0 を返す。ハッシュ衝突により最悪は O(n) |
-| `c.most_common(k)` | O(n log k) | O(k) | n は `len(c)`、すなわち異なるキーの数。`k=1` は `max()`、`k >= len(c)` は `sorted()` にフォールバックする。その間はヒープを使うが定数倍が大きく、CPython 3.11 と 3.14 で n が 10³〜10⁶ のとき、全体をソートするより 2〜5 倍遅く計測された |
+| `c.most_common(k)` | O(n log k) | O(k) | n は `len(c)`、すなわち異なるキーの数。`k=1` は `max()`、`k >= len(c)` は `sorted()` にフォールバックし、その間は大きさ k のヒープを保つ。それが全体のソートより速いかは件数の分布による。ランダムや Zipf 的なデータでは明確に速く、件数が反復順に増加する場合は要素ごとにヒープ置換が起きるため遅くなる |
 | `c.update(iterable)` | O(n) | O(k) | n はイテラブルの長さ |
 | `c.subtract(iterable)` | O(n) | O(1) | 個数を引く。負の値も保持する |
 | `c.total()` | O(n) | O(1) | すべての個数の合計（Python 3.10+） |
@@ -128,8 +134,8 @@ words = ['apple', 'banana', 'apple', 'cherry', 'apple']
 c = Counter(words)
 # Counter({'apple': 3, 'banana': 1, 'cherry': 1})
 
-# Most common items - O(n log k) for k items, n = len(c). Passing k is not
-# the optimisation it looks like: see the note in the table above
+# Most common items - O(n log k) for k items, n = len(c). Whether that beats
+# sorting everything depends on the counts; see the note in the table above
 top_3 = c.most_common(3)  # [('apple', 3), ('banana', 1), ('cherry', 1)]
 
 # Arithmetic - O(n) over the combined keys

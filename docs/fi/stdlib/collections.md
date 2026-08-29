@@ -1,5 +1,5 @@
 ---
-source_sha: e32210f0b30cd99aa404b93423279e38f89a907a66f182d9e3df1cd3ed5357f2
+source_sha: f99a7f1db066324adce1ef1c4d66432c20d2c2889467ceb9f2910ca4212c8768
 translated: machine
 ---
 
@@ -86,18 +86,24 @@ Sama kuin `dict`:
 ```python
 from collections import defaultdict
 
-# Avoid: manual checking
+# Avoid: manual checking - a membership test, then a store, then the append
+groups = {}
+if 'key' not in groups:
+    groups['key'] = []
+groups['key'].append('value')
+
+# Better: the factory supplies the list - O(1) avg, one lookup
 data = defaultdict(list)
-data['key'].append('value')  # O(1) avg - key auto-created as empty list
+data['key'].append('value')
 
 # Avoid: clunky dict.get()
-d = {}
-d['key'] = d.get('key', 0) + 1  # O(1) avg, but a get and a set spelled out
+counts = {}
+counts['key'] = counts.get('key', 0) + 1  # O(1) avg, a get and a set spelled out
 
 # Better: defaultdict with int
-counts = defaultdict(int)
-counts['key'] += 1  # O(1) avg - still a get plus a set, but one statement
-                    # and no default to pass in
+tally = defaultdict(int)
+tally['key'] += 1  # O(1) avg - still a get plus a set, but one statement
+                   # and no default to pass in
 ```
 
 ## Counter
@@ -108,7 +114,7 @@ counts['key'] += 1  # O(1) avg - still a get plus a set, but one statement
 |-----------|------|-------|-------|
 | `Counter(iterable)` | O(n) | O(k) | n = iteroituvan pituus, k = uniikkien alkioiden määrä |
 | `c[item]` | O(1) avg | O(1) | Palauttaa 0 jos puuttuu; pahimmillaan O(n) tiivistetörmäysten vuoksi |
-| `c.most_common(k)` | O(n log k) | O(k) | n = `len(c)` eli eri avainten määrä. `k=1` käyttää `max()`-funktiota; `k >= len(c)` palautuu `sorted()`-kutsuun; näiden välillä se on kekopohjainen, ja vakiokerroin on niin suuri, että CPython 3.11:ssä ja 3.14:ssä, kun n oli 10³–10⁶, se mitattiin 2-5 kertaa hitaammaksi kuin kaiken lajittelu |
+| `c.most_common(k)` | O(n log k) | O(k) | n = `len(c)` eli eri avainten määrä. `k=1` käyttää `max()`-funktiota; `k >= len(c)` palautuu `sorted()`-kutsuun; näiden välissä se ylläpitää k-kokoista kekoa. Voittaako se kaiken lajittelun, riippuu lukumääristä: satunnaisella tai Zipf-tyyppisellä datalla se voittaa selvästi ja häviää, kun lukumäärät kasvavat iterointijärjestyksessä, jolloin jokainen alkio aiheuttaa keon korvauksen |
 | `c.update(iterable)` | O(n) | O(k) | n = iteroituvan pituus |
 | `c.subtract(iterable)` | O(n) | O(1) | Vähentää lukumääriä; säilyttää negatiiviset arvot |
 | `c.total()` | O(n) | O(1) | Kaikkien lukumäärien summa (Python 3.10+) |
@@ -128,8 +134,8 @@ words = ['apple', 'banana', 'apple', 'cherry', 'apple']
 c = Counter(words)
 # Counter({'apple': 3, 'banana': 1, 'cherry': 1})
 
-# Most common items - O(n log k) for k items, n = len(c). Passing k is not
-# the optimisation it looks like: see the note in the table above
+# Most common items - O(n log k) for k items, n = len(c). Whether that beats
+# sorting everything depends on the counts; see the note in the table above
 top_3 = c.most_common(3)  # [('apple', 3), ('banana', 1), ('cherry', 1)]
 
 # Arithmetic - O(n) over the combined keys

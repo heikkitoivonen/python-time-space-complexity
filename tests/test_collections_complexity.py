@@ -626,55 +626,43 @@ class TestCounterOperations:
             f"Counter() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
-    def test_most_common_with_a_middling_k_is_slower_than_sorting(self) -> None:
-        """The bound is O(n log k); the constant loses to Timsort in practice.
+    def test_heap_path_beats_sorting_on_realistic_data(self) -> None:
+        """most_common(k) is the faster choice on data that looks like data.
 
-        heapq.nlargest builds a (key, order, element) tuple per element and
-        compares in Python - CPython's own comment calls that path the
-        "General case, slowest method". Sorting the raw items beats it.
-
-        This is a measurement, not a law: it holds for 1 < k < len(c) on
-        CPython 3.11 and 3.14 at every size tried, from a thousand keys to a
-        million. The two boundaries have their own tests below, because
-        nlargest routes them elsewhere.
+        An earlier version of this file asserted the opposite, having
+        benchmarked only counts that increase in iteration order - the one
+        ordering that defeats the heap. On random counts the heap wins by
+        roughly eight times, because nlargest settles on a high threshold
+        early and stops replacing, while Timsort has no runs to exploit.
         """
-        counter = self._counter(self.SIZE)
+        import random
+
+        rng = random.Random(7)
+        counter = Counter({f"k{i}": rng.randrange(self.SIZE) for i in range(self.SIZE)})
+
+        sorted_time = measure_time(counter.most_common, iterations=3)
+        heap_time = measure_time(lambda: counter.most_common(10), iterations=3)
+
+        assert heap_time < sorted_time, (
+            f"on random counts the heap should win: k=10 {heap_time:.2e}s all {sorted_time:.2e}s"
+        )
+
+    def test_heap_path_loses_when_counts_rise_in_iteration_order(self) -> None:
+        """The adversarial ordering, kept because it is what misled us.
+
+        Every element beats the current top, so each one costs a
+        heapreplace; meanwhile the input is already sorted, which is
+        Timsort's best case. Benchmarking only this shape is how the docs
+        came to claim that passing k never pays.
+        """
+        counter = self._counter(self.SIZE)  # counts 0, 1, 2, ... in order
 
         sorted_time = measure_time(counter.most_common, iterations=3)
         heap_time = measure_time(lambda: counter.most_common(10), iterations=3)
 
         assert heap_time > sorted_time, (
-            f"most_common(10) should measure slower than most_common(): "
-            f"k=10 {heap_time:.2e}s all {sorted_time:.2e}s"
-        )
-
-    def test_a_k_at_or_above_the_key_count_falls_back_to_sorting(self) -> None:
-        """nlargest short-circuits to sorted() when k >= size.
-
-        So the "passing k is slower" result has an upper boundary as well as
-        the k=1 one: at k >= len(c) the two calls run the same code.
-        """
-        counter = self._counter(2_000)
-        key_count = len(counter)
-
-        sorted_time = measure_time(counter.most_common, iterations=5)
-        saturated_time = measure_time(lambda: counter.most_common(key_count), iterations=5)
-
-        assert saturated_time < sorted_time * 3, (
-            f"k >= len(c) should cost about a plain sort: k={key_count} "
-            f"{saturated_time:.2e}s all {sorted_time:.2e}s"
-        )
-        assert counter.most_common(key_count) == counter.most_common()
-
-    def test_most_common_one_is_special_cased(self) -> None:
-        """nlargest routes n == 1 to max(), which does beat sorting."""
-        counter = self._counter(self.SIZE)
-
-        sorted_time = measure_time(counter.most_common, iterations=3)
-        single_time = measure_time(lambda: counter.most_common(1), iterations=3)
-
-        assert single_time < sorted_time, (
-            f"most_common(1) should beat a full sort: k=1 {single_time:.2e}s all {sorted_time:.2e}s"
+            f"ascending counts are the heap's worst case: k=10 {heap_time:.2e}s "
+            f"all {sorted_time:.2e}s"
         )
 
     def test_most_common_returns_what_it_claims(self) -> None:

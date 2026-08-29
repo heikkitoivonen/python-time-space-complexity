@@ -242,12 +242,25 @@ as which unit a bound is expressed in. Say so in the test file's docstring,
 next to the ones you did cover, and do not write a test that pretends
 otherwise.
 
-Two things worth knowing before you rely on a test:
+Claims are not the only thing that breaks. Two of the three pages spot-checked
+so far shipped examples that raised on the first line - one of them a
+`NameError` introduced while adding annotations to it. Run a page's code
+blocks, not just its numbers.
 
-- A test pins what it asserts, not what the prose says.
+Things worth knowing before you rely on a test:
+
+- A test pins what it asserts, not what the prose says. Its *name* is not an
+  assertion either: one here claimed a comparison its body never made.
 - Measure before you correct. `Decimal.quantize()` cost tracks the digits the
   result keeps, not the operand's - the opposite of a plausible-sounding
   review comment that was accepted here without measuring.
+- Vary the input before you generalise. `most_common(k)` was benchmarked on
+  counts that rose in iteration order, the one shape that defeats the heap,
+  and the docs told four languages that passing k never pays. On random or
+  Zipf-like counts it wins by eight times.
+- Run it on every version the project supports, not just the pinned one.
+  Tests asserting that `prepare()` may be called once passed on 3.11 and
+  failed on 3.14, which relaxed it.
 
 Test files: `tests/test_<module>_complexity.py` for a module's table,
 `tests/test_builtin_claims.py` and `tests/test_stdlib_claims.py` for kind A,
@@ -329,6 +342,8 @@ Before every commit, verify:
 - [ ] Changes are focused/minimal
 - [ ] Documentation updated if needed
 - [ ] New complexity claims tested, or recorded as untestable (see above)
+- [ ] Edited code blocks actually run, and new timing tests pass on the
+      oldest and newest supported Python, not just the pinned one
 - [ ] Translations updated if an English page changed
 - [ ] Accessibility rules honoured if colours/headings/`lang` changed
 - [ ] No test files left uncommitted
