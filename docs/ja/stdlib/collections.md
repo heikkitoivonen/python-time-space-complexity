@@ -1,5 +1,5 @@
 ---
-source_sha: 300e9573b2faa2a2d99bdf500c96cf9f85fd0e453dc05d1831ca154e4e1cb1cc
+source_sha: 8bfb851d8a96095493ad930e71dce6a005258780f53354bdce9f6aba331e6613
 translated: machine
 ---
 
@@ -8,12 +8,6 @@ translated: machine
 `collections` モジュールは、特定の用途に最適化された専用のデータ構造を提供します。
 
 ## deque
-
-### deque（両端キュー）
-
-```python
-from collections import deque
-```
 
 ### 時間計算量
 
@@ -50,6 +44,8 @@ from collections import deque
 ### 使いどころ
 
 ```python
+from collections import deque
+
 # Process items from both ends - very efficient
 queue = deque([1, 2, 3])
 queue.appendleft(0)  # O(1) - add to front
@@ -61,10 +57,6 @@ queue.pop()  # O(1) - remove from back
 ```
 
 ## DefaultDict
-
-```python
-from collections import defaultdict
-```
 
 ### 時間計算量
 
@@ -96,23 +88,19 @@ from collections import defaultdict
 from collections import defaultdict
 
 data = defaultdict(list)
-data['key'].append('value')  # Key auto-created as empty list
+data['key'].append('value')  # O(1) avg - key auto-created as empty list
 
 # Avoid: Clunky dict.get()
-count = d.get('key', 0)
+count = d.get('key', 0)  # O(1) avg, but two statements per increment
 count += 1
 
 # Better: defaultdict with int
 from collections import defaultdict
 count = defaultdict(int)
-count['key'] += 1
+count['key'] += 1  # O(1) avg - one lookup, default supplied by the factory
 ```
 
 ## Counter
-
-```python
-from collections import Counter
-```
 
 ### 時間計算量
 
@@ -135,25 +123,21 @@ from collections import Counter
 ```python
 from collections import Counter
 
-# Count items
+# Count items - O(n) for n items
 words = ['apple', 'banana', 'apple', 'cherry', 'apple']
 c = Counter(words)
 # Counter({'apple': 3, 'banana': 1, 'cherry': 1})
 
-# Most common items
+# Most common items - O(n log k) for k items, O(n log n) if k is None
 top_3 = c.most_common(3)  # [('apple', 3), ('banana', 1), ('cherry', 1)]
 
-# Arithmetic
+# Arithmetic - O(n) over the combined keys
 c1 = Counter('aab')
 c2 = Counter('abc')
 c1 + c2  # Counter({'a': 3, 'b': 2, 'c': 1})
 ```
 
 ## NamedTuple
-
-```python
-from collections import namedtuple
-```
 
 ### 時間計算量
 
@@ -187,10 +171,6 @@ p2 = p._replace(x=5)
 
 ## OrderedDict
 
-```python
-from collections import OrderedDict
-```
-
 ### 時間計算量
 
 | 操作 | 時間 | 空間 | 備考 |
@@ -215,10 +195,6 @@ od.move_to_end('a')  # O(1) - moves 'a' to end
 ```
 
 ## ChainMap
-
-```python
-from collections import ChainMap
-```
 
 ### 時間計算量
 
