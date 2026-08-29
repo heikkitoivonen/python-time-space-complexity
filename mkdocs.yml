@@ -423,6 +423,7 @@ plugins:
           nav_translations:
             Home: 首页
             Overview: 概览
+            Absolute: 绝对值
             Builtins: 内置
             Standard Library: 标准库
             Implementations: 实现

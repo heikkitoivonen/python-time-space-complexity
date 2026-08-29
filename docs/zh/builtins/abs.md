@@ -9,7 +9,7 @@ translated: machine
 
 ## 复杂度分析
 
-| 实例 | 时间 | 空间 | 备注 |
+| 情况 | 时间 | 空间 | 备注 |
 |------|------|-------|-------|
 | 整数 | O(1) | O(1) | 简单的符号判断 |
 | 浮点数 | O(1) | O(1) | IEEE 754 符号位操作 |
@@ -54,7 +54,7 @@ d = Distance(-10)
 result = abs(d)  # 10
 ```
 
-## 性能典范
+## 性能模式
 
 ### 条件绝对值
 
@@ -164,7 +164,7 @@ abs(-10**100)  # Very large positive
 abs(-sys.maxsize)  # Minimum integer
 ```
 
-### 强类型
+### 类型转换
 
 ```python
 # O(1) - works with numeric types
