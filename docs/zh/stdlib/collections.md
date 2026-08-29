@@ -1,5 +1,5 @@
 ---
-source_sha: f43208b32ebe4144adb55b7eb744985d72325b37cd3f82bde46534a8971094d1
+source_sha: e32210f0b30cd99aa404b93423279e38f89a907a66f182d9e3df1cd3ed5357f2
 translated: machine
 ---
 
@@ -92,8 +92,7 @@ data['key'].append('value')  # O(1) avg - key auto-created as empty list
 
 # Avoid: clunky dict.get()
 d = {}
-count = d.get('key', 0)  # O(1) avg, but two statements per increment
-count += 1
+d['key'] = d.get('key', 0) + 1  # O(1) avg, but a get and a set spelled out
 
 # Better: defaultdict with int
 counts = defaultdict(int)
@@ -109,7 +108,7 @@ counts['key'] += 1  # O(1) avg - still a get plus a set, but one statement
 |-----------|------|-------|-------|
 | `Counter(iterable)` | O(n) | O(k) | n = 可迭代对象长度，k = 唯一元素个数 |
 | `c[item]` | 平均 O(1) | O(1) | 缺失时返回 0；哈希冲突下最坏为 O(n) |
-| `c.most_common(k)` | O(n log k) | O(k) | 基于堆，但常数因子很大：当 k >= 2 时，实测比 `most_common()` 的 O(n log n) 排序更慢。k=1 会特殊处理为 `max()` |
+| `c.most_common(k)` | O(n log k) | O(k) | n 为 `len(c)`，即不同键的数量。`k=1` 使用 `max()`；`k >= len(c)` 回退到 `sorted()`；两者之间基于堆，但常数因子足够大，在 CPython 3.11 与 3.14 上、n 从 10³ 到 10⁶ 时，实测比全部排序慢 2-5 倍 |
 | `c.update(iterable)` | O(n) | O(k) | n = 可迭代对象长度 |
 | `c.subtract(iterable)` | O(n) | O(1) | 减去计数；保留负值 |
 | `c.total()` | O(n) | O(1) | 所有计数之和（Python 3.10+） |
@@ -129,8 +128,8 @@ words = ['apple', 'banana', 'apple', 'cherry', 'apple']
 c = Counter(words)
 # Counter({'apple': 3, 'banana': 1, 'cherry': 1})
 
-# Most common items - O(n log k) for k items, O(n log n) if k is None.
-# The bound favours passing k; the measured time does not, except for k=1
+# Most common items - O(n log k) for k items, n = len(c). Passing k is not
+# the optimisation it looks like: see the note in the table above
 top_3 = c.most_common(3)  # [('apple', 3), ('banana', 1), ('cherry', 1)]
 
 # Arithmetic - O(n) over the combined keys

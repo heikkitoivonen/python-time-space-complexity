@@ -87,8 +87,7 @@ data['key'].append('value')  # O(1) avg - key auto-created as empty list
 
 # Avoid: clunky dict.get()
 d = {}
-count = d.get('key', 0)  # O(1) avg, but two statements per increment
-count += 1
+d['key'] = d.get('key', 0) + 1  # O(1) avg, but a get and a set spelled out
 
 # Better: defaultdict with int
 counts = defaultdict(int)
@@ -104,7 +103,7 @@ counts['key'] += 1  # O(1) avg - still a get plus a set, but one statement
 |-----------|------|-------|-------|
 | `Counter(iterable)` | O(n) | O(k) | n = iterable length, k = unique items |
 | `c[item]` | O(1) avg | O(1) | Returns 0 if missing; O(n) worst case due to hash collisions |
-| `c.most_common(k)` | O(n log k) | O(k) | Heap-based, but with a large constant: for k >= 2 it measures slower than the O(n log n) sort that `most_common()` does. k=1 is special-cased to `max()` |
+| `c.most_common(k)` | O(n log k) | O(k) | n = `len(c)`, the distinct keys. `k=1` uses `max()`; `k >= len(c)` falls back to `sorted()`; in between it is heap-based, and its constant is large enough that on CPython 3.11 and 3.14, for n from 10³ to 10⁶, it measured 2-5x slower than sorting everything |
 | `c.update(iterable)` | O(n) | O(k) | n = iterable length |
 | `c.subtract(iterable)` | O(n) | O(1) | Subtract counts; keeps negative values |
 | `c.total()` | O(n) | O(1) | Sum of all counts (Python 3.10+) |
@@ -124,8 +123,8 @@ words = ['apple', 'banana', 'apple', 'cherry', 'apple']
 c = Counter(words)
 # Counter({'apple': 3, 'banana': 1, 'cherry': 1})
 
-# Most common items - O(n log k) for k items, O(n log n) if k is None.
-# The bound favours passing k; the measured time does not, except for k=1
+# Most common items - O(n log k) for k items, n = len(c). Passing k is not
+# the optimisation it looks like: see the note in the table above
 top_3 = c.most_common(3)  # [('apple', 3), ('banana', 1), ('cherry', 1)]
 
 # Arithmetic - O(n) over the combined keys

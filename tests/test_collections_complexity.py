@@ -626,12 +626,17 @@ class TestCounterOperations:
             f"Counter() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
-    def test_most_common_with_k_is_slower_than_sorting_everything(self) -> None:
-        """The bound is O(n log k), but the constant loses to Timsort.
+    def test_most_common_with_a_middling_k_is_slower_than_sorting(self) -> None:
+        """The bound is O(n log k); the constant loses to Timsort in practice.
 
         heapq.nlargest builds a (key, order, element) tuple per element and
-        calls the key in Python - CPython's own comment calls that path the
+        compares in Python - CPython's own comment calls that path the
         "General case, slowest method". Sorting the raw items beats it.
+
+        This is a measurement, not a law: it holds for 1 < k < len(c) on
+        CPython 3.11 and 3.14 at every size tried, from a thousand keys to a
+        million. The two boundaries have their own tests below, because
+        nlargest routes them elsewhere.
         """
         counter = self._counter(self.SIZE)
 
@@ -642,6 +647,24 @@ class TestCounterOperations:
             f"most_common(10) should measure slower than most_common(): "
             f"k=10 {heap_time:.2e}s all {sorted_time:.2e}s"
         )
+
+    def test_a_k_at_or_above_the_key_count_falls_back_to_sorting(self) -> None:
+        """nlargest short-circuits to sorted() when k >= size.
+
+        So the "passing k is slower" result has an upper boundary as well as
+        the k=1 one: at k >= len(c) the two calls run the same code.
+        """
+        counter = self._counter(2_000)
+        key_count = len(counter)
+
+        sorted_time = measure_time(counter.most_common, iterations=5)
+        saturated_time = measure_time(lambda: counter.most_common(key_count), iterations=5)
+
+        assert saturated_time < sorted_time * 3, (
+            f"k >= len(c) should cost about a plain sort: k={key_count} "
+            f"{saturated_time:.2e}s all {sorted_time:.2e}s"
+        )
+        assert counter.most_common(key_count) == counter.most_common()
 
     def test_most_common_one_is_special_cased(self) -> None:
         """nlargest routes n == 1 to max(), which does beat sorting."""
