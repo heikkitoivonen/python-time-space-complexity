@@ -38,6 +38,7 @@ import unicodedata
 from collections import defaultdict
 from collections.abc import Callable
 from decimal import Decimal, getcontext
+from fractions import Fraction
 from functools import cmp_to_key
 from ipaddress import IPv4Network
 from pathlib import Path
@@ -630,6 +631,41 @@ class TestUnicodeDataLookupsAreTableReads:
         assert unicodedata.normalize("NFC", ascii_text) is ascii_text
         assert unicodedata.normalize("NFC", composed) is composed
 
+    def test_many_runs_cost_more_than_one_run_of_the_same_length(self) -> None:
+        """The bound is O(n + sum of squared run lengths), not O(n + k^2).
+
+        Same total length, same longest run - only the number of runs
+        differs. If the longest run were what bounded it, these would match.
+        """
+        marks = "".join(chr(0x0300 + (index % 40)) for index in range(100))
+        unit = "a" + marks
+
+        one_run = unit + "b" * (200_000 - len(unit))
+        many_runs = (unit + "b" * (100 - len(unit) % 100)) * 2_000
+
+        one_time = best_time(lambda: unicodedata.normalize("NFC", one_run))
+        many_time = best_time(lambda: unicodedata.normalize("NFC", many_runs))
+
+        assert many_time > one_time * 3, (
+            f"every run is sorted, so 2000 of them cost more than one: "
+            f"one={one_time:.2e}s many={many_time:.2e}s"
+        )
+
+    def test_cost_tracks_the_squared_run_lengths(self) -> None:
+        """Hold the total length fixed and lengthen the runs."""
+
+        def build(runs: int, length: int) -> str:
+            marks = "".join(chr(0x0300 + (index % 40)) for index in range(length))
+            return ("a" + marks) * runs
+
+        short_runs = best_time(lambda: unicodedata.normalize("NFC", build(20_000, 10)))
+        long_runs = best_time(lambda: unicodedata.normalize("NFC", build(200, 1_000)))
+
+        assert long_runs > short_runs * 3, (
+            f"same characters, hundred times the squared-run total: "
+            f"20000x10={short_runs:.2e}s 200x1000={long_runs:.2e}s"
+        )
+
     def test_a_string_needing_work_does_allocate(self) -> None:
         decomposed = "cafe\u0301"
         result = unicodedata.normalize("NFC", decomposed)
@@ -676,3 +712,65 @@ class TestBisectKeyListDominates:
             f"the O(n) rebuild dwarfs the O(log n) search it precedes: "
             f"rebuild={rebuild:.2e}s search={search:.2e}s"
         )
+
+
+class TestFractionLoopDoesNotReduce:
+    """docs/stdlib/fractions.md, as corrected by these tests.
+
+    The continued-fraction example was annotated as re-reducing via GCD on
+    every step. Neither of its operations does: subtracting an integer from a
+    reduced fraction leaves it reduced, and a reciprocal is a swap. The GCDs
+    that do run have 1 as an operand.
+    """
+
+    def test_subtracting_an_int_leaves_it_reduced(self) -> None:
+        import math
+        import random
+
+        for _ in range(500):
+            value = Fraction(random.randint(1, 10**9), random.randint(1, 10**9))
+            result = value - random.randint(-1000, 1000)
+            assert math.gcd(result.numerator, result.denominator) == 1
+
+    def test_the_reciprocal_is_a_swap(self) -> None:
+        value = Fraction(1_414_213_562, 10**9)
+        reciprocal = 1 / value
+
+        assert reciprocal.numerator == value.denominator
+        assert reciprocal.denominator == value.numerator
+
+    def test_the_gcds_in_the_loop_are_trivial(self) -> None:
+        """Every gcd() the loop reaches has 1 as an operand."""
+        import fractions as fractions_module
+        import math
+
+        seen: list[tuple[int, ...]] = []
+        real_gcd = math.gcd
+
+        def counting_gcd(*args: int) -> int:
+            seen.append(args)
+            return real_gcd(*args)
+
+        fractions_module.math.gcd = counting_gcd  # type: ignore[assignment]
+        try:
+            x = Fraction(1_414_213_562, 10**9)
+            seen.clear()
+            for _ in range(5):
+                a = int(x)
+                x = x - a
+                if x == 0:
+                    break
+                x = 1 / x
+        finally:
+            fractions_module.math.gcd = real_gcd  # type: ignore[assignment]
+
+        assert seen, "the loop should reach gcd at all"
+        assert all(1 in args for args in seen), (
+            f"a real reduction would have two non-trivial operands: {seen[:5]}"
+        )
+
+    def test_a_genuine_reduction_does_happen_elsewhere(self) -> None:
+        """Contrast: adding two fractions really does reduce."""
+        total = Fraction(1, 6) + Fraction(1, 3)
+        assert total == Fraction(1, 2)
+        assert total.denominator == 2, "6 and 3 were reduced away"

@@ -228,18 +228,20 @@ def continued_fraction(value, depth=10):
     x = Fraction(value)
     
     # depth iterations, each one Fraction subtraction plus one reciprocal.
-    # Both re-reduce via GCD, which is O(log n) steps for that step's n - and
-    # n is not the input size here: it is the current x, which changes on
-    # every iteration, so these do not add up to depth times a fixed cost
+    # Neither reduces: subtracting an integer from a reduced fraction leaves
+    # it reduced, and a reciprocal is a swap, so the GCDs here are against 1.
+    # The cost is the big-integer arithmetic - one multiply and subtract for
+    # x - a, one floor division for int(x) - on operands whose size changes
+    # every iteration, so the steps do not add up to a fixed cost each
     for _ in range(depth):
         a = int(x)
         coefficients.append(a)
         
-        x = x - a       # O(log n) GCD steps for this x
+        x = x - a       # Big-int multiply and subtract; already reduced
         if x == 0:
             break
         
-        x = 1 / x       # reciprocal is a swap; the reduction is the cost
+        x = 1 / x       # A swap of numerator and denominator, nothing more
     
     return coefficients
 
