@@ -225,17 +225,19 @@ def continued_fraction(value, depth=10):
     coefficients = []
     x = Fraction(value)
     
-    # O(depth * log m) - each step is one Fraction subtraction and one
-    # reciprocal, and every operation re-reduces via GCD
+    # depth iterations, each one Fraction subtraction plus one reciprocal.
+    # Both re-reduce via GCD, which is O(log m) steps in m, the larger of
+    # that step's numerator and denominator - and m is not fixed: it changes
+    # with x on every iteration
     for _ in range(depth):
         a = int(x)
         coefficients.append(a)
         
-        x = x - a       # O(log m)
+        x = x - a       # O(log m) GCD steps for this x
         if x == 0:
             break
         
-        x = 1 / x       # O(log m) - reciprocal is a swap plus reduction
+        x = 1 / x       # reciprocal is a swap; the reduction is the cost
     
     return coefficients
 

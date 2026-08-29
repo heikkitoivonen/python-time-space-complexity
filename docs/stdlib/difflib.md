@@ -374,9 +374,10 @@ print(f"With spaces: {matcher1.ratio():.2%}")   # O(n*m) worst case
 # With filtering - ignores spaces
 matcher2 = SequenceMatcher(is_whitespace, text1, text2)
 print(f"Without spaces: {matcher2.ratio():.2%}")  # O(n*m) worst case
-# The junk filter runs once per element while indexing; it changes the
-# result, not the worst-case complexity. Reuse one matcher via set_seq1()
-# to avoid re-indexing b for every comparison
+# The junk filter runs once per DISTINCT element - it is applied to the
+# keys of the index, not to every position - and it changes the result, not
+# the worst-case complexity. Reuse one matcher via set_seq1() to avoid
+# re-indexing b for every comparison
 ```
 
 ## Best Practices

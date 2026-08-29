@@ -9,7 +9,7 @@ The `sqlite3` module provides a lightweight embedded SQL database interface for 
 | `connect()` | O(1) | O(1) | Open database (filesystem work varies) |
 | `execute()` | Varies | Varies | Depends on query plan, indexes, sorting |
 | SELECT | O(n) or O(log n) | O(n) | O(log n) lookup with index, O(n) full scan |
-| INSERT | O(log n) per index | O(1) | One B-tree insert per index, plus constraints, triggers and page splits |
+| INSERT | O(log n) per B-tree | O(1) | The table's B-tree plus one per index, then constraints, triggers, page splits and I/O |
 | UPDATE/DELETE | O(n) or O(log n) | O(1) | O(log n) with indexed WHERE; O(n) full scan |
 
 ## Basic Usage
@@ -134,7 +134,8 @@ import sqlite3
 # Automatic commit/rollback
 with sqlite3.connect('db.db') as conn:
     cursor = conn.cursor()
-    cursor.execute('INSERT INTO users VALUES (?, ?)', (1, 'Alice'))  # O(log n)
+    cursor.execute('INSERT INTO users VALUES (?, ?)', (1, 'Alice'))
+    # O(log n) into the table B-tree, and again into every index on it
 # Automatically commits when exiting. The commit is usually the expensive
 # part, because durability means reaching the disk
 ```
@@ -149,7 +150,8 @@ cursor = conn.cursor()
 
 try:
     # Multiple operations - varies by query plan
-    # O(log n) per index on the table, plus any constraints and triggers
+    # O(log n) into the table's own B-tree and one more per index, plus any
+    # constraints and triggers, and then the I/O to make it durable
     cursor.execute('INSERT INTO users VALUES (?, ?)', (1, 'Alice'))
     cursor.execute('INSERT INTO orders VALUES (?, ?)', (1, 1))
     

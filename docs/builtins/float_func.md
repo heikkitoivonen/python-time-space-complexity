@@ -228,8 +228,10 @@ float("42")     # O(n) - 42.0
 float("3.14")   # O(n) - 3.14
 float(42)       # O(1) for a small int - 42.0
 # float() parsing is O(n): the result is fixed width, so it only scans.
-# int() is not - decimal to binary is quadratic in CPython for long inputs,
-# which is why Python 3.11+ caps str-to-int at 4300 digits by default
+# int() is not - it is superlinear, and how much depends on the version:
+# quadratic up to 3.11, and about O(n^1.58) from 3.12, which added a
+# subquadratic path for large inputs. Either way it is why Python 3.11+
+# caps str-to-int at 4300 digits by default
 ```
 
 ## Mathematical Properties

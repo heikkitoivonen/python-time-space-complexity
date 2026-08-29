@@ -281,8 +281,10 @@ ignore = shutil.ignore_patterns(
     '*.egg-info',      # Package info
 )
 
-# O(n + E) - bytes copied plus every entry walked and stat'd; matching costs
-# O(E * patterns) on top, which is cheap next to the copying it avoids
+# O(n + E) - bytes copied plus every entry walked and stat'd, with matching
+# adding O(E * patterns). Which term dominates depends on the tree: with many
+# small files, or many patterns, or most entries ignored, the matching can
+# cost more than the copying it saves
 shutil.copytree('src', 'dst', ignore=ignore)
 ```
 

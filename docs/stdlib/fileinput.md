@@ -6,7 +6,7 @@ The `fileinput` module provides an iterator for processing lines from multiple i
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `input(files)` | O(n) | O(L) | n = lines; L = longest line held at a time |
+| `input(files)` | O(B) | O(L) | B = total bytes read; L = longest line held at a time |
 | `input()` with backup | O(n) | O(1) | In-place edit with backup |
 | `filename()` | O(1) | O(1) | Get current file name |
 | `filelineno()` | O(1) | O(1) | Get current line in file |
@@ -162,9 +162,10 @@ with fileinput.input(['file.txt']) as f:
 ```python
 import fileinput
 
-# Process lines from multiple files - O(n) in total lines, O(L) space
-# Files are opened one at a time and lines yielded on demand, so memory
-# holds one line, not the input - but that line can be arbitrarily long
+# Process lines from multiple files - O(B) in total bytes, O(L) space.
+# Lines are the unit you iterate, not the unit of work: every byte is still
+# scanned to find the line breaks. Files are opened one at a time and lines
+# yielded on demand, so memory holds one line - which can be arbitrarily long
 for line in fileinput.input(['input1.txt', 'input2.txt']):
     # Line already has newline
     if line.startswith('#'):
@@ -212,7 +213,7 @@ for line in fileinput.input(['file1.txt', 'file2.txt']):
 ```python
 import fileinput
 
-# Extract specific lines - O(n) over all lines, O(L) for the current one
+# Extract specific lines - O(B) over all bytes, O(L) for the current line
 for line in fileinput.input(['file1.txt', 'file2.txt']):
     if 'ERROR' in line:
         filename = fileinput.filename()  # O(1)
@@ -225,7 +226,7 @@ for line in fileinput.input(['file1.txt', 'file2.txt']):
 ```python
 import fileinput
 
-# O(n) in total lines; in-place editing rewrites each file once
+# O(B) in total bytes; in-place editing rewrites each file once
 for line in fileinput.input(inplace=True):
     lineno = fileinput.lineno()  # O(1)
     print(f'{lineno:5d}: {line.rstrip()}')
@@ -241,7 +242,7 @@ for line in fileinput.input(inplace=True):
 ```python
 import fileinput
 
-# Read as text (default) - O(n) in total lines, O(L) for the current one
+# Read as text (default) - O(B) in total bytes, O(L) for the current line
 # Decoding is part of the per-line cost; it does not change the complexity
 for line in fileinput.input(['file.txt']):
     print(type(line))  # str
@@ -269,7 +270,7 @@ import fileinput
 # hook_encoded() is O(1) - it builds the opener, called once per file
 for line in fileinput.input(['utf8_file.txt'], 
                            openhook=fileinput.hook_encoded("utf-8")):
-    print(line.rstrip())  # Still O(n) in total lines, O(L) per line
+    print(line.rstrip())  # Still O(B) in total bytes, O(L) per line
 ```
 
 ## Performance Characteristics
@@ -318,7 +319,7 @@ import sys
 
 def process_files_safely(files):
     try:
-        # O(n) in total lines; the try/except costs nothing until it raises
+        # O(B) in total bytes; the try/except costs nothing until it raises
         for line in fileinput.input(files):
             try:
                 process(line)
@@ -367,7 +368,7 @@ import fileinput
 import sys
 
 # Automatically use command-line files or stdin
-# O(n) in total lines, O(L) per line - stdin streams the same way a file does
+# O(B) in total bytes, O(L) per line - stdin streams the same way a file does
 for line in fileinput.input():
     # Reads from files in sys.argv[1:] or stdin
     print(line.rstrip())

@@ -13,8 +13,8 @@ including character names, categories, normalization, and digit/decimal values.
 | `bidirectional(ch)` | O(1) | O(1) | Bidi class |
 | `combining(ch)` | O(1) | O(1) | Canonical combining class |
 | `decimal(ch)` / `digit(ch)` / `numeric(ch)` | O(1) | O(1) | Numeric properties |
-| `normalize(form, s)` | O(n) typical, O(k²) worst | O(n) | n = string length; k = longest run of combining marks |
-| `is_normalized(form, s)` | O(n) | O(1) or O(n) | Quick check is O(1) space; an inconclusive result falls back to `normalize()` |
+| `normalize(form, s)` | O(n + k²) | O(n) | n = string length; k = longest run of combining marks, which is sorted |
+| `is_normalized(form, s)` | O(n) quick check, O(n + k²) worst | O(1) or O(n) | An inconclusive quick check falls back to `normalize()`, inheriting its bound and its space |
 
 ## Character Properties
 
@@ -54,18 +54,20 @@ import unicodedata
 
 text = "cafe\u0301"  # "e" + combining acute
 
-# Normalize to NFC/NFD/NFKC/NFKD - O(n) for ordinary text, and allocates a
-# new string, unlike the per-character lookups above. Canonical ordering
-# sorts each run of combining marks, so a long run costs O(k²) in that run
+# Normalize to NFC/NFD/NFKC/NFKD - O(n + k²), and allocates a new string,
+# unlike the per-character lookups above. The whole string is scanned, and
+# canonical ordering sorts each run of combining marks, so a long run adds
+# O(k²) for that run on top of the scan
 nfc = unicodedata.normalize("NFC", text)
 nfd = unicodedata.normalize("NFD", text)
 
 print(text == nfc)  # False
 print(text == nfd)  # True
 
-# Check normalization - O(n) time. The quick check needs O(1) space, but an
-# inconclusive answer falls back to normalize(), which allocates O(n). Still
-# worth it to skip a normalize() that would be a no-op
+# Check normalization - O(n) when the quick check is decisive. When it is
+# not, it falls back to normalize() and inherits that bound, O(n + k²), and
+# its O(n) allocation. Still worth it to skip a normalize() that would be a
+# no-op
 print(unicodedata.is_normalized("NFC", text))  # False
 print(unicodedata.is_normalized("NFD", text))  # True
 ```

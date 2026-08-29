@@ -20,8 +20,11 @@ corrected in:
   superlinear, in inputs the docs described as linear
 
 Timing-based tests use a ratio between two sizes with wide tolerances: they
-are checking the shape of the growth, not a benchmark. The measured ratios at
-the sizes used here are 4.0, 4.1 and 5.7 against a threshold of 2.5.
+are checking the shape of the growth, not a benchmark. Where an
+implementation differs by version the sizes are chosen so one threshold holds
+for all of them, rather than branching on the version - see
+TestIntFromStringIsSuperlinear, which is quadratic up to 3.11 and
+subquadratic from 3.12.
 """
 
 import glob
@@ -349,22 +352,37 @@ class TestUnicodeDataCaveats:
 class TestIntFromStringIsSuperlinear:
     """docs/builtins/float_func.md priced int(str) at O(n) alongside float().
 
-    Decimal-to-binary conversion is quadratic in CPython, which is why there
-    is a digit cap at all.
+    How superlinear depends on the version: decimal-to-binary conversion is
+    quadratic up to 3.11, and about O(n^1.58) from 3.12, which added a
+    subquadratic path for large inputs. What survives both is that it is not
+    linear, which is why there is a digit cap at all.
+
+    So this compares four times the digits rather than twice, where the two
+    algorithms are 16x and 9x against linear's 4x - far enough apart from
+    linear to assert on, and far enough from each other not to need a
+    version check. Measured here: 16.5x on 3.11, 9.7x on 3.14.
     """
 
-    def test_parsing_twice_the_digits_costs_more_than_twice(self) -> None:
+    # Four times the input. Linear would be 4x, so 6x separates "not linear"
+    # from either real implementation with room to spare.
+    DIGIT_MULTIPLE = 4
+    SUPERLINEAR_AT_4X = 6.0
+
+    def test_parsing_four_times_the_digits_costs_far_more(self) -> None:
         limit = sys.get_int_max_str_digits()
-        sys.set_int_max_str_digits(200_000)
+        sys.set_int_max_str_digits(2_000_000)
         try:
-            small_digits, large_digits = "9" * 20_000, "9" * 40_000
+            small_digits = "9" * 20_000
+            large_digits = "9" * (20_000 * self.DIGIT_MULTIPLE)
             small = best_time(lambda: int(small_digits))
             large = best_time(lambda: int(large_digits))
         finally:
             sys.set_int_max_str_digits(limit)
 
-        assert large / small > SUPERLINEAR_RATIO, (
-            f"int(str) should be superlinear: {small:.2e}s vs {large:.2e}s"
+        assert large / small > self.SUPERLINEAR_AT_4X, (
+            f"int(str) should be superlinear on any version: "
+            f"{large / small:.1f}x for {self.DIGIT_MULTIPLE}x the digits "
+            f"({small:.2e}s vs {large:.2e}s)"
         )
 
     def test_a_digit_cap_exists_because_of_that_cost(self) -> None:
