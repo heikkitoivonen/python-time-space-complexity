@@ -113,18 +113,18 @@ class TestCompileDirComplexity:
     def test_per_file_overhead_dominates_for_small_files(self, tmp_path: Path) -> None:
         """Same total source, split two ways.
 
-        This is why the table is not priced in bytes alone: 200 ten-line
-        files cost several times what 10 two-hundred-line files do.
+        This is why the table is not priced in bytes alone: 1,000 ten-line
+        files cost several times what 10 thousand-line files do.
         """
-        many_small = build_tree(tmp_path / "many_small", files=200, lines_each=10)
-        few_large = build_tree(tmp_path / "few_large", files=10, lines_each=200)
+        many_small = build_tree(tmp_path / "many_small", files=1_000, lines_each=10)
+        few_large = build_tree(tmp_path / "few_large", files=10, lines_each=1_000)
 
         many_time = best_time(lambda: compile_fresh(many_small))
         few_time = best_time(lambda: compile_fresh(few_large))
 
         assert many_time > few_time * 3, (
-            f"the same 2000 lines, and the file count is what costs: "
-            f"200 files {many_time:.2e}s, 10 files {few_time:.2e}s"
+            f"the same 10000 lines, and the file count is what costs: "
+            f"1000 files {many_time:.2e}s, 10 files {few_time:.2e}s"
         )
 
     @pytest.mark.timing

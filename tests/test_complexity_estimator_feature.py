@@ -98,6 +98,7 @@ class TestComplexityEstimator:
         complexity, score = estimate_complexity.detect_complexity(n_values, times)
         assert complexity == "O(n^2) (Quadratic)"
 
+    @pytest.mark.timing
     def test_type_hint_int(self):
         """Verify that int type hint generates int input."""
         mock_func = MagicMock()
@@ -109,6 +110,7 @@ class TestComplexityEstimator:
         estimate_complexity.measure_execution_time(hinted, 100, iterations=1)
         mock_func.assert_called_with(100)
 
+    @pytest.mark.timing
     def test_type_hint_list(self):
         """Verify that List[int] type hint generates list input."""
         mock_func = MagicMock()
@@ -122,6 +124,7 @@ class TestComplexityEstimator:
         assert isinstance(args[0], list)
         assert len(args[0]) == 10
 
+    @pytest.mark.timing
     def test_integration_constant(self):
         """Run measurement on constant function (int hint)."""
         n_values = [10, 50, 100]
@@ -134,6 +137,7 @@ class TestComplexityEstimator:
         # Constant time is hard to fail unless system is super noisy
         assert complexity == "O(1) (Constant)"
 
+    @pytest.mark.timing
     def test_integration_linear_list(self):
         """Run measurement on linear function (List[int] hint).
 

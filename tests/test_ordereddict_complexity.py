@@ -54,18 +54,23 @@ class TestConstantTimeOperations:
             f"{label} should not scale with the mapping: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_lookup_is_o1(self) -> None:
         self._flat(lambda od: od["k0"], "lookup")
 
+    @pytest.mark.timing
     def test_move_to_end_is_o1(self) -> None:
         self._flat(lambda od: od.move_to_end(next(iter(od))), "move_to_end()")
 
+    @pytest.mark.timing
     def test_popitem_is_o1(self) -> None:
         self._flat(lambda od: od.__setitem__(*od.popitem()), "popitem()")
 
+    @pytest.mark.timing
     def test_popitem_first_is_o1(self) -> None:
         self._flat(lambda od: od.__setitem__(*od.popitem(last=False)), "popitem(last=False)")
 
+    @pytest.mark.timing
     def test_delete_and_reinsert_is_o1(self) -> None:
         def churn(od: OrderedDict) -> None:
             del od["k0"]

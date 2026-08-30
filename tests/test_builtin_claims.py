@@ -169,13 +169,16 @@ class TestRoundVersusAlternatives:
             step = Decimal("0.01")
             short = Decimal("1." + "9" * 1_000)
             long = Decimal("1." + "9" * 50_000)
+            few_step = Decimal("0.01")
+            many_step = Decimal("1e-20000")
 
-            short_operand = best_time(lambda: short.quantize(step))
-            long_operand = best_time(lambda: long.quantize(step))
+            short_operand = best_time(lambda: [short.quantize(step) for _ in range(200)])
+            long_operand = best_time(lambda: [long.quantize(step) for _ in range(200)])
 
-            # Now vary what the result keeps, holding the operand fixed.
-            few_places = best_time(lambda: long.quantize(Decimal("0.01")))
-            many_places = best_time(lambda: long.quantize(Decimal("1e-5000")))
+            # Batch enough calls to keep sub-microsecond timer noise out of the
+            # ratio, then widen the retained-digit gap itself.
+            few_places = best_time(lambda: [long.quantize(few_step) for _ in range(200)])
+            many_places = best_time(lambda: [long.quantize(many_step) for _ in range(200)])
         finally:
             getcontext().prec = precision
 
@@ -185,7 +188,7 @@ class TestRoundVersusAlternatives:
         )
         assert many_places > few_places * 3, (
             f"the digits the result keeps are what costs: "
-            f"2 places={few_places:.2e}s 5000 places={many_places:.2e}s"
+            f"2 places={few_places:.2e}s 20000 places={many_places:.2e}s"
         )
 
     @pytest.mark.timing

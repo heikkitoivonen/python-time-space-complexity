@@ -13,8 +13,8 @@ including character names, categories, normalization, and digit/decimal values.
 | `bidirectional(ch)` | O(1) | O(1) | Bidi class |
 | `combining(ch)` | O(1) | O(1) | Canonical combining class |
 | `decimal(ch)` / `digit(ch)` / `numeric(ch)` | O(1) | O(1) | Numeric properties |
-| `normalize(form, s)` | O(n + Σrᵢ²) | O(n) worst | n = string length; rᵢ = length of each combining-mark run, all of which are sorted. O(n·k) for a longest run k, and O(n²) when the whole string is one run. Returns the original object, allocating nothing, if it is already in that form |
-| `is_normalized(form, s)` | O(1) for ASCII, else O(n) quick check, O(n + Σrᵢ²) worst | O(1) or O(n) | ASCII answers from a flag on the string; an inconclusive quick check falls back to `normalize()`, inheriting its bound and its space |
+| `normalize(form, s)` | O(n) | O(n) worst | n = string length. Security-patched CPython uses counting sort for long combining-mark runs. Returns the original object, allocating nothing, if it is already in that form |
+| `is_normalized(form, s)` | O(1) for ASCII, else O(n) | O(1) or O(n) | ASCII answers from a flag on the string; an inconclusive quick check falls back to `normalize()`, inheriting its bound and space |
 
 ## Character Properties
 
@@ -54,14 +54,10 @@ import unicodedata
 
 text = "cafe\u0301"  # "e" + combining acute
 
-# Normalize to NFC/NFD/NFKC/NFKD - O(n + Σrᵢ²). The whole string is scanned,
-# and canonical ordering sorts each run of combining marks, so every run
-# contributes the square of its own length. Concentration is what costs, not
-# the number of marks: 20,000 marks in one run take about 300x what the same
-# 20,000 marks split into 2,000 runs of ten do. That is O(n·k) for a longest
-# run k, and O(n²) when the whole string is a single run. O(n) space is the
-# worst case, not the usual one: a string already in the requested form is
-# returned as the same object, with nothing allocated
+# Normalize to NFC/NFD/NFKC/NFKD - O(n). The whole string is scanned, and
+# security-patched CPython uses counting sort to order long combining-mark
+# runs. O(n) space is the worst case, not the usual one: a string already in
+# the requested form is returned as the same object, with nothing allocated
 nfc = unicodedata.normalize("NFC", text)
 nfd = unicodedata.normalize("NFD", text)
 
@@ -70,12 +66,18 @@ print(text == nfd)  # True
 
 # Check normalization - O(1) for an ASCII string, which is already known to
 # be normalized from a flag, and O(n) for anything else the quick check can
-# settle. When it cannot, it falls back to normalize() and inherits that
-# bound, O(n + Σrᵢ²), and its O(n) allocation. Still worth it to skip a
-# normalize() that would be a no-op
+# settle. When it cannot, it falls back to normalize() and inherits its O(n)
+# time and allocation. Still worth it to skip a normalize() that would be a no-op
 print(unicodedata.is_normalized("NFC", text))  # False
 print(unicodedata.is_normalized("NFD", text))  # True
 ```
+
+!!! warning "Install a security-patched Python"
+    Before the CVE-2026-3276 fix, CPython insertion-sorted each combining-mark
+    run. Its worst-case time was O(n + Σrᵢ²), reaching O(n²) for one adversarial
+    run. The fix is included upstream in Python 3.10.21, 3.11.16, 3.12.14,
+    3.13.14, 3.14.6, and later releases; distributors may backport it while
+    retaining an older Python version number.
 
 ## Related Documentation
 

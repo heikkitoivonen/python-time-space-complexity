@@ -16,8 +16,9 @@ corrected in:
 * installing a warnings filter scans the filter list
 * ``d[k] += 1`` on a defaultdict is more than one dict operation
 * equal-hashing keys still compare their elements
-* ``int(str)``, ``Decimal`` arithmetic and Unicode normalization are all
-  superlinear, in inputs the docs described as linear
+* ``int(str)`` and ``Decimal`` arithmetic are superlinear in inputs the docs
+  described as linear
+* Unicode normalization was superlinear before CPython's CVE-2026-3276 fix
 
 Timing-based tests use a ratio between two sizes with wide tolerances: they
 are checking the shape of the growth, not a benchmark. Where an
@@ -324,7 +325,9 @@ class _Expensive(metaclass=_ExpensiveMeta):
 
 class TestUnicodeDataCaveats:
     """docs/stdlib/unicodedata.md priced lookup() at O(1) and normalization
-    as linear. Neither holds."""
+    as linear. The lookup claim was wrong; the normalization claim became true
+    after CPython replaced its quadratic insertion sort for long combining runs
+    to fix CVE-2026-3276."""
 
     def test_lookup_reads_the_whole_name(self) -> None:
         assert unicodedata.lookup("GREEK SMALL LETTER MU") == "μ"
@@ -333,16 +336,27 @@ class TestUnicodeDataCaveats:
             unicodedata.lookup("GREEK SMALL LETTER M")
 
     @pytest.mark.timing
-    def test_normalizing_a_combining_run_is_superlinear(self) -> None:
+    def test_patched_normalization_is_linear_in_a_combining_run(self) -> None:
+        fixed_releases = {
+            (3, 10): (3, 10, 21),
+            (3, 11): (3, 11, 16),
+            (3, 12): (3, 12, 14),
+            (3, 13): (3, 13, 14),
+            (3, 14): (3, 14, 6),
+        }
+        release = fixed_releases.get(sys.version_info[:2])
+        if release is not None and sys.version_info[:3] < release:
+            pytest.skip("this upstream Python version predates the CVE-2026-3276 fix")
+
         def run(marks: int) -> Callable[[], str]:
             text = "a" + "".join(chr(0x0300 + (i % 40)) for i in range(marks))
             return lambda: unicodedata.normalize("NFC", text)
 
         small = best_time(run(2_000))
-        large = best_time(run(4_000))
+        large = best_time(run(20_000))
 
-        assert large / small > SUPERLINEAR_RATIO, (
-            f"canonical ordering should be quadratic in a combining run: "
+        assert large / small < 20, (
+            f"ten times the input should remain linear after the security fix: "
             f"{small:.2e}s vs {large:.2e}s"
         )
 

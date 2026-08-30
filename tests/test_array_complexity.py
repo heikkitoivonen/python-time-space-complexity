@@ -305,16 +305,19 @@ class TestConversions:
             f"{label} should scale with the array: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
+    @pytest.mark.timing
     def test_tolist_is_on(self) -> None:
         small = array.array("i", range(self.SMALL_SIZE))
         large = array.array("i", range(self.LARGE_SIZE))
         self._linear(small.tolist, large.tolist, "tolist()")
 
+    @pytest.mark.timing
     def test_tobytes_is_on(self) -> None:
         small = array.array("i", range(self.SMALL_SIZE))
         large = array.array("i", range(self.LARGE_SIZE))
         self._linear(small.tobytes, large.tobytes, "tobytes()")
 
+    @pytest.mark.timing
     def test_frombytes_is_on(self) -> None:
         small_bytes = array.array("i", range(self.SMALL_SIZE)).tobytes()
         large_bytes = array.array("i", range(self.LARGE_SIZE)).tobytes()
@@ -324,6 +327,7 @@ class TestConversions:
             "frombytes()",
         )
 
+    @pytest.mark.timing
     def test_fromlist_is_on(self) -> None:
         small_list = list(range(self.SMALL_SIZE))
         large_list = list(range(self.LARGE_SIZE))
