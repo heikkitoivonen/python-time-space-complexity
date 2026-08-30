@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+started_at=$SECONDS
+
+if ! command -v uv >/dev/null 2>&1; then
+    echo "Installing uv..."
+    curl -LsSf https://astral.sh/uv/install.sh |
+        env UV_INSTALL_DIR="$HOME/.local/bin" sh
+fi
+
+export PATH="$HOME/.local/bin:$PATH"
+
+echo "Installing locked project dependencies..."
+uv sync --frozen
+
+echo "Orb setup completed in $((SECONDS - started_at))s."
