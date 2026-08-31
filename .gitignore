@@ -39,7 +39,11 @@ env/
 # IDE
 .vscode/
 .idea/
-.claude/
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/documenting-complexity-modules
+!.claude/skills/testing-complexity-claims
 .project
 .pydevproject
 *.swp

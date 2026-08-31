@@ -82,6 +82,19 @@ git commit -m "Your message"
 - `.python-version` - Python 3.11 specification
 - `uv.lock` - Dependency lock file (reproducible builds)
 
+## Repository Skills
+
+Reusable project workflows live in `.agents/skills/`. Agents with native Agent
+Skills support should load the matching skill before starting this work:
+
+- `documenting-complexity-modules` - Use when adding a builtin or standard-library
+  module page, or materially expanding one.
+- `testing-complexity-claims` - Use when adding or changing complexity claims,
+  auditing claim coverage, or creating module complexity tests.
+
+`.agents/skills/` is the canonical source. Claude Code compatibility symlinks
+live in `.claude/skills/`; edit the canonical skill rather than the symlink.
+
 ## Code Style & Standards
 
 ### Python Code
