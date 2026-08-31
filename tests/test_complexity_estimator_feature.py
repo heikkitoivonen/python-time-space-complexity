@@ -98,7 +98,6 @@ class TestComplexityEstimator:
         complexity, score = estimate_complexity.detect_complexity(n_values, times)
         assert complexity == "O(n^2) (Quadratic)"
 
-    @pytest.mark.timing
     def test_type_hint_int(self):
         """Verify that int type hint generates int input."""
         mock_func = MagicMock()
@@ -110,7 +109,6 @@ class TestComplexityEstimator:
         estimate_complexity.measure_execution_time(hinted, 100, iterations=1)
         mock_func.assert_called_with(100)
 
-    @pytest.mark.timing
     def test_type_hint_list(self):
         """Verify that List[int] type hint generates list input."""
         mock_func = MagicMock()

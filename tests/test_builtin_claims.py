@@ -169,7 +169,6 @@ class TestRoundVersusAlternatives:
             step = Decimal("0.01")
             short = Decimal("1." + "9" * 1_000)
             long = Decimal("1." + "9" * 50_000)
-            few_step = Decimal("0.01")
             many_step = Decimal("1e-20000")
 
             short_operand = best_time(lambda: [short.quantize(step) for _ in range(200)])
@@ -177,7 +176,7 @@ class TestRoundVersusAlternatives:
 
             # Batch enough calls to keep sub-microsecond timer noise out of the
             # ratio, then widen the retained-digit gap itself.
-            few_places = best_time(lambda: [long.quantize(few_step) for _ in range(200)])
+            few_places = best_time(lambda: [long.quantize(step) for _ in range(200)])
             many_places = best_time(lambda: [long.quantize(many_step) for _ in range(200)])
         finally:
             getcontext().prec = precision

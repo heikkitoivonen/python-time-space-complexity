@@ -111,9 +111,12 @@ markers = [
     # Tests that settle a claim with a stopwatch rather than by observation.
     # They are correct but not reliable on a shared CI runner, so they do not
     # gate deployment -- see the `timing` job in .github/workflows/deploy.yml.
-    # A test earns this marker by reaching time.perf_counter(), directly or
-    # through a helper; nothing else belongs here. Prefer removing the marker
-    # by rewriting the test to observe (a call counter, an identity check)
-    # over leaving it in the non-blocking job forever.
+    # A test earns this marker by *asserting* on elapsed time -- a duration,
+    # or a ratio between two of them. Merely reaching time.perf_counter() is
+    # not enough: a test that times a call and then asserts on what it was
+    # called with cannot be knocked over by a loaded runner, and belongs in
+    # the gating job. Prefer removing the marker by rewriting the test to
+    # observe (a call counter, an identity check) over leaving it in the
+    # non-blocking job forever.
     "timing: settles its claim by measuring elapsed time",
 ]

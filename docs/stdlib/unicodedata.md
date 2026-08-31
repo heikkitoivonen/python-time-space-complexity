@@ -13,7 +13,7 @@ including character names, categories, normalization, and digit/decimal values.
 | `bidirectional(ch)` | O(1) | O(1) | Bidi class |
 | `combining(ch)` | O(1) | O(1) | Canonical combining class |
 | `decimal(ch)` / `digit(ch)` / `numeric(ch)` | O(1) | O(1) | Numeric properties |
-| `normalize(form, s)` | O(n) | O(n) worst | n = string length. Security-patched CPython uses counting sort for long combining-mark runs. Returns the original object, allocating nothing, if it is already in that form |
+| `normalize(form, s)` | O(n) on a patched CPython, O(n²) before | O(n) worst | n = string length. The linear bound needs the CVE-2026-3276 fix, which counting-sorts long combining-mark runs — see the warning below. Returns the original object, allocating nothing, if it is already in that form |
 | `is_normalized(form, s)` | O(1) for ASCII, else O(n) | O(1) or O(n) | ASCII answers from a flag on the string; an inconclusive quick check falls back to `normalize()`, inheriting its bound and space |
 
 ## Character Properties
