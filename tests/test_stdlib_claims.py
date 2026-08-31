@@ -34,6 +34,7 @@ import posixpath
 import pprint
 import sqlite3
 import struct
+import sys
 import tempfile
 import time
 import unicodedata
@@ -47,7 +48,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import tomllib
+
+if sys.version_info >= (3, 11):
+    import tomllib
 
 
 def best_time(func: Callable[[], Any], repeats: int = 5) -> float:
@@ -561,6 +564,7 @@ class TestTempfileCachesTheDirectory:
         assert not directory.exists(), "cleanup is O(k) in the files created"
 
 
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="tomllib is new in 3.11")
 class TestTomllibNestingIsNotFree:
     """docs/stdlib/tomllib.md, as corrected by this test.
 
@@ -609,6 +613,10 @@ class TestUnicodeDataLookupsAreTableReads:
         assert ratio < 3.0, f"both are table reads: ascii={low:.2e}s astral={high:.2e}s"
 
     @pytest.mark.timing
+    @pytest.mark.skipif(
+        sys.version_info < (3, 11),
+        reason="the ASCII short-circuit in is_normalized() is new in 3.11",
+    )
     def test_ascii_is_normalized_answers_from_a_flag(self) -> None:
         ascii_text = "a" * 200_000
         accented = "é" * 200_000
