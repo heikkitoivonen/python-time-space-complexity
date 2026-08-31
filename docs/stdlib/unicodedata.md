@@ -14,7 +14,7 @@ including character names, categories, normalization, and digit/decimal values.
 | `combining(ch)` | O(1) | O(1) | Canonical combining class |
 | `decimal(ch)` / `digit(ch)` / `numeric(ch)` | O(1) | O(1) | Numeric properties |
 | `normalize(form, s)` | O(n) on a patched CPython, O(n²) before | O(n) worst | n = string length. The linear bound needs the CVE-2026-3276 fix, which counting-sorts long combining-mark runs — see the warning below. Returns the original object, allocating nothing, if it is already in that form |
-| `is_normalized(form, s)` | O(1) for ASCII, else O(n) | O(1) or O(n) | ASCII answers from a flag on the string; an inconclusive quick check falls back to `normalize()`, inheriting its bound and space |
+| `is_normalized(form, s)` | O(1) for ASCII, else O(n) | O(1) or O(n) | ASCII answers from a flag on the string. An inconclusive quick check falls back to `normalize()` and allocates, but stays O(n) on any CPython: the check bails at the first combining-class inversion, and an inversion is exactly what would make `normalize()` superlinear |
 
 ## Character Properties
 
@@ -66,8 +66,11 @@ print(text == nfd)  # True
 
 # Check normalization - O(1) for an ASCII string, which is already known to
 # be normalized from a flag, and O(n) for anything else the quick check can
-# settle. When it cannot, it falls back to normalize() and inherits its O(n)
-# time and allocation. Still worth it to skip a normalize() that would be a no-op
+# settle. When it cannot, it falls back to normalize() and allocates - but it
+# does not inherit the pre-fix quadratic, on any CPython. The check bails at
+# the first combining-class inversion, and an inversion is precisely what
+# makes the sort quadratic, so the fallback only ever runs on a run that is
+# already ordered. Still worth it to skip a normalize() that would be a no-op
 print(unicodedata.is_normalized("NFC", text))  # False
 print(unicodedata.is_normalized("NFD", text))  # True
 ```

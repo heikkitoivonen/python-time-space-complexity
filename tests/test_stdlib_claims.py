@@ -642,6 +642,49 @@ class TestUnicodeDataLookupsAreTableReads:
         assert result is not decomposed
         assert result != decomposed
 
+    @pytest.mark.timing
+    def test_is_normalized_cannot_inherit_the_quadratic_normalize(self) -> None:
+        """The page prices is_normalized() at O(n) with no CVE-2026-3276 caveat.
+
+        A review asked for one, reasoning that the fallback to normalize()
+        inherits whatever normalize() costs. It cannot: the two requirements
+        exclude each other. normalize() is only superlinear when a combining
+        run contains a class inversion, and an inversion is the one thing that
+        lets the quick check answer without falling back. So the fallback runs
+        only on already-ordered runs, where the sort does no swaps.
+
+        Both arms hold on a patched and an unpatched CPython alike, which is
+        why this needs no version guard.
+        """
+
+        def adversarial(marks: int) -> str:
+            return "a" + "".join(chr(0x0300 + (i % 40)) for i in range(marks))
+
+        def ordered(marks: int) -> str:
+            return "a" + "\u0301" * marks
+
+        # Inversions present: the quick check stops at the first one, so the
+        # answer costs the same for twenty times the input.
+        small, large = adversarial(1_000), adversarial(20_000)
+        flat = best_time(lambda: unicodedata.is_normalized("NFC", large)) / best_time(
+            lambda: unicodedata.is_normalized("NFC", small)
+        )
+        assert flat < 5, (
+            f"an inversion should settle the quick check regardless of length, "
+            f"but twenty times the marks cost {flat:.1f}x"
+        )
+
+        # No inversions: this is the input that does fall through to
+        # normalize(), and it is linear there on any CPython.
+        small, large = ordered(1_000), ordered(20_000)
+        fallback = best_time(lambda: unicodedata.is_normalized("NFC", large)) / best_time(
+            lambda: unicodedata.is_normalized("NFC", small)
+        )
+        assert fallback < 100, (
+            f"the fallback only sees already-ordered runs, so twenty times the "
+            f"marks should cost about twenty times, not {fallback:.1f}x"
+        )
+
 
 class TestIoStringBuilding:
     """docs/stdlib/io.md: StringIO accumulation is linear."""
