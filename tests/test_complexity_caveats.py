@@ -169,9 +169,38 @@ class TestDefaultdictIncrementIsTwoOperations:
         assert (counts.gets, counts.sets) == (1, 1)
 
     def test_missing_key_also_pays_for_the_factory(self) -> None:
-        counts = _CountingDefaultDict(int)
+        """The factory's insert is real work, counted or not.
+
+        Counting __setitem__ used to see it. Between 3.14.2 and 3.14.7,
+        defaultdict.__missing__ stopped routing its insert through a
+        subclass's __setitem__, so that instrument reads 1 where it read 2
+        -- while the dict still ends up holding the factory's value. Observe
+        the factory and the stored value instead, which every version agrees
+        on.
+        """
+        calls = 0
+
+        def factory() -> int:
+            nonlocal calls
+            calls += 1
+            return 0
+
+        # A bare missing lookup: the factory runs, and its value is stored
+        # rather than merely returned.
+        probe = _CountingDefaultDict(factory)
+        probe["k"]
+
+        assert calls == 1, "a missing key runs the factory"
+        assert dict(probe) == {"k": 0}, "and the factory's value is stored, not just returned"
+
+        # The documented expression pays for that on top of its own get and
+        # store, which test_existing_key_does_a_get_and_a_set pins at one each.
+        counts = _CountingDefaultDict(factory)
         counts["k"] += 1
-        assert counts.sets == 2, "factory insert plus the increment's own store"
+
+        assert calls == 2, "the increment's missing key runs the factory too"
+        assert counts.gets == 1
+        assert dict(counts) == {"k": 1}, "and the increment stores over the factory's value"
 
 
 class _CountingDefaultDict(defaultdict):  # type: ignore[type-arg]
