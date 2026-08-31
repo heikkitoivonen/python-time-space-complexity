@@ -362,7 +362,13 @@ class TestUnicodeDataCaveats:
         if release is not None and sys.version_info[:3] < release:
             version = ".".join(str(part) for part in sys.version_info[:3])
             needed = ".".join(str(part) for part in release)
-            pytest.skip(f"Python {version} predates the CVE-2026-3276 fix in {needed}")
+            message = f"Python {version} predates the CVE-2026-3276 fix in {needed}"
+            # The `timing` job pins a patched interpreter so that this runs. A
+            # skip there means the pin drifted, not that the claim cannot be
+            # checked -- and a drifted pin is invisible if it stays a skip.
+            if os.environ.get("COMPLEXITY_REQUIRE_PATCHED_PYTHON"):
+                pytest.fail(f"{message}, but this job pins one to check the claim")
+            pytest.skip(message)
 
         def run(marks: int) -> Callable[[], str]:
             text = "a" + "".join(chr(0x0300 + (i % 40)) for i in range(marks))

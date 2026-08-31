@@ -57,11 +57,33 @@ jobs:
   # the measurement missed by a hair (noise) or by a wide margin (the claim).
   timing:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The oldest and newest supported lines, both at or above their
+        # CVE-2026-3276 fix release. Left implicit, `uv sync` takes whatever
+        # Python the runner ships -- 3.12.3, which predates 3.12.14, so the
+        # normalization assertion skipped instead of running and this job
+        # reported green having checked nothing.
+        python: ["3.10.21", "3.14.7"]
+    env:
+      UV_PYTHON: ${{ matrix.python }}
+      # Makes that skip a failure here, so a pin that drifts below a fix
+      # release cannot quietly put this job back to verifying nothing.
+      # Local runs still skip, and `make check` stays green off a patch.
+      COMPLEXITY_REQUIRE_PATCHED_PYTHON: "1"
     steps:
       - uses: actions/checkout@v4
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
+        with:
+          # An older pinned uv resolves against a build index predating the
+          # fix releases and cannot fetch either matrix entry.
+          version: "latest"
+
+      - name: Install Python ${{ matrix.python }}
+        run: uv python install ${{ matrix.python }}
 
       - name: Install dependencies
         run: uv sync
