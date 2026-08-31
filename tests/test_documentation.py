@@ -267,6 +267,7 @@ def test_mkdocs_yaml_valid():
 def test_new_translation_is_not_reported_as_stale(tmp_path):
     """A never-recorded hash must not tell the translator to re-translate."""
     import scripts.validate_translations as validate
+
     source = tmp_path / "page.md"
     source.write_text("# Title\n", encoding="utf-8")
 
@@ -282,6 +283,7 @@ def test_new_translation_is_not_reported_as_stale(tmp_path):
 def test_changed_source_is_reported_as_stale(tmp_path):
     """A real recorded hash that no longer matches is genuine staleness."""
     import scripts.validate_translations as validate
+
     source = tmp_path / "page.md"
     source.write_text("# Title\n", encoding="utf-8")
 
@@ -294,12 +296,14 @@ def test_changed_source_is_reported_as_stale(tmp_path):
 def test_update_hashes_can_record_a_first_hash():
     """--update-hashes must work from every state the error points at."""
     import scripts.validate_translations as validate
+
     current = "a" * 64
 
     # Existing key is replaced.
-    assert validate.stamp_front_matter(
-        "source_sha: old\ntranslated: machine", current
-    ) == f"source_sha: {current}\ntranslated: machine"
+    assert (
+        validate.stamp_front_matter("source_sha: old\ntranslated: machine", current)
+        == f"source_sha: {current}\ntranslated: machine"
+    )
 
     # Missing key is added rather than silently skipped.
     assert validate.stamp_front_matter("translated: machine", current) == (

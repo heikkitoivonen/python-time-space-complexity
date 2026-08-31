@@ -82,9 +82,9 @@ def test_extra_css_is_not_also_linked():
     assert "<style>{{ config.extra.inline_css | safe }}</style>" in OVERRIDE
 
 
-SOURCE_PARTIAL = (
-    PROJECT_ROOT / "docs" / "overrides" / "partials" / "source.html"
-).read_text(encoding="utf-8")
+SOURCE_PARTIAL = (PROJECT_ROOT / "docs" / "overrides" / "partials" / "source.html").read_text(
+    encoding="utf-8"
+)
 
 
 def test_source_component_is_not_mounted():
@@ -122,9 +122,9 @@ def test_source_partial_matches_the_theme_apart_from_that_attribute():
     """
     import material
 
-    theme = (
-        Path(material.__file__).parent / "templates" / "partials" / "source.html"
-    ).read_text(encoding="utf-8")
+    theme = (Path(material.__file__).parent / "templates" / "partials" / "source.html").read_text(
+        encoding="utf-8"
+    )
 
     def normalise(text: str) -> str:
         text = re.sub(r"\{#.*?#\}", "", text, flags=re.DOTALL)
@@ -201,8 +201,7 @@ def test_vendored_fonts_span_every_weight_the_theme_uses():
         low, high = (int(bound) for bound in face["weight"].split())
         outside = sorted(weight for weight in used if not low <= weight <= high)
         assert not outside, (
-            f"{face['file']} has a wght axis of {low}-{high}, but the theme "
-            f"renders {outside}"
+            f"{face['file']} has a wght axis of {low}-{high}, but the theme renders {outside}"
         )
 
 

@@ -56,9 +56,7 @@ def _resolved_config(locale: str):
 
 def _translated_sources(locale: str) -> list[str]:
     locale_dir = DOCS_DIR / locale
-    return sorted(
-        page.relative_to(DOCS_DIR).as_posix() for page in locale_dir.rglob("*.md")
-    )
+    return sorted(page.relative_to(DOCS_DIR).as_posix() for page in locale_dir.rglob("*.md"))
 
 
 @pytest.mark.parametrize("locale", LOCALES)
@@ -73,8 +71,7 @@ def test_translations_win_their_url(locale):
     missing = [page for page in _translated_sources(locale) if page not in survivors]
 
     assert not missing, (
-        f"{locale}: translated pages were dropped in favour of the English "
-        f"source: {missing}"
+        f"{locale}: translated pages were dropped in favour of the English source: {missing}"
     )
 
 
@@ -98,20 +95,14 @@ def test_fallback_pages_are_flagged(locale):
             self.file = file
 
     config = type("C", (), {"theme": {"language": locale}})()
-    flagged = {
-        file.src_uri
-        for file in pages
-        if hooks._is_fallback(_Page(file), config)
-    }
+    flagged = {file.src_uri for file in pages if hooks._is_fallback(_Page(file), config)}
 
     assert not (flagged & translated), (
-        f"{locale}: translated pages wrongly flagged as fallbacks: "
-        f"{sorted(flagged & translated)}"
+        f"{locale}: translated pages wrongly flagged as fallbacks: {sorted(flagged & translated)}"
     )
     unflagged_fallbacks = {file.src_uri for file in pages} - flagged - translated
     assert not unflagged_fallbacks, (
-        f"{locale}: English fallbacks missing the notice flag: "
-        f"{sorted(unflagged_fallbacks)[:5]}"
+        f"{locale}: English fallbacks missing the notice flag: {sorted(unflagged_fallbacks)[:5]}"
     )
 
 

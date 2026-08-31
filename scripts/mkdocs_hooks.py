@@ -127,20 +127,36 @@ FONT_UNICODE_RANGE = (
 # prose emphasis and can wait for the cascade to ask for them.
 FONTS: tuple[dict[str, Any], ...] = (
     {
-        "family": "Roboto", "style": "normal", "weight": "100 900",
-        "stretch": "100%", "file": "roboto-v51-latin.woff2", "preload": True,
+        "family": "Roboto",
+        "style": "normal",
+        "weight": "100 900",
+        "stretch": "100%",
+        "file": "roboto-v51-latin.woff2",
+        "preload": True,
     },
     {
-        "family": "Roboto", "style": "italic", "weight": "100 900",
-        "stretch": "100%", "file": "roboto-v51-latin-italic.woff2", "preload": False,
+        "family": "Roboto",
+        "style": "italic",
+        "weight": "100 900",
+        "stretch": "100%",
+        "file": "roboto-v51-latin-italic.woff2",
+        "preload": False,
     },
     {
-        "family": "Roboto Mono", "style": "normal", "weight": "100 700",
-        "stretch": None, "file": "roboto-mono-v51-latin.woff2", "preload": True,
+        "family": "Roboto Mono",
+        "style": "normal",
+        "weight": "100 700",
+        "stretch": None,
+        "file": "roboto-mono-v51-latin.woff2",
+        "preload": True,
     },
     {
-        "family": "Roboto Mono", "style": "italic", "weight": "100 700",
-        "stretch": None, "file": "roboto-mono-v51-latin-italic.woff2", "preload": False,
+        "family": "Roboto Mono",
+        "style": "italic",
+        "weight": "100 700",
+        "stretch": None,
+        "file": "roboto-mono-v51-latin-italic.woff2",
+        "preload": False,
     },
 )
 
@@ -311,9 +327,7 @@ def on_config(config: Any) -> Any:
     config.extra["alternate"] = [
         {
             "name": language_config["name"],
-            "link": _absolute_url(
-                origin, language_config["fixed_link"] or language_config["link"]
-            ),
+            "link": _absolute_url(origin, language_config["fixed_link"] or language_config["link"]),
             "lang": language_config["locale"],
         }
         for language_config in i18n["languages"]
