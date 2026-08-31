@@ -337,6 +337,20 @@ class TestUnicodeDataCaveats:
 
     @pytest.mark.timing
     def test_patched_normalization_is_linear_in_a_combining_run(self) -> None:
+        """Twenty times the marks in one run should cost about twenty times.
+
+        The page documents the pre-fix quadratic shape but this asserts only
+        the patched one, so the threshold has to exclude the shape it replaced:
+        counting sort predicts 20x, insertion sort 400x, and 100x sits five
+        times above the first and four below the second. Unpatched
+        interpreters measured 350-400x here (3.11.14, 3.12.3, 3.13.11, 3.14.2),
+        so the excluded end is not theoretical.
+        """
+        # 3.15 and later shipped with the fix, so a minor absent from this map
+        # is treated as patched. A distributor that backports while keeping an
+        # older version number is skipped rather than run -- the wrong call for
+        # coverage, but the safe one, since the alternative fails a Python that
+        # is not actually vulnerable.
         fixed_releases = {
             (3, 10): (3, 10, 21),
             (3, 11): (3, 11, 16),
@@ -346,18 +360,21 @@ class TestUnicodeDataCaveats:
         }
         release = fixed_releases.get(sys.version_info[:2])
         if release is not None and sys.version_info[:3] < release:
-            pytest.skip("this upstream Python version predates the CVE-2026-3276 fix")
+            version = ".".join(str(part) for part in sys.version_info[:3])
+            needed = ".".join(str(part) for part in release)
+            pytest.skip(f"Python {version} predates the CVE-2026-3276 fix in {needed}")
 
         def run(marks: int) -> Callable[[], str]:
             text = "a" + "".join(chr(0x0300 + (i % 40)) for i in range(marks))
             return lambda: unicodedata.normalize("NFC", text)
 
-        small = best_time(run(2_000))
+        small = best_time(run(1_000))
         large = best_time(run(20_000))
 
-        assert large / small < 20, (
-            f"ten times the input should remain linear after the security fix: "
-            f"{small:.2e}s vs {large:.2e}s"
+        assert large / small < 100, (
+            f"twenty times the input should stay near twenty times the time "
+            f"after the security fix: {small:.2e}s vs {large:.2e}s "
+            f"({large / small:.0f}x)"
         )
 
     def test_is_normalized_agrees_with_normalize(self) -> None:

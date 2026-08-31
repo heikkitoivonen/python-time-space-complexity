@@ -103,7 +103,10 @@ known-first-party = ["python_time_space_complexity"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
-addopts = "-v --tb=short --strict-markers"
+# -ra: a claim that skipped is a claim nobody checked. The CVE-2026-3276
+# normalization test skips on an unpatched interpreter, and a bare "s" in
+# the progress line is too easy to read as a pass.
+addopts = "-v --tb=short --strict-markers -ra"
 markers = [
     # Tests that settle a claim with a stopwatch rather than by observation.
     # They are correct but not reliable on a shared CI runner, so they do not
