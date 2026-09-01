@@ -31,7 +31,7 @@ The `itertools` module provides efficient looping tools for creating iterators a
 | `chain.from_iterable(iterable)` | O(n) total | O(1) | Chain nested iterables |
 | `zip_longest(iter1, iter2, ...)` | O(n) total | O(1) | Zip with fill value |
 | `starmap(func, iter)` | O(n) total | O(1) | Apply func(*args) for each args tuple |
-| `tee(iterable, n)` | O(1) init | O(n×k) | Create n independent iterators; k = items consumed |
+| `tee(iterable, n)` | O(n) init | O(g + n) | n iterators sharing one buffer, so the copies do not multiply it. g = how far the leading iterator has run ahead of the trailing one, not how much has been consumed: iterators advanced in lockstep hold almost nothing |
 | `batched(iterable, n)` | O(n) total | O(n) per batch | Group into n-sized tuples (Python 3.12+) |
 | `pairwise(iterable)` | O(n) total | O(1) | Successive overlapping pairs (Python 3.10+) |
 
@@ -40,9 +40,9 @@ The `itertools` module provides efficient looping tools for creating iterators a
 | Function | Time | Space | Notes |
 |----------|------|-------|-------|
 | `groupby(iterable, key)` | O(n) total | O(1) | Group consecutive |
-| `combinations(iterable, r)` | O(C(n,r)) total | O(r) per item | All r-combinations |
-| `combinations_with_replacement(iter, r)` | O(C(n+r-1,r)) total | O(r) per item | Combinations allowing repeats |
-| `permutations(iterable, r)` | O(P(n,r)) total | O(r) per item | All permutations |
+| `combinations(iterable, r)` | O(C(n,r)) total | O(n) input + O(r) per item | All r-combinations; the iterable is copied to a tuple up front |
+| `combinations_with_replacement(iter, r)` | O(C(n+r-1,r)) total | O(n) input + O(r) per item | Combinations allowing repeats; the iterable is copied to a tuple up front |
+| `permutations(iterable, r)` | O(P(n,r)) total | O(n) input + O(r) per item | All permutations; the iterable is copied to a tuple up front |
 | `product(iter1, iter2, ...)` | O(n₁×n₂×...×nₖ) | O(Σnᵢ) init + O(k) per item | Cartesian product; stores all inputs in memory first |
 
 ## Memory Characteristics
@@ -52,10 +52,19 @@ All itertools functions are lazy iterators, but some cache input data (e.g., `cy
 ```python
 import itertools
 
-# All of these are O(1) memory (lazy)
-c = itertools.count()              # Infinite counter
-f = itertools.filterfalse(pred, x)  # Filtered iterator
-z = itertools.chain(iter1, iter2)  # Chained iterators
+
+def pred(value):
+    return value % 2 == 0
+
+
+numbers = range(10)
+iter1, iter2 = iter("ab"), iter("cd")
+
+# All of these are O(1) memory (lazy): none of them reads its input until you
+# ask for an item, and none keeps more than the item it is handing back
+c = itertools.count()                     # Infinite counter
+f = itertools.filterfalse(pred, numbers)  # Filtered iterator
+z = itertools.chain(iter1, iter2)         # Chained iterators
 ```
 
 ## Common Use Cases
@@ -96,9 +105,10 @@ list(result)  # [1, 2, 3, 4]
 result = dropwhile(lambda x: x < 5, data)
 list(result)  # [5, 6, 7, 8, 9]
 
-# Opposite of filter - O(n)
-even = filterfalse(lambda x: x % 2 == 0, data)
-list(even)  # [1, 3, 5, 7, 9]
+# Opposite of filter - O(n). filterfalse keeps what the predicate rejects,
+# so an "is even" predicate leaves the odd numbers
+odd = filterfalse(lambda x: x % 2 == 0, data)
+list(odd)  # [1, 3, 5, 7, 9]
 ```
 
 ### Combinations & Permutations
@@ -146,11 +156,19 @@ for key, group in groupby(data, key=lambda x: x[0]):
 ### Use itertools for Large Data
 
 ```python
-# Bad: materializes all combinations O(n*m) memory
+from itertools import product
+
+
+def process(x, y):
+    pass
+
+
+# Bad: materializes all 1,000,000 pairs at once - O(n*m) memory
 pairs = [(x, y) for x in range(1000) for y in range(1000)]
 
-# Good: lazy generation O(1) memory
-from itertools import product
+# Better: the 1,000,000 pairs are yielded one at a time and never all held.
+# Not O(1) though - product() copies each input to a tuple before yielding
+# anything, so this holds the 2,000 input values throughout: O(n + m)
 pairs = product(range(1000), range(1000))
 for x, y in pairs:
     process(x, y)
@@ -159,12 +177,22 @@ for x, y in pairs:
 ### Chain Multiple Iterators
 
 ```python
-# Bad: convert to lists then concatenate O(n+m) memory
-result = list(iter1) + list(iter2) + list(iter3)
-
-# Good: chain lazily O(1) memory
 from itertools import chain
-result = chain(iter1, iter2, iter3)
+
+
+def process(item):
+    pass
+
+
+def source():
+    return iter(range(1000))
+
+
+# Bad: convert to lists then concatenate - O(n+m) memory
+result = list(source()) + list(source()) + list(source())
+
+# Good: chain lazily - O(1) memory, and it never builds the joined list
+result = chain(source(), source(), source())
 for item in result:
     process(item)
 ```
