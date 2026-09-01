@@ -32,7 +32,9 @@ import io
 import itertools
 import math
 import sys
+import time
 import tracemalloc
+from collections import deque
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -514,12 +516,7 @@ class TestDocumentedExamplesRun:
         ]
 
     def test_the_window_helper_slides_as_documented(self) -> None:
-        """The Window Operations example, which the page shows output for.
-
-        Its memory claim of O(w) holds, but note the rebuild: `w[1:] + (item,)`
-        builds a fresh w-tuple per item, so the helper is O(n*w) time rather
-        than the O(n) that "O(n) items" might be read to promise.
-        """
+        """The Window Operations example, which the page shows output for."""
         source = self._blocks()[-1][1]
         namespace: dict[str, object] = {"__name__": "__main__"}
         captured, real_stdout = io.StringIO(), sys.stdout
@@ -532,3 +529,84 @@ class TestDocumentedExamplesRun:
         window = namespace["window"]
         assert list(window(range(10), 3))[:3] == [(0, 1, 2), (1, 2, 3), (2, 3, 4)]  # type: ignore[operator]
         assert len(list(window(range(10), 3))) == 8  # type: ignore[operator]
+
+
+class TestWindowHelperCost:
+    """docs/stdlib/itertools.md Window Operations, as corrected by these tests.
+
+    The example was priced at "O(n) items, O(w) memory". The memory was right;
+    the time was not. Each window is a fresh w-tuple, so the windows alone come
+    to n*w items and the helper is O(n*w) -- which is a property of
+    materialising every window, not of the `w[1:] + (item,)` rebuild. Yielding
+    one reused deque instead is flat in w.
+    """
+
+    ITEMS = 50_000
+    NARROW = 2
+    WIDE = 256
+
+    @staticmethod
+    def _tuple_window(iterable, size):
+        """The page's helper."""
+        iterator = iter(iterable)
+        window = tuple(itertools.islice(iterator, size))
+        yield window
+        for item in iterator:
+            window = window[1:] + (item,)
+            yield window
+
+    @staticmethod
+    def _reused_deque(iterable, size):
+        """One deque, handed back each time and valid until the next item."""
+        iterator = iter(iterable)
+        window = deque(itertools.islice(iterator, size), maxlen=size)
+        yield window
+        for item in iterator:
+            window.append(item)
+            yield window
+
+    def _drain(self, helper, size) -> float:
+        best = float("inf")
+        for _ in range(3):
+            start = time.perf_counter()
+            deque(helper(range(self.ITEMS), size), maxlen=0)
+            best = min(best, time.perf_counter() - start)
+        return best
+
+    @pytest.mark.timing
+    def test_the_page_helper_grows_with_the_window(self) -> None:
+        """O(n) would mean the window size does not matter. It does."""
+        narrow = self._drain(self._tuple_window, self.NARROW)
+        wide = self._drain(self._tuple_window, self.WIDE)
+
+        assert wide / narrow > 4, (
+            f"a wider window should cost more per item, not the same: "
+            f"w={self.NARROW} {narrow:.2e}s vs w={self.WIDE} {wide:.2e}s "
+            f"({wide / narrow:.1f}x)"
+        )
+
+    @pytest.mark.timing
+    def test_a_reused_deque_is_flat_in_the_window_size(self) -> None:
+        """Which locates the cost: materialising each window, not sliding."""
+        narrow = self._drain(self._reused_deque, self.NARROW)
+        wide = self._drain(self._reused_deque, self.WIDE)
+
+        assert wide / narrow < 3, (
+            f"handing back one deque should not care how wide it is: "
+            f"w={self.NARROW} {narrow:.2e}s vs w={self.WIDE} {wide:.2e}s "
+            f"({wide / narrow:.1f}x)"
+        )
+
+    def test_the_reused_deque_is_only_valid_until_the_next_item(self) -> None:
+        """The caveat that buys the flat cost, so it is not a free upgrade."""
+        windows = list(self._reused_deque(range(5), 3))
+
+        assert all(window is windows[0] for window in windows), "the same object throughout"
+        assert list(windows[0]) == [2, 3, 4], "every entry shows only the final window"
+
+    def test_both_helpers_yield_the_same_windows_when_copied(self) -> None:
+        from_page = list(self._tuple_window(range(10), 3))
+        from_deque = [tuple(window) for window in self._reused_deque(range(10), 3)]
+
+        assert from_page == from_deque
+        assert len(from_page) == 10 - 3 + 1, "n - w + 1 windows"

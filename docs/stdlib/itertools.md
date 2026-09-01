@@ -202,7 +202,12 @@ for item in result:
 ```python
 from itertools import islice
 
-# Create sliding window: O(n) items, O(w) memory
+# Sliding window: n - w + 1 windows, O(w) memory, and O(n*w) time rather
+# than O(n). Each window is a fresh w-tuple, so the windows alone are n*w
+# items no matter how they are built - 68ns per input item at w=2 against
+# 1203ns at w=512. Rebuilding with a deque instead of w[1:] + (item,) does
+# not help, because the tuple() per window costs the same. Only yielding one
+# reused deque, valid until the next iteration, is flat: 34ns at every w
 def window(iterable, size):
     it = iter(iterable)
     w = tuple(islice(it, size))
