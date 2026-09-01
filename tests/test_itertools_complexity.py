@@ -200,20 +200,32 @@ class TestCombiningIterators:
     def test_chain_from_iterable_flattens_one_level_lazily(self) -> None:
         """The outer iterable is pulled one sub-iterable at a time.
 
-        The first version of this asserted a pull count on a CountingSource
-        that was never passed to chain.from_iterable(), so it held whatever
-        the function did. The source has to be the argument.
+        Two earlier versions of this were too weak, both in the same way. The
+        first asserted a pull count on a CountingSource never passed to the
+        function. The second instrumented the sub-iterables but handed over a
+        plain list, so an implementation that drained the outer iterable at
+        construction would have passed. What needs watching is the outer one.
         """
-        inners = [CountingSource(2), CountingSource(2)]
-        flattened = itertools.chain.from_iterable(inners)
+        outer_pulled = 0
 
-        assert (inners[0].pulled, inners[1].pulled) == (0, 0), "nothing read at construction"
+        def outer():
+            nonlocal outer_pulled
+            for chunk in ([0, 1], [2, 3], [4, 5]):
+                outer_pulled += 1
+                yield chunk
+
+        flattened = itertools.chain.from_iterable(outer())
+
+        assert outer_pulled == 0, "no sub-iterable is fetched at construction"
         assert next(flattened) == 0
-        assert (inners[0].pulled, inners[1].pulled) == (1, 0), (
-            "the first sub-iterable is being read and the second is untouched"
-        )
-        assert list(flattened) == [1, 0, 1]
-        assert (inners[0].pulled, inners[1].pulled) == (2, 2)
+        assert outer_pulled == 1, "exactly one sub-iterable in hand"
+        assert next(flattened) == 1
+        assert outer_pulled == 1, "still inside it, so the outer stays put"
+        assert next(flattened) == 2
+        assert outer_pulled == 2, "the next one is fetched only on crossing into it"
+
+        assert list(flattened) == [3, 4, 5]
+        assert outer_pulled == 3
 
     def test_zip_longest_pads_to_the_longest_input(self) -> None:
         assert list(itertools.zip_longest("AB", "xyz", fillvalue="-")) == [
@@ -648,6 +660,47 @@ class TestCombinatoricsCostIsNotJustTheResultCount:
 
         assert list(itertools.combinations(source, 501)) == []
         assert source.pulled == 500
+
+    @pytest.mark.parametrize(
+        "produce",
+        [
+            itertools.combinations,
+            itertools.combinations_with_replacement,
+            itertools.permutations,
+        ],
+    )
+    def test_an_r_entry_index_array_is_allocated_before_any_result(self, produce) -> None:
+        """The standalone r term, which only shows when n = M = 0.
+
+        With an empty input there is no input to copy and no result to build,
+        so a bound of O(n + r x M) would predict constant cost. The index
+        array is allocated anyway, and it is one entry per r.
+        """
+        assert list(produce((), 1_000)) == [], "nothing is yielded at all"
+
+        small = held_bytes(lambda: produce((), 1_000), lambda obj: None)
+        large = held_bytes(lambda: produce((), 100_000), lambda obj: None)
+
+        assert large > small * 50, (
+            f"a hundred times the r should hold about a hundred times the "
+            f"state, not the same: r=1,000 {small:,}B vs r=100,000 {large:,}B"
+        )
+
+    def test_product_keeps_per_pool_state_even_with_an_empty_pool(self) -> None:
+        """The k term: one empty pool empties the results, not the setup."""
+
+        def build(pools: int):
+            return lambda: itertools.product(*([range(50)] * (pools - 1) + [()]))
+
+        assert list(itertools.product(range(50), ())) == [], "an empty pool yields nothing"
+
+        small = held_bytes(build(10), lambda obj: None)
+        large = held_bytes(build(1_000), lambda obj: None)
+
+        assert large > small * 10, (
+            f"a hundred times the pools should hold far more state, not the "
+            f"same: k=10 {small:,}B vs k=1,000 {large:,}B"
+        )
 
     @pytest.mark.parametrize("r", [1, 2, 3, 4])
     def test_elements_handed_back_are_r_times_the_result_count(self, r: int) -> None:
