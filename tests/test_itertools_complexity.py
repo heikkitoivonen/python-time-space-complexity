@@ -638,12 +638,22 @@ class TestWindowHelperCost:
 class TestCombinatoricsCostIsNotJustTheResultCount:
     """docs/stdlib/itertools.md priced the combinatorics rows by result count.
 
-    A review caught that the count alone does not bound the cost, and it is
-    right twice over. The input is consumed whatever r is, so C(n,n) produces
-    one result but still costs n. And each result is a fresh r-tuple, so the
-    elements handed back come to r x M, not M. Corrected to O(n + r x M).
+    Four rounds of review took that to O(n + r + r x M), one term at a time:
 
-    Both terms are countable, so most of this needs no stopwatch.
+    * the input is consumed whatever r is, so C(n,n) yields one result and
+      still costs n;
+    * an r-entry index array is allocated before any result exists, which is
+      the standalone r and the only term left when n = M = 0;
+    * up to r slots are filled per result, so C(n,1) and C(n,n-1) are the same
+      count and nowhere near the same cost.
+
+    That last term is an upper bound rather than a flat rate. CPython refills
+    the result tuple in place when nothing holds the previous one, rewriting
+    only the suffix from the leftmost changed index -- about one slot when r
+    is small next to n, but n/2 when r = n-1. Keeping the results forces the
+    full r-element copy every time.
+
+    Every term here is countable, so only the last test needs a stopwatch.
     """
 
     def test_the_input_is_read_even_when_there_is_one_result(self) -> None:
@@ -708,16 +718,90 @@ class TestCombinatoricsCostIsNotJustTheResultCount:
             f"cost: k=100 {small:,}B vs k=10,000 {large:,}B"
         )
 
+    @staticmethod
+    def _slots_rewritten_per_result(n: int, r: int) -> float:
+        """Mean suffix length combinations() rewrites, by the same walk it uses.
+
+        Mirrors combinations_next: scan right-to-left for the first index below
+        its maximum, bump it, reset everything to its right, and rewrite the
+        result from that index onward. Exact and deterministic -- no timing.
+        """
+        indices = list(range(r))
+        steps = writes = 0
+        while True:
+            i = r - 1
+            while i >= 0 and indices[i] == i + n - r:
+                i -= 1
+            if i < 0:
+                break
+            indices[i] += 1
+            for j in range(i + 1, r):
+                indices[j] = indices[j - 1] + 1
+            steps += 1
+            writes += r - i
+        return writes / steps if steps else 0.0
+
+    @pytest.mark.parametrize(("n", "r"), [(7, 3), (9, 4), (6, 5), (5, 1)])
+    def test_the_simulated_index_walk_matches_itertools(self, n: int, r: int) -> None:
+        """The suffix counts below are only worth anything if the walk is real.
+
+        Replays the same scan and reset that _slots_rewritten_per_result
+        counts, and checks it lands on exactly the tuples combinations()
+        yields.
+        """
+        indices = list(range(r))
+        walked = [tuple(indices)]
+        while True:
+            i = r - 1
+            while i >= 0 and indices[i] == i + n - r:
+                i -= 1
+            if i < 0:
+                break
+            indices[i] += 1
+            for j in range(i + 1, r):
+                indices[j] = indices[j - 1] + 1
+            walked.append(tuple(indices))
+
+        assert walked == list(itertools.combinations(range(n), r))
+
+    def test_the_rewritten_suffix_is_not_a_constant(self) -> None:
+        """Why O(r) per result is an upper bound and not a flat rate.
+
+        An earlier version of the page called the reuse path "O(1) amortised".
+        It is nearly that when r is small next to n, and nothing like it when
+        r approaches n -- at r = n-1 the mean suffix is exactly n/2, which
+        grows without bound. The claim now says so, and this is the arithmetic
+        behind both timing tests in this class.
+        """
+        # r small next to n: essentially one slot per result.
+        assert self._slots_rewritten_per_result(20, 2) < 1.2
+        assert self._slots_rewritten_per_result(100, 2) < 1.1
+        assert self._slots_rewritten_per_result(20, 12) < 3
+
+        # r = n-1: exactly n/2, so it tracks r rather than a constant.
+        for n in (20, 100, 500):
+            assert self._slots_rewritten_per_result(n, n - 1) == n / 2
+
+        # And therefore grows with n, which "O(1) amortised" denies.
+        assert self._slots_rewritten_per_result(500, 499) > 20 * self._slots_rewritten_per_result(
+            20, 19
+        )
+
     @pytest.mark.timing
     def test_keeping_the_results_is_what_costs_r(self) -> None:
-        """Per-result cost grows with r only when the previous result is held.
+        """With r small next to n, only the copy path tracks r.
 
-        Six times the r, at a fixed n. The copy path pays a full r-element
-        copy per result and grows with it; the reuse path rewrites only the
-        suffix that changed and stays flat. "r writes per result, always"
-        would put both near 6x. Measured: reuse 1.08x on 3.11 and 0.93x on
-        3.14, retained 6.01x and 4.29x -- so the threshold sits at 2.0, which
-        is the tighter of the two ends rather than the pinned interpreter's.
+        Six times the r at a fixed n=20, where the reuse path's suffix averages
+        1.1 slots at r=2 and 2.3 at r=12 -- see
+        test_the_rewritten_suffix_is_not_a_constant for those figures and for
+        the regime where this does not hold. This pair is not evidence that
+        reuse is flat in general; r = n-1 rewrites n/2 slots per result, which
+        is what test_the_wider_result_actually_costs_more measures.
+
+        "r writes per result, always" would put both paths near 6x. Measured:
+        reuse 1.08x on 3.11 and 0.93x on 3.14, retained 6.01x and 4.29x -- so
+        the threshold sits at 2.0, the tighter of the two ends rather than the
+        pinned interpreter's.
         """
         n, narrow, wide = 20, 2, 12
 
