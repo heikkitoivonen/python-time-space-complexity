@@ -198,11 +198,22 @@ class TestCombiningIterators:
         assert len(list(chained)) == 999
 
     def test_chain_from_iterable_flattens_one_level_lazily(self) -> None:
-        outer = CountingSource(3)
-        flattened = itertools.chain.from_iterable([range(2), range(2)])
+        """The outer iterable is pulled one sub-iterable at a time.
 
-        assert list(flattened) == [0, 1, 0, 1]
-        assert outer.pulled == 0
+        The first version of this asserted a pull count on a CountingSource
+        that was never passed to chain.from_iterable(), so it held whatever
+        the function did. The source has to be the argument.
+        """
+        inners = [CountingSource(2), CountingSource(2)]
+        flattened = itertools.chain.from_iterable(inners)
+
+        assert (inners[0].pulled, inners[1].pulled) == (0, 0), "nothing read at construction"
+        assert next(flattened) == 0
+        assert (inners[0].pulled, inners[1].pulled) == (1, 0), (
+            "the first sub-iterable is being read and the second is untouched"
+        )
+        assert list(flattened) == [1, 0, 1]
+        assert (inners[0].pulled, inners[1].pulled) == (2, 2)
 
     def test_zip_longest_pads_to_the_longest_input(self) -> None:
         assert list(itertools.zip_longest("AB", "xyz", fillvalue="-")) == [
@@ -610,3 +621,83 @@ class TestWindowHelperCost:
 
         assert from_page == from_deque
         assert len(from_page) == 10 - 3 + 1, "n - w + 1 windows"
+
+
+class TestCombinatoricsCostIsNotJustTheResultCount:
+    """docs/stdlib/itertools.md priced the combinatorics rows by result count.
+
+    A review caught that the count alone does not bound the cost, and it is
+    right twice over. The input is consumed whatever r is, so C(n,n) produces
+    one result but still costs n. And each result is a fresh r-tuple, so the
+    elements handed back come to r x M, not M. Corrected to O(n + r x M).
+
+    Both terms are countable, so most of this needs no stopwatch.
+    """
+
+    def test_the_input_is_read_even_when_there_is_one_result(self) -> None:
+        """The O(n) term. C(n,n) = 1, and the count alone would predict O(1)."""
+        source = CountingSource(500)
+        results = list(itertools.combinations(source, 500))
+
+        assert len(results) == 1, "C(n,n) is a single result"
+        assert source.pulled == 500, "and the whole input was read to produce it"
+
+    def test_an_empty_result_set_still_costs_the_input(self) -> None:
+        """r > n yields nothing at all, and still reads everything."""
+        source = CountingSource(500)
+
+        assert list(itertools.combinations(source, 501)) == []
+        assert source.pulled == 500
+
+    @pytest.mark.parametrize("r", [1, 2, 3, 4])
+    def test_elements_handed_back_are_r_times_the_result_count(self, r: int) -> None:
+        """The r x M term, counted exactly rather than timed."""
+        results = list(itertools.combinations(range(9), r))
+        elements = sum(len(item) for item in results)
+
+        assert len(results) == math.comb(9, r)
+        assert elements == r * math.comb(9, r)
+
+    def test_equal_result_counts_can_mean_very_different_work(self) -> None:
+        """C(n,1) and C(n,n-1) are both n results -- the resemblance ends there.
+
+        This is the case that shows the old bound could not have been right:
+        by result count these two are identical.
+        """
+        n = 200
+        few = list(itertools.combinations(range(n), 1))
+        many = list(itertools.combinations(range(n), n - 1))
+
+        assert len(few) == len(many) == n, "the same number of results"
+        assert sum(len(item) for item in few) == n
+        assert sum(len(item) for item in many) == n * (n - 1)
+
+    @pytest.mark.timing
+    def test_the_wider_result_actually_costs_more(self) -> None:
+        """And the element count is not bookkeeping -- it is the runtime."""
+        n = 2_000
+
+        def drain(r: int) -> float:
+            best = float("inf")
+            for _ in range(3):
+                start = time.perf_counter()
+                deque(itertools.combinations(range(n), r), maxlen=0)
+                best = min(best, time.perf_counter() - start)
+            return best
+
+        narrow, wide = drain(1), drain(n - 1)
+
+        assert wide / narrow > 20, (
+            f"C(n,1) and C(n,n-1) are both {n} results, so a bound in the "
+            f"result count alone predicts parity: r=1 {narrow:.2e}s vs "
+            f"r=n-1 {wide:.2e}s ({wide / narrow:.0f}x)"
+        )
+
+    def test_product_builds_a_k_tuple_per_result(self) -> None:
+        """The k factor the product row's time column had omitted."""
+        for k in (2, 4, 6):
+            results = list(itertools.product(*[range(2)] * k))
+
+            assert len(results) == 2**k
+            assert all(len(item) == k for item in results)
+            assert sum(len(item) for item in results) == k * 2**k

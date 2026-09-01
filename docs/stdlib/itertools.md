@@ -40,10 +40,10 @@ The `itertools` module provides efficient looping tools for creating iterators a
 | Function | Time | Space | Notes |
 |----------|------|-------|-------|
 | `groupby(iterable, key)` | O(n) total | O(1) | Group consecutive |
-| `combinations(iterable, r)` | O(C(n,r)) total | O(n) input + O(r) per item | All r-combinations; the iterable is copied to a tuple up front |
-| `combinations_with_replacement(iter, r)` | O(C(n+r-1,r)) total | O(n) input + O(r) per item | Combinations allowing repeats; the iterable is copied to a tuple up front |
-| `permutations(iterable, r)` | O(P(n,r)) total | O(n) input + O(r) per item | All permutations; the iterable is copied to a tuple up front |
-| `product(iter1, iter2, ...)` | O(n₁×n₂×...×nₖ) | O(Σnᵢ) init + O(k) per item | Cartesian product; stores all inputs in memory first |
+| `combinations(iterable, r)` | O(n + r×C(n,r)) total | O(n) input + O(r) per item | All r-combinations. The iterable is copied to a tuple up front, and each result is a fresh r-tuple, so the result count alone does not bound the cost: C(n,1) and C(n,n-1) are both n results, and the second costs hundreds of times more |
+| `combinations_with_replacement(iter, r)` | O(n + r×C(n+r-1,r)) total | O(n) input + O(r) per item | Combinations allowing repeats; the iterable is copied to a tuple up front |
+| `permutations(iterable, r)` | O(n + r×P(n,r)) total | O(n) input + O(r) per item | All permutations; the iterable is copied to a tuple up front |
+| `product(iter1, iter2, ...)` | O(Σnᵢ + k×n₁×n₂×...×nₖ) total | O(Σnᵢ) init + O(k) per item | Cartesian product; stores all inputs in memory first, and builds a k-tuple per result |
 
 ## Memory Characteristics
 
@@ -204,10 +204,11 @@ from itertools import islice
 
 # Sliding window: n - w + 1 windows, O(w) memory, and O(n*w) time rather
 # than O(n). Each window is a fresh w-tuple, so the windows alone are n*w
-# items no matter how they are built - 68ns per input item at w=2 against
-# 1203ns at w=512. Rebuilding with a deque instead of w[1:] + (item,) does
-# not help, because the tuple() per window costs the same. Only yielding one
-# reused deque, valid until the next iteration, is flat: 34ns at every w
+# items no matter how they are built: widening w from 2 to 256 at a fixed n
+# costs about ten times as much, where O(n) would cost the same. Rebuilding
+# with a deque instead of w[1:] + (item,) does not help, because the tuple()
+# per window costs the same. Only yielding one reused deque, valid until the
+# next iteration, is flat in w
 def window(iterable, size):
     it = iter(iterable)
     w = tuple(islice(it, size))
