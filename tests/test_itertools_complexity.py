@@ -708,6 +708,43 @@ class TestCombinatoricsCostIsNotJustTheResultCount:
             f"cost: k=100 {small:,}B vs k=10,000 {large:,}B"
         )
 
+    @pytest.mark.timing
+    def test_keeping_the_results_is_what_costs_r(self) -> None:
+        """Per-result cost grows with r only when the previous result is held.
+
+        Six times the r, at a fixed n. The copy path pays a full r-element
+        copy per result and grows with it; the reuse path rewrites only the
+        suffix that changed and stays flat. "r writes per result, always"
+        would put both near 6x. Measured: reuse 1.08x on 3.11 and 0.93x on
+        3.14, retained 6.01x and 4.29x -- so the threshold sits at 2.0, which
+        is the tighter of the two ends rather than the pinned interpreter's.
+        """
+        n, narrow, wide = 20, 2, 12
+
+        def per_result(r: int, keep: bool) -> float:
+            results = math.comb(n, r)
+            best = float("inf")
+            for _ in range(3):
+                start = time.perf_counter()
+                if keep:
+                    deque(list(itertools.combinations(range(n), r)), maxlen=0)
+                else:
+                    deque(itertools.combinations(range(n), r), maxlen=0)
+                best = min(best, time.perf_counter() - start)
+            return best / results
+
+        reuse = per_result(wide, keep=False) / per_result(narrow, keep=False)
+        retained = per_result(wide, keep=True) / per_result(narrow, keep=True)
+
+        assert retained > 2.0, (
+            f"holding each result should make the per-result cost track r: "
+            f"r={narrow} to r={wide} moved it {retained:.2f}x"
+        )
+        assert reuse < 2.0, (
+            f"refilling in place only touches the changed suffix, so it should "
+            f"not track r: r={narrow} to r={wide} moved it {reuse:.2f}x"
+        )
+
     def test_permutations_carries_more_setup_than_combinations(self) -> None:
         """permutations() keeps an n-entry indices array combinations() has not.
 
@@ -731,11 +768,14 @@ class TestCombinatoricsCostIsNotJustTheResultCount:
         )
 
     def test_the_result_tuple_is_reused_unless_you_hold_it(self) -> None:
-        """The page says r slots are filled per result, not allocated.
+        """CPython hands back the same tuple when nothing references the old one.
 
-        CPython hands back the same tuple when nothing else references the
-        previous one, so "a fresh tuple every time" would be wrong. The r
-        writes happen either way, which is what the bound rests on.
+        So "a fresh tuple every time" is wrong. What replaced it was wrong too:
+        the r writes do NOT happen either way. On the reuse path
+        combinations_next() updates the result "starting with i, the leftmost
+        index that changed", while the copy path runs a full
+        _PyTuple_FromArray of all r. O(r) per result is an upper bound, tight
+        only on the copy path -- see test_keeping_the_results_is_what_costs_r.
         """
         recycled = [id(item) for item in itertools.combinations(range(5), 2)]
         retained = [id(item) for item in list(itertools.combinations(range(5), 2))]
