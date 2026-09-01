@@ -686,21 +686,72 @@ class TestCombinatoricsCostIsNotJustTheResultCount:
             f"state, not the same: r=1,000 {small:,}B vs r=100,000 {large:,}B"
         )
 
-    def test_product_keeps_per_pool_state_even_with_an_empty_pool(self) -> None:
-        """The k term: one empty pool empties the results, not the setup."""
+    def test_product_keeps_per_pool_state_with_the_inputs_held_at_nothing(self) -> None:
+        """The k term, isolated from the Sum(ni) term.
+
+        An earlier version grew k by adding 50-element pools, which grew
+        Sum(ni) in step -- so the older O(Sum(ni)) bound explained the result
+        just as well and the test proved nothing about k. Every pool here is
+        empty, so Sum(ni) stays 0 and only k moves.
+        """
 
         def build(pools: int):
-            return lambda: itertools.product(*([range(50)] * (pools - 1) + [()]))
+            return lambda: itertools.product(*([()] * pools))
 
-        assert list(itertools.product(range(50), ())) == [], "an empty pool yields nothing"
+        assert list(itertools.product((), (), ())) == [], "empty pools yield nothing"
 
-        small = held_bytes(build(10), lambda obj: None)
-        large = held_bytes(build(1_000), lambda obj: None)
+        small = held_bytes(build(100), lambda obj: None)
+        large = held_bytes(build(10_000), lambda obj: None)
 
-        assert large > small * 10, (
-            f"a hundred times the pools should hold far more state, not the "
-            f"same: k=10 {small:,}B vs k=1,000 {large:,}B"
+        assert large > small * 20, (
+            f"with Sum(ni) fixed at 0, a hundred times the pools should still "
+            f"cost: k=100 {small:,}B vs k=10,000 {large:,}B"
         )
+
+    def test_permutations_carries_more_setup_than_combinations(self) -> None:
+        """permutations() keeps an n-entry indices array combinations() has not.
+
+        The page used to describe both as holding "an r-entry index array".
+        The O(n + r) bound was right, but for permutations the n comes from a
+        second array rather than only from the input copy, so at a fixed small
+        r the gap between the two grows with n.
+        """
+
+        def gap(n: int) -> int:
+            with_cycles = held_bytes(lambda: itertools.permutations(range(n), 2), lambda o: None)
+            without = held_bytes(lambda: itertools.combinations(range(n), 2), lambda o: None)
+            return with_cycles - without
+
+        small, large = gap(10_000), gap(100_000)
+
+        assert small > 0, "permutations holds strictly more at the same n and r"
+        assert large > small * 5, (
+            f"the extra array is n-entry, so ten times the n should cost about "
+            f"ten times more: n=10,000 {small:,}B vs n=100,000 {large:,}B"
+        )
+
+    def test_the_result_tuple_is_reused_unless_you_hold_it(self) -> None:
+        """The page says r slots are filled per result, not allocated.
+
+        CPython hands back the same tuple when nothing else references the
+        previous one, so "a fresh tuple every time" would be wrong. The r
+        writes happen either way, which is what the bound rests on.
+        """
+        recycled = [id(item) for item in itertools.combinations(range(5), 2)]
+        retained = [id(item) for item in list(itertools.combinations(range(5), 2))]
+
+        assert len(recycled) == len(retained) == math.comb(5, 2)
+        assert len(set(recycled)) < len(recycled), "ids repeat when nothing holds them"
+        assert len(set(retained)) == len(retained), "list() holds each, forcing a new tuple"
+
+        results = itertools.combinations(range(5), 2)
+        first = next(results)
+        first_id = id(first)
+        del first
+        assert id(next(results)) == first_id, "the dropped tuple is refilled in place"
+
+        held = next(results)
+        assert id(next(results)) != id(held), "one still referenced forces a fresh tuple"
 
     @pytest.mark.parametrize("r", [1, 2, 3, 4])
     def test_elements_handed_back_are_r_times_the_result_count(self, r: int) -> None:
