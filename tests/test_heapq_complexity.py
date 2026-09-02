@@ -35,6 +35,7 @@ import subprocess
 import sys
 import textwrap
 import time
+import tracemalloc
 from collections.abc import Callable
 from typing import Any
 
@@ -507,6 +508,15 @@ class TestMaxHeapOperations:
 
         assert drained == sorted(drained, reverse=True)
 
+    @staticmethod
+    def _counted_max(operation: Callable[[list[CountingInt]], Any], size: int) -> int:
+        """Comparisons made by one operation on a freshly max-heapified list."""
+        heap = [CountingInt(value) for value in range(size)]
+        heapify_max(heap)
+        CountingInt.comparisons = 0
+        operation(heap)
+        return CountingInt.comparisons
+
     def test_replace_max_and_pushpop_max_keep_the_size(self) -> None:
         data = [3, 1, 4, 1, 5, 9, 2, 6]
         heapify_max(data)
@@ -517,6 +527,64 @@ class TestMaxHeapOperations:
 
         heappushpop_max(data, 8)
         assert len(data) == size, "heappushpop_max should not change the size"
+
+    def test_heappushpop_max_skips_the_sift_when_the_item_wins(self) -> None:
+        """The max-heap twin of heappushpop's shortcut.
+
+        An item at or above the root comes straight back out, so a test that
+        pushes one exercises no sift at all: one comparison against 19 at
+        n=1,023 and 31 at n=65,535.
+        """
+        for size in (1_023, 65_535):
+            shortcut = self._counted_max(lambda h: heappushpop_max(h, CountingInt(10**9)), size)
+            sifted = self._counted_max(lambda h: heappushpop_max(h, CountingInt(h[0] - 1)), size)
+
+            assert shortcut == 1, (
+                f"an item above the root should cost one comparison at n={size}, got {shortcut}"
+            )
+            assert sifted > 10 * shortcut, (
+                f"an item below the root should sift at n={size}: {sifted} against {shortcut}"
+            )
+
+    def test_heappushpop_max_sift_path_is_logarithmic(self) -> None:
+        small = self._counted_max(lambda h: heappushpop_max(h, CountingInt(h[0] - 1)), 1_023)
+        large = self._counted_max(lambda h: heappushpop_max(h, CountingInt(h[0] - 1)), 65_535)
+
+        # 64x the heap: log predicts about 1.6x, linear would be 64x.
+        assert large < 5 * small, (
+            f"heappushpop_max does not look logarithmic: {small} against {large} "
+            f"comparisons for a 64x heap"
+        )
+
+    def test_heapreplace_max_is_logarithmic(self) -> None:
+        """1,024x the heap costs about twice the comparisons, not 1,024 times."""
+        small = self._counted_max(lambda h: heapreplace_max(h, CountingInt(h[0] - 1)), 1_023)
+        large = self._counted_max(lambda h: heapreplace_max(h, CountingInt(h[0] - 1)), 1_048_575)
+
+        assert large < 5 * small, (
+            f"heapreplace_max does not look logarithmic: {small} against {large} "
+            f"comparisons for a 1,024x heap"
+        )
+
+    def test_the_combined_max_operations_allocate_nothing(self) -> None:
+        """The O(1) space column: the peak does not follow the heap."""
+        peaks: list[int] = []
+        for size in (1_000, 100_000):
+            heap = list(range(size))
+            heapify_max(heap)
+
+            tracemalloc.start()
+            try:
+                heapreplace_max(heap, -1)
+                heappushpop_max(heap, heap[0] - 1)
+                peaks.append(tracemalloc.get_traced_memory()[1])
+            finally:
+                tracemalloc.stop()
+
+        # The 100,000-item heap's own storage is roughly 800 KB.
+        assert max(peaks) < 10_000, (
+            f"the combined max operations should allocate nothing per element: {peaks} bytes"
+        )
 
     @pytest.mark.timing
     def test_heapify_max_is_on(self) -> None:
