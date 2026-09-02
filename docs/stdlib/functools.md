@@ -8,21 +8,20 @@ The `functools` module provides higher-order functions and operations on callabl
 
 | Function | Time | Space | Notes |
 |----------|------|-------|-------|
-| `lru_cache(maxsize)` | O(1) avg hit, O(f(n)) miss | O(min(n, maxsize)) | Hit is O(1) avg (hash-based); miss runs wrapped function |
-| `cache()` | O(1) avg hit, O(f(n)) miss | O(n) unbounded | Hit is O(1) avg (hash-based); miss runs wrapped function |
-| `cached_property` | O(1) after first call | O(1) per property | Descriptor cache |
-| `get_cache_token()` | O(1) | O(1) | Token changes when cache state changes |
+| `lru_cache(maxsize)` | O(h) avg hit, O(h + w) miss | O(min(n, maxsize)); O(n) for `maxsize=None`; O(1) for `maxsize=0` | h = building and hashing this call's key, after which the lookup itself is O(1) avg; w = one call of the wrapped function; n = distinct calls cached |
+| `cache()` | O(h) avg hit, O(h + w) miss | O(n) unbounded | Same h, w and n; defined as `lru_cache(maxsize=None)`, so nothing is evicted |
+| `cached_property` | O(1) after first call | O(1) per property |  |
+
 
 ### Function Composition
 
 | Function | Time | Space | Notes |
 |----------|------|-------|-------|
-| `reduce(func, iterable)` | O(n) | O(1) | Fold/aggregate |
-| `partial(func, *args)` | O(1) | O(k) for k args | Create partial function |
-| `partialmethod(func, *args)` | O(1) | O(k) for k args | Partial for use as method descriptor |
-| `wraps(wrapped)` | O(1) | O(1) | Decorator to copy function metadata |
-| `update_wrapper(wrapper, wrapped)` | O(1) | O(1) | Copy function metadata (used by wraps) |
-| `recursive_repr()` | O(1) | O(1) | Prevent recursive __repr__ loops |
+| `reduce(func, iterable)` | O(n·f) | O(1) auxiliary, plus the accumulator | n = items in the iterable, f = cost of one `func` call |
+| `partial(func, *args, **keywords)` | O(p + q) | O(p + q) | p = stored positional args, q = stored keyword bindings |
+| `partialmethod(func, *args, **keywords)` | O(p + q) | O(p + q) | Method-descriptor version; stores and flattens by the same rules |
+| `wraps(wrapped, assigned, updated)` | O(a + u) when applied | O(a + u) | The decorator form of `update_wrapper`, taking the same a and u and paying the same cost |
+| `update_wrapper(wrapper, wrapped, assigned, updated)` | O(a + u) | O(a + u) | a = names listed in `assigned`, u = total entries across the mappings named by `updated`. |
 
 ### Comparison Helpers
 
@@ -35,8 +34,9 @@ The `functools` module provides higher-order functions and operations on callabl
 
 | Function | Time | Space | Notes |
 |----------|------|-------|-------|
-| `singledispatch` | O(1) dispatch | O(k) for k types | Generic function decorator |
-| `singledispatchmethod` | O(1) dispatch | O(k) for k types | Generic method decorator (Python 3.8+) |
+| `singledispatch` | O(1) avg hit, super-linear miss for related types | O(k) registered + O(t) cached types | k = registered implementations, t = distinct argument types dispatched on. Hit is O(1) avg (cached per argument type, weak-keyed) |
+| `singledispatchmethod` | O(1) avg hit, super-linear miss for related types | O(k) registered + O(t) cached types | Same k and t; method descriptor version (Python 3.8+), sharing `singledispatch`'s dispatch cache |
+
 
 ## Caching Complexity
 
@@ -53,7 +53,8 @@ def fibonacci(n):
 
 # Complexity with cache:
 # Time: O(n) - each value computed once
-# Space: O(min(n, 128)) - limited cache size
+# Space: O(n) - n nested calls are live at once; the cache itself is the
+# smaller term, holding only min(n, 128) entries
 
 # Without cache would be O(2^n)
 ```
@@ -90,16 +91,21 @@ second_time = time.time() - start
 from functools import reduce
 import operator
 
-# Reduce: O(n) - applies function n-1 times
+# Reduce applies the function n-1 times, so the total is n-1 times whatever
+# one call costs -- and since each result is fed back in as the next call's
+# first argument, "what one call costs" can grow as the fold proceeds
 data = [1, 2, 3, 4, 5]
 
-# Sum all: O(n)
+# Sum all: O(n) while the running total stays machine-word sized
 total = reduce(operator.add, data)  # 15
 
-# Product all: O(n)
+# Product all: O(n) here, but NOT in general. Python ints are arbitrary
+# precision, so the running product keeps widening -- over range(1, n + 1)
+# this builds n!, whose O(n log n) bits make the fold badly super-linear
 product = reduce(operator.mul, data)  # 120
 
-# Max: O(n)
+# Max: O(n), and safely so -- the accumulator is always one of the inputs,
+# so unlike the two above it cannot grow beyond the largest of them
 maximum = reduce(lambda a, b: a if a > b else b, data)  # 5
 ```
 
@@ -338,3 +344,5 @@ process([1,2,3])  # "List of 3 items"
 
 - [Itertools Module](itertools.md) - Iterator functions
 - [Operator Module](operator.md) - Operator functions
+- [abc Module](abc.md) - `get_cache_token()`'s actual home
+- [reprlib Module](reprlib.md) - `recursive_repr()`'s actual home
