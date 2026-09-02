@@ -45,11 +45,15 @@ Follow the local style of adjacent pages:
    |-----------|------|-------|-------|
    ```
 
-4. Cover all scoped operations. Distinguish best, average, amortized, and worst
-   cases; state eager versus lazy work, cache effects, output-sensitive terms,
-   and version boundaries where they affect the result.
-5. Add concise sections that explain non-obvious costs and practical performance
-   choices. Exclude generic usage advice unrelated to complexity.
+4. Cover all scoped operations at the altitude set by *Document the Common
+   Case* below: one bound per operation, with its size variables defined.
+   Distinguish best, average, amortized and worst only where they differ
+   asymptotically and ordinary use can reach the difference; state eager versus
+   lazy work, cache effects, output-sensitive terms, and version boundaries
+   where they change the result on a version this project supports.
+5. Add concise sections only where a non-obvious cost changes a practical
+   choice. Exclude generic usage advice unrelated to complexity, and prefer no
+   section to one that restates the table in sentences.
 6. Include runnable examples that demonstrate the documented operation or a
    performance consequence. Annotate relevant operations with their complexity.
    Avoid huge allocations or slow benchmark-style examples in docs.
@@ -59,6 +63,39 @@ Follow the local style of adjacent pages:
 Every table row, annotation, caption, example comment, explanatory sentence,
 warning, and recommendation that describes cost or behavior is a claim. Make a
 claim inventory while writing; do not review only text containing `O(...)`.
+
+## Document the Common Case
+
+The page exists so a reader can choose between operations. Its subject is the
+Big-O characteristic that governs that choice, not a full account of the CPython
+code path that produced it. A row that is correct but exhaustive costs more than
+it returns: it reads worse, it goes stale sooner, and every added clause is one
+more claim to test.
+
+Keep these off the page:
+
+- **Measured constant factors.** "roughly 1,400x dearer", "some 50x", "wins by
+  eight times". A ratio is a property of one machine, one input shape and one
+  release. The page cannot re-run it, the reader cannot act on it, and nothing
+  fails when it drifts. Where a magnitude really does drive a choice, say which
+  side wins and why, not by how much; the number stays in the test that guards
+  it.
+- **Pathological-input costs.** An argument whose `__hash__` scans 100,000
+  elements does make hashing dominate a cache hit, but pricing that into the
+  cache's row teaches nothing about the cache. Document the cost the operation
+  itself controls; where caller-supplied cost dominates, name it once as a
+  variable (h, f, the callback) and move on.
+- **Per-release micro-changes.** A version boundary earns a mention when it
+  changes the bound or the recommendation on a supported version. Shifts in
+  constant factors between minor releases do not, and neither does an
+  implementation detail stated so precisely that the next release falsifies it.
+- **Restated mechanism.** The C function reached, the struct field consulted,
+  the order of two statements: that is evidence for the test file, not content
+  for the page, unless the reader must do something differently because of it.
+
+Apply one test to every note: would removing it change how someone uses the
+operation? If not, cut it. An empty Notes cell beside a correct bound is a good
+outcome, not an unfinished one.
 
 ## Test Every Claim
 
@@ -143,7 +180,10 @@ make check
 Also inspect the final diff for:
 
 - complete public API coverage or explained omissions;
-- defined size variables and qualified bounds;
+- defined size variables and bounds qualified only where the qualification
+  changes a decision;
+- notes that survive the removal test, carrying no measured constants,
+  pathological-input pricing, or restated mechanism;
 - every claim mapped to evidence;
 - every fenced code section tested or explicitly accounted for, with semantic
   assertions where execution alone is insufficient;

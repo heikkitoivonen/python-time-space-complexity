@@ -8,6 +8,30 @@ description: Designs and reviews tests for every complexity, behavioral, and per
 Turn each documentation claim into executable evidence when execution can
 settle it, and explicitly account for the claims it cannot settle.
 
+## Choose a Durable Level of Abstraction
+
+Concentrate reviews and tests on Big-O characteristics that matter to a
+reader's choice: the growth class, its size variables, meaningful best/average/
+worst distinctions, output size, callback cost, and bounded versus unbounded
+behavior. A finding should normally change one of those conclusions.
+
+Do not turn constant factors, benchmark ratios, incidental CPython steps, rare
+custom-protocol behavior, or minor wording in test comments into review
+findings unless they make the documented complexity materially misleading.
+Respect explicitly scoped bounds such as "after first access", "cache hit",
+"auxiliary space", or "excluding callback cost". Do not flag omitted
+out-of-scope work unless the page presents the bound as total or the omission
+materially changes a reader's decision.
+Use CPython source to establish the durable bound, not to reproduce a release's
+implementation in prose or tests. When caller-defined work can dominate, name
+it once as a variable such as callback cost or key cost rather than cataloguing
+pathological implementations.
+
+Inventories remain exhaustive so false claims are not silently blessed, but
+report and fix them at the highest useful level. Prefer one stable growth-class
+test over several microbenchmarks that pin mechanisms or constants likely to
+change between releases.
+
 ## Inventory Before Testing
 
 Read the page and list all claims, not only Big-O notation:
@@ -58,6 +82,53 @@ CPython source or official docs in the documentation where appropriate.
 Do not disguise category C as a skipped test, and never mark a wrong translation
 or unverified claim current merely to make checks pass.
 
+## Corrections Are New Claims
+
+A fix does not only remove a wrong claim, it writes a replacement — and that
+replacement arrives with none of the scrutiny the original just received.
+Inventory and classify it before publishing it, exactly as you did the text it
+replaces. Over a sustained review cycle most surviving defects are found in
+prose written by earlier fixes rather than in the original page.
+
+The measurement that motivated the fix usually covers one sentence. The
+explanation written around it goes in untested, and that is where corrections
+go wrong:
+
+- naming a mechanism the measurement did not observe ("sorts the input for a
+  deterministic order", where the sorted path was measured and the fallback is
+  not ordered at all);
+- asserting a lifetime or invariant in passing ("the cached entry lives as long
+  as its key does", where an unrelated call clears the cache);
+- restating a bound for a path that was not measured, such as an
+  immediate-failure cost presented as the cost of every failure;
+- naming one end of a range as though it were the whole, such as a worst case
+  with no best case, or the reverse.
+
+Apply one rule to every sentence of a correction: if it claims something about
+cost, ordering, lifetime, allocation, or call counts, and no test distinguishes
+it from its negation, either test it or cut it. Prefer cutting to hedging, and a
+shorter true row to a longer one carrying a fresh untested clause.
+
+When a correction rests on a single measured input, record in the test docstring
+which dimensions were *not* varied — element cost, operand width, input order,
+arity, callback cost. A named untested axis can be checked later; an implied one
+reads as covered.
+
+## Keep Measurements in the Test
+
+Settling a claim generates prose: the ratio you just measured, the code path you
+just read, a caveat about the one input shape you used. Almost none of it
+belongs on the page. The page carries the Big-O characteristic and the size
+variables it is expressed in; the numbers, the mechanism and the untested axes
+go in the test and its docstring, where they can be re-run and where the next
+CPython release fails them loudly instead of leaving a stale sentence behind.
+
+So "either test it or cut it" has a third outcome, and it is often the right
+one: keep the test, drop the sentence. A fact that needed a stopwatch to settle
+is usually a fact the page should state qualitatively — which side wins and
+why, not by how much — or not at all. Trimming a claim discharges it; a claim
+that is gone needs no test, and the inventory shrinks with the page.
+
 ## Use Timing Only When Necessary
 
 If direct observation cannot distinguish the growth class:
@@ -74,7 +145,8 @@ If direct observation cannot distinguish the growth class:
 7. Run it under the oldest and newest supported Python versions when the claim
    can differ by implementation version. Prefer one robust invariant over
    version branching when possible.
-8. Include measured values in assertion failures so regressions are diagnosable.
+8. Include measured values in assertion failures so regressions are
+   diagnosable. Those values stay in the test; never quote them on the page.
 
 Avoid microbenchmarks when a call counter, identity check, or state observation
 can prove the same fact without tolerance.
