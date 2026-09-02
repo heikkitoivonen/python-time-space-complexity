@@ -88,15 +88,17 @@ A further review round found three more defects, unrelated to singledispatch:
   accumulator both exactly (bit_length) and by timing.
 
 * `lru_cache`/`cache` claimed a flat "O(1) avg hit (hash-based)". Reaching
-  that dict lookup means building a key from the call's arguments and
-  hashing it, then confirming the match with `__eq__` -- paid on every call,
-  hits included. Integer keys, which every test here had used, are the shape
-  that hides it: a confirmed hit on an argument whose `__hash__` scans
-  100,000 elements costs about 1,400x one hashing in constant time, and
-  5,000 positional arguments about 50x two, because the key is a tuple over
-  all of them. The rows are now O(h) avg hit / O(h + w) miss. This makes
-  `cached_property`'s neighbouring O(1) the interesting one: it is genuine,
-  because it looks up a fixed attribute name rather than a derived key.
+  that dict lookup can require building a key from the call's arguments,
+  hashing it, then confirming the match with `__eq__`. Integer keys, which
+  every test here had used, are the shape that hides it: a hit on a fresh
+  equal argument whose `__hash__` scans 100,000 elements costs far more than
+  one hashing in constant time, and a fresh key over 5,000 arguments hashes
+  all 5,000. The rows are now O(h) avg hit / O(h + w) miss. CPython 3.14's
+  tuple-hash cache can avoid repeating that work when a call reuses an
+  already-hashed argument tuple, which is why h is the work actually required
+  by this call rather than a fixed cost. This makes `cached_property`'s
+  neighbouring O(1) the interesting one: it is genuine, because it looks up
+  a fixed attribute name rather than a derived key.
 
 * Fixing that row still left its Space column and its eviction note
   describing only one of `maxsize`'s three modes. `maxsize=None` is the
@@ -169,14 +171,15 @@ class TestLruCacheHitsAndMisses:
     """docs/stdlib/functools.md: lru_cache table row and Caching Complexity.
 
     The rows claimed a flat "O(1) avg hit (hash-based)". Reaching that dict
-    lookup means building a key from the call's arguments and hashing it,
-    then confirming the match with `__eq__` -- work every call pays, hits
-    included, and constant only if the arguments are few and hash in
-    constant time. That is a property of the arguments, not of the cache.
+    lookup can mean building a key from the call's arguments and hashing it,
+    then confirming the match with `__eq__`. The cost is constant only when
+    the work required for this call's key is constant. CPython 3.14 may reuse
+    a positional argument tuple's cached hash, but a fresh equal key still
+    pays its argument hashing and comparison costs.
 
     The tests below this docstring's first group use integer keys, which is
-    the shape that cannot show any of it; the last four supply arguments
-    whose hashing and equality cost real time.
+    the shape that cannot show any of it; later tests supply arguments whose
+    hashing and equality cost real time.
 
     A later round found the Space column and the eviction note describing
     only a positive `maxsize`; the three tests naming the parameter's modes
@@ -364,40 +367,9 @@ class TestLruCacheHitsAndMisses:
             f"miss={miss_time:.2e}s hit={hit_time:.2e}s"
         )
 
-    def test_a_confirmed_hit_still_hashes_its_argument(self) -> None:
-        """Exact, no tolerance: the key has to be built and hashed before
-        there is anything to look the hit up with."""
+    def test_a_hit_on_an_equal_key_hashes_and_compares_it(self) -> None:
+        """A fresh equal key cannot reuse the stored key's hash or identity."""
         hashes = {"n": 0}
-
-        class Key:
-            def __init__(self, payload: tuple) -> None:
-                self.payload = payload
-
-            def __hash__(self) -> int:
-                hashes["n"] += 1
-                return hash(self.payload)
-
-            def __eq__(self, other: object) -> bool:
-                return isinstance(other, Key) and self.payload == other.payload
-
-        @lru_cache(maxsize=128)
-        def identity(key: Key) -> int:
-            return 1
-
-        key = Key((1, 2, 3))
-        identity(key)
-        hashes["n"] = 0
-
-        identity(key)
-        identity(key)
-        identity(key)
-
-        assert identity.cache_info().hits == 3, "all three were hits"
-        assert hashes["n"] == 3, "and each one hashed the argument again"
-
-    def test_a_hit_on_an_equal_key_also_compares_it(self) -> None:
-        """The realistic case -- callers pass an equal object, not the
-        identical one, so identity cannot short-circuit the comparison."""
         comparisons = {"n": 0}
 
         class Key:
@@ -405,6 +377,7 @@ class TestLruCacheHitsAndMisses:
                 self.payload = payload
 
             def __hash__(self) -> int:
+                hashes["n"] += 1
                 return hash(self.payload)
 
             def __eq__(self, other: object) -> bool:
@@ -416,12 +389,14 @@ class TestLruCacheHitsAndMisses:
             return 1
 
         identity(Key((1, 2, 3)))
+        hashes["n"] = 0
         comparisons["n"] = 0
 
         identity(Key((1, 2, 3)))
         identity(Key((1, 2, 3)))
 
         assert identity.cache_info().hits == 2
+        assert hashes["n"] == 2, "each fresh key had to be hashed"
         assert comparisons["n"] == 2, "each hit confirmed the key with __eq__"
 
     @pytest.mark.timing
@@ -434,7 +409,7 @@ class TestLruCacheHitsAndMisses:
                 self.payload = payload
 
             def __hash__(self) -> int:
-                return hash(self.payload)
+                return sum(hash(item) for item in self.payload)
 
             def __eq__(self, other: object) -> bool:
                 return isinstance(other, Key) and self.payload == other.payload
@@ -443,13 +418,13 @@ class TestLruCacheHitsAndMisses:
         def identity(key: Key) -> int:
             return 1
 
-        cheap = Key(tuple(range(10)))
-        costly = Key(tuple(range(100_000)))
-        identity(cheap)
-        identity(costly)
+        cheap_payload = tuple(range(10))
+        costly_payload = tuple(range(100_000))
+        identity(Key(cheap_payload))
+        identity(Key(costly_payload))
 
-        cheap_time = best_time(lambda: identity(cheap))
-        costly_time = best_time(lambda: identity(costly))
+        cheap_time = best_time(lambda: identity(Key(cheap_payload)))
+        costly_time = best_time(lambda: identity(Key(costly_payload)))
 
         assert identity.cache_info().misses == 2, "everything timed was a hit"
         assert costly_time > cheap_time * 20, (
@@ -457,28 +432,31 @@ class TestLruCacheHitsAndMisses:
             f"as one hashing 10: {cheap_time:.2e}s vs {costly_time:.2e}s"
         )
 
-    @pytest.mark.timing
     def test_hit_cost_tracks_the_number_of_arguments(self) -> None:
-        """Key construction, separately from per-argument hash cost: these
-        are plain ints, and only how many of them there are changes."""
+        """A fresh equal call key hashes each positional argument."""
+        hashes = {"n": 0}
+
+        class Key:
+            def __init__(self, value: int) -> None:
+                self.value = value
+
+            def __hash__(self) -> int:
+                hashes["n"] += 1
+                return hash(self.value)
+
+            def __eq__(self, other: object) -> bool:
+                return isinstance(other, Key) and self.value == other.value
 
         @lru_cache(maxsize=128)
-        def variadic(*args: int) -> int:
+        def variadic(*args: Key) -> int:
             return 1
 
-        few = tuple(range(2))
-        many = tuple(range(5_000))
-        variadic(*few)
-        variadic(*many)
+        variadic(*(Key(value) for value in range(5_000)))
+        hashes["n"] = 0
+        variadic(*(Key(value) for value in range(5_000)))
 
-        few_time = best_time(lambda: variadic(*few))
-        many_time = best_time(lambda: variadic(*many))
-
-        assert variadic.cache_info().misses == 2, "everything timed was a hit"
-        assert many_time > few_time * 10, (
-            f"the key is a tuple over every argument, so 5,000 of them cost "
-            f"more than 2: {few_time:.2e}s vs {many_time:.2e}s"
-        )
+        assert variadic.cache_info().hits == 1
+        assert hashes["n"] == 5_000, "the fresh call key hashed every argument"
 
 
 class TestCachedProperty:

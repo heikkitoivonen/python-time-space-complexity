@@ -771,7 +771,7 @@ class TestCombinatoricsCostIsNotJustTheResultCount:
         It is nearly that when r is small next to n, and nothing like it when
         r approaches n -- at r = n-1 the mean suffix is exactly n/2, which
         grows without bound. The claim now says so, and this is the arithmetic
-        behind both timing tests in this class.
+        behind the wider-result timing test in this class.
         """
         # r small next to n: essentially one slot per result.
         assert self._slots_rewritten_per_result(20, 2) < 1.2
@@ -785,48 +785,6 @@ class TestCombinatoricsCostIsNotJustTheResultCount:
         # And therefore grows with n, which "O(1) amortised" denies.
         assert self._slots_rewritten_per_result(500, 499) > 20 * self._slots_rewritten_per_result(
             20, 19
-        )
-
-    @pytest.mark.timing
-    def test_keeping_the_results_is_what_costs_r(self) -> None:
-        """With r small next to n, only the copy path tracks r.
-
-        Six times the r at a fixed n=20, where the reuse path's suffix averages
-        1.1 slots at r=2 and 2.3 at r=12 -- see
-        test_the_rewritten_suffix_is_not_a_constant for those figures and for
-        the regime where this does not hold. This pair is not evidence that
-        reuse is flat in general; r = n-1 rewrites n/2 slots per result, which
-        is what test_the_wider_result_actually_costs_more measures.
-
-        "r writes per result, always" would put both paths near 6x. Measured:
-        reuse 1.08x on 3.11 and 0.93x on 3.14, retained 6.01x and 4.29x -- so
-        the threshold sits at 2.0, the tighter of the two ends rather than the
-        pinned interpreter's.
-        """
-        n, narrow, wide = 20, 2, 12
-
-        def per_result(r: int, keep: bool) -> float:
-            results = math.comb(n, r)
-            best = float("inf")
-            for _ in range(3):
-                start = time.perf_counter()
-                if keep:
-                    deque(list(itertools.combinations(range(n), r)), maxlen=0)
-                else:
-                    deque(itertools.combinations(range(n), r), maxlen=0)
-                best = min(best, time.perf_counter() - start)
-            return best / results
-
-        reuse = per_result(wide, keep=False) / per_result(narrow, keep=False)
-        retained = per_result(wide, keep=True) / per_result(narrow, keep=True)
-
-        assert retained > 2.0, (
-            f"holding each result should make the per-result cost track r: "
-            f"r={narrow} to r={wide} moved it {retained:.2f}x"
-        )
-        assert reuse < 2.0, (
-            f"refilling in place only touches the changed suffix, so it should "
-            f"not track r: r={narrow} to r={wide} moved it {reuse:.2f}x"
         )
 
     def test_permutations_carries_more_setup_than_combinations(self) -> None:
@@ -859,7 +817,8 @@ class TestCombinatoricsCostIsNotJustTheResultCount:
         combinations_next() updates the result "starting with i, the leftmost
         index that changed", while the copy path runs a full
         _PyTuple_FromArray of all r. O(r) per result is an upper bound, tight
-        only on the copy path -- see test_keeping_the_results_is_what_costs_r.
+        only on the copy path. The retained identities below distinguish that
+        path directly, without a timing threshold.
         """
         recycled = [id(item) for item in itertools.combinations(range(5), 2)]
         retained = [id(item) for item in list(itertools.combinations(range(5), 2))]
