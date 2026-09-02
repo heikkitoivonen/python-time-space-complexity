@@ -109,7 +109,7 @@ tally['key'] += 1  # O(1) avg - still a get plus a set, but one statement
 |-----------|------|-------|-------|
 | `Counter(iterable)` | O(n) | O(k) | n = iterable length, k = unique items |
 | `c[item]` | O(1) avg | O(1) | Returns 0 if missing; O(n) worst case due to hash collisions |
-| `c.most_common(k)` | O(n log k) | O(k) | n = `len(c)`, the distinct keys. `k=1` uses `max()`; `k >= len(c)` falls back to `sorted()`; in between it keeps a heap of k. Whether that beats sorting everything depends on the counts: it wins comfortably on random or Zipf-like data, and loses when counts increase in iteration order, which forces a heap replacement per element |
+| `c.most_common(k)` | O(n log k) | O(k) | n = `len(c)`, the distinct keys. Passing k keeps a heap of size k rather than sorting every key, usually the faster choice |
 | `c.update(iterable)` | O(n) | O(k) | n = iterable length |
 | `c.subtract(iterable)` | O(n) | O(1) | Subtract counts; keeps negative values |
 | `c.total()` | O(n) | O(1) | Sum of all counts (Python 3.10+) |

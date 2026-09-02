@@ -638,8 +638,10 @@ class TestChainMapScalesWithMapCount:
 class TestCounterOperations:
     """The Counter table rows that had no test.
 
-    most_common() is the interesting one: the O(n log k) bound is right, and
-    it is still the slower choice for any k above 1.
+    most_common() is the interesting one: the O(n log k) bound is right, but
+    which side of it is faster depends on the counts. The two timing tests
+    below pin both directions - the heap wins on random counts, and loses
+    when counts rise in iteration order.
     """
 
     SIZE = 200_000

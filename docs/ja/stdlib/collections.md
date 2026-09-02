@@ -1,5 +1,5 @@
 ---
-source_sha: f99a7f1db066324adce1ef1c4d66432c20d2c2889467ceb9f2910ca4212c8768
+source_sha: c74648e14db9f85efaec25d010dfdc906afae07865b969011ddae0774144a100
 translated: machine
 ---
 
@@ -114,7 +114,7 @@ tally['key'] += 1  # O(1) avg - still a get plus a set, but one statement
 |-----------|------|-------|-------|
 | `Counter(iterable)` | O(n) | O(k) | n はイテラブルの長さ、k は異なる要素の個数 |
 | `c[item]` | 平均 O(1) | O(1) | なければ 0 を返す。ハッシュ衝突により最悪は O(n) |
-| `c.most_common(k)` | O(n log k) | O(k) | n は `len(c)`、すなわち異なるキーの数。`k=1` は `max()`、`k >= len(c)` は `sorted()` にフォールバックし、その間は大きさ k のヒープを保つ。それが全体のソートより速いかは件数の分布による。ランダムや Zipf 的なデータでは明確に速く、件数が反復順に増加する場合は要素ごとにヒープ置換が起きるため遅くなる |
+| `c.most_common(k)` | O(n log k) | O(k) | n は `len(c)`、すなわち異なるキーの数。k を渡すと全キーをソートする代わりに大きさ k のヒープを保つため、通常はこちらが速い |
 | `c.update(iterable)` | O(n) | O(k) | n はイテラブルの長さ |
 | `c.subtract(iterable)` | O(n) | O(1) | 個数を引く。負の値も保持する |
 | `c.total()` | O(n) | O(1) | すべての個数の合計（Python 3.10+） |

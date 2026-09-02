@@ -1,5 +1,5 @@
 ---
-source_sha: f99a7f1db066324adce1ef1c4d66432c20d2c2889467ceb9f2910ca4212c8768
+source_sha: c74648e14db9f85efaec25d010dfdc906afae07865b969011ddae0774144a100
 translated: machine
 ---
 
@@ -114,7 +114,7 @@ tally['key'] += 1  # O(1) avg - still a get plus a set, but one statement
 |-----------|------|-------|-------|
 | `Counter(iterable)` | O(n) | O(k) | n = iteroituvan pituus, k = uniikkien alkioiden määrä |
 | `c[item]` | O(1) avg | O(1) | Palauttaa 0 jos puuttuu; pahimmillaan O(n) tiivistetörmäysten vuoksi |
-| `c.most_common(k)` | O(n log k) | O(k) | n = `len(c)` eli eri avainten määrä. `k=1` käyttää `max()`-funktiota; `k >= len(c)` palautuu `sorted()`-kutsuun; näiden välissä se ylläpitää k-kokoista kekoa. Voittaako se kaiken lajittelun, riippuu lukumääristä: satunnaisella tai Zipf-tyyppisellä datalla se voittaa selvästi ja häviää, kun lukumäärät kasvavat iterointijärjestyksessä, jolloin jokainen alkio aiheuttaa keon korvauksen |
+| `c.most_common(k)` | O(n log k) | O(k) | n = `len(c)` eli eri avainten määrä. k:n antaminen ylläpitää k-kokoista kekoa sen sijaan, että kaikki avaimet järjestettäisiin; tämä on yleensä nopeampi vaihtoehto |
 | `c.update(iterable)` | O(n) | O(k) | n = iteroituvan pituus |
 | `c.subtract(iterable)` | O(n) | O(1) | Vähentää lukumääriä; säilyttää negatiiviset arvot |
 | `c.total()` | O(n) | O(1) | Kaikkien lukumäärien summa (Python 3.10+) |

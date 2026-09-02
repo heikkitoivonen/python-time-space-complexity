@@ -1,5 +1,5 @@
 ---
-source_sha: f99a7f1db066324adce1ef1c4d66432c20d2c2889467ceb9f2910ca4212c8768
+source_sha: c74648e14db9f85efaec25d010dfdc906afae07865b969011ddae0774144a100
 translated: machine
 ---
 
@@ -114,7 +114,7 @@ tally['key'] += 1  # O(1) avg - still a get plus a set, but one statement
 |-----------|------|-------|-------|
 | `Counter(iterable)` | O(n) | O(k) | n = 可迭代对象长度，k = 唯一元素个数 |
 | `c[item]` | 平均 O(1) | O(1) | 缺失时返回 0；哈希冲突下最坏为 O(n) |
-| `c.most_common(k)` | O(n log k) | O(k) | n 为 `len(c)`，即不同键的数量。`k=1` 使用 `max()`；`k >= len(c)` 回退到 `sorted()`；两者之间维护大小为 k 的堆。它是否胜过全部排序取决于计数分布：在随机或类 Zipf 数据上明显更快，而当计数按迭代顺序递增时，每个元素都会触发堆替换，因而更慢 |
+| `c.most_common(k)` | O(n log k) | O(k) | n 为 `len(c)`，即不同键的数量。传入 k 会维护大小为 k 的堆而非排序全部键，通常更快 |
 | `c.update(iterable)` | O(n) | O(k) | n = 可迭代对象长度 |
 | `c.subtract(iterable)` | O(n) | O(1) | 减去计数；保留负值 |
 | `c.total()` | O(n) | O(1) | 所有计数之和（Python 3.10+） |
