@@ -30,7 +30,7 @@ The `heapq` module provides heap implementations for priority queue operations.
 - `heapify()`: O(1) in-place transformation
 - `heappush()`: O(1) - modifies existing list
 - `heappop()`: O(1) - modifies existing list
-- `nlargest(n, ...)`: O(n) for result list of n items
+- `nlargest(k, ...)`: O(k) for result list of k items
 
 ## Implementation Details
 
@@ -200,6 +200,7 @@ heap_queue = []  # heapq-based
 fifo_queue = deque()  # Simple FIFO
 
 # Add task
+priority, task = 1, 'render'
 heapq.heappush(heap_queue, (priority, task))  # O(log n)
 fifo_queue.append(task)  # O(1)
 

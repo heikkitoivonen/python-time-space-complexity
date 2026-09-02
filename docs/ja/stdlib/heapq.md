@@ -1,5 +1,5 @@
 ---
-source_sha: fb99573c6c731125939b7ef5b3be9f797b8f106113c202b686d574b388b20d2e
+source_sha: c1b5f1ee5978dde99e9799f5f90d36c53c47949cd101d739d756649cb9c23ab7
 translated: machine
 ---
 
@@ -35,7 +35,7 @@ translated: machine
 - `heapify()`: その場で変換するので O(1)
 - `heappush()`: O(1) - 既存のリストを変更する
 - `heappop()`: O(1) - 既存のリストを変更する
-- `nlargest(n, ...)`: n 要素の結果リストに O(n)
+- `nlargest(k, ...)`: k 要素の結果リストに O(k)
 
 ## 実装の詳細
 
@@ -205,6 +205,7 @@ heap_queue = []  # heapq-based
 fifo_queue = deque()  # Simple FIFO
 
 # Add task
+priority, task = 1, 'render'
 heapq.heappush(heap_queue, (priority, task))  # O(log n)
 fifo_queue.append(task)  # O(1)
 
