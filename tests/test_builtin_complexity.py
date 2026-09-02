@@ -6,6 +6,7 @@ precise benchmarks, but rather sanity checks that O(1) operations
 don't become O(n), etc.
 """
 
+import math
 import time
 from collections.abc import Callable
 from typing import Any
@@ -321,31 +322,42 @@ class TestListComplexity:
             f"{small_slice_time:.2e}s vs {large_slice_time:.2e}s"
         )
 
-    @pytest.mark.timing
     def test_sort_average_case(self) -> None:
-        """sort() should be O(n log n) average case."""
+        """Random input should take O(n log n) comparisons.
+
+        Count comparisons rather than timing list copies and allocations. The
+        old elapsed-time upper bound sat close enough to the expected ratio
+        that ordinary Python 3.14 runner noise could push it over.
+        """
         import random
 
-        random.seed(42)
-        small_list = [random.randint(0, 1000000) for _ in range(self.SMALL_SIZE)]
-        large_list = [random.randint(0, 1000000) for _ in range(self.LARGE_SIZE)]
+        def comparison_count(size: int) -> int:
+            comparisons = 0
 
-        def sort_small() -> None:
-            lst = small_list.copy()
-            lst.sort()
+            class Value:
+                def __init__(self, value: int) -> None:
+                    self.value = value
 
-        def sort_large() -> None:
-            lst = large_list.copy()
-            lst.sort()
+                def __lt__(self, other: "Value") -> bool:
+                    nonlocal comparisons
+                    comparisons += 1
+                    return self.value < other.value
 
-        small_time = measure_time(sort_small, iterations=40)
-        large_time = measure_time(sort_large, iterations=40)
+            rng = random.Random(42)
+            values = [Value(value) for value in rng.sample(range(size * 10), size)]
+            values.sort()
+            return comparisons
 
-        # O(n log n) means large should be ~100 * log(100000)/log(1000) ~ 166x slower
-        # We use a generous tolerance since timing can vary
-        expected_ratio = (self.LARGE_SIZE / self.SMALL_SIZE) * (17 / 10)  # ~170x
-        assert large_time < small_time * expected_ratio * 3, (
-            f"sort() appears worse than O(n log n): {small_time:.2e}s vs {large_time:.2e}s"
+        small_count = comparison_count(self.SMALL_SIZE)
+        large_count = comparison_count(self.LARGE_SIZE)
+        expected_ratio = (self.LARGE_SIZE / self.SMALL_SIZE) * (
+            math.log2(self.LARGE_SIZE) / math.log2(self.SMALL_SIZE)
+        )
+        actual_ratio = large_count / small_count
+
+        assert expected_ratio * 0.8 < actual_ratio < expected_ratio * 1.2, (
+            f"random-input comparisons should track n log n: {small_count:,} vs "
+            f"{large_count:,} ({actual_ratio:.1f}x, expected about {expected_ratio:.1f}x)"
         )
 
     @pytest.mark.timing

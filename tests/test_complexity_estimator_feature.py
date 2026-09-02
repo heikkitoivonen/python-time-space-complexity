@@ -144,14 +144,17 @@ class TestComplexityEstimator:
         factor, and log grows so slowly that a narrow range leaves no signal:
         over 1000..16000 the decision boundary sits at an exponent of 1.06 and
         measured slopes scatter across 0.91-1.11, so the verdict is decided by
-        noise. Over 1000..256000 the same slopes land in 1.00-1.04 and the
-        verdict is stable. Widening the range matters far more than the number
-        of iterations, so this needs fewer of them than the narrow version did.
+        noise. Over 1000..256000 the same slopes land in 1.00-1.04. Taking the
+        fastest of three batches excludes runner interruptions; widening the
+        range still matters far more than adding iterations to one batch.
         """
         n_values = [1000, 4000, 16000, 64000, 256000]
         times = []
         for n in n_values:
-            t = estimate_complexity.measure_execution_time(linear_time_list, n, iterations=50)
+            t = min(
+                estimate_complexity.measure_execution_time(linear_time_list, n, iterations=50)
+                for _ in range(3)
+            )
             times.append(t)
 
         complexity, _ = estimate_complexity.detect_complexity(n_values, times)
