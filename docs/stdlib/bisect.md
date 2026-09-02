@@ -201,12 +201,31 @@ data.insert(pos, ('d', 4))  # O(n) - shifts the tail
 # data instead
 ```
 
+Since Python 3.10 every function in the module takes a `key` argument, which
+removes the parallel list:
+
+```python
+import bisect
+
+data = [('a', 1), ('b', 3), ('c', 5)]
+
+# key runs once per probe, so no parallel list is needed
+pos = bisect.bisect_right(data, 4, key=lambda item: item[1])  # O(log n) key calls
+data.insert(pos, ('d', 4))  # O(n) - shifts the tail
+```
+
+Which to prefer depends on how many searches share the keys: a parallel list
+costs O(n) once and no calls per search, while `key` costs nothing up front and
+one call per probe.
+
 ## Important Notes
 
 !!! warning "Sorted Data Requirement"
     The input list MUST be sorted for binary search to work correctly.
     
     ```python
+    import bisect
+
     # Wrong: Data not sorted
     unsorted = [3, 1, 4, 1, 5]
     pos = bisect.bisect(unsorted, 2)  # Incorrect result!
@@ -219,6 +238,10 @@ data.insert(pos, ('d', 4))  # O(n) - shifts the tail
     - Collect then single `sort()`: O(n log n) overall
     
     Choose based on your access patterns.
+
+## Version Notes
+
+- **Python 3.10+**: `key` parameter added to every function in the module
 
 ## Related Documentation
 

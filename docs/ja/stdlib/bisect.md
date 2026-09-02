@@ -1,5 +1,5 @@
 ---
-source_sha: d14c68b5c9db7df75b803c010b75ddcbe2fc0b740f19130fbed563b03df516aa
+source_sha: b04962478eecb0ad13d0ce4d85f4eb6e7d0434e3799c89a2b10b66a31b8766c6
 translated: machine
 ---
 
@@ -206,12 +206,31 @@ data.insert(pos, ('d', 4))  # O(n) - shifts the tail
 # data instead
 ```
 
+Python 3.10 以降、モジュールのすべての関数が `key` 引数を取り、並行リストが
+不要になる:
+
+```python
+import bisect
+
+data = [('a', 1), ('b', 3), ('c', 5)]
+
+# key runs once per probe, so no parallel list is needed
+pos = bisect.bisect_right(data, 4, key=lambda item: item[1])  # O(log n) key calls
+data.insert(pos, ('d', 4))  # O(n) - shifts the tail
+```
+
+どちらを選ぶかは、同じキーを共有する検索の数による。並行リストは一度 O(n)
+かかるが検索ごとの呼び出しはゼロで、`key` は事前コストがない代わりに探索
+1 回につき 1 回呼ばれる。
+
 ## 重要な注意
 
 !!! warning "データが整列済みであること"
     二分探索が正しく動くには、入力のリストが必ず整列済みでなければなりません。
     
     ```python
+    import bisect
+
     # Wrong: Data not sorted
     unsorted = [3, 1, 4, 1, 5]
     pos = bisect.bisect(unsorted, 2)  # Incorrect result!
@@ -224,6 +243,10 @@ data.insert(pos, ('d', 4))  # O(n) - shifts the tail
     - まとめてから `sort()` を一度呼ぶ: 全体で O(n log n)
     
     アクセスの仕方に応じて選んでください。
+
+## バージョン情報
+
+- **Python 3.10+**: モジュールのすべての関数に `key` パラメータが追加
 
 ## 関連するドキュメント
 

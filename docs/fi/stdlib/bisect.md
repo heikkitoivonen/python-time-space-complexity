@@ -1,5 +1,5 @@
 ---
-source_sha: d14c68b5c9db7df75b803c010b75ddcbe2fc0b740f19130fbed563b03df516aa
+source_sha: b04962478eecb0ad13d0ce4d85f4eb6e7d0434e3799c89a2b10b66a31b8766c6
 translated: machine
 ---
 
@@ -206,12 +206,31 @@ data.insert(pos, ('d', 4))  # O(n) - shifts the tail
 # data instead
 ```
 
+Python 3.10 alkaen jokainen moduulin funktio ottaa `key`-argumentin, joka
+poistaa rinnakkaisen listan tarpeen:
+
+```python
+import bisect
+
+data = [('a', 1), ('b', 3), ('c', 5)]
+
+# key runs once per probe, so no parallel list is needed
+pos = bisect.bisect_right(data, 4, key=lambda item: item[1])  # O(log n) key calls
+data.insert(pos, ('d', 4))  # O(n) - shifts the tail
+```
+
+Valinta riippuu siitä, kuinka moni haku jakaa samat avaimet: rinnakkainen lista
+maksaa O(n) kerran eikä yhtään kutsua hakua kohti, kun taas `key` ei maksa
+mitään etukäteen ja yhden kutsun jokaista koetinta kohti.
+
 ## Tärkeitä huomioita
 
 !!! warning "Vaatimus järjestetystä datasta"
     Syötelistan TÄYTYY olla järjestetty, jotta binäärihaku toimii oikein.
     
     ```python
+    import bisect
+
     # Wrong: Data not sorted
     unsorted = [3, 1, 4, 1, 5]
     pos = bisect.bisect(unsorted, 2)  # Incorrect result!
@@ -224,6 +243,10 @@ data.insert(pos, ('d', 4))  # O(n) - shifts the tail
     - Kerää ensin ja kutsu `sort()` kerran: yhteensä O(n log n)
     
     Valitse käyttötapasi mukaan.
+
+## Versiohuomiot
+
+- **Python 3.10+**: `key`-parametri lisättiin jokaiseen moduulin funktioon
 
 ## Liittyvä dokumentaatio
 

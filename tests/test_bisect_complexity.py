@@ -1,16 +1,40 @@
-"""Tests to verify documented time complexity of bisect module operations.
+"""Tests to verify documented behaviour of the bisect module.
 
-docs/stdlib/bisect.md is the only algorithmic stdlib page in this repo with
-no test file, and its claims are the kind worth checking: that the searches
-are logarithmic, that a long run of equal values does not degrade them, and
-that the O(n) in `insort` comes from shifting the list, not from searching it.
+The page's framing is that the search is cheap and everything around it is
+not - `keys = [x[1] for x in data]` before a search, or the insert after one -
+so the contrast between the two is what these tests pin.
 
-The page's own framing is that the search is cheap and everything around it
-is not - `keys = [x[1] for x in data]` before a search, or the insert after
-one - so the contrast between the two is what these tests pin.
+Two things the review found, both now covered here:
+
+* The Sorted Data Requirement snippet had no `import bisect`, so it raised
+  NameError when run on its own. Nothing executed the page's code before.
+* The page never mentioned the `key` argument, added in 3.10, while its
+  Advanced section built a parallel list instead. Measured, key runs exactly
+  once per probe - 10, 16 and 20 calls at n = 1,024, 65,536 and 1,048,576 -
+  and insort adds one more for the item being inserted.
+
+On "a run of equal values costs no more than a unique one": counted rather
+than timed below. An all-equal list costs one probe more than the distinct
+list this file compares it against (11 against 10 at n=1,024), but that is
+where the answer lands, not the duplicates - position 0 needs the extra
+halving. Both are log2(n) probes, which is the claim. The point the test has
+to exclude is a scan of the run, and 17 probes at n=65,536 excludes it by
+three orders of magnitude.
+
+Not settled by execution:
+
+* "O(1) additional space" for the searches. No allocation is observable per
+  probe, asserted below via tracemalloc, but the C implementation's stack
+  use is not something this suite can weigh.
 """
 
 import bisect
+import math
+import pathlib
+import re
+import subprocess
+import sys
+import textwrap
 import time
 from collections.abc import Callable
 from typing import Any
@@ -57,12 +81,24 @@ def is_logarithmic_time(
     tolerance: float = 3.0,
 ) -> bool:
     """Check if time scales logarithmically with size."""
-    import math
-
     if small_time == 0:
         return True
     expected = math.log2(large_size) / math.log2(small_size)
     return large_time / small_time < expected * tolerance
+
+
+class CountingInt(int):
+    """A list element that counts the probes a binary search makes."""
+
+    comparisons = 0
+
+    def __lt__(self, other: int) -> bool:
+        CountingInt.comparisons += 1
+        return int.__lt__(self, other)
+
+    def __gt__(self, other: int) -> bool:
+        CountingInt.comparisons += 1
+        return int.__gt__(self, other)
 
 
 class TestBisectComplexity:
@@ -97,24 +133,33 @@ class TestBisectComplexity:
             f"bisect_right() doesn't appear O(log n): {small_time:.2e}s vs {large_time:.2e}s"
         )
 
-    @pytest.mark.timing
     def test_a_run_of_equal_values_costs_no_more(self) -> None:
         """The page claims equal values do not degrade the search.
 
-        Halving the range does not care whether the values it skips are
-        distinct, so a list of a million identical items searches as fast as
-        a million distinct ones.
+        Counted, not timed: halving the range does not care whether the values
+        it skips are distinct, so an all-equal list of 65,536 items takes 17
+        probes where a scan of the run would take 65,536.
         """
-        distinct = list(range(self.LARGE_SIZE))
-        identical = [5] * self.LARGE_SIZE
+        for size in (1_024, 65_536):
+            distinct = [CountingInt(value) for value in range(size)]
+            identical = [CountingInt(5) for _ in range(size)]
 
-        distinct_time = measure_time(lambda: bisect.bisect_left(distinct, self.LARGE_SIZE // 2))
-        identical_time = measure_time(lambda: bisect.bisect_left(identical, 5))
+            CountingInt.comparisons = 0
+            bisect.bisect_left(distinct, size // 2)
+            distinct_probes = CountingInt.comparisons
 
-        assert is_constant_time(distinct_time, identical_time), (
-            f"an all-equal list should not slow the search: "
-            f"distinct={distinct_time:.2e}s identical={identical_time:.2e}s"
-        )
+            CountingInt.comparisons = 0
+            bisect.bisect_left(identical, 5)
+            identical_probes = CountingInt.comparisons
+
+            assert identical_probes <= distinct_probes + 1, (
+                f"an all-equal list should not cost more than a distinct one at "
+                f"n={size}: {identical_probes} against {distinct_probes} probes"
+            )
+            assert identical_probes < math.log2(size) + 2, (
+                f"the search should stay logarithmic on a run of duplicates at "
+                f"n={size}: {identical_probes} probes"
+            )
 
     def test_left_and_right_bracket_a_run_of_duplicates(self) -> None:
         """bisect_left and bisect_right give the ends of an equal run."""
@@ -190,7 +235,7 @@ class TestInsortCostIsTheInsertNotTheSearch:
 
         values: list[int] = []
         source = list(range(500))
-        random.shuffle(source)
+        random.Random(7).shuffle(source)
         for item in source:
             bisect.insort(values, item)
 
@@ -231,5 +276,233 @@ class TestKeyFunctionCosts:
         data = [(str(i), i) for i in range(1024)]
         bisect.bisect_left(data, 500, key=key)
 
-        # log2(1024) == 10; a scan would be 1024.
-        assert calls["n"] <= 20, f"expected about log2(n) key calls, got {calls['n']}"
+        # Exactly log2(1024) probes, one key call each; a scan would be 1024.
+        assert calls["n"] == 10, f"expected log2(n) == 10 key calls, got {calls['n']}"
+
+
+class TestInsortLeftAndRightDiffer:
+    """Two table rows that only the aliases were covering."""
+
+    def test_left_inserts_before_an_equal_run_and_right_after(self) -> None:
+        left_target = [1, 3, 3, 3, 5]
+        right_target = [1, 3, 3, 3, 5]
+
+        bisect.insort_left(left_target, 3)
+        bisect.insort_right(right_target, 3)
+
+        assert left_target == right_target == [1, 3, 3, 3, 3, 5]
+        assert bisect.bisect_left(left_target, 3) == 1
+        assert bisect.bisect_right(right_target, 3) == 5
+
+    def test_left_and_right_place_a_new_object_differently(self) -> None:
+        """With equal keys the two differ in where the item lands."""
+        marker = ("b", 2)
+        left_data = [("a", 1), ("x", 2), ("c", 3)]
+        right_data = [("a", 1), ("x", 2), ("c", 3)]
+
+        bisect.insort_left(left_data, marker, key=lambda item: item[1])
+        bisect.insort_right(right_data, marker, key=lambda item: item[1])
+
+        assert left_data.index(marker) == 1, "insort_left goes before the equal item"
+        assert right_data.index(marker) == 2, "insort_right goes after it"
+
+    def test_insort_is_an_alias_for_insort_right(self) -> None:
+        alias = [1, 3, 3, 5]
+        explicit = [1, 3, 3, 5]
+
+        bisect.insort(alias, 3)
+        bisect.insort_right(explicit, 3)
+
+        assert alias == explicit
+
+
+class TestKeyParameterCosts:
+    """The `key` argument the page gained in this review.
+
+    Counted rather than timed: key runs once per probe, so the call count is
+    exactly the number of halvings.
+    """
+
+    def test_key_runs_once_per_probe_at_every_size(self) -> None:
+        for size in (1_024, 65_536):
+            calls = {"n": 0}
+
+            def key(item: tuple[str, int], calls: dict[str, int] = calls) -> int:
+                calls["n"] += 1
+                return item[1]
+
+            data = [(str(value), value) for value in range(size)]
+            bisect.bisect_left(data, size // 2, key=key)
+
+            assert calls["n"] == math.log2(size), (
+                f"expected log2({size}) key calls, got {calls['n']}"
+            )
+
+    def test_insort_calls_key_once_more_for_the_inserted_item(self) -> None:
+        size = 1_024
+        calls = {"n": 0}
+
+        def key(item: tuple[str, int]) -> int:
+            calls["n"] += 1
+            return item[1]
+
+        data = [(str(value), value) for value in range(size)]
+        bisect.insort_left(data, ("new", size // 2), key=key)
+
+        assert calls["n"] == math.log2(size) + 1, (
+            f"expected log2(n) probes plus the item itself, got {calls['n']}"
+        )
+
+    def test_key_avoids_building_a_parallel_list(self) -> None:
+        """The trade the page now states: no O(n) build, log n calls instead."""
+        size = 10_000
+        data = [(str(value), value) for value in range(size)]
+        calls = {"n": 0}
+
+        def key(item: tuple[str, int]) -> int:
+            calls["n"] += 1
+            return item[1]
+
+        position = bisect.bisect_right(data, 5_000, key=key)
+
+        assert position == 5_001
+        assert calls["n"] < size / 100, (
+            f"key should be called per probe, not per element: {calls['n']} for n={size}"
+        )
+
+
+class TestSortedDataRequirement:
+    """The warning admonition: unsorted input gives a wrong answer."""
+
+    def test_an_unsorted_list_yields_a_position_that_does_not_sort(self) -> None:
+        unsorted = [3, 1, 4, 1, 5]
+
+        position = bisect.bisect(unsorted, 2)
+        result = unsorted[:position] + [2] + unsorted[position:]
+
+        assert result != sorted(result), (
+            f"the page calls this an incorrect result; inserting at {position} gave {result}"
+        )
+
+
+PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "bisect.md"
+
+EXPECTED_BLOCKS = 12
+
+
+def _blocks() -> list[tuple[int, str]]:
+    """Every fenced python block on the page, with its 1-based line number."""
+    lines = PAGE.read_text(encoding="utf-8").splitlines()
+    found: list[tuple[int, str]] = []
+    index = 0
+    while index < len(lines):
+        if re.match(r"^\s*```python\s*$", lines[index]):
+            start = index + 1
+            end = start
+            while not re.match(r"^\s*```\s*$", lines[end]):
+                end += 1
+            found.append((start + 1, textwrap.dedent("\n".join(lines[start:end]))))
+            index = end
+        index += 1
+    return found
+
+
+def _run(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
+    script = cwd / "_block.py"
+    script.write_text(source, encoding="utf-8")
+    return subprocess.run(
+        [sys.executable, script.name],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        stdin=subprocess.DEVNULL,
+        check=False,
+    )
+
+
+class TestDocumentedExamples:
+    """Every block runs, including the one indented inside an admonition."""
+
+    def test_the_page_has_the_expected_blocks(self) -> None:
+        blocks = _blocks()
+
+        assert len(blocks) == EXPECTED_BLOCKS, (
+            f"expected {EXPECTED_BLOCKS} python blocks, found {len(blocks)}"
+        )
+
+    def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
+        failures: list[str] = []
+
+        for line, source in _blocks():
+            result = _run(source, tmp_path)
+            if result.returncode != 0:
+                failures.append(f"{PAGE.name}:{line} raised: {result.stderr.strip()}")
+
+        assert not failures, "\n".join(failures)
+
+    def test_the_runner_catches_a_broken_block(self, tmp_path: pathlib.Path) -> None:
+        """A runner that cannot fail proves nothing about the blocks it ran."""
+        original = _blocks()[0][1]
+        broken = original.replace("import bisect\n", "", 1)
+        assert broken != original, "the mutation did not remove the import"
+
+        result = _run(broken, tmp_path)
+
+        assert result.returncode != 0
+        assert "NameError" in result.stderr
+
+
+class TestDocumentedOutputs:
+    """Every value the page prints or states in a comment."""
+
+    def test_binary_search_guarantee_positions(self) -> None:
+        values = [1, 3, 3, 3, 5, 7, 9]
+
+        assert bisect.bisect_left(values, 3) == 1
+        assert bisect.bisect_right(values, 3) == 4
+
+    def test_sorted_insert_result(self) -> None:
+        values = [1, 3, 5, 7]
+
+        bisect.insort(values, 4)
+
+        assert values == [1, 3, 4, 5, 7]
+
+    def test_range_positions(self) -> None:
+        values = [1, 5, 10, 15, 20]
+
+        assert bisect.bisect_right(values, 7) == 2
+        assert bisect.bisect_left(values, 12) == 3
+
+    def test_grade_ranges(self) -> None:
+        breaks = [60, 70, 80, 90]
+        grades = ["F", "D", "C", "B", "A"]
+
+        assert grades[bisect.bisect(breaks, 85)] == "B"
+        assert grades[bisect.bisect(breaks, 95)] == "A"
+
+    def test_timestamp_lookup_returns_the_later_events(self) -> None:
+        from datetime import datetime
+
+        events = [
+            (datetime(2024, 1, 1, 10), "event1"),
+            (datetime(2024, 1, 1, 12), "event2"),
+            (datetime(2024, 1, 1, 15), "event3"),
+            (datetime(2024, 1, 1, 18), "event4"),
+        ]
+        timestamps = [event[0] for event in events]
+
+        index = bisect.bisect_right(timestamps, datetime(2024, 1, 1, 14))
+
+        assert [name for _, name in events[index:]] == ["event3", "event4"]
+
+    def test_exists_helper_from_the_page(self) -> None:
+        values = [1, 3, 5, 7, 9]
+
+        def exists(sorted_list: list[int], x: int) -> bool:
+            position = bisect.bisect_left(sorted_list, x)
+            return position < len(sorted_list) and sorted_list[position] == x
+
+        assert exists(values, 5) is True
+        assert exists(values, 4) is False

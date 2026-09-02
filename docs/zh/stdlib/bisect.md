@@ -1,5 +1,5 @@
 ---
-source_sha: d14c68b5c9db7df75b803c010b75ddcbe2fc0b740f19130fbed563b03df516aa
+source_sha: b04962478eecb0ad13d0ce4d85f4eb6e7d0434e3799c89a2b10b66a31b8766c6
 translated: machine
 ---
 
@@ -206,12 +206,29 @@ data.insert(pos, ('d', 4))  # O(n) - shifts the tail
 # data instead
 ```
 
+自 Python 3.10 起，模块中的每个函数都接受 `key` 参数，从而无需并行列表：
+
+```python
+import bisect
+
+data = [('a', 1), ('b', 3), ('c', 5)]
+
+# key runs once per probe, so no parallel list is needed
+pos = bisect.bisect_right(data, 4, key=lambda item: item[1])  # O(log n) key calls
+data.insert(pos, ('d', 4))  # O(n) - shifts the tail
+```
+
+如何取舍取决于有多少次查找共用同一批键：并行列表一次性花费 O(n)，每次查找不再
+调用；而 `key` 无前期开销，但每次探测调用一次。
+
 ## 重要提示
 
 !!! warning "数据必须有序"
     输入列表**必须**已排序，二分查找才能正确工作。
     
     ```python
+    import bisect
+
     # Wrong: Data not sorted
     unsorted = [3, 1, 4, 1, 5]
     pos = bisect.bisect(unsorted, 2)  # Incorrect result!
@@ -224,6 +241,10 @@ data.insert(pos, ('d', 4))  # O(n) - shifts the tail
     - 先收集再调用一次 `sort()`：总体 O(n log n)
     
     根据你的访问模式来选择。
+
+## 版本说明
+
+- **Python 3.10+**: 模块中的每个函数都新增了 `key` 参数
 
 ## 相关文档
 
