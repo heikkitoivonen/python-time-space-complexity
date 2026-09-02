@@ -7,7 +7,7 @@ The `json` module provides JSON serialization and deserialization.
 | Function | Time | Space | Notes |
 |----------|------|-------|-------|
 | `json.dumps(obj)` | O(n) | O(n) | Serialize to string |
-| `json.dump(obj, fp)` | O(n) | O(d) | d = nesting depth; writes incrementally |
+| `json.dump(obj, fp)` | O(n) | O(d + s) | d = nesting depth, s = largest encoded scalar; writes incrementally |
 | `json.loads(s)` | O(n) | O(n) | Parse JSON string |
 | `json.load(fp)` | O(n) | O(n) | Reads full file into memory |
 | `JSONEncoder.encode()` | O(n) | O(n) | Custom encoder |
@@ -24,7 +24,7 @@ import json
 
 # Simple object: O(n) where n = 3
 data = {'a': 1, 'b': 2, 'c': 3}
-json_str = json.dumps(data)  # O(3)
+json_str = json.dumps(data)  # O(n) with n = 3
 
 # Nested object: O(n) where n = total elements
 data = {
@@ -71,7 +71,7 @@ data = json.loads(large_json)  # O(n)
 import json
 
 # Creates Python objects taking O(n) space
-json_str = '{"items": [1, 2, 3, ..., 10000]}'
+json_str = json.dumps({'items': list(range(10000))})
 data = json.loads(json_str)  # O(n) memory for result
 ```
 
@@ -88,7 +88,7 @@ data = {'key': 'value', 'items': list(range(1000))}
 with open('data.json', 'w') as f:
     json.dump(data, f)  # O(n) serialization + write
 
-# Streaming: O(d) extra memory, O(n) time (object itself still in memory)
+# Streaming: O(d + s) extra memory, O(n) time (object itself still in memory)
 # Writes to file incrementally
 ```
 
@@ -127,7 +127,7 @@ json_str = json.dumps(data, cls=DateTimeEncoder)  # O(n)
 import json
 from datetime import datetime
 
-def datetime_parser(dct):  # O(1) per call
+def datetime_parser(dct):  # O(k) for an object with k keys
     for key, val in dct.items():
         if isinstance(val, str):
             try:
@@ -136,7 +136,7 @@ def datetime_parser(dct):  # O(1) per call
                 pass
     return dct
 
-# Use custom decoder: O(n) + O(1) per custom object
+# Use custom decoder: O(n) + the hook's own cost per object
 json_str = '{"timestamp": "2024-01-12T12:00:00"}'
 data = json.loads(json_str, object_hook=datetime_parser)  # O(n)
 ```
@@ -156,10 +156,12 @@ json_str = json.dumps(data)  # O(n) once
 for i in range(100):
     json_str = json.dumps(data)  # O(n) * 100
 
-# Good: Reuse encoder for large operations
-encoder = json.JSONEncoder()
+# dumps() with default options routes through a cached module-level encoder,
+# so building your own changes nothing. Pass any non-default option and
+# dumps() builds a fresh encoder on every call; holding one avoids that.
+encoder = json.JSONEncoder(sort_keys=True)
 for i in range(100):
-    json_str = encoder.encode(data)  # Still O(n) per iteration, but optimized
+    json_str = encoder.encode(data)  # O(n) per call, one encoder
 ```
 
 ### Memory Efficiency
@@ -175,7 +177,7 @@ with open('huge.json') as f:
 # or process line by line with JSONL format
 with open('data.jsonl') as f:
     for line in f:
-        obj = json.loads(line)  # O(1) per line
+        obj = json.loads(line)  # O(m) for a line of m characters
 ```
 
 ## Common Patterns
@@ -190,7 +192,11 @@ data = {'key': 'value', 'nested': {'a': 1, 'b': 2}}
 # Normal: O(n)
 json_str = json.dumps(data)
 
-# Pretty printed: O(n) (same complexity, different format)
+# Pretty printed: O(input + output). Indentation repeats at every level, so a
+# d-deep object prints O(d²) whitespace from O(d) of input
+json_str = json.dumps(data, indent=2)
+
+# sort_keys sorts each object's keys: O(k log k) for an object with k keys
 json_str = json.dumps(data, indent=2, sort_keys=True)
 ```
 
