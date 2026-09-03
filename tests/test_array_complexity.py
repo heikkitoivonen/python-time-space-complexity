@@ -2,9 +2,8 @@
 
 A spot check of docs/stdlib/array.md against the interpreter: every row of
 its complexity table, plus the per-operation annotations in its code blocks.
-
-The complexity claims all hold. At a hundred times the size, the operations
-documented O(1) came in at 1.0-1.3x and the ones documented O(n) at 97-125x.
+Inputs are large enough that the timed work dominates fixed overhead; raw byte
+copies use two sizes beyond the cache-sensitive small-copy regime.
 
 The memory section did not, and both tests for it were written against
 measurements rather than the page:
@@ -294,6 +293,8 @@ class TestConversions:
     SMALL_SIZE = 10_000
     LARGE_SIZE = 1_000_000
     SIZE_RATIO = LARGE_SIZE / SMALL_SIZE
+    TOBYTES_SMALL_SIZE = 1_000_000
+    TOBYTES_LARGE_SIZE = 8_000_000
 
     def _linear(self, small: Callable[[], Any], large: Callable[[], Any], label: str) -> None:
         small_time = measure_time(small, iterations=10)
@@ -313,9 +314,18 @@ class TestConversions:
 
     @pytest.mark.timing
     def test_tobytes_is_on(self) -> None:
-        small = array.array("i", range(self.SMALL_SIZE))
-        large = array.array("i", range(self.LARGE_SIZE))
-        self._linear(small.tobytes, large.tobytes, "tobytes()")
+        # A 40 KiB small input stays cache-hot while the old 4 MiB large input
+        # reaches main memory, making a 100x input appear to cost over 300x.
+        # Keep both copies beyond that cache-sensitive regime.
+        small = array.array("i", range(self.TOBYTES_SMALL_SIZE))
+        large = array.array("i", range(self.TOBYTES_LARGE_SIZE))
+        small_time = measure_time(small.tobytes, iterations=10)
+        large_time = measure_time(large.tobytes, iterations=10)
+        size_ratio = self.TOBYTES_LARGE_SIZE / self.TOBYTES_SMALL_SIZE
+
+        assert scales_with_size(small_time, large_time, size_ratio), (
+            f"tobytes() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
+        )
 
     @pytest.mark.timing
     def test_frombytes_is_on(self) -> None:
