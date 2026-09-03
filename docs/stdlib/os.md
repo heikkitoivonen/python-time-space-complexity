@@ -16,16 +16,16 @@ The `os` module provides a way to use operating system-dependent functionality l
 | `os.path.getctime(path)` | O(1) | O(1) | Get creation/metadata change time |
 | `os.listdir(path)` | O(n) | O(n) | List directory contents |
 | `os.scandir(path)` | O(n) | O(1) | Lazy directory iterator |
-| `os.walk(path)` | O(n) | O(d) | n = total entries, d = max depth (call stack + pending dirs) |
+| `os.walk(path)` | O(n) | O(w + d) | n = total entries, d = max depth, w = entries queued but not yet walked; recursive before 3.12, where a deep enough tree raises RecursionError |
 | `os.stat(path)` | O(1) | O(1) | Get file statistics |
 | `os.lstat(path)` | O(1) | O(1) | Stat without following symlink |
 | `os.access(path, mode)` | O(1) | O(1) | Check file accessibility |
 | `os.remove(path)` | O(1) | O(1) | Delete file |
 | `os.unlink(path)` | O(1) | O(1) | Delete file (alias for remove) |
 | `os.mkdir(path)` | O(1) | O(1) | Create directory |
-| `os.makedirs(path)` | O(n) | O(1) | Create directories, n = depth |
+| `os.makedirs(path)` | O(n·L) | O(n·L) | n = components, L = path length; every recursive frame keeps its own prefix, and a deep enough path raises RecursionError |
 | `os.rmdir(path)` | O(1) | O(1) | Remove empty directory |
-| `os.removedirs(path)` | O(n) | O(1) | Remove empty directories recursively |
+| `os.removedirs(path)` | O(n·L) | O(L) | n = components, L = path length; iterative, holding one prefix at a time |
 | `os.rename(src, dst)` | O(1) | O(1) | Rename/move file |
 | `os.replace(src, dst)` | O(1) | O(1) | Rename, overwriting dst if exists |
 | `os.link(src, dst)` | O(1) | O(1) | Create hard link |
@@ -59,9 +59,13 @@ The `os` module provides a way to use operating system-dependent functionality l
 | `os.path.dirname(path)` | O(n) | O(n) | Get directory part |
 | `os.path.basename(path)` | O(n) | O(n) | Get filename part |
 | `os.path.splitext(path)` | O(n) | O(n) | Split extension |
-| `os.path.abspath(path)` | O(n) | O(n) | Get absolute path |
-| `os.path.realpath(path)` | O(n) | O(n) | Resolve symlinks |
+| `os.path.abspath(path)` | O(n) | O(n) | Get absolute path; one `getcwd()` when the path is relative |
+| `os.path.realpath(path)` | O(n) | O(n) | Resolve symlinks; one `lstat()` per component |
 | `os.path.normpath(path)` | O(n) | O(n) | Normalize path |
+
+Everything here is string manipulation except `abspath()`, which calls
+`getcwd()` for a relative path, and `realpath()`, which calls `lstat()` once
+per component.
 
 ## Common Operations
 
@@ -156,7 +160,7 @@ import os
 # Create directory - O(1)
 os.mkdir("/new/dir")
 
-# Create all parent dirs - O(n) where n = depth
+# Create all parent dirs - O(n·L), n = components, L = path length
 os.makedirs("/deep/nested/dir/structure")
 
 # Remove file - O(1)
@@ -246,6 +250,7 @@ except FileNotFoundError:
 - **Python 2.x**: Basic functionality, limited Unicode support
 - **Python 3.x**: Full Unicode path support
 - **Python 3.5+**: `os.scandir()` is faster for directory iteration
+- **Python 3.12+**: `os.walk()` is iterative; 3.11 recurses once per level
 - **Python 3.10+**: More type hints, better cross-platform support
 
 ## Platform Differences

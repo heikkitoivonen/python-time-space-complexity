@@ -120,6 +120,18 @@ live in `.claude/skills/`; edit the canonical skill rather than the symlink.
 - Format: `Type: Brief description`
 - Types: Add, Fix, Update, Refactor, Docs, Test, Chore
 - Example: `Add: List complexity documentation`
+- **Keep the message short.** Say what was corrected or added and stop. Do
+  not narrate what the code or claim used to be, how the defect was found,
+  what was measured on the way, or which approaches were rejected — the
+  reader does not need it, and the evidence belongs in the test and its
+  docstring, where it can be re-run. Prefer a line or a few bullets:
+  ```
+  Fix: Correct three os space bounds and add the module's tests
+
+  - os.walk is O(w + d), not O(d): queued entries are a term of their own
+  - os.makedirs is O(n): it recurses once per path component
+  ```
+  The same applies to pull request descriptions.
 - **AI Agents MUST add Co-Authored-By trailer to identify the agent:**
   ```
   Add: List complexity documentation
