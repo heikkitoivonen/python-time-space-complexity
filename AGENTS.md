@@ -91,6 +91,8 @@ Skills support should load the matching skill before starting this work:
   module page, or materially expanding one.
 - `testing-complexity-claims` - Use when adding or changing complexity claims,
   auditing claim coverage, or creating module complexity tests.
+- `updating-python-support` - Use when dropping an EOL Python version, adding a
+  newly released Python version, or changing the supported Python range.
 
 `.agents/skills/` is the canonical source. Claude Code compatibility symlinks
 live in `.claude/skills/`; edit the canonical skill rather than the symlink.

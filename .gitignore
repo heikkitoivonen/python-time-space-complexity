@@ -44,6 +44,7 @@ env/
 .claude/skills/*
 !.claude/skills/documenting-complexity-modules
 !.claude/skills/testing-complexity-claims
+!.claude/skills/updating-python-support
 .project
 .pydevproject
 *.swp
