@@ -55,7 +55,7 @@ import random
 # Random float [0.0, 1.0) - O(1)
 x = random.random()  # ~0.37
 
-# Random integer [a, b] inclusive - O(1)
+# Random integer [a, b] inclusive - O(1) expected
 n = random.randint(1, 10)  # Between 1 and 10
 
 # Random float in range - O(1)
@@ -67,7 +67,7 @@ y = random.uniform(0, 100)  # Between 0 and 100
 ```python
 import random
 
-# Set seed for reproducible results - O(1)
+# Set seed for reproducible results - O(1) for an int seed
 random.seed(42)
 
 # Same seed produces same sequence
@@ -88,15 +88,15 @@ y2 = random.randint(1, 100)  # Same as y1
 ```python
 import random
 
-# Choose one random element - O(1)
+# Choose one random element - O(1) expected
 lst = [10, 20, 30, 40, 50]
 item = random.choice(lst)  # One of the elements
 
 # Works with strings
 char = random.choice("hello")  # 'h', 'e', 'l', 'l', or 'o'
 
-# Get one random element from range - O(1)
-num = random.choice(range(1000000))  # O(1) even for huge range!
+# Get one random element from range - O(1) expected
+num = random.choice(range(1000000))  # O(1) expected even for huge range!
 ```
 
 ### Multiple Random Selections
@@ -197,12 +197,12 @@ def reservoir_sample(iterable, k):
         if i < k:
             reservoir.append(item)
         else:
-            j = random.randint(0, i)  # O(1) per item
+            j = random.randint(0, i)  # O(1) expected per item
             if j < k:
                 reservoir[j] = item
     return reservoir
 
-# Usage - O(n) for iteration, O(1) per random operation
+# Usage - O(n) for iteration, O(1) expected per random operation
 large_iter = range(1000000)
 sample = reservoir_sample(large_iter, 100)  # O(1000000)
 ```
@@ -212,9 +212,9 @@ sample = reservoir_sample(large_iter, 100)  # O(1000000)
 ```python
 import random
 
-# Randomized quicksort pivot selection - O(1)
+# Randomized quicksort pivot selection - O(1) expected
 def random_partition(arr, low, high):
-    pivot_idx = random.randint(low, high)  # O(1)
+    pivot_idx = random.randint(low, high)  # O(1) expected
     # ... partition logic
 
 # Shuffle-sort (bogosort) - expected O(n * n!) time: n! shuffles of O(n) each
@@ -254,7 +254,7 @@ def random_walk(steps):
     """Perform a random walk"""
     position = 0
     for _ in range(steps):
-        step = random.choice([-1, 1])  # O(1)
+        step = random.choice([-1, 1])  # O(1) expected
         position += step
     return position
 
@@ -313,7 +313,7 @@ result = random.choices(items, weights=weights, k=1)[0]  # O(n)
 ```python
 import random
 
-# Create independent random states - O(1)
+# Create independent random states - O(1) for an int seed
 rng1 = random.Random(42)
 rng2 = random.Random(43)
 
