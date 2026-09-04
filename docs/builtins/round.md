@@ -154,10 +154,9 @@ rounded = round(x, 2)  # 3.14 (float)
 # Format string - returns string
 formatted = f"{x:.2f}"  # "3.14" (string)
 
-# round() for calculation, format for display. Not for speed: both run the
-# same double-to-decimal conversion, and they measure within a few percent
-# of each other. round() with no ndigits is the cheap one - it skips that
-# conversion entirely
+# Choose by result type: round() for a number, format for display text.
+# round() with no ndigits is cheaper than round(x, n) because it skips the
+# decimal-place conversion.
 ```
 
 ## Edge Cases
@@ -186,20 +185,6 @@ round(1e-10, 10)   # 1e-10
 # O(1) - but may lose precision
 round(1e20, 2)     # 1e+20
 round(123456789.123, 2)  # 123456789.12
-```
-
-## Performance Notes
-
-```python
-# round() is very fast - O(1) operation
-import timeit
-
-# Timing comparison
-t_round = timeit.timeit(lambda: round(3.14159, 2), number=10**7)
-t_format = timeit.timeit(lambda: f"{3.14159:.2f}", number=10**7)
-
-# round() is typically faster for computation
-# format is better for display
 ```
 
 ## Best Practices

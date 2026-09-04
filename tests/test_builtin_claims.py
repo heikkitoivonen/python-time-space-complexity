@@ -118,8 +118,7 @@ class TestRoundVersusAlternatives:
 
     Rounding to decimals is not a fixed-cost operation: it runs a
     double-to-decimal conversion whose length follows the value's exponent.
-    That also makes it cost about the same as formatting the value, and makes
-    round(x) with no ndigits the cheap one, since it skips the conversion.
+    round(x) with no ndigits is the cheap one, since it skips that conversion.
     """
 
     @pytest.mark.timing
@@ -141,20 +140,6 @@ class TestRoundVersusAlternatives:
         assert without < with_digits, (
             f"no ndigits skips the decimal conversion: "
             f"round(x)={without:.2e}s round(x, 2)={with_digits:.2e}s"
-        )
-
-    @pytest.mark.timing
-    def test_formatting_costs_about_the_same_as_rounding(self) -> None:
-        # The page used to claim formatting was the pricier of the two. Both
-        # run the same conversion, so they land within a few percent.
-        value = 3.14159
-        round_time = best_time(lambda: [round(value, 2) for _ in range(20_000)])
-        format_time = best_time(lambda: [f"{value:.2f}" for _ in range(20_000)])
-
-        ratio = max(round_time, format_time) / min(round_time, format_time)
-        assert ratio < 2.0, (
-            f"neither should dominate: round={round_time:.2e}s "
-            f"format={format_time:.2e}s ratio={ratio:.2f}x"
         )
 
     @pytest.mark.timing
