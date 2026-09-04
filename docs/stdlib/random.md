@@ -4,17 +4,46 @@ The `random` module provides pseudo-random number generation for various probabi
 
 ## Complexity Reference
 
+Throughout, `n` is the size of the population passed in, `k` the number of
+values drawn, `w` the bit width of the widest integer an operation handles -
+its operands as well as its result - and `s` the size of a seed. Costs are
+counted in generator draws and element accesses, with an index taken as one
+word: a sequence bounds its index with `len()`. An integer passed as a *bound*
+has no such limit, so the rows that take one carry `w`. "Expected" marks a
+rejection loop: the number of draws is not bounded, but its mean is a small
+constant.
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `random.random()` | O(1) | O(1) | Uniform [0.0, 1.0) |
-| `random.randint(a, b)` | O(1) | O(1) | Uniform integer |
-| `random.choice(seq)` | O(1) | O(1) | Random element |
-| `random.choices(seq, k)` | O(k) to O(n + k log n) | O(k) to O(n + k) | O(k) if no weights; builds cumulative weights if provided |
-| `random.sample(seq, k)` | O(k) to O(n) | O(k) to O(n) | Copies population when k is large or input is set/dict |
+| `random.getrandbits(w)` | O(w) | O(w) | Returns a w-bit integer |
+| `random.randbytes(count)` | O(count) | O(count) | One `getrandbits(8 * count)` |
+| `random.randrange([start,] stop)` | O(w) expected | O(w) | One word for ordinary bounds. `stop` is excluded |
+| `random.randrange(start, stop, step)` | O(w) expected, plus one [`//`](../builtins/int.md) and one [`*`](../builtins/int.md) on w-bit operands | O(w) | Superlinear in w once those operands are big integers |
+| `random.randint(a, b)` | O(w) expected | O(w) | Uniform integer, both ends included |
+| `random.choice(seq)` | O(1) expected | O(1) | One index lookup, so O(1) only where indexing is |
+| `random.choices(seq, k=k)` | O(k) | O(k) | With replacement; the population is not copied |
+| `random.choices(seq, weights, k=k)` | O(n + k log n) | O(n + k) | Accumulates the weights once, then bisects per draw |
+| `random.choices(seq, cum_weights=c, k=k)` | O(k log n) | O(k) | Skips the accumulation; pass this to reuse one set of weights across calls |
+| `random.sample(seq, k)` | O(k) to O(n) | O(k) to O(n) | Tracks the k drawn indices, or copies the population when that copy is smaller than the index set; `seq` must be a sequence, not a set or dict |
+| `random.sample(seq, k, counts=c)` | O(n + k log n) | O(n + k) | Accumulates the counts, then bisects each selection |
 | `random.shuffle(list)` | O(n) | O(1) | In-place Fisher-Yates shuffle |
 | `random.uniform(a, b)` | O(1) | O(1) | Uniform float |
-| `random.gauss(mu, sigma)` | O(1) | O(1) | Gaussian distribution |
-| `random.seed(a)` | O(len(a)) | O(1) | Seed processing depends on input type |
+| `random.triangular(low, high, mode)` | O(1) | O(1) | One draw |
+| `random.gauss(mu, sigma)` | O(1) | O(1) | Generates values in pairs and caches the spare |
+| `random.normalvariate(mu, sigma)` | O(1) expected | O(1) | Rejection loop, and no cached spare |
+| `random.lognormvariate(mu, sigma)` | O(1) expected | O(1) | `exp()` of a `normalvariate()` |
+| `random.expovariate(lambd)` | O(1) | O(1) | One draw |
+| `random.paretovariate(alpha)` | O(1) | O(1) | One draw |
+| `random.weibullvariate(alpha, beta)` | O(1) | O(1) | One draw |
+| `random.gammavariate(alpha, beta)` | O(1) expected | O(1) | Rejection loop |
+| `random.betavariate(alpha, beta)` | O(1) expected | O(1) | Two `gammavariate()` calls |
+| `random.vonmisesvariate(mu, kappa)` | O(1) expected | O(1) | Rejection loop |
+| `random.binomialvariate(n, p)` | O(1) expected | O(1) | Python 3.12+ |
+| `random.seed(a)` | O(s) | O(s) | A str or bytes seed is hashed with the whole input kept, so both terms follow its length |
+| `random.getstate()` / `random.setstate(state)` | O(1) | O(1) | The Mersenne Twister state is a fixed 625 words |
+| `random.Random(a)` | O(s) | O(s) | An independent stream; seeded as above |
+| `random.SystemRandom()` | O(1) | O(1) | Draws from `os.urandom()`; cannot be seeded and keeps no state |
 
 ## Basic Random Number Generation
 
@@ -131,8 +160,8 @@ samples = [random.gauss(100, 15) for _ in range(1000)]  # O(1000)
 ```python
 import random
 
-# Beta distribution - O(1)
-x = random.betavariate(2, 5)  # O(1)
+# Beta distribution - O(1) expected, via two gammavariate() calls
+x = random.betavariate(2, 5)
 
 # Multiple samples - O(n)
 samples = [random.betavariate(2, 5) for _ in range(1000)]  # O(1000)
@@ -146,7 +175,7 @@ import random
 # Exponential distribution - O(1)
 x = random.expovariate(1/1000)  # Mean 1000
 
-# Gamma distribution - O(1)
+# Gamma distribution - O(1) expected, from a rejection loop
 y = random.gammavariate(2, 2)
 
 # Generate many samples - O(n)
@@ -188,7 +217,7 @@ def random_partition(arr, low, high):
     pivot_idx = random.randint(low, high)  # O(1)
     # ... partition logic
 
-# Shuffle-sort (bogosort) - expected O(n!) time
+# Shuffle-sort (bogosort) - expected O(n * n!) time: n! shuffles of O(n) each
 def shuffle_sort(arr):
     while not is_sorted(arr):
         random.shuffle(arr)  # O(n) per iteration
@@ -335,8 +364,10 @@ value = random.random()  # O(1) - standard
 import random
 import threading
 
-# The module-level RNG is safe to call from multiple threads, but it shares state.
-# Use a per-thread Random instance to avoid contention and interleaved sequences.
+# random() is a single C step, so the module-level RNG is safe to call from
+# multiple threads -- but it shares state, so no thread gets its own sequence.
+# gauss() is the exception: it caches a spare value between calls, and two
+# threads can be handed the same one. Give each thread its own Random instance.
 
 def worker(seed):
     rng = random.Random(seed)  # O(1) - thread-safe
@@ -354,6 +385,9 @@ threads = [
 
 - **Python 2.x and 3.x**: Core functions available in all versions
 - **Python 3.6+**: `random.choices()` added
+- **Python 3.9+**: `random.randbytes()` added, and `random.sample()` gained `counts`
+- **Python 3.11+**: `random.sample()` rejects a set; convert it to a sequence first
+- **Python 3.12+**: `random.binomialvariate()` added
 - **Different versions**: Some algorithms (e.g., `randrange`) have changed for quality, so sequences may differ
 
 ## Related Modules
