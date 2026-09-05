@@ -23,7 +23,7 @@ and `e` the number of entries in `sys.path`.
 | `sys.setrecursionlimit(n)` | O(t) | O(1) | Writes through to every thread state (Python 3.11+) |
 | `sys.getsizeof(obj)` | O(1) | O(1) | Calls `obj.__sizeof__()`; O(1) for builtin types, and whatever a custom `__sizeof__` costs otherwise |
 | `sys.getrefcount(obj)` | O(1) | O(1) | Reads the refcount field |
-| `sys.intern(s)` | O(len(s)) | O(1) | Hashes and looks up the string; O(1) when `s` is already interned. From Python 3.13 the table holds no reference of its own, so keep the result alive or the entry goes with it |
+| `sys.intern(s)` | O(len(s)) | O(1) | Hashes and looks up the string; O(1) when `s` is already interned. The table holds no reference of its own, so keep the result alive or the entry goes with it |
 | `sys.audit(event, *args)` | O(h) | O(1) | Every installed hook is called |
 | `sys.addaudithook(hook)` | O(1) | O(1) | Hooks cannot be removed once added |
 | `sys.settrace(fn)` / `sys.setprofile(fn)` | O(1) | O(1) | Constant to install; while installed, every traced event calls `fn`, which is where the cost lands |
@@ -118,7 +118,7 @@ import sys
 # O(1) to get limit
 current_limit = sys.getrecursionlimit()  # Default: 1000
 
-# O(1) to set limit
+# O(t) to set limit
 sys.setrecursionlimit(5000)
 
 # Check recursion depth - O(1)
@@ -266,11 +266,13 @@ def get_module_cached(name):
 
 - **Python 2.6+**: Most operations available
 - **Python 3.x**: All standard operations available
-- **Python 3.11+**: `sys.exception()` and `sys.set_int_max_str_digits()` added;
-  `sys.setrecursionlimit()` began writing through to every thread state
+- **Python 3.10.7+**: `sys.set_int_max_str_digits()` added, backported from 3.11
+- **Python 3.11+**: `sys.exception()` added; `sys.setrecursionlimit()` began
+  writing through to every thread state
 - **Python 3.12+**: `sys.monitoring` and `sys.getunicodeinternedsize()` added
-- **Python 3.13+**: strings from `sys.intern()` are mortal - dropping the last
-  reference removes them from the interned table
+- **Python 3.12**: and only 3.12, `sys.intern()` makes the string immortal, so
+  interning many distinct strings there never gives the memory back
+- **Python 3.13+**: interned strings are mortal again, as they were before 3.12
 - **Python 3.14+**: `sys._clear_type_cache()` is deprecated in favour of
   `sys._clear_internal_caches()`
 

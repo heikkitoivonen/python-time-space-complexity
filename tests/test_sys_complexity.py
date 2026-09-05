@@ -36,14 +36,15 @@ constant time: `sys._getframe`, `sys._current_frames`, `sys.intern`,
 `sys.audit`, and the `sys.path` operations that the prose already priced but
 the table never listed.
 
-One version boundary turned up while testing rather than from the changelog.
-`sys.intern()` went mortal in 3.13: `sys_intern_impl` calls
-`_PyUnicode_InternMortal`, and the interned table keeps no reference of its
-own, so a result nobody holds is dropped again straight away. Interning a
-string and discarding it leaves `getunicodeinternedsize()` unchanged on 3.13
-and 3.14 and raises it by one on 3.12. It reached the page because it changes
-what a caller has to do: the interning is only worth anything while someone
-keeps the string.
+One version boundary turned up while testing rather than from the changelog,
+and it is 3.12 alone rather than a floor. `sys.intern()` normally frees the
+string with its last reference - `sys_intern_impl` calls
+`_PyUnicode_InternMortal` in 3.14, and the official docs say plainly that
+"interned strings are not immortal". 3.12 made them immortal, and only 3.12:
+interning 500 strings of 20,000 characters and dropping every reference
+retains 9.6 MB there and 0.0 MB on 3.10, 3.11, 3.13 and 3.14. It reached the
+page because it changes what a caller has to do - on 3.12, interning many
+distinct strings never gives the memory back.
 
 Untested axes, and why:
 
@@ -70,6 +71,7 @@ Not settled by execution:
 
 from __future__ import annotations
 
+import gc
 import pathlib
 import re
 import subprocess
@@ -77,6 +79,7 @@ import sys
 import textwrap
 import threading
 import timeit
+import tracemalloc
 from collections.abc import Callable, Iterator
 from types import FrameType
 from typing import Any
@@ -97,7 +100,9 @@ def run_isolated(source: str) -> subprocess.CompletedProcess[str]:
 
     Audit hooks cannot be removed once installed and a tracer slows everything
     that follows, so the tests for those run out of process rather than
-    leaving the suite in a changed state.
+    leaving the suite in a changed state. So does the intern timing test: on
+    3.12 an interned string is immortal, and it interns some 200 MB of them
+    that would otherwise stay resident for the rest of the run.
     """
     return subprocess.run(
         [sys.executable, "-c", textwrap.dedent(source)],
@@ -432,12 +437,14 @@ class TestIntern:
         reason="sys.getunicodeinternedsize() is Python 3.12+",
     )
     def test_an_interned_string_nobody_keeps_does_not_stay(self) -> None:
-        """3.13 made interned strings mortal, which the row has to say.
+        """3.12 is the one version that keeps it, which the row has to say.
 
         `sys_intern_impl` calls `_PyUnicode_InternMortal`, so the table holds
         no reference of its own: discard the result and the entry goes with
-        it. Through 3.12 the same call left the string immortal and the count
-        rose whether anyone kept it or not.
+        it. On 3.12 the same call left the string immortal and the count rose
+        whether anyone kept it or not. This test can only see 3.12 onwards,
+        since `getunicodeinternedsize()` does not exist before it - the
+        retention test below covers the whole supported range.
         """
         interned_size = sys.getunicodeinternedsize  # type: ignore[attr-defined]
         before = interned_size()
@@ -447,19 +454,69 @@ class TestIntern:
         if sys.version_info >= (3, 13):
             assert interned_size() == before, "a string nobody references is not kept interned"
         else:
-            assert interned_size() == before + 1, "before 3.13 interning made it immortal"
+            assert interned_size() == before + 1, "3.12 interning made it immortal"
+
+    def test_only_3_12_keeps_an_interned_string_alive(self) -> None:
+        """The retention, measured on every supported version.
+
+        `getunicodeinternedsize()` arrived in 3.12, so the count test above
+        cannot see 3.10 or 3.11. Traced allocation can: intern a payload,
+        drop every reference to it, and see whether the memory comes back.
+        """
+        payload = 500 * 20_000  # bytes of ASCII, if every string is kept
+
+        def intern_and_discard() -> None:
+            """Nothing outlives this call, so its locals cannot hold them."""
+            for index in range(500):
+                sys.intern(str(index).rjust(20_000, "q"))
+
+        tracemalloc.start()
+        try:
+            base, _ = tracemalloc.get_traced_memory()
+            intern_and_discard()
+            gc.collect()
+            current, _ = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+
+        retained = current - base
+        if sys.version_info[:2] == (3, 12):
+            assert retained > payload * 0.5, (
+                f"3.12 interning is immortal, so the payload should still be held: "
+                f"retained {retained:,} of {payload:,} bytes"
+            )
+        else:
+            assert retained < payload * 0.1, (
+                f"interned strings are freed with their last reference: "
+                f"retained {retained:,} of {payload:,} bytes"
+            )
 
     @pytest.mark.timing
     def test_the_first_intern_follows_the_string_length(self) -> None:
-        def fresh(length: int, count: int = 2_000) -> float:
-            strings = [str(index).rjust(length, "q") for index in range(count)]
-            start = timeit.default_timer()
-            for text in strings:
-                sys.intern(text)
-            return (timeit.default_timer() - start) / count
+        """Run out of process: on 3.12 an interned string is immortal, and
+        this test interns about 200 MB of them, which would stay resident for
+        the rest of the suite. The subprocess times both lengths and prints
+        one figure per line; the assertion is unchanged.
+        """
+        result = run_isolated(
+            """
+            import sys
+            import timeit
 
-        short = min(fresh(1_000) for _ in range(3))
-        long = min(fresh(100_000) for _ in range(3))
+            def fresh(length, count=2_000):
+                strings = [str(index).rjust(length, "q") for index in range(count)]
+                start = timeit.default_timer()
+                for text in strings:
+                    sys.intern(text)
+                return (timeit.default_timer() - start) / count
+
+            print(min(fresh(1_000) for _ in range(3)))
+            print(min(fresh(100_000) for _ in range(3)))
+            """
+        )
+
+        assert result.returncode == 0, result.stderr
+        short, long = (float(line) for line in result.stdout.split())
 
         assert long > short * 10, (
             f"a hundred times the characters is hashed and compared: "
