@@ -32,9 +32,10 @@ importing it, and the caching block used an undefined `large_list`.
 
 Untested axes, and why:
 
-* Locale. Every format here is parsed and produced under the test runner's
-  locale. `%A`, `%B` and `%p` expand to locale-dependent names, which changes
-  the constant in front of the format length, not the term.
+* Locale. The formats used here are numeric directives only, so the suite
+  holds under any locale. Name directives (`%A`, `%B`, `%b`, `%p`) compile
+  to the locale's names, which changes the constant in front of the format
+  length, not the term - that constant is what goes untested.
 * Platform. `strftime` hands the work to the C library on some platforms;
   the linearity measured here is CPython's own pass over the format.
 
@@ -73,13 +74,15 @@ DATEUTIL_MARKER = "dateutil"
 HAS_DATEUTIL = importlib.util.find_spec("dateutil") is not None
 
 # Distinct formats and a string each matches, for filling the strptime cache.
+# Numeric directives only: `%b` and friends compile to the locale's month
+# names, so a sample holding "Jan" fails to parse under a non-English locale.
 FORMAT_SAMPLES: list[tuple[str, str]] = [
     ("%Y-%m-%d", "2024-01-15"),
     ("%d/%m/%Y", "15/01/2024"),
     ("%m-%d-%Y", "01-15-2024"),
     ("%Y.%m.%d", "2024.01.15"),
-    ("%d-%b-%Y", "15-Jan-2024"),
-    ("%b %d %Y", "Jan 15 2024"),
+    ("%H:%M:%S", "12:30:45"),
+    ("%Y-%j", "2024-015"),
     ("%Y%m%d", "20240115"),
 ]
 
@@ -227,8 +230,9 @@ class TestFormatCache:
     ) -> None:
         """The corrected advice, observed at the exact boundary.
 
-        `_strptime` clears before inserting, so the sixth format still fits
-        and the seventh is the one that empties it.
+        The clear runs at the top of every call once the cache holds more
+        than five, before the lookup, so the sixth format is still admitted
+        and the seventh call, whatever format it asks for, empties it first.
         """
         sizes = []
         for fmt, sample in FORMAT_SAMPLES:
@@ -237,6 +241,26 @@ class TestFormatCache:
 
         assert sizes == [1, 2, 3, 4, 5, 6, 1], (
             f"expected the cache to fill and then be dropped: {sizes}"
+        )
+
+    def test_a_cache_hit_at_size_six_clears_too(self, clean_format_cache: None) -> None:
+        """The prose claim: rotating through more than five rebuilds every parse.
+
+        The clear runs before the lookup, not before the insert, so it does
+        not matter that the next call repeats a cached format - the cache is
+        emptied and the format recompiled either way. An insert-tied clear
+        would leave the repeat alone and never rebuild.
+        """
+        for fmt, sample in FORMAT_SAMPLES[:6]:
+            datetime.strptime(sample, fmt)
+        assert len(_strptime._regex_cache) == 6
+
+        repeat_fmt, repeat_sample = FORMAT_SAMPLES[0]  # already cached
+        datetime.strptime(repeat_sample, repeat_fmt)
+
+        assert len(_strptime._regex_cache) == 1, (
+            f"repeating {repeat_fmt!r} at size six should have cleared and "
+            f"recompiled it: {len(_strptime._regex_cache)} entries remain"
         )
 
     def test_naming_the_format_in_a_variable_changes_nothing(
@@ -438,14 +462,18 @@ class TestDocumentedValues:
     """Results and comments the examples state outright."""
 
     def test_the_parsing_example_produces_what_it_prints(self) -> None:
-        parsed = datetime.strptime("2024-01-15", "%Y-%m-%d")
+        """The block's own values, end to end.
 
-        assert parsed == datetime(2024, 1, 15)
-        assert datetime.fromisoformat("2024-01-15") == parsed
-        assert datetime(2024, 1, 15, 12, 30, 45).isoformat() == "2024-01-15T12:30:45"
-        assert datetime(2024, 1, 15, 12, 30, 45).strftime("%Y-%m-%d %H:%M:%S") == (
-            "2024-01-15 12:30:45"
-        )
+        The block reassigns `dt` from `fromisoformat`, then formats it, so
+        the test does the same: asserting against a datetime built here
+        instead would let a comment claim any output it liked.
+        """
+        parsed = datetime.strptime("2024-01-15 12:30:45", "%Y-%m-%d %H:%M:%S")
+        parsed = datetime.fromisoformat("2024-01-15 12:30:45")
+
+        assert parsed == datetime(2024, 1, 15, 12, 30, 45)
+        assert parsed.strftime("%Y-%m-%d %H:%M:%S") == "2024-01-15 12:30:45"
+        assert parsed.isoformat() == "2024-01-15T12:30:45"
 
     def test_the_arithmetic_example_is_five_days(self) -> None:
         first, second = datetime(2024, 1, 15), datetime(2024, 1, 20)

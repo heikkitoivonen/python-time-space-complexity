@@ -155,10 +155,10 @@ delta = timedelta(days=5, hours=3, minutes=30)
 from datetime import datetime
 
 # Parse string - O(n + f) for input length n and format length f
-dt = datetime.strptime("2024-01-15", "%Y-%m-%d")
+dt = datetime.strptime("2024-01-15 12:30:45", "%Y-%m-%d %H:%M:%S")
 
 # Same result with no format to compile - O(n)
-dt = datetime.fromisoformat("2024-01-15")
+dt = datetime.fromisoformat("2024-01-15 12:30:45")
 
 # Format as string - O(f)
 formatted = dt.strftime("%Y-%m-%d %H:%M:%S")
@@ -349,13 +349,13 @@ new_dt = dt + relativedelta(months=1)  # O(1) too - 2024-02-29
 - Use timezone-aware datetimes for storage/transmission
 - Use UTC internally, convert to local for display
 - Use `datetime.now(timezone.utc)` not `datetime.utcnow()`
-- Cache parsed datetime formats in tight loops
+- Group parsing work by format; prefer `fromisoformat()` for ISO 8601
 - Use `isoformat()` for serialization
 
 ❌ **Avoid**:
 
 - Mixing timezone-aware and naive datetimes
-- String parsing in tight loops without caching
+- Interleaving more than five parse formats in a tight loop
 - Using `datetime.utcnow()` (deprecated)
 - Manual timezone arithmetic (use libraries)
 - Assuming time is monotonic (use `time.monotonic()`)
