@@ -2,19 +2,25 @@
 
 The `datetime` module provides classes for manipulating dates and times.
 
+Every operation on a `datetime`, `date`, `time` or `timedelta` *object* is
+constant time: they are fixed-size records of small integers, so arithmetic,
+comparison, attribute access and replacement have nothing to scale with. Only
+the conversions to and from strings do. Throughout, `n` is the length of a
+string being parsed or produced and `f` the length of a format string.
+
 ## Class Creation and Operations
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `datetime.now()` | O(1) | O(1) | Current date/time |
 | `datetime.fromtimestamp(ts)` | O(1) | O(1) | From Unix timestamp |
-| `datetime.strptime(s, fmt)` | O(n) | O(1) | Parse string, n = input length; format-dependent |
+| `datetime.strptime(s, fmt)` | O(n + f) | O(f) | Compiles `fmt` to a regex and caches it; the first call in a process also imports `_strptime` |
 | `date(year, month, day)` | O(1) | O(1) | Create date |
 | `time(hour, min, sec)` | O(1) | O(1) | Create time |
 | `timedelta(days, seconds, ...)` | O(1) | O(1) | Create duration |
 | `dt1 - dt2` | O(1) | O(1) | Datetime arithmetic |
 | `str(dt)` | O(1) | O(1) | Convert to string |
-| `dt.strftime(fmt)` | O(n) | O(n) | Format string, n = format length |
+| `dt.strftime(fmt)` | O(f) | O(f) | One pass over the format |
 
 ## Date Operations
 
@@ -22,7 +28,7 @@ The `datetime` module provides classes for manipulating dates and times.
 |-----------|------|-------|-------|
 | `date.year`, `date.month`, `date.day` | O(1) | O(1) | Attribute access |
 | `date.today()` | O(1) | O(1) | Current local date |
-| `date.fromisoformat(s)` | O(n) | O(1) | Parse ISO format string |
+| `date.fromisoformat(s)` | O(n) | O(1) | Parsed in C, with no format to compile; the cheaper choice when the input is ISO 8601 |
 | `date.fromtimestamp(ts)` | O(1) | O(1) | From Unix timestamp |
 | `date.fromordinal(n)` | O(1) | O(1) | From proleptic Gregorian ordinal |
 | `date.fromisocalendar(y, w, d)` | O(1) | O(1) | From ISO year, week, day |
@@ -30,19 +36,19 @@ The `datetime` module provides classes for manipulating dates and times.
 | `date.isoweekday()` | O(1) | O(1) | Day of week (1=Mon, 7=Sun) |
 | `date.isocalendar()` | O(1) | O(1) | Returns (year, week, weekday) |
 | `date.isoformat()` | O(1) | O(1) | ISO 8601 string |
-| `date.strftime(fmt)` | O(n) | O(n) | Format to string |
+| `date.strftime(fmt)` | O(f) | O(f) | One pass over the format |
 | `date.ctime()` | O(1) | O(1) | C-style string |
 | `date.timetuple()` | O(1) | O(1) | time.struct_time |
 | `date.toordinal()` | O(1) | O(1) | Proleptic Gregorian ordinal |
 | `date.replace(year=...)` | O(1) | O(1) | Return new date |
-| `date.__format__(fmt)` | O(n) | O(n) | Format string length n |
+| `date.__format__(fmt)` | O(f) | O(f) | `strftime` for a non-empty spec, `isoformat()` for an empty one |
 
 ## Datetime Operations
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `datetime.combine(date, time)` | O(1) | O(1) | Combine date and time objects |
-| `datetime.fromisoformat(s)` | O(n) | O(1) | Parse ISO format string |
+| `datetime.fromisoformat(s)` | O(n) | O(1) | Parsed in C, with no format to compile; far cheaper than `strptime` for ISO 8601 input |
 | `datetime.date()` | O(1) | O(1) | Extract date part |
 | `datetime.time()` | O(1) | O(1) | Extract time part (no tzinfo) |
 | `datetime.timetz()` | O(1) | O(1) | Extract time part (with tzinfo) |
@@ -60,16 +66,16 @@ The `datetime` module provides classes for manipulating dates and times.
 | `datetime.timetuple()` | O(1) | O(1) | time.struct_time |
 | `datetime.ctime()` | O(1) | O(1) | C-style string |
 | `datetime.isoformat()` | O(1) | O(1) | ISO 8601 string |
-| `datetime.__format__()` | O(n) | O(n) | Format string length n |
+| `datetime.__format__(fmt)` | O(f) | O(f) | `strftime` for a non-empty spec, `isoformat()` for an empty one |
 
 ## Time Operations
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `time.hour`, `time.minute`, `time.second` | O(1) | O(1) | Attribute access |
-| `time.fromisoformat(s)` | O(n) | O(1) | Parse ISO format string |
+| `time.fromisoformat(s)` | O(n) | O(1) | Parsed in C, with no format to compile |
 | `time.isoformat()` | O(1) | O(1) | ISO 8601 string |
-| `time.strftime(fmt)` | O(n) | O(n) | Format to string |
+| `time.strftime(fmt)` | O(f) | O(f) | One pass over the format |
 | `time.replace(hour=...)` | O(1) | O(1) | Return new time |
 | `time.dst()` | O(1) | O(1) | Daylight saving offset |
 | `time.tzname()` | O(1) | O(1) | Timezone name string |
@@ -148,10 +154,13 @@ delta = timedelta(days=5, hours=3, minutes=30)
 ```python
 from datetime import datetime
 
-# Parse string - O(n) where n = length of format string
+# Parse string - O(n + f) for input length n and format length f
 dt = datetime.strptime("2024-01-15", "%Y-%m-%d")
 
-# Format as string - O(n)
+# Same result with no format to compile - O(n)
+dt = datetime.fromisoformat("2024-01-15")
+
+# Format as string - O(f)
 formatted = dt.strftime("%Y-%m-%d %H:%M:%S")
 # "2024-01-15 12:30:45"
 
@@ -184,7 +193,7 @@ total_secs = delta.total_seconds()
 ### Comparisons
 
 ```python
-from datetime import datetime
+from datetime import datetime, timedelta
 
 dt1 = datetime(2024, 1, 15)
 dt2 = datetime(2024, 1, 20)
@@ -238,37 +247,44 @@ dt_new_tz = dt_utc.replace(tzinfo=tz)
 
 ### Parsing Performance
 
+`strptime` does two things the bound does not show. The first call in a
+process imports `_strptime`, which is where most of that call's time goes; and
+each format is compiled to a regular expression that is then cached, so a
+format costs far more the first time it is seen than on any later parse.
+
 ```python
 from datetime import datetime
-import time
 
-# Simple format - faster - O(n)
-start = time.time()
-for _ in range(10000):
-    datetime.strptime("2024-01-15", "%Y-%m-%d")
-simple_time = time.time() - start
+# First call in the process: imports _strptime, then compiles the format
+dt = datetime.strptime("2024-01-15", "%Y-%m-%d")  # O(n + f), plus the import
 
-# Complex format - slower - O(n)
-start = time.time()
-for _ in range(10000):
-    datetime.strptime("Monday, January 15, 2024 at 3:30:45 PM", "%A, %B %d, %Y at %I:%M:%S %p")
-complex_time = time.time() - start
+# Same format again: the compiled regex is already cached - O(n + f)
+dt = datetime.strptime("2024-02-20", "%Y-%m-%d")
+
+# No format at all, and no regex: parsed in C - O(n)
+dt = datetime.fromisoformat("2024-02-20")
 ```
+
+Prefer `fromisoformat()` whenever the input is ISO 8601. It is the cheaper of
+the two by a wide margin, and it never builds a regex.
 
 ### Caching Parsed Dates
 
+The format cache is cleared as soon as it holds more than five formats.
+Parsing one format repeatedly compiles it once; rotating through more than
+five pays the rebuild on every parse, so group the work by format rather than
+interleaving it.
+
 ```python
 from datetime import datetime
 
-# Bad: parse each time - O(n) per parse
-dates = []
-for date_str in large_list:
-    dates.append(datetime.strptime(date_str, "%Y-%m-%d"))
+rows = ["2024-01-15", "2024-02-20", "2024-03-25"]
 
-# Better: cache format if reusing
-pattern = "%Y-%m-%d"
-dates = [datetime.strptime(d, pattern) for d in large_list]
-# Still O(n*m) total but pattern is consistent
+# One compile, then a cache hit per row - O(n + f) each
+dates = [datetime.strptime(row, "%Y-%m-%d") for row in rows]
+
+# Cheaper again where the input allows it - O(n) each, no compile
+dates = [datetime.fromisoformat(row) for row in rows]
 ```
 
 ## Special Considerations
@@ -312,8 +328,13 @@ new_dt = dt + relativedelta(months=1)  # O(1) too - 2024-02-29
 
 - **Python 3.2+**: timezone-aware datetimes recommended
 - **Python 3.6+**: Better timezone support
-- **Python 3.11+**: New zoneinfo module for IANA timezones
-- **Python 3.12+**: Some deprecations in favor of zoneinfo
+- **Python 3.9+**: `zoneinfo` module added for IANA timezones
+- **Python 3.11+**: `fromisoformat()` accepts most of ISO 8601, including a
+  trailing `Z` and the basic format; before that it read only what
+  `isoformat()` produced
+- **Python 3.12+**: `datetime.utcnow()` and `datetime.utcfromtimestamp()` are
+  deprecated in favour of the timezone-aware `datetime.now(timezone.utc)` and
+  `datetime.fromtimestamp(ts, timezone.utc)`
 
 ## Related Modules
 
