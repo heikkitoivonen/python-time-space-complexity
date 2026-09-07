@@ -53,6 +53,15 @@ Read against the 3.14 sources afterwards, which sharpened three things:
   matched text counts too: 20,000 matches cost 1.25 MB at 5 characters each
   and 5.15 MB at 200. The row and the tip beside it also disagreed, one
   saying O(k) and the other O(k + g).
+* The cache prose written for this round called the compiled-pattern cache
+  an LRU, and dated the second-level cache to 3.13. Both were read off the
+  3.14 source alone. It is an LRU from 3.12, where `_compile` pops and
+  re-inserts a found pattern as most recently used; on 3.10 and 3.11 the hit
+  was a plain dict lookup and the 513th pattern dropped the oldest-inserted
+  entry however often it had been used. `_MAXCACHE2` is 3.12 as well - the
+  first probe checked 3.10, 3.11, 3.13 and 3.14 and skipped the one version
+  where both changes landed. Both behaviours are pinned by identity,
+  version-branched like the anchor tests.
 * The Match rows used `k` for the number of groups while the preamble defined
   it as the number of matches, and `re.purge()` used `c` for the cache size.
   Both now have their own name.
@@ -219,6 +228,38 @@ class TestMatchObjectsHoldPositions:
 
         assert found.groupdict() == {"head": "aaa", "tail": "bbb"}
         assert found.groups() == ("aaa", "bbb")
+
+    def test_expand_substitutes_the_named_groups(self) -> None:
+        found = re.compile(r"(?P<word>\w+)").search("hello world")
+        assert found is not None
+
+        assert found.expand(r"<\g<word>!>") == "<hello!>"
+
+    @pytest.mark.timing
+    def test_expand_follows_the_template_length(self) -> None:
+        """The t in the expand row's O(t + g).
+
+        The g side is the same group slicing the tests above pin; what varies
+        here is the literal template text the expansion copies out. Both
+        sizes are far above the fixed call overhead, because 3.12 rewrote
+        template expansion and left the shorter end of an earlier framing
+        indistinguishable from noise: at 100,000 characters 3.11 takes
+        1.31e-02s and 3.14 takes 2.12e-06s. The bound is unchanged - both
+        rise tenfold for a tenfold template - and only the constant moved.
+        """
+        found = re.compile(r"(a+)").fullmatch("a" * 1_000)
+        assert found is not None
+
+        brief = r"\1" + "x" * 10_000
+        lengthy = r"\1" + "x" * 1_000_000
+
+        short = per_call(lambda: found.expand(brief), 200, repeat=3)
+        long = per_call(lambda: found.expand(lengthy), 1, repeat=3)
+
+        assert long > short * 20, (
+            f"the template is copied into the result: {len(brief):,} chars "
+            f"{short:.2e}s, {len(lengthy):,} chars {long:.2e}s"
+        )
 
 
 class TestFinditerIsLazyNotFree:
@@ -420,7 +461,7 @@ class TestAnchors:
 
 
 class TestPatternCache:
-    """`re.compile` caches; the page's "~512" and the LRU it never described."""
+    """`re.compile` caches 512 patterns; the eviction policy changed in 3.12."""
 
     def test_the_documented_size_is_the_implementation_size(self) -> None:
         assert MAXCACHE == 512
@@ -436,10 +477,12 @@ class TestPatternCache:
     def test_the_cache_drops_one_entry_rather_than_emptying(
         self, clean_pattern_cache: None
     ) -> None:
-        """The contrast worth drawing: this is an LRU, not a clear.
+        """The contrast worth drawing: one entry goes, not the whole cache.
 
-        `_strptime` empties its format cache once it overflows; `re` evicts
-        the least recently used entry and keeps the other 511.
+        `_strptime` empties its format cache once it overflows; `re` evicts a
+        single entry and keeps the rest. The sizes here come out the same
+        under either eviction policy, so which one runs is pinned by the two
+        recency tests below - it changed in 3.12.
         """
         sizes = []
         for index in range(MAXCACHE + 4):
@@ -451,6 +494,49 @@ class TestPatternCache:
             f"expected the cache to fill and then hold: {sizes}"
         )
 
+    @pytest.mark.skipif(sys.version_info >= (3, 12), reason="hits refresh recency from 3.12 on")
+    def test_before_3_12_a_hit_does_not_save_the_oldest_entry(
+        self, clean_pattern_cache: None
+    ) -> None:
+        """3.10 and 3.11 are insertion-ordered, not an LRU.
+
+        A cache hit in `_compile` is a plain dict lookup with no move to the
+        end, so however often the oldest-inserted entry is used it is still
+        the one a 513th pattern drops.
+        """
+        oldest = re.compile("pattern-oldest")
+        for index in range(MAXCACHE - 1):
+            re.compile(f"pattern-{index}")
+        assert len(pattern_cache()) == MAXCACHE
+        assert re.compile("pattern-oldest") is oldest, "the entry is present"
+
+        re.compile("pattern-new")  # the 513th insert
+
+        assert re.compile("pattern-oldest") is not oldest, (
+            "the oldest-inserted entry was dropped despite the recent hit"
+        )
+
+    @pytest.mark.skipif(sys.version_info < (3, 12), reason="before 3.12 a hit changes nothing")
+    def test_from_3_12_a_hit_saves_the_entry(self, clean_pattern_cache: None) -> None:
+        """From 3.12 a hit pops and re-inserts, so the used entry survives.
+
+        `_compile` re-records a found pattern as most recently used, and the
+        513th pattern drops the least recently used one instead. On 3.13+
+        the fast-path FIFO may serve the hit first; it has long since
+        evicted a pattern this old, so the LRU refresh still happens.
+        """
+        oldest = re.compile("pattern-oldest")
+        for index in range(MAXCACHE - 1):
+            re.compile(f"pattern-{index}")
+        assert len(pattern_cache()) == MAXCACHE
+        assert re.compile("pattern-oldest") is oldest, "the hit re-records it"
+
+        re.compile("pattern-new")  # the 513th insert
+
+        assert re.compile("pattern-oldest") is oldest, (
+            "a recently used entry should not be the one dropped"
+        )
+
     def test_purge_empties_it(self, clean_pattern_cache: None) -> None:
         re.compile(r"\d+")
         assert len(pattern_cache()) > 0
@@ -459,7 +545,7 @@ class TestPatternCache:
 
         assert len(pattern_cache()) == 0
 
-    @pytest.mark.skipif(MAXCACHE2 is None, reason="the second-level cache is Python 3.13+")
+    @pytest.mark.skipif(MAXCACHE2 is None, reason="the second-level cache is Python 3.12+")
     def test_the_fast_path_cache_is_smaller(self) -> None:
         assert MAXCACHE2 == 256
         assert MAXCACHE2 is not None and MAXCACHE2 < MAXCACHE

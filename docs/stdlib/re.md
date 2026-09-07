@@ -51,10 +51,12 @@ When only the positions matter, `span()` avoids building the substring at all.
 | `compiled = re.compile(p)` | O(n) | O(n) | Explicit compilation |
 | `compiled.match(s)` | O(m) typical, O(exp) worst | O(m) | Uses the already-compiled pattern |
 
-CPython caches the last ~512 compiled patterns automatically. The cache is an
-LRU: passing a 513th pattern drops the least recently used entry rather than
-emptying the cache, so a working set that fits keeps hitting. Python 3.13
-added a 256-entry FIFO in front of it as a fast path.
+CPython caches the last ~512 compiled patterns automatically, dropping one
+entry when a new pattern overflows it rather than emptying the cache. From
+Python 3.12 the entry dropped is the least recently used, and a 256-entry FIFO
+sits in front as a fast path. On 3.10 and 3.11 a hit left the entry where it
+was, so the one dropped was the oldest inserted however often it had been
+used.
 
 ## Common Operations
 
@@ -309,7 +311,9 @@ match = pattern.search(text)  # O(m)
 - **Python 3.11+**: a `search` for a pattern anchored with `^` stops after the
   first attempt instead of retrying at every position; before that, anchoring
   made an unmatchable search slower rather than faster
-- **Python 3.13+**: a 256-entry FIFO cache sits in front of the 512-entry LRU
+- **Python 3.12+**: the compiled-pattern cache became a true LRU - a hit now
+  re-records the entry as most recently used - and gained a 256-entry FIFO
+  in front of it as a fast path
   of compiled patterns
 
 ## Related Modules
