@@ -21,10 +21,17 @@ Five claims did not survive measurement:
   yielded. The glob section also defined its size variable as "matching
   entries" while the table said "entries checked"; the scan is what costs, so
   both now say entries scanned.
-* `Path.rglob()` holds the directories it has found but not yet descended
-  into, so depth is a term of its own: 32x the depth costs x171 on 3.10, x131
-  on 3.11, x6.1 on 3.12 and x2.1 on 3.13 and 3.14. The row is O(w + d) - tight
-  on the older pair, an upper bound on the newer.
+* `Path.rglob()` pays a depth term as well as a width one: 32x the depth costs
+  x171 on 3.10, x131 on 3.11, x6.1 on 3.12 and x2.1 on 3.13 and 3.14. The row
+  is O(w + d) on every version - but not for the same reason on each, and the
+  first draft of this page said it was, that the walk holds the directories it
+  has found but not yet descended into. Varying component length at a fixed
+  total path length separates the two: with 1,280 characters of tail either
+  way, 640 nested directories cost 3,628,740 B against 64,140 B for 20 on
+  3.10. On 3.14 the same pair costs 11,962 B and 11,988 B - indistinguishable,
+  because what grows there is the length of the paths the walk carries, not a
+  queue of directories behind them. The page states the terms and no
+  mechanism.
 * `Path.walk()` was documented O(d) space, and is the same shape as os.walk
   for the same reason - it delegates to it. 4x the siblings at a fixed depth
   costs x3.8-x3.9. The row is O(w + d), matching the os page. The row also
@@ -34,7 +41,8 @@ Five claims did not survive measurement:
   supported versions - 6 stat calls at any depth on 3.10 and 3.11, 2 on 3.13
   and 3.14. On 3.12 it reaches an os.path.ismount that resolves the parent
   rather than lstat-ing it, so the count rises one per component: 6, 9 and 21
-  at the three depths measured here. The row says O(1) and names 3.12.
+  at the three depths measured here. The row is O(1) with O(n) in components
+  named for 3.12.
 
 Two rows became version-dependent rather than wrong:
 
@@ -476,7 +484,8 @@ class TestIterdirReadsTheWholeDirectory:
 
 
 class TestGlobScansEntriesNotMatches:
-    """`Path.glob(pattern)` | O(n) | O(w) - n is entries scanned, not matched.
+    """`Path.glob(pattern)` | O(n) | O(w), O(w + d) with `**` - n is entries
+    scanned, not matched.
 
     The page's table said "entries checked" while its glob section said
     "matching entries"; only one of those can be the size variable. Holding
@@ -537,15 +546,38 @@ class TestGlobScansEntriesNotMatches:
             f"{small_peak} B against {large_peak} B"
         )
 
+    def test_a_recursive_pattern_pays_the_depth_term(self, tmp_path: pathlib.Path) -> None:
+        """The table's O(w + d) cell for `**` patterns, at a fixed breadth of one.
+
+        rglob() is measured the same way in the class below; this pins that the
+        spelling is what matters - a glob() call with `**` in the pattern pays
+        the walk's depth term, not the flat O(w) of the non-recursive patterns
+        above.
+        """
+        shallow = make_deep(tmp_path, 20)
+        nested = make_deep(tmp_path, 640)
+        drain(shallow.glob("**/*.txt"))
+        drain(nested.glob("**/*.txt"))
+
+        shallow_peak = peak_bytes(lambda: drain(shallow.glob("**/*.txt")))
+        nested_peak = peak_bytes(lambda: drain(nested.glob("**/*.txt")))
+        remove_deep(nested)
+
+        assert nested_peak > 1.25 * shallow_peak, (
+            f"32x the depth should cost more through glob('**') too, so O(w) "
+            f"alone cannot be the bound: {shallow_peak} B against {nested_peak} B"
+        )
+
 
 class TestRglobSpaceNeedsBothTerms:
     """`Path.rglob(pattern)` | O(n) | O(w + d) - the page said O(1) per item.
 
-    Width behaves the same on every supported version. Depth is the term that
-    changed: the recursive selector on 3.10 and 3.11 pays x171 and x131 for
-    32x the depth, where the iterative globber of 3.13 and 3.14 pays x2.1.
-    Loose there, but present, and the page states the bound that holds on
-    both.
+    Width behaves the same on every supported version. Depth does not: 32x the
+    depth costs x171 on 3.10 and x2.1 on 3.14, and those are not the same
+    term. Held at a fixed total path length, 640 nested directories cost 57x
+    what 20 do on 3.10 and nothing measurable on 3.14, where the depth term is
+    the length of the paths the walk carries rather than a queue behind them.
+    O(w + d) bounds both; see the module docstring.
     """
 
     def test_peak_grows_with_the_widest_directory(self, tmp_path: pathlib.Path) -> None:

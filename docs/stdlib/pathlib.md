@@ -14,7 +14,7 @@ The `pathlib` module provides an object-oriented approach to filesystem path han
 | `Path.is_file()` | O(1) | O(1) | One stat call |
 | `Path.is_dir()` | O(1) | O(1) | One stat call |
 | `Path.is_symlink()` | O(1) | O(1) | One lstat call |
-| `Path.is_mount()` | O(1) | O(1) | Stats the path and its parent; on 3.12 it resolves the parent instead, at one lstat per component |
+| `Path.is_mount()` | O(1), O(n) on 3.12 | O(1) | n = path components; stats the path and its parent; on 3.12 it resolves the parent instead, at one lstat per component |
 | `Path.is_socket()` | O(1) | O(1) | One stat call |
 | `Path.is_fifo()` | O(1) | O(1) | One stat call |
 | `Path.is_block_device()` | O(1) | O(1) | One stat call |
@@ -26,7 +26,7 @@ The `pathlib` module provides an object-oriented approach to filesystem path han
 | `Path.expanduser()` | O(n) | O(n) | Expand ~ to home directory |
 | `Path.iterdir()` | O(d) | O(d) | d = directory entries; the whole listing is read before the first item |
 | `Path.walk()` | O(n) | O(w + d) | Python 3.12+; n = total entries, d = max depth, w = entries queued but not yet walked |
-| `Path.glob(pattern)` | O(n) | O(w) | n = entries scanned, not entries matched; w = entries of the largest directory scanned |
+| `Path.glob(pattern)` | O(n) | O(w); O(w + d) with `**` | n = entries scanned, not entries matched; w = entries of the largest directory scanned, d = depth reached |
 | `Path.rglob(pattern)` | O(n) | O(w + d) | `glob('**/' + pattern)`; n = entries in the tree, d = depth reached |
 | `Path.mkdir()` | O(1) | O(1) | O(d) for d missing components with `parents=True` |
 | `Path.touch()` | O(1) | O(1) | Create file or update timestamp |
@@ -244,7 +244,8 @@ results = list(path.glob('[a-z]*/data/*.json'))  # O(n)
 
 Where w = entries of the largest directory scanned. Like `iterdir()`, `glob()`
 reads a directory in one go, so the peak follows the widest directory it opens
-rather than the number of matches it yields.
+rather than the number of matches it yields. A `**` in the pattern walks the
+tree as `rglob()` does, and pays its O(w + d) space instead.
 
 ```python
 from pathlib import Path
@@ -255,6 +256,9 @@ for match in Path('.').glob('*'):  # O(w) space
 
 # Collecting the results adds the matches on top
 matches = list(Path('.').glob('*'))  # O(w + matches) space
+
+# A ** pattern pays rglob's depth term instead of the flat O(w)
+txt_files = list(Path('.').glob('**/*.txt'))  # O(w + d) space
 ```
 
 ### rglob()
@@ -277,9 +281,9 @@ all_txt = list(path.rglob('*.txt'))  # O(n)
 
 #### Space Complexity: O(w + d)
 
-Where w = entries of the largest directory scanned and d = depth reached. The
-recursive walk holds the directories it has found but not yet descended into,
-so depth is a term of its own alongside width.
+Where w = entries of the largest directory scanned and d = depth reached.
+Depth does not fold into width: a deeper tree costs more than a shallow one
+holding the same entries.
 
 ```python
 from pathlib import Path
