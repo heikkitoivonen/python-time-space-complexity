@@ -98,7 +98,7 @@ d = math.dist((0.0, 0.0), (3.0, 4.0))  # 5.0
 
 # O(n) time, O(1) space - neither holds anything per element
 total = math.fsum([0.1] * 10)      # 1.0
-inner = math.prod([2.0, 3.0, 7.0])  # 42.0
+product = math.prod([2.0, 3.0, 7.0])  # 42.0
 ```
 
 Where a dot product is what you want, `sumprod()` (3.12+) is the O(1)-space

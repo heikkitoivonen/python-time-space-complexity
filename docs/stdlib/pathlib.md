@@ -47,7 +47,7 @@ touches the filesystem.
 | `Path.is_dir()` | O(1) | O(1) | One stat call |
 | `Path.is_symlink()` | O(1) | O(1) | One lstat call |
 | `Path.is_junction()` | O(1) | O(1) | Python 3.12+; always False on POSIX |
-| `Path.is_mount()` | O(1) | O(1) | Stats the path and its parent; on 3.12 it resolves the parent instead, at one lstat per component |
+| `Path.is_mount()` | O(1), O(n) on 3.12 | O(1) | n = path components; stats the path and its parent; on 3.12 it resolves the parent instead, at one lstat per component |
 | `Path.is_socket()` | O(1) | O(1) | One stat call |
 | `Path.is_fifo()` | O(1) | O(1) | One stat call |
 | `Path.is_block_device()` | O(1) | O(1) | One stat call |

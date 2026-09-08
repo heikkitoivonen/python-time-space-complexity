@@ -81,6 +81,7 @@ of log beyond the two-argument form, and non-CPython implementations.
 """
 
 import math
+import pathlib
 import random
 import re
 import subprocess
@@ -93,7 +94,7 @@ from typing import Any
 
 import pytest
 
-PAGE = __import__("pathlib").Path(__file__).parent.parent / "docs" / "stdlib" / "math.md"
+PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "math.md"
 
 EXPECTED_BLOCKS = 9
 
