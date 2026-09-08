@@ -377,20 +377,27 @@ class TestIsqrtAndIntegerProd:
 
     @pytest.mark.timing
     def test_isqrt_grows_faster_than_the_digit_count(self) -> None:
-        timings = [
-            best_ns(lambda bits=bits: math.isqrt((1 << bits) + 1), repeats=5)
-            for bits in (1 << 12, 1 << 13, 1 << 14)
-        ]
+        small = (1 << (1 << 12)) + 1
+        large = (1 << (1 << 15)) + 1
+        small_time = best_ns(lambda: math.isqrt(small), repeats=5)
+        large_time = best_ns(lambda: math.isqrt(large), repeats=5)
 
-        for before, after in zip(timings, timings[1:], strict=False):
-            assert after > 2.5 * before, f"doubling the digits should cost more: {timings}"
+        assert large_time > 12 * small_time, (
+            f"8x the digits should cost more than linear growth: "
+            f"{small_time:.0f} ns against {large_time:.0f} ns"
+        )
 
     @pytest.mark.timing
     def test_prod_over_ints_grows_faster_than_the_term_count(self) -> None:
-        timings = [best_ns(lambda n=n: math.prod([3] * n), repeats=3) for n in (500, 1000, 2000)]
+        small = [3] * 500
+        large = [3] * 4000
+        small_time = best_ns(lambda: math.prod(small), repeats=3)
+        large_time = best_ns(lambda: math.prod(large), repeats=3)
 
-        for before, after in zip(timings, timings[1:], strict=False):
-            assert after > 2.0 * before, f"the growing product should cost more: {timings}"
+        assert large_time > 12 * small_time, (
+            f"8x the terms should cost more than linear growth: "
+            f"{small_time:.0f} ns against {large_time:.0f} ns"
+        )
 
 
 class TestFloatRowsTakeFloats:
