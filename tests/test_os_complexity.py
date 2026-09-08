@@ -5,39 +5,35 @@ so the page's claims about how many of them an operation makes need no
 tolerance. os.stat, os.lstat and os.getcwd are wrapped for the duration of a
 call and restored afterwards.
 
-Two space bounds did not survive measurement:
+The space bounds that carry more than one term:
 
-* os.walk was documented O(d) for depth d, with a note that mentioned pending
-  directories without counting them. The queued entries are a term of their
-  own: at a fixed depth, 4x the siblings costs about 4x the peak on every
-  supported version (x3.57 on 3.11, x3.89 on 3.14). Depth costs too, and how
-  much depends on the version - gh-89727 replaced the recursive _walk() with
-  an explicit stack in 3.12, so 3.11 spends a generator frame per level and
-  raises RecursionError on a tree 2,000 deep where 3.12, 3.13 and 3.14 walk it.
-  Neither term dominates on every version, so the page claims neither.
-* os.makedirs was documented O(1) space, and the frames are only half of why
-  that is wrong: each recursive frame keeps its own prefix of the path, so at
-  a fixed depth of 100 the peak still rises from 17.5 KB to 118.6 KB as the
-  components grow from 1 to 20 characters. The bound is O(n·L) for n
-  components and a path of length L, and a deep enough path raises
+* os.walk is O(w + d). The queued entries are a term of their own: at a fixed
+  depth, 4x the siblings costs about 4x the peak on every supported version
+  (x3.57 on 3.11, x3.89 on 3.14). Depth costs too, and how much depends on the
+  version - gh-89727 replaced the recursive _walk() with an explicit stack in
+  3.12, so 3.11 spends a generator frame per level and raises RecursionError
+  on a tree 2,000 deep where 3.12, 3.13 and 3.14 walk it. Neither term
+  dominates on every version, so the page claims neither over the other.
+* os.makedirs is O(n·L) in space for n components and a path of length L. The
+  frames are only half of it: each recursive frame keeps its own prefix of the
+  path, so at a fixed depth of 100 the peak rises from 17.5 KB to 118.6 KB as
+  the components grow from 1 to 20 characters. A deep enough path raises
   RecursionError besides - at depth 1,200 on both 3.11 and 3.14.
-* os.removedirs was documented O(1) space too. It is iterative, which is why
-  it holds one prefix rather than all of them, but each prefix is still O(L):
-  799 B against 6,605 B for the same two component lengths. Iteration bounds
-  how many are live at once, not how large they are.
-* Both were documented O(n) time, which cannot be right beside an O(n·L)
-  space bound - the characters have to be produced before they can be held.
-  Counted at os.path.split, the parsing tracks n·L exactly: doubling the
-  depth multiplies it by 3.8, and at a fixed depth it follows the path length
-  (x4.79 for a 5.1x path, x3.19 for a 3.23x one). removedirs parses the same
-  characters as makedirs, so both rows carry O(n·L) time and only the space
-  differs.
+* os.removedirs is O(L). It is iterative, which is why it holds one prefix
+  rather than all of them, but each prefix is still O(L): 799 B against 6,605 B
+  for the same two component lengths. Iteration bounds how many are live at
+  once, not how large they are.
+* Both are O(n·L) in time as well, because the characters have to be produced
+  before they can be held. Counted at os.path.split, the parsing tracks n·L
+  exactly: doubling the depth multiplies it by 3.8, and at a fixed depth it
+  follows the path length (x4.79 for a 5.1x path, x3.19 for a 3.23x one).
+  removedirs parses the same characters as makedirs, so the two rows differ
+  only in space.
 
-The Path Operations table listed realpath among what are otherwise string
-operations. Counted, realpath makes one lstat per component (4, 6, 10 and 18
-calls at depths 2, 4, 8 and 16) and abspath makes one getcwd call for a
-relative path, while join, split, dirname, basename, splitext and normpath
-make none.
+realpath is the one Path Operations entry that touches the filesystem.
+Counted, it makes one lstat per component (4, 6, 10 and 18 calls at depths 2,
+4, 8 and 16), and abspath makes one getcwd call for a relative path, while
+join, split, dirname, basename, splitext and normpath make none.
 
 Both efficiency claims in Performance Notes hold exactly: listing 55 entries
 costs 55 stat calls through listdir plus os.path.isfile and none at all

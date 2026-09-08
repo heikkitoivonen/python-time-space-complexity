@@ -1,15 +1,16 @@
 """Tests to verify documented behaviour of Counter, per docs/stdlib/counter.md.
 
 That page has its own complexity table, separate from the Counter section of
-docs/stdlib/collections.md, and all ten of its code blocks run - the first
-page checked where none were broken. Two table claims did not survive:
+docs/stdlib/collections.md, and all ten of its code blocks run.
 
-* `subtract()` was priced at O(1) space. Subtracting a key the counter does
-  not have creates it with a negative count.
-* "Not good for: simple counting loops (slightly slower)" is right for one
-  usage and backwards for the other. `Counter(iterable)` counts in C through
-  `_count_elements` and beats a `defaultdict(int)` loop; incrementing one key
-  at a time does not use that path and is slower than the same loop.
+Two claims the table has to be careful about:
+
+* `subtract()` is not O(1) in space. Subtracting a key the counter does not
+  have creates it with a negative count.
+* Whether Counter beats a counting loop depends on which Counter usage is
+  meant. `Counter(iterable)` counts in C through `_count_elements` and beats a
+  `defaultdict(int)` loop; incrementing one key at a time does not use that
+  path and is slower than the same loop.
 
 tests/test_collections_complexity.py covers most_common() and the arithmetic
 operators; this file covers what is specific to the standalone page.
@@ -119,9 +120,9 @@ class TestCountingSpeedDependsOnHowYouFeedIt:
     def test_missing_is_not_the_explanation(self) -> None:
         """__missing__ fires once per distinct key, not once per increment.
 
-        The page originally blamed Counter.__missing__ being written in
-        Python. Over 200,000 increments of 1,000 keys it runs 1,000 times,
-        and a Counter that never misses at all is still the slower one.
+        Counter.__missing__ being written in Python does not explain the
+        gap: over 200,000 increments of 1,000 keys it runs 1,000 times, and a
+        Counter that never misses at all is still the slower one.
         """
         calls = {"n": 0}
 

@@ -1,12 +1,10 @@
 """Tests to verify documented complexity of abc.get_cache_token().
 
-docs/stdlib/abc.md's `get_cache_token()` row had no test coverage at all
-before this file. It was previously tested indirectly under
-tests/test_functools_complexity.py, because `functools.get_cache_token`
-happens to work too -- `functools.py` imports the name from `abc` for its
-own internal use. That import is not part of the documented functools API
-(it is not in `functools.__all__`), so the test now uses the import the
-documentation actually recommends: `from abc import get_cache_token`.
+`functools.get_cache_token` happens to work too -- `functools.py` imports
+the name from `abc` for its own internal use -- but that import is not part
+of the documented functools API (it is not in `functools.__all__`). These
+tests use the import the documentation recommends: `from abc import
+get_cache_token`.
 """
 
 from abc import ABC, abstractmethod, get_cache_token

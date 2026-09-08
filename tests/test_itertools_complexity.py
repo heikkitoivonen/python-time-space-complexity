@@ -64,9 +64,8 @@ class CountingSource:
 def held_bytes(build, drive) -> int:
     """Bytes still held after driving an iterator, measured before releasing it.
 
-    The reading has to be taken while the object is still alive: sample it
-    after the last reference goes and every answer is zero, which is what the
-    first draft of this helper did.
+    The reading has to be taken while the object is still alive. Sampled
+    after the last reference goes, every answer is zero.
     """
     tracemalloc.start()
     try:
@@ -555,7 +554,7 @@ class TestDocumentedExamplesRun:
 
 
 class TestWindowHelperCost:
-    """docs/stdlib/itertools.md Window Operations, as corrected by these tests.
+    """docs/stdlib/itertools.md Window Operations.
 
     The example was priced at "O(n) items, O(w) memory". The memory was right;
     the time was not. Each window is a fresh w-tuple, so the windows alone come
@@ -699,10 +698,10 @@ class TestCombinatoricsCostIsNotJustTheResultCount:
     def test_product_keeps_per_pool_state_with_the_inputs_held_at_nothing(self) -> None:
         """The k term, isolated from the Sum(ni) term.
 
-        An earlier version grew k by adding 50-element pools, which grew
-        Sum(ni) in step -- so the older O(Sum(ni)) bound explained the result
-        just as well and the test proved nothing about k. Every pool here is
-        empty, so Sum(ni) stays 0 and only k moves.
+        Growing k by adding 50-element pools grows Sum(ni) in step, so an
+        O(Sum(ni)) bound would explain the result just as well and nothing
+        about k would be proved. Every pool here is empty, so Sum(ni) stays 0
+        and only k moves.
         """
 
         def build(pools: int):
@@ -767,10 +766,9 @@ class TestCombinatoricsCostIsNotJustTheResultCount:
     def test_the_rewritten_suffix_is_not_a_constant(self) -> None:
         """Why O(r) per result is an upper bound and not a flat rate.
 
-        An earlier version of the page called the reuse path "O(1) amortised".
-        It is nearly that when r is small next to n, and nothing like it when
-        r approaches n -- at r = n-1 the mean suffix is exactly n/2, which
-        grows without bound. The claim now says so, and this is the arithmetic
+        The reuse path is nearly O(1) amortised when r is small next to n,
+        and nothing like it when r approaches n -- at r = n-1 the mean suffix
+        is exactly n/2, which grows without bound. This is the arithmetic
         behind the wider-result timing test in this class.
         """
         # r small next to n: essentially one slot per result.
@@ -790,10 +788,9 @@ class TestCombinatoricsCostIsNotJustTheResultCount:
     def test_permutations_carries_more_setup_than_combinations(self) -> None:
         """permutations() keeps an n-entry indices array combinations() has not.
 
-        The page used to describe both as holding "an r-entry index array".
-        The O(n + r) bound was right, but for permutations the n comes from a
-        second array rather than only from the input copy, so at a fixed small
-        r the gap between the two grows with n.
+        Both carry an O(n + r) bound, but for permutations the n comes from
+        a second array rather than only from the input copy, so at a fixed
+        small r the gap between the two grows with n.
         """
 
         def gap(n: int) -> int:

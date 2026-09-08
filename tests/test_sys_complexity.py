@@ -6,38 +6,26 @@ operations that are not constant, and those are mostly observable: a frame
 walk is a chain of known length, `_current_frames()` returns one entry per
 thread, every audit hook fires, and a tracer is called once per event.
 
-Four claims did not survive the check, and two of the page's code blocks did
-not run at all:
+The operations that are not constant, and the size variable each is in:
 
-* `sys.setrecursionlimit(n)` was documented O(1). Since 3.11 it writes through
-  to every thread state (`Py_SetRecursionLimit` in Python/ceval.c), so it is
-  O(t): flat on 3.10 at 5.0e-08s from 1 thread to 400, and 3.4e-08s to
-  4.9e-07s across the same range on 3.14.
-* The `sys.modules` lookup row claimed O(n) *space*. A dict lookup allocates
-  nothing; the O(n) was the size of the dict, which is not what the column
-  means.
-* "Multiple O(n) inserts at position 0" was offered a fix - reversing the
-  input and inserting at 0 anyway - labelled "O(k) amortized". Reversing
-  fixes the resulting order, not the cost: k inserts at the front of an
-  e-element list is O(k * e) however they are ordered.
-* "sys.modules is dict-like with ~200+ entries typically" is wrong twice. It
-  is a real dict, and a plain script starts with 34 entries here, not 200.
-  `sys.path`'s "usually ~10-20" was 5. Both counts are gone rather than
-  corrected: they are properties of one installation.
+* `sys.setrecursionlimit(n)` is O(t) in the thread count from 3.11, where it
+  writes through to every thread state (`Py_SetRecursionLimit` in
+  Python/ceval.c): flat on 3.10 at 5.0e-08s from 1 thread to 400, and
+  3.4e-08s to 4.9e-07s across the same range on 3.14.
+* A `sys.modules` lookup allocates nothing, so its space is O(1). The size of
+  the dict is not what the Space column means.
+* k inserts at position 0 of an e-element list is O(k * e) however they are
+  ordered. Reversing the input first fixes the resulting order, not the cost.
+* `sys.modules` is a real dict, and how many entries it or `sys.path` holds is
+  a property of one installation rather than of the API - a plain script
+  starts with 34 modules here. The page states neither count.
 
-The two blocks that did not run:
+Fifteen rows cover the operations that are not constant time: `sys._getframe`,
+`sys._current_frames`, `sys.intern`, `sys.audit`, and the `sys.path`
+operations the prose prices.
 
-* the module-lookup block ended an `if` with nothing but a comment, so it
-  raised IndentationError before reaching anything it was illustrating;
-* the path block used `paths` without defining it, so it raised NameError.
-
-Fifteen rows were missing, including every operation on the page that is not
-constant time: `sys._getframe`, `sys._current_frames`, `sys.intern`,
-`sys.audit`, and the `sys.path` operations that the prose already priced but
-the table never listed.
-
-One version boundary turned up while testing rather than from the changelog,
-and it is 3.12 alone rather than a floor. `sys.intern()` normally frees the
+One version boundary is 3.12 alone rather than a floor. `sys.intern()`
+normally frees the
 string with its last reference - `sys_intern_impl` calls
 `_PyUnicode_InternMortal` in 3.14, and the official docs say plainly that
 "interned strings are not immortal". 3.12 made them immortal, and only 3.12:
@@ -405,8 +393,8 @@ class TestIntern:
         assert sys.intern(once) is once
 
     def test_only_exact_strings_can_be_interned(self) -> None:
-        """A str subclass is refused too, which is why the row says `len(s)`
-        of a real str and nothing about what a subclass might cost.
+        """A str subclass is refused too, so the row's `len(s)` is the
+        length of a real str and says nothing about a subclass.
         """
 
         class Subclass(str):

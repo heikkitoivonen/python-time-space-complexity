@@ -314,10 +314,10 @@ def test_every_locale_has_at_least_one_lead(locale):
 def test_the_lead_and_its_label_come_from_one_variable():
     """aria-label *replaces* the link text, so the two must say the same thing.
 
-    They used to be the same expression twice. Now the lead is chosen once,
-    and the risk is that a later edit re-inlines a different pick into one of
-    the two places -- the visible question and the announced one would then
-    disagree, with nothing to see on screen.
+    The lead is chosen once and used in both places. The risk this guards is
+    a later edit re-inlining a different pick into one of the two -- the
+    visible question and the announced one would then disagree, with nothing
+    to see on screen.
     """
     assert re.search(r"\{%-? set lead = announcement\.leads\[", MAIN_HTML), (
         "the rotating lead must be resolved into a single `lead` variable"

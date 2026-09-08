@@ -480,7 +480,7 @@ class TestSqliteCommitBatching:
 
 
 class TestStructFormatCaching:
-    """docs/stdlib/struct.md, as corrected by this test.
+    """docs/stdlib/struct.md.
 
     The page claimed pre-compiling a Struct saves parsing the format "on
     every call". It does not: the module-level functions cache compiled
@@ -566,7 +566,7 @@ class TestTempfileCachesTheDirectory:
 
 @pytest.mark.skipif(sys.version_info < (3, 11), reason="tomllib is new in 3.11")
 class TestTomllibNestingIsNotFree:
-    """docs/stdlib/tomllib.md, as corrected by this test.
+    """docs/stdlib/tomllib.md.
 
     The page claimed nesting costs no more per character than a flat key.
     Each table header creates and installs a dict, so the same number of keys
@@ -737,7 +737,7 @@ class TestBisectKeyListDominates:
 
 
 class TestFractionLoopDoesNotReduce:
-    """docs/stdlib/fractions.md, as corrected by these tests.
+    """docs/stdlib/fractions.md.
 
     The continued-fraction example was annotated as re-reducing via GCD on
     every step. Neither of its operations does: subtracting an integer from a

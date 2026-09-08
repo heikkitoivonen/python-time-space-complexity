@@ -185,9 +185,8 @@ class TestHeapqComplexity:
 
         The item has to exceed the root or heappushpop returns it untouched:
         pushing -1 into a heap rooted at 0 costs exactly one comparison at
-        every size, which is what this test used to measure while asserting a
-        logarithmic ratio. Pushing root + 1 costs 19 comparisons at n=1,000
-        and 33 at n=100,000.
+        every size, so it cannot show a logarithmic ratio. Pushing root + 1
+        costs 19 comparisons at n=1,000 and 33 at n=100,000.
         """
         small_heap = list(range(self.SMALL_SIZE))
         large_heap = list(range(self.LARGE_SIZE))

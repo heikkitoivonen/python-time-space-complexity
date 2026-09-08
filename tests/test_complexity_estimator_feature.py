@@ -78,9 +78,9 @@ class TestComplexityEstimator:
     def test_tie_break_runs_when_rmse_gap_is_large(self):
         """The linear-vs-nlogn tie-break must not be gated on close RMSE values.
 
-        It used to bail out unless the two RMSE scores were within 5% of each
-        other. In practice the gap is 100-800%, so it never ran and noise
-        picked the winner.
+        Gating it on close RMSE values would keep it from ever running: in
+        practice the gap between the two scores is 100-800%, which would
+        leave noise to pick the winner.
         """
         n_values = [1000, 2000, 4000, 8000, 16000]
         times = [n * math.log(n) * 1e-9 for n in n_values]

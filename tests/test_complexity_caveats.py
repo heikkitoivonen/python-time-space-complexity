@@ -1,23 +1,18 @@
-"""Tests for the complexity claims that turned out to need a caveat.
+"""Tests for the complexity claims that need a caveat.
 
-Every test here corresponds to a claim these docs got wrong and had to
-correct. The pattern was always the same: a clean bound stated for an
-operation whose real cost has a qualifier -- an eager index, a fallback path,
-a resize, a second dict operation -- and the qualifier is exactly what a
-reader relies on. Documentation review does not catch these; running the code
-does.
+These all share a shape: a clean bound stated for an operation whose real cost
+carries a qualifier -- an eager index, a fallback path, a resize, a second
+dict operation -- and the qualifier is exactly what a reader relies on.
+Reading the documentation does not surface them; running the code does.
 
-So each test pins the behaviour that forced the correction, in the file it was
-corrected in:
+Each test pins one such behaviour, alongside the page that documents it:
 
-* ``mode()`` on a tie returns a value, it does not raise (docs showed the
-  opposite, and the example did not run)
+* ``mode()`` on a tie returns a value, it does not raise
 * ``SequenceMatcher`` indexes its second sequence during construction
 * installing a warnings filter scans the filter list
 * ``d[k] += 1`` on a defaultdict is more than one dict operation
 * equal-hashing keys still compare their elements
-* ``int(str)`` and ``Decimal`` arithmetic are superlinear in inputs the docs
-  described as linear
+* ``int(str)`` and ``Decimal`` arithmetic are superlinear, not linear
 * Unicode normalization was superlinear before CPython's CVE-2026-3276 fix
 
 Timing-based tests use a ratio between two sizes with wide tolerances: they
@@ -171,12 +166,12 @@ class TestDefaultdictIncrementIsTwoOperations:
     def test_missing_key_also_pays_for_the_factory(self) -> None:
         """The factory's insert is real work, counted or not.
 
-        Counting __setitem__ used to see it. Between 3.14.2 and 3.14.7,
-        defaultdict.__missing__ stopped routing its insert through a
-        subclass's __setitem__, so that instrument reads 1 where it read 2
-        -- while the dict still ends up holding the factory's value. Observe
-        the factory and the stored value instead, which every version agrees
-        on.
+        Counting __setitem__ is not the way to see it: between 3.14.2 and
+        3.14.7, defaultdict.__missing__ stopped routing its insert through a
+        subclass's __setitem__, so that instrument reads 1 on some versions
+        and 2 on others while the dict ends up holding the factory's value
+        either way. Observe the factory and the stored value instead, which
+        every version agrees on.
         """
         calls = 0
 

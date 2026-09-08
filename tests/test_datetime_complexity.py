@@ -428,7 +428,7 @@ class TestVersionNotes:
     """The three notes that name a version inside the supported range."""
 
     def test_zoneinfo_is_present_on_every_supported_version(self) -> None:
-        """It arrived in 3.9, not 3.11 as the page said."""
+        """zoneinfo arrived in 3.9, below the whole supported range."""
         assert zoneinfo.ZoneInfo("UTC") is not None
 
     def test_fromisoformat_widened_in_3_11(self) -> None:

@@ -665,11 +665,11 @@ class TestCounterOperations:
     def test_heap_path_beats_sorting_on_realistic_data(self) -> None:
         """most_common(k) is the faster choice on data that looks like data.
 
-        An earlier version of this file asserted the opposite, having
-        benchmarked only counts that increase in iteration order - the one
-        ordering that defeats the heap. On random counts the heap wins by
-        roughly eight times, because nlargest settles on a high threshold
-        early and stops replacing, while Timsort has no runs to exploit.
+        Counts that increase in iteration order are the one shape that
+        defeats the heap, and benchmarking only those gives the opposite
+        answer. On random counts the heap wins by roughly eight times,
+        because nlargest settles on a high threshold early and stops
+        replacing, while Timsort has no runs to exploit.
         """
         import random
 

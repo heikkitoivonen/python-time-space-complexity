@@ -1,64 +1,50 @@
 """Tests to verify documented complexity of reprlib.
 
-docs/stdlib/reprlib.md had no test coverage before this file, and successive
-reviews turned up eight defects, each of the last five found in the fix for
-the one before it:
+Truncation does not make a call constant in either column. A truncated call
+still returns a string whose length grows with the configured limit, so its
+space is O(k) at best, and how much of the input it reads depends on which
+container it was handed.
 
-* The Truncation row claimed O(1) space while the row above it (`repr()`)
-  already prices output at O(k) -- a truncated call still returns a string
-  whose length grows with the limit, so the truncated case cannot be O(1)
-  either.
-* The "Truncating Long Outputs" example's displayed output for the
-  `maxstring` case was wrong on both the content and the position of the
-  ellipsis: the page said `'xxxxxxxxxxxxxxxxxxxx'...` (quotes closed before
-  the ellipsis); the actual output truncates *inside* the quotes,
-  `'xxxxxxx...xxxxxxxx'`.
-* The "Default Shorthand" example's displayed output was missing an entry:
-  the page said `{0: 0, 1: 1, 2: 4, ...}`; the actual default `maxdict` is
-  4, so the real output is `{0: 0, 1: 1, 2: 4, 3: 9, ...}`.
-* The fix for the first point above then priced *all* truncation at O(k) in
-  terms of the configured limit, without saying what that means for the
-  input size n -- and the examples separately mislabeled several fixed-limit
-  calls as O(n). Reading `Lib/reprlib.py` explains why neither was
-  sufficient: `repr_list`/`repr_tuple`/`repr_deque`/`repr_array`/`repr_str`
-  pull only k items via `islice` (or a direct slice for `str`), so a fixed k
-  costs O(min(n, k)) -- no more once n exceeds k. But `repr_dict`/`repr_set`/
-  `repr_frozenset` call `sorted()` on the *whole* input before truncating
-  the rendered output, which is O(n log n) regardless of the limit. One
-  table row cannot describe both; see TestReprTruncation for the measured
-  contrast between a list (flat as n grows) and a dict (which is not).
-* Splitting that row still left the sorted containers' space at O(k). The
-  `sorted()` call materializes an n-element list before any truncation
-  happens -- as does the `list(x)` fallback it drops to when the elements
-  are not orderable -- so peak space is O(n + k), and no output limit
-  reduces it. The elapsed-time tests could not have caught this: an
-  implementation that sorted without allocating would time the same. See
-  TestSortedContainersHoldTheWholeInput, which measures the allocation.
-* That same row then described the sort as giving "a deterministic order"
-  while, in the same sentence, acknowledging the `list(x)` fallback -- the
-  one path that is not ordered at all. It renders in iteration order, which
-  for a set of hash-randomized elements differs between processes, so the
-  page was promising exactly what the fallback does not provide. See
-  TestTheSortFallbackIsNotOrdered.
-* Correcting that also changed the time column to call the fallback O(n),
-  on the strength of a comparator that raised on comparison one -- a
-  generalisation from a single input shape. `_possibly_sorted()` catches
-  the exception whenever it arrives, so a comparator that raises late has
-  already paid for the whole sort, discards the ordering, and builds
-  `list(x)` on top. O(n log n) is restored as the bound, with O(n) named as
-  the immediate-failure case; both ends are now tested. Getting *that*
-  measurement right needed shuffling the elements: drawn from `range(n)`
-  they enter the set in ascending order, where Timsort finishes in n-1
-  comparisons and the sort looks linear.
-* Which was the next defect, because that observation belonged in the docs
-  and went only into a test comment. Timsort's adaptivity is not a
-  measurement artefact to work around; it is the row's best case. An
-  already-ascending input costs n-1 comparisons however late a comparison
-  fails, so the row reads O(n) best / O(n log n) worst. The page's own
-  "Default Shorthand" example, built from `range(1000)`, is the O(n) shape
-  and had been annotated with the worst case; it now says so, and
-  test_the_documented_dict_example_takes_the_linear_path pins the property
-  that makes it true.
+Two families, two bounds:
+
+* `repr_list`, `repr_tuple`, `repr_deque`, `repr_array` and `repr_str` pull
+  only k items, via `islice` or a direct slice, so a fixed k costs
+  O(min(n, k)) - no more once n exceeds k. TestReprTruncation measures a list
+  staying flat as n grows.
+* `repr_dict`, `repr_set` and `repr_frozenset` call `sorted()` on the *whole*
+  input before truncating the rendered output, so they are O(n log n)
+  regardless of the limit, and the same test measures a dict that does not
+  stay flat. One table row cannot describe both families.
+
+That `sorted()` materializes an n-element list before any truncation happens,
+as does the `list(x)` fallback it drops to when the elements are not
+orderable. Peak space is therefore O(n + k) and no output limit reduces it.
+Elapsed time cannot settle this - an implementation that sorted without
+allocating would time the same - so TestSortedContainersHoldTheWholeInput
+measures the allocation instead.
+
+The `list(x)` fallback is the one path with no ordering at all. It renders in
+iteration order, which for a set of hash-randomized elements differs between
+processes, so nothing about the sorted families may be called deterministic.
+See TestTheSortFallbackIsNotOrdered.
+
+`_possibly_sorted()` catches a comparison failure whenever it arrives, so a
+comparator that raises late has already paid for the whole sort, discards the
+ordering, and builds `list(x)` on top. O(n log n) is the bound; O(n) is the
+immediate-failure case, and both ends are tested.
+
+Timsort's adaptivity is the row's best case rather than a measurement
+artefact: an already-ascending input costs n-1 comparisons however late a
+comparison fails, so the row reads O(n) best and O(n log n) worst. Measuring
+the worst case needs shuffled elements - drawn from `range(n)` they enter a
+set in ascending order, where the sort looks linear. The page's own "Default
+Shorthand" example is built from `range(1000)` and is the O(n) shape;
+test_the_documented_dict_example_takes_the_linear_path pins the property that
+makes it so.
+
+The displayed outputs the examples claim: `maxstring` truncates *inside* the
+quotes, giving `'xxxxxxx...xxxxxxxx'`, and the default `maxdict` is 4, so the
+shorthand prints `{0: 0, 1: 1, 2: 4, 3: 9, ...}`.
 
 `recursive_repr()` was previously tested indirectly under
 tests/test_functools_complexity.py, because `functools.recursive_repr`
@@ -142,7 +128,7 @@ class TestRecursiveRepr:
 
 
 class TestReprTruncation:
-    """docs/stdlib/reprlib.md, as corrected by this class.
+    """The Truncation row, split by container family.
 
     The returned string's length tracks the limit rather than a constant, so
     the output alone is O(k) on every path. Everything else diverges by
@@ -248,14 +234,12 @@ class TestReprTruncation:
 
 
 class TestSortedContainersHoldTheWholeInput:
-    """docs/stdlib/reprlib.md, as corrected by this class.
+    """The dict/set/frozenset space bound: O(n + k), not O(k).
 
-    The dict/set/frozenset row named the O(n log n) sort but still priced
-    space at O(k), the size of the returned string. `_possibly_sorted()`
-    calls `sorted(x)`, which materializes an n-element list before anything
-    is truncated -- and its `except Exception: return list(x)` fallback,
-    taken when the elements are not orderable, materializes n as well. Peak
-    space is therefore O(n + k), and no output limit reduces it.
+    `_possibly_sorted()` calls `sorted(x)`, which materializes an n-element
+    list before anything is truncated -- and its
+    `except Exception: return list(x)` fallback, taken when the elements are
+    not orderable, materializes n as well. No output limit reduces it.
 
     The elapsed-time tests above cannot catch this: a hypothetical
     implementation that sorted lazily would be just as slow and hold
@@ -411,32 +395,25 @@ class TestSortedContainersHoldTheWholeInput:
 
 
 class TestTheSortFallbackIsNotOrdered:
-    """docs/stdlib/reprlib.md, as corrected by this class.
+    """The dict/set/frozenset row: what a failed comparison leaves behind.
 
-    The dict/set/frozenset row said these sort the entire input "for a
-    deterministic order" while, in the same breath, acknowledging the
-    `list(x)` fallback -- which is precisely the path that is *not* ordered.
-    The row now says these attempt to sort, and that a failed comparison
-    leaves iteration order, which for a set of hash-randomized elements
-    varies from one process to the next.
+    These attempt to sort, and a failed comparison leaves iteration order,
+    which for a set of hash-randomized elements varies from one process to
+    the next. Nothing here may be described as deterministic.
 
-    The time column took three goes to get right, each one generalising from
-    whatever single input the previous test happened to use:
+    Two independent parameters decide the cost, and the tests below cross
+    them rather than sampling one point:
 
-    1. O(n log n), flat, with no best case named.
-    2. A comparator raising on comparison one costs 1 comparison, so the
-       fallback was called O(n) -- true only of that comparator.
-       `_possibly_sorted()` catches the exception whenever it arrives, so
-       one raising late has already paid for the whole sort.
-    3. O(n log n) restored as the bound -- but measured only on scattered
-       input, so it named no best case either. Timsort is adaptive: an
-       already-ascending input takes exactly n-1 comparisons however late a
-       comparison fails.
+    * The input's existing order decides between O(n) and O(n log n). Timsort
+      is adaptive, so an already-ascending input takes exactly n-1
+      comparisons however late a comparison fails.
+    * The failure position decides how much of that is paid before the
+      fallback discards it. `_possibly_sorted()` catches the exception
+      whenever it arrives, so a comparator raising on comparison one costs 1
+      while one raising late has already paid for the whole sort.
 
-    So there are two independent parameters, and the tests below cross them
-    rather than sampling one point: the input's existing order decides
-    between O(n) and O(n log n), and the failure position decides how much
-    of that is paid before the fallback discards it.
+    Measuring either on a single input shape gives an answer true only of
+    that shape.
     """
 
     class Unorderable:

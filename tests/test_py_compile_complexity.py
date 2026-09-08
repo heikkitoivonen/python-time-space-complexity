@@ -127,8 +127,8 @@ class TestTheReturnValueIsThePath:
         """The raise sits inside `if quiet < 2:`, so quiet=2 swallows it.
 
         A build step asking for doraise and quiet together gets neither the
-        exception nor the message. This test exists because the first draft
-        of the page's own example asked for both and demonstrated nothing.
+        exception nor the message, so an example that passes both
+        demonstrates nothing.
         """
         broken = tmp_path / "broken.py"
         broken.write_text("def (\n", encoding="utf-8")
@@ -197,8 +197,8 @@ class TestInvalidationModes:
     ) -> None:
         """TIMESTAMP is only the default when SOURCE_DATE_EPOCH is unset.
 
-        A reproducible build already gets hash invalidation without asking,
-        which the page claimed the opposite of.
+        A reproducible build already gets hash invalidation without asking
+        for it.
         """
         modes = py_compile.PycInvalidationMode
 

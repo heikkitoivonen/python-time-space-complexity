@@ -6,33 +6,31 @@ so a ``Random`` subclass that counts those two calls settles most of the page's
 bounds with no tolerance at all: how many draws an operation makes, whether it
 copies its population, and whether a rejection loop is running.
 
-Three claims did not survive that check:
+What that counting settles:
 
-* ``sample()`` was documented as copying the population "when k is large or
-  input is set/dict". Sets and dicts are not copied on any supported version -
-  they raise TypeError on 3.11 through 3.14 and warn on 3.10. The copy is real,
-  but neither term decides it alone: CPython sizes an n-element list against a
-  set built for k, so at k=1 a population of 21 is copied and 22 is not, and at
-  n=100 a k of 20 is indexed while 50 is copied. Both directions are pinned.
-* ``seed()`` was documented O(1) space. A str or bytes seed becomes
+* ``sample()`` does not copy sets or dicts on any supported version - they
+  raise TypeError on 3.11 through 3.14 and warn on 3.10. The copy is real for
+  sequences, but neither k nor n decides it alone: CPython sizes an n-element
+  list against a set built for k, so at k=1 a population of 21 is copied and
+  22 is not, and at n=100 a k of 20 is indexed while 50 is copied. Both
+  directions are pinned.
+* ``seed()`` is O(n) in space for a str or bytes seed, which becomes
   ``int.from_bytes(a + sha512(a).digest())`` - the whole input is kept, not
   just its digest - so the int and the key array built from it are both
   proportional to the seed. Measured peak rises 10x for a 10x seed, from
   3.4 KB at 1,000 characters to 3.1 MB at 1,000,000. Only the state it
   produces is fixed, at 625 words.
-* Bogosort was documented "expected O(n!) time", which counts the shuffles and
-  not what one costs. Each shuffle is O(n), so the expected total is O(n * n!);
-  measured over 2,000 trials at n=4, the mean shuffle count is 24, matching n!.
+* Bogosort is O(n * n!) expected, not O(n!): the factorial counts the
+  shuffles and each shuffle is itself O(n). Measured over 2,000 trials at
+  n=4, the mean shuffle count is 24, matching n!.
 
-The thread-safety note said the module-level RNG "is safe to call from multiple
-threads". True of ``random()``, which is one C step, but not of ``gauss()``,
-which caches its spare value in the instance and is documented in CPython as
-"not thread-safe without a lock around calls". The page now says so.
+Thread safety splits by function. ``random()`` is one C step and safe to call
+from several threads; ``gauss()`` caches its spare value in the instance and is
+documented in CPython as "not thread-safe without a lock around calls".
 
-Ten table rows were missing entirely, including every operation whose cost is
-not constant: ``getrandbits``, ``randbytes``, ``sample(counts=...)``, and the
-``cum_weights=`` form of ``choices()``, which skips the O(n) accumulation the
-``weights=`` row is priced for.
+The rows whose cost is not constant are ``getrandbits``, ``randbytes``,
+``sample(counts=...)``, and the ``cum_weights=`` form of ``choices()``, which
+skips the O(n) accumulation the ``weights=`` row is priced for.
 
 Costs are counted in draws and element accesses, with an index taken as one
 word. That is the model the rest of this site uses, and the split it rests on
@@ -59,12 +57,11 @@ about eighty-five times the call (78 us at 10,000 bits, 6.6 ms at 100,000,
 dominates the multiplication, 5.7 ms against 0.9 ms at 100,000 bits. The two
 forms are separate rows because of it.
 
-Read against the 3.14 sources afterwards, which moved two things:
+Two things the sources decide rather than the measurements:
 
-* ``randint`` no longer delegates to ``randrange``. Through 3.13 it was
-  ``self.randrange(a, b + 1)``; 3.14 inlines ``a + self._randbelow(b - a + 1)``.
-  The bound is the same either way, and the table said the mechanism, so the
-  table now says the bound.
+* ``randint`` delegates to ``randrange`` through 3.13 and inlines
+  ``a + self._randbelow(b - a + 1)`` from 3.14. The bound is the same either
+  way, which is why the table states the bound and not the mechanism.
 * ``long_divmod`` hands off to ``_pylong.int_divmod`` (Burnikel-Ziegler) past
   300 divisor digits from 3.12 on; 3.11 has no ``_pylong`` at all. The stepped
   path is superlinear on both, which is what the row claims, but by very

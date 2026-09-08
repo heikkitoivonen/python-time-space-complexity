@@ -41,27 +41,23 @@ Untested axes, and why:
   and `re.UNICODE` change how a character class is built, not how the scan
   scales with the subject.
 
-Read against the 3.14 sources afterwards, which sharpened three things:
+Three things the sources decide rather than the measurements:
 
 * `match_getslice_by_index` reads two integers out of `self->mark` and hands
   them to `getslice`, which calls `PyUnicode_Substring`. That function opens
   with `if (start == 0 && end == length) return unicode_result_unchanged(self)`
   - so a group spanning the whole subject is returned unchanged, and only a
-  proper substring is copied. It is why an early measurement of `group(0)`
-  looked flat, and it is now pinned rather than tripped over.
-* `findall` was documented O(k) space. The list holds k *copies*, so the
-  matched text counts too: 20,000 matches cost 1.25 MB at 5 characters each
-  and 5.15 MB at 200. The row and the tip beside it also disagreed, one
-  saying O(k) and the other O(k + g).
-* The cache prose written for this round called the compiled-pattern cache
-  an LRU, and dated the second-level cache to 3.13. Both were read off the
-  3.14 source alone. It is an LRU from 3.12, where `_compile` pops and
+  proper substring is copied. `group(0)` therefore measures flat where a
+  proper substring does not, and both are pinned.
+* `findall` is O(k + g) in space, not O(k): the list holds k *copies*, so
+  the matched text counts too. 20,000 matches cost 1.25 MB at 5 characters
+  each and 5.15 MB at 200.
+* The compiled-pattern cache is an LRU from 3.12, where `_compile` pops and
   re-inserts a found pattern as most recently used; on 3.10 and 3.11 the hit
   was a plain dict lookup and the 513th pattern dropped the oldest-inserted
-  entry however often it had been used. `_MAXCACHE2` is 3.12 as well - the
-  first probe checked 3.10, 3.11, 3.13 and 3.14 and skipped the one version
-  where both changes landed. Both behaviours are pinned by identity,
-  version-branched like the anchor tests.
+  entry however often it had been used. `_MAXCACHE2` is 3.12 as well, so a
+  version sweep that skips 3.12 misses both changes. Both behaviours are
+  pinned by identity, version-branched like the anchor tests.
 * The Match rows used `k` for the number of groups while the preamble defined
   it as the number of matches, and `re.purge()` used `c` for the cache size.
   Both now have their own name.

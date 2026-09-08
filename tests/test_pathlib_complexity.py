@@ -5,65 +5,53 @@ syscall is observable and a peak allocation is reproducible, so the page's
 claims about how many directory reads an operation makes, and how much it
 holds while it makes them, need no tolerance.
 
-Five claims did not survive measurement:
+What the directory operations hold:
 
-* `Path.iterdir()` was documented O(1) space per item, "iterator uses O(1)
-  space per entry". It is an iterator, but not a streaming one: every
-  supported version reads the directory in full before yielding anything -
-  through os.listdir up to 3.12 and a list() of os.scandir from 3.13. Taking
-  only the first item from a directory of 1,600 entries peaks at roughly 8x
-  what 200 entries cost, on every version (x7.11 on 3.10, x7.95 on 3.14). The
-  row is O(d).
-* `Path.glob()` and `Path.rglob()` carried the same O(1)-per-item space claim,
-  and the same measurement refutes it: a pattern matching exactly one file
-  peaks at x7.5-x7.7 more in a directory of 1,600 than in one of 200 on every
-  version. Space follows the widest directory scanned, not the matches
-  yielded. The glob section also defined its size variable as "matching
-  entries" while the table said "entries checked"; the scan is what costs, so
-  both now say entries scanned.
-* `Path.rglob()` pays a depth term as well as a width one: 32x the depth costs
-  x171 on 3.10, x131 on 3.11, x6.1 on 3.12 and x2.1 on 3.13 and 3.14. The row
-  is O(w + d) on every version - but not for the same reason on each, and the
-  first draft of this page said it was, that the walk holds the directories it
-  has found but not yet descended into. Varying component length at a fixed
-  total path length separates the two: with 1,280 characters of tail either
-  way, 640 nested directories cost 3,628,740 B against 64,140 B for 20 on
-  3.10. On 3.14 the same pair costs 11,962 B and 11,988 B - indistinguishable,
-  because what grows there is the length of the paths the walk carries, not a
-  queue of directories behind them. The page states the terms and no
-  mechanism.
-* `Path.walk()` was documented O(d) space, and is the same shape as os.walk
-  for the same reason - it delegates to it. 4x the siblings at a fixed depth
-  costs x3.8-x3.9. The row is O(w + d), matching the os page. The row also
-  carried no version marker: Path.walk() does not exist before 3.12, which is
-  two of the five versions this project supports.
-* `Path.is_mount()` was documented O(1), and is O(1) on four of the five
-  supported versions - 6 stat calls at any depth on 3.10 and 3.11, 2 on 3.13
-  and 3.14. On 3.12 it reaches an os.path.ismount that resolves the parent
-  rather than lstat-ing it, so the count rises one per component: 6, 9 and 21
-  at the three depths measured here. The row is O(1) with O(n) in components
-  named for 3.12.
+* `Path.iterdir()` is O(d) in space as well as time. It returns an iterator,
+  but not a streaming one: every supported version reads the directory in full
+  before yielding anything - through os.listdir up to 3.12 and a list() of
+  os.scandir from 3.13. Taking only the first item from a directory of 1,600
+  entries peaks at roughly 8x what 200 entries cost (x7.11 on 3.10, x7.95 on
+  3.14).
+* `Path.glob()` is O(w) in the widest directory it scans, for the same reason,
+  and its time is in entries scanned rather than matched: a pattern matching
+  exactly one file peaks at x7.5-x7.7 more in a directory of 1,600 than in one
+  of 200, on every version.
+* `Path.rglob()` and a `**` pattern pay a depth term as well: 32x the depth
+  costs x171 on 3.10, x131 on 3.11, x6.1 on 3.12 and x2.1 on 3.13 and 3.14.
+  O(w + d) bounds every version, but the term is not the same thing on each.
+  Varying component length at a fixed total path length separates them: with
+  1,280 characters of tail either way, 640 nested directories cost 3,628,740 B
+  against 64,140 B for 20 on 3.10, while on 3.14 the same pair costs 11,962 B
+  and 11,988 B - indistinguishable, because what grows there is the length of
+  the paths the walk carries rather than a queue of directories behind them.
+  The page states the terms and no mechanism.
+* `Path.walk()` is 3.12+ and delegates to os.walk, so it carries that page's
+  O(w + d): 4x the siblings at a fixed depth costs x3.8-x3.9.
 
-Two rows became version-dependent rather than wrong:
+Where the version matters:
 
-* `Path(str)` was documented O(n) time and space. gh-101362 made PurePath
-  store its arguments and parse them on first use, so from 3.12 construction
-  is O(1): a 100,000-character path peaks at 100,793 B on 3.10 and 248 B on
-  3.12, and the same 248 B for a 10-character one. The parse is deferred, not
-  removed - the first str() pays it and caches the result.
+* `Path(str)` is O(n) in the string before 3.12 and O(1) from it. gh-101362
+  made PurePath store its arguments and parse them on first use, so a
+  100,000-character path peaks at 100,793 B on 3.10 and 248 B on 3.12 - the
+  same 248 B a 10-character path costs. The parse is deferred, not removed:
+  the first str() pays it and caches the result.
 * Joining is deferred with it. A 1,000,000-character segment costs x19.0 a
   10-character one on 3.10 and x26.9 on 3.11; from 3.12 the ratio is 1.0.
-  This is the only claim here settled with a stopwatch: the peak allocation
-  does not separate the two, because splitting a segment with no separator in
-  it hands back the same string object either way.
+  This is the only claim here settled with a stopwatch, because the peak
+  allocation does not separate the two: splitting a segment with no separator
+  in it hands back the same string object either way.
+* `Path.is_mount()` is O(1) on four of the five supported versions - 6 stat
+  calls at any depth on 3.10 and 3.11, 2 on 3.13 and 3.14. On 3.12 it reaches
+  an os.path.ismount that resolves the parent rather than lstat-ing it, so the
+  count rises one per component: 6, 9 and 21 at the three depths measured here.
+* `Path.iterdir()` reads the directory when it is called from 3.13, and at the
+  first next() before that, so a missing directory surfaces at different
+  moments.
 
-Ten of the page's 25 code blocks did not run. Two could never have:
-`process(match)` and `for name in files`, with neither name defined. One
-raised on four of the five supported versions - `Path('large_name' *
-100).exists()` is a 1,000-character basename, and before 3.14 exists()
-re-raised the resulting ENAMETOOLONG rather than returning False. The other
-seven reached absolute or invented placeholder paths. Every block runs now,
-on 3.10 through 3.14, and the runner below holds none of them back.
+All 25 of the page's code blocks run, on 3.10 through 3.14, and the runner
+below holds none of them back: any non-zero exit is a failure, so a NameError
+has nowhere to hide behind an allowance for missing paths.
 
 Not settled by execution:
 
@@ -434,11 +422,12 @@ class TestModificationRowsAreOneSyscall:
 
 
 class TestIterdirReadsTheWholeDirectory:
-    """`Path.iterdir()` | O(d) | O(d) - the page said O(1) space per item.
+    """`Path.iterdir()` | O(d) | O(d).
 
-    iterdir() returns an iterator, which is why the claim looked right, but
-    the directory is read in full before the first item appears: os.listdir up
-    to 3.12, and list(os.scandir(...)) from 3.13. Both materialise every name.
+    It returns an iterator, but the directory is read in full before the first
+    item appears: os.listdir up to 3.12, and list(os.scandir(...)) from 3.13.
+    Both materialise every name, so the space bound is the listing's, not one
+    entry's.
     """
 
     def test_the_first_item_costs_the_whole_listing(self, tmp_path: pathlib.Path) -> None:
@@ -570,7 +559,7 @@ class TestGlobScansEntriesNotMatches:
 
 
 class TestRglobSpaceNeedsBothTerms:
-    """`Path.rglob(pattern)` | O(n) | O(w + d) - the page said O(1) per item.
+    """`Path.rglob(pattern)` | O(n) | O(w + d).
 
     Width behaves the same on every supported version. Depth does not: 32x the
     depth costs x171 on 3.10 and x2.1 on 3.14, and those are not the same
@@ -612,7 +601,7 @@ class TestRglobSpaceNeedsBothTerms:
         )
 
     def test_rglob_is_glob_with_a_leading_double_star(self, tmp_path: pathlib.Path) -> None:
-        """The page states the equivalence; it used to state it as `**/*pattern`."""
+        """`rglob(pattern)` is `glob('**/' + pattern)`, as the page's row says."""
         root = tmp_path / "tree"
         root.mkdir()
         (root / "a").mkdir()
@@ -624,11 +613,11 @@ class TestRglobSpaceNeedsBothTerms:
 
 @pytest.mark.skipif(sys.version_info < (3, 12), reason="Path.walk() is 3.12+")
 class TestWalkSpaceNeedsBothTerms:
-    """`Path.walk()` | O(n) | O(w + d) - the page said O(d), and no version.
+    """`Path.walk()` | O(n) | O(w + d), and 3.12+.
 
-    Path.walk() delegates to os.walk, so it inherits the bound the os page
-    already carries: the queued entries are a term of their own, and 4x the
-    siblings at a fixed depth costs about 4x.
+    It delegates to os.walk, so it carries the bound the os page already
+    does: the queued entries are a term of their own, and 4x the siblings at
+    a fixed depth costs about 4x.
     """
 
     def test_peak_grows_with_the_sibling_count(self, tmp_path: pathlib.Path) -> None:
@@ -988,9 +977,9 @@ def _run(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
 class TestDocumentedExamples:
     """Every block runs, in a directory of its own, with nothing held back.
 
-    Nothing is pre-classified, which is what makes this catch a real defect:
-    any non-zero exit is a failure, so a NameError has nowhere to hide behind
-    an allowance for missing paths.
+    Nothing is pre-classified, which is what gives the check teeth: any
+    non-zero exit is a failure, so a NameError has nowhere to hide behind an
+    allowance for missing paths.
     """
 
     def test_the_page_has_the_expected_blocks(self) -> None:

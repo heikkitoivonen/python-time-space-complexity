@@ -67,25 +67,23 @@ A further review round found three more defects, unrelated to singledispatch:
   `update_wrapper(w, bare, assigned=20_000_names, updated=())` does Θ(a)
   work against an empty `__dict__` -- a case the O(m) bound priced at zero.
   The bound is O(a + u); see TestWrapsAndUpdateWrapper.
-* `reduce` was priced at flat O(n) time and O(1) space, and had been listed
-  above as a row that checked out -- on the strength of tests that counted
-  its n-1 invocations. The count was right and proved neither bound: both
-  belong to the callback and the accumulator, not to `reduce`'s own walk.
-  Summing ones, the fold those tests used, is precisely the shape that hides
-  this. Folding n one-character strings with `+` re-copies the accumulator
-  every call -- Theta(n^2) time, Theta(n) space. The row is now O(n*f) with
-  the accumulator called out separately; see TestReduce.
-* Fixing that, this module then explained the blind spot by saying integer
-  addition "keeps both callback and accumulator constant-size", and the
-  page's example labelled its product fold O(n). Python has no fixed-size
-  integers. Summing ones is cheap because log2(n) bits fit in a machine word
-  for any n anyone benchmarks, not because the accumulator cannot grow --
-  and `operator.mul` over range(1, n+1) builds n!, whose Theta(n log n) bits
-  make each call dearer than the last: 18.3x for a 4x input, against 4.0x
-  for `max` over the very same numbers. So arbitrary precision breaks the
-  row on its own, with no strings involved. The example no longer calls the
-  product fold O(n) in general, and TestReduce covers the widening
-  accumulator both exactly (bit_length) and by timing.
+* `reduce` is O(n*f), not flat O(n) time and O(1) space. Counting its n-1
+  invocations proves neither bound: both belong to the callback and the
+  accumulator, not to `reduce`'s own walk, so the accumulator is called out
+  separately in the row. Folding n one-character strings with `+` re-copies
+  the accumulator every call -- Theta(n^2) time, Theta(n) space -- and
+  summing ones, the obvious fold to benchmark, is precisely the shape that
+  hides it.
+  Nor is integer addition safe on the grounds that it "keeps both callback
+  and accumulator constant-size": Python has no fixed-size integers. Summing
+  ones is cheap because log2(n) bits fit in a machine word for any n anyone
+  benchmarks, not because the accumulator cannot grow. `operator.mul` over
+  range(1, n+1) builds n!, whose Theta(n log n) bits make each call dearer
+  than the last: 18.3x for a 4x input, against 4.0x for `max` over the very
+  same numbers. Arbitrary precision breaks the flat bound on its own, with no
+  strings involved, which is why a product fold is not O(n) in general.
+  TestReduce covers the widening accumulator both exactly (bit_length) and by
+  timing.
 
 * `lru_cache`/`cache` claimed a flat "O(1) avg hit (hash-based)". Reaching
   that dict lookup can require building a key from the call's arguments,
@@ -100,15 +98,14 @@ A further review round found three more defects, unrelated to singledispatch:
   neighbouring O(1) the interesting one: it is genuine, because it looks up
   a fixed attribute name rather than a derived key.
 
-* Fixing that row still left its Space column and its eviction note
-  describing only one of `maxsize`'s three modes. `maxsize=None` is the
+* The `lru_cache` Space column and eviction note have to cover all three of
+  `maxsize`'s modes, not just one. `maxsize=None` is the
   documented unbounded mode -- the one `cache()` is defined as -- where
   nothing is ever evicted and `min(n, maxsize)` has no value to take, and
   `maxsize=0` disables the cache outright, so nothing is stored and no key
   is even built. Only a positive `maxsize` evicts. The Space column is now
-  piecewise over all three modes. The unbounded case did have a test
-  already, but it asserted on `cache()`, which pins the `cache()` row
-  rather than this one.
+  piecewise over all three modes. A test asserting on `cache()` pins the
+  `cache()` row rather than this one, so the unbounded mode needs its own.
 
 Everything else on the page checked out: the fourteen code blocks execute
 without error and print what their comments say, and the remaining table
@@ -592,9 +589,8 @@ class TestReduce:
 
         Both thresholds come from the measured spread over ten trials rather
         than from the 4x the input step suggests: at five repeats the control
-        lands in 4.0-4.2 and concatenation in 14.3-16.5. An earlier version
-        took three repeats and put the control at 6 -- barely above a linear
-        result, and it duly flaked at 7.2.
+        lands in 4.0-4.2 and concatenation in 14.3-16.5. Three repeats spread
+        wide enough to reach 7.2 for the control, so a threshold of 6 flakes.
         """
         small, large = 20_000, 80_000
         small_chars, large_chars = ["x"] * small, ["x"] * large
@@ -1002,7 +998,7 @@ def _count_find_impl_calls() -> Iterator[dict[str, int]]:
 
 
 class TestSingledispatchCacheBehaviour:
-    """docs/stdlib/functools.md, as corrected by these tests.
+    """docs/stdlib/functools.md.
 
     The page priced dispatch at a flat O(1). It is O(1) only once a type has
     been dispatched before -- the result is cached by argument type. The
@@ -1146,14 +1142,13 @@ class TestSingledispatchCacheBehaviour:
 
 
 class TestSingledispatchMissIsSuperlinearForRelatedTypes:
-    """docs/stdlib/functools.md, as corrected by this test.
+    """docs/stdlib/functools.md.
 
-    An earlier version of the page's fix claimed a flat O(k) upper bound for
-    a dispatch miss. That undersells the pathological case: when several of
-    the k registrations are ancestors -- real or virtual, via
+    A flat O(k) upper bound undersells a dispatch miss. When several of the
+    k registrations are ancestors -- real or virtual, via
     `ABCMeta.register()` -- of the dispatched class, `_compose_mro()` checks
-    each of those ancestors against every other one before composing the
-    MRO, and the cost measured here grows far faster than k.
+    each of those ancestors against every other one before composing the MRO,
+    and the cost measured here grows far faster than k.
     """
 
     @staticmethod
@@ -1206,18 +1201,17 @@ class TestSingledispatchMissIsSuperlinearForRelatedTypes:
 
 
 class TestSingledispatchCacheSizeTracksDispatchedTypesNotJustK:
-    """docs/stdlib/functools.md, as corrected by this test.
+    """docs/stdlib/functools.md.
 
     The Space column priced singledispatch at O(k) for k registered types.
     That leaves out the dispatch cache: it holds one entry per distinct
     argument type dispatched since the cache was last cleared, so a function
     with a single registration (k=1) can still accumulate many entries.
 
-    An earlier version of this test inferred cache growth from retained
-    memory while holding thousands of dynamically-created classes alive.
-    That measured the class objects themselves, not the cache -- the same
-    result would appear even if `process.dispatch()` were never called at
-    all. These tests instead read `dispatch_cache`, the `WeakKeyDictionary`
+    Retained memory is the wrong instrument for it: holding thousands of
+    dynamically-created classes alive measures the class objects themselves,
+    and would show the same result even if `process.dispatch()` were never
+    called. These tests read `dispatch_cache`, the `WeakKeyDictionary`
     singledispatch's `dispatch()` closes over, directly by inspecting the
     closure -- not public API, but the only way to observe the cache rather
     than something correlated with it.

@@ -1,28 +1,22 @@
 """Tests to verify documented behaviour of the json module.
 
 All fourteen code blocks on docs/stdlib/json.md run, one of them raising the
-exception its own comment names. Four claims did not survive measurement, and
-the page had shipped a block that could never have run at all:
+exception its own comment names.
 
-* ``'{"items": [1, 2, 3, ..., 10000]}'`` is not JSON. The Space Complexity
-  example under Deserialization raised JSONDecodeError on its second line,
-  which is where the page demonstrated the memory cost of a parse.
-* ``object_hook`` was annotated "O(1) per call". The hook is handed the whole
-  decoded object and the page's own example loops over it, so it costs the
-  object's key count, not a constant.
-* ``json.loads(line)`` in the JSONL loop was annotated "O(1) per line". A line
-  costs its own length; the whole point of the JSONL shape is that the length
-  is one record rather than the file.
-* ``dumps(indent=2, sort_keys=True)`` was called "same complexity, different
-  format". indent is linear, but sort_keys sorts each object's keys and is the
-  only option here that is not: zero key comparisons without it, k log k with
-  it.
+The claims that are not constants:
 
-The Best Practices block also advised reusing a JSONEncoder without saying
-when that helps. dumps() with default options routes through a cached
-module-level encoder, so the encoder the block built was the same work as the
-dumps() call above it. Reuse only avoids a construction once a non-default
-option is passed, which is what the block now shows.
+* ``object_hook`` costs the decoded object's key count, not a constant. The
+  hook is handed the whole object and the page's own example loops over it.
+* ``json.loads(line)`` in the JSONL loop costs the line's own length. The
+  point of the JSONL shape is that the length is one record rather than the
+  file, which is not the same as O(1).
+* ``sort_keys=True`` is the only option here that changes the growth class:
+  zero key comparisons without it, k log k with it. ``indent`` is linear.
+
+``dumps()`` with default options routes through a cached module-level encoder,
+so building a JSONEncoder to call once is the same work as calling ``dumps()``
+directly. Reuse only avoids a construction once a non-default option is
+passed, which is what the Best Practices block shows.
 
 Not settled by execution:
 
@@ -35,20 +29,18 @@ Not settled by execution:
   with no size argument. Whether the OS or the io layer buffered that read in
   pieces is outside what the page claims.
 
-Two bounds were widened after review, both on axes the first version of this
-file failed to vary:
+Two bounds need more than the obvious size variable:
 
-* dump() was documented O(d). It builds each encoded scalar whole before
+* dump() is O(d + s), not O(d). It builds each encoded scalar whole before
   handing it to write(), so a single large string sets the peak on its own:
   1 MB in one string costs 1,004,139 B, while the same megabyte split into
-  ten-character strings costs 4,413 B. The bound is O(d + s) for the largest
-  encoded scalar s. The first version varied record count using only short
-  strings and varied depth using empty dictionaries, so nothing it measured
-  could have caught this.
-* dumps(indent=2) was documented O(n) in the input. Indentation repeats each
-  level's whitespace, so a chain of d one-key dictionaries prints Theta(d^2)
-  from O(d) of input, and both the time and the returned string follow the
-  output rather than the input.
+  ten-character strings costs 4,413 B. s is the largest encoded scalar.
+  Varying record count with short strings, or depth with empty dictionaries,
+  measures neither term.
+* dumps(indent=2) follows the *output*, not the input. Indentation repeats
+  each level's whitespace, so a chain of d one-key dictionaries prints
+  Theta(d^2) from O(d) of input, and both the time and the returned string
+  grow with what is printed.
 
 Axes still unvaried for the O(d + s) bound: scalar *kind* (only str is
 measured, not a long int or a float), and escaping, which can make an encoded

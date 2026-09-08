@@ -398,7 +398,7 @@ class TestTypeCodesFixItemSize:
 
 
 class TestMemoryFootprint:
-    """docs/stdlib/array.md's memory comparison, as corrected by these tests.
+    """docs/stdlib/array.md's memory comparison.
 
     The page demonstrated "Array size: Smaller" with five elements. At that
     size it is a coin flip, and below about a dozen the array is bigger.
