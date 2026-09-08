@@ -49,9 +49,39 @@ Where the version matters:
   first next() before that, so a missing directory surfaces at different
   moments.
 
-All 25 of the page's code blocks run, on 3.10 through 3.14, and the runner
-below holds none of them back: any non-zero exit is a failure, so a NameError
-has nowhere to hide behind an allowance for missing paths.
+Pure paths are the other half of the module and do no I/O at all: every
+operation in the pure table runs against a path that does not exist, under the
+same syscall counter, and reaches the filesystem zero times. Three of them cost
+more than their API suggests:
+
+* `PurePath.parts` rebuilds its tuple on every access from 3.12, where up to
+  3.11 it was cached on the instance. Identity settles it with no stopwatch -
+  `p.parts is p.parts` is False from 3.12 and True before.
+* `PurePath.relative_to()` and `is_relative_to()` are O(n²) from 3.12, where
+  the search walks one path's parents and rescans the other's for each
+  candidate. Doubling the components costs x2.0 to x2.7 there against x1.04
+  to x1.15 before, and at 200 components the call is 2.5 us on 3.10 against
+  402 us on 3.14.
+* `PurePath.parents` is a lazy sequence, O(1) to obtain and holding nothing,
+  but `list(parents)` is O(n²): each of the n parents holds up to n
+  components.
+
+Python 3.14 adds two rows worth measuring. `Path.info` caches what it stats -
+four queries through one info object cost one stat call where four `Path`
+predicates cost four - and the cache never expires, so a fresh `Path` is the
+only way to see a changed file. `Path.copy()` streams: its peak is the same
+for a 1 MB file and an 8 MB one.
+
+pathlib's public surface is `pathlib.__all__` plus the public attributes of
+PurePath and Path. `dir(pathlib)` is not the right set - the module leaks its
+own imports, and on 3.14 that is a few hundred errno constants.
+TestEveryPublicNameIsDocumented compares the tables against that surface in
+both directions.
+
+All 30 of the page's code blocks run, on 3.10 through 3.14, except the two
+calling 3.14 APIs, which are counted rather than classified by outcome: any
+non-zero exit is a failure, so a NameError has nowhere to hide behind an
+allowance for missing paths.
 
 Not settled by execution:
 
@@ -83,6 +113,7 @@ import sys
 import textwrap
 import time
 import tracemalloc
+import warnings
 from collections import deque
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -92,7 +123,39 @@ import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "pathlib.md"
 
-EXPECTED_BLOCKS = 25
+EXPECTED_BLOCKS = 30
+# Two blocks use APIs that arrive in 3.14 (`Path.info`, `Path.copy`). They run
+# only there, and the count is asserted so the exclusion cannot quietly widen.
+LATER_ONLY_MARKERS = (".info", ".copy(")
+EXPECTED_LATER_ONLY_BLOCKS = 2
+
+# Documented but absent from the older interpreters. Each must carry a version
+# marker in its own row; the coverage test checks that.
+ADDED_LATER = {
+    "walk": "3.12",
+    "is_junction": "3.12",
+    "with_segments": "3.12",
+    "from_uri": "3.13",
+    "full_match": "3.13",
+    "parser": "3.13",
+    "UnsupportedOperation": "3.13",
+    "copy": "3.14",
+    "copy_into": "3.14",
+    "move": "3.14",
+    "move_into": "3.14",
+    "info": "3.14",
+}
+# Present on the older interpreters and gone from the newer ones.
+REMOVED_LATER = {"link_to": "3.12"}
+CLASSES = (
+    "PurePath",
+    "PurePosixPath",
+    "PureWindowsPath",
+    "Path",
+    "PosixPath",
+    "WindowsPath",
+    "UnsupportedOperation",
+)
 
 POSIX_ONLY = pytest.mark.skipif(os.name != "posix", reason="POSIX-only behaviour")
 
@@ -239,6 +302,365 @@ def remove_deep(root: pathlib.Path) -> None:
     while node != root.parent:
         node.rmdir()
         node = node.parent
+
+
+def _documented_names() -> set[str]:
+    """Every attribute the Complexity Reference tables name.
+
+    Rows group families as `PurePath.name/stem/suffix`, so a slash-separated
+    run after the class name names one attribute each. The bare class names
+    are matched separately, since they appear without a dot.
+    """
+    text = PAGE.read_text(encoding="utf-8")
+    start = text.index("## Complexity Reference")
+    end = text.index("## Pure Paths Never Touch the Filesystem")
+    names: set[str] = set()
+    for line in text[start:end].splitlines():
+        if not line.startswith("| `"):
+            continue
+        operation = line.split("|")[1]
+        for group in re.findall(
+            r"(?:PurePath|Path)?\.([A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)*)",
+            operation,
+        ):
+            names.update(group.split("/"))
+        for klass in CLASSES:
+            if f"`{klass}`" in operation:
+                names.add(klass)
+    return names
+
+
+def _public_names() -> set[str]:
+    """What this interpreter actually offers: the classes plus their surface."""
+    names = set(pathlib.__all__)
+    for klass in (pathlib.PurePath, pathlib.Path):
+        names |= {name for name in dir(klass) if not name.startswith("_")}
+    return names
+
+
+class TestEveryPublicNameIsDocumented:
+    """The tables have to name every public attribute pathlib offers.
+
+    A page is lint-clean and green whether it covers its module or a quarter
+    of it, and no reader of the page can tell the difference. `pathlib.__all__`
+    plus the public surface of PurePath and Path is the set that has to be
+    accounted for; `dir(pathlib)` is not, because the module leaks its imports.
+    """
+
+    def test_no_public_name_is_missing_from_the_tables(self) -> None:
+        missing = sorted(_public_names() - _documented_names())
+
+        assert not missing, f"{len(missing)} public names absent from the tables: {missing}"
+
+    def test_the_tables_name_nothing_that_does_not_exist(self) -> None:
+        """The other direction, so a typo cannot pass as coverage."""
+        allowed = set(ADDED_LATER) | set(REMOVED_LATER)
+        unknown = sorted(_documented_names() - _public_names() - allowed)
+
+        assert not unknown, f"the tables name attributes pathlib does not have: {unknown}"
+
+    def test_every_version_gated_row_says_which_version(self) -> None:
+        rows = [
+            line for line in PAGE.read_text(encoding="utf-8").splitlines() if line.startswith("| `")
+        ]
+
+        for name, version in {**ADDED_LATER, **REMOVED_LATER}.items():
+            owning = [row for row in rows if re.search(rf"\b{name}\b", row)]
+            assert owning, f"no row names {name}"
+            assert any(version in row for row in owning), (
+                f"the {name} row should name {version}: {owning[0]}"
+            )
+
+    def test_the_coverage_check_would_notice_a_gap(self) -> None:
+        """A coverage test that cannot fail proves nothing about coverage."""
+        documented = _documented_names()
+        public = _public_names()
+
+        assert len(documented) >= 70, f"the extractor found only {len(documented)} names"
+        assert {"parts", "suffixes", "iterdir", "PurePosixPath", "relative_to"} <= documented
+        assert public - (documented - {"iterdir"}) == {"iterdir"}, (
+            "dropping one row from the extracted set should surface it as missing"
+        )
+
+
+class TestPurePathsDoNoIO:
+    """The pure table's defining property, and the reason it is a table apart.
+
+    Counted rather than argued: every operation below runs against a path that
+    does not exist, under the same syscall counter the filesystem tests use.
+    """
+
+    def test_no_pure_operation_reaches_the_filesystem(self) -> None:
+        pure = pathlib.PurePosixPath("/nowhere/at/all/report.tar.gz")
+        other = pathlib.PurePosixPath("/nowhere")
+
+        with counting_syscalls() as counter:
+            _ = pure.parts
+            _ = pure.parent
+            _ = pure.parents[0]
+            _ = (pure.name, pure.stem, pure.suffix, pure.suffixes)
+            _ = (pure.anchor, pure.drive, pure.root)
+            pure.is_absolute()
+            pure.with_name("other.txt")
+            pure.with_stem("other")
+            pure.with_suffix(".md")
+            pure.joinpath("x")
+            _ = pure / "y"
+            pure.relative_to(other)
+            pure.is_relative_to(other)
+            pure.match("*.gz")
+            pure.as_posix()
+            str(pure)
+
+        assert counter.stat_family == 0, f"a pure operation stat'd: {counter.counts}"
+        assert counter.listings == 0, f"a pure operation read a directory: {counter.counts}"
+
+    def test_the_documented_pure_values(self) -> None:
+        pure = pathlib.PurePosixPath("/nowhere/at/all/report.tar.gz")
+
+        assert pure.name == "report.tar.gz"
+        assert pure.stem == "report.tar"
+        assert pure.suffix == ".gz"
+        assert pure.suffixes == [".tar", ".gz"]
+        assert pure.parts == ("/", "nowhere", "at", "all", "report.tar.gz")
+        assert pathlib.PureWindowsPath("C:/Users/x").drive == "C:"
+
+    def test_suffixes_costs_the_final_component(
+        self,
+    ) -> None:
+        """`PurePath.suffixes` | O(m) | O(m) | m = length of the final component."""
+        few = pathlib.PurePosixPath("/a/f.tar.gz")
+        many = pathlib.PurePosixPath("/a/f" + ".x" * 200)
+
+        assert len(few.suffixes) == 2
+        assert len(many.suffixes) == 200
+
+    def test_a_pure_path_never_grows_filesystem_methods(self) -> None:
+        """PurePath is the smaller surface, which is what makes the split real."""
+        pure_surface = {n for n in dir(pathlib.PurePath) if not n.startswith("_")}
+
+        assert "exists" not in pure_surface
+        assert "iterdir" not in pure_surface
+        assert "exists" in {n for n in dir(pathlib.Path) if not n.startswith("_")}
+
+
+class TestPartsIsRebuiltPerAccess:
+    """`PurePath.parts` | O(n) | O(n), rebuilt on every access from 3.12.
+
+    Identity settles this with no stopwatch: up to 3.11 the tuple is cached on
+    the instance and the same object comes back, and from 3.12 a fresh one is
+    built each time.
+    """
+
+    def test_whether_the_tuple_is_cached(self) -> None:
+        path = pathlib.PurePosixPath("/a/b/c/d/e/f.txt")
+
+        first, second = path.parts, path.parts
+
+        assert first == second
+        if CONSTRUCTION_IS_DEFERRED:
+            assert first is not second, "3.12 rebuilds the tuple on every access"
+        else:
+            assert first is second, "before 3.12 the tuple is cached on the instance"
+
+    def test_parents_is_lazy_and_listing_it_is_not(self) -> None:
+        """`PurePath.parents` | O(1) | O(1), and `list(parents)` is O(n²)."""
+        deep = pathlib.PurePosixPath("/" + "/".join(f"d{i}" for i in range(400)))
+        # The first touch parses the path from 3.12; measure the steady state.
+        _ = deep.parents
+        _ = deep.parts
+
+        lazy_peak = peak_bytes(lambda: deep.parents)
+        listed_peak = peak_bytes(lambda: list(deep.parents))
+
+        assert len(deep.parents) == 400
+        assert lazy_peak < 2_000, f"parents should hold nothing: {lazy_peak} B"
+        assert listed_peak > 100 * lazy_peak, (
+            f"materialising n parents of up to n components each is quadratic: "
+            f"{lazy_peak} B against {listed_peak} B"
+        )
+
+
+class TestRelativeToGrowth:
+    """`PurePath.relative_to()` | O(n²) | O(n), and O(n) before 3.12.
+
+    The search walks the parents of one path and tests each candidate against
+    the parents of the other, so the work squares from 3.12. Elapsed time is
+    what separates them: neither branch allocates in proportion to n.
+    """
+
+    @staticmethod
+    def _relative_ns(components: int) -> float:
+        path = pathlib.PurePosixPath("/" + "/".join(f"d{i}" for i in range(components)) + "/f.txt")
+        base = pathlib.PurePosixPath("/d0")
+        _ = path.parts
+        best = None
+        for _ in range(5):
+            start = time.perf_counter_ns()
+            path.relative_to(base)
+            elapsed = time.perf_counter_ns() - start
+            best = elapsed if best is None else min(best, elapsed)
+        assert best is not None
+        return float(best)
+
+    def test_relative_to_returns_the_tail(self) -> None:
+        path = pathlib.PurePosixPath("/a/b/c/f.txt")
+
+        assert path.relative_to("/a") == pathlib.PurePosixPath("b/c/f.txt")
+        assert path.is_relative_to("/a")
+        assert not path.is_relative_to("/z")
+
+    @pytest.mark.timing
+    def test_the_growth_squares_from_312(self) -> None:
+        """x2.0 to x2.7 per doubling from 3.12; x1.04 to x1.15 before it."""
+        small, large = self._relative_ns(50), self._relative_ns(200)
+        ratio = large / small
+
+        if CONSTRUCTION_IS_DEFERRED:
+            assert ratio > 3, (
+                f"4x the components should cost more than 4x from 3.12: "
+                f"{small:.0f} ns against {large:.0f} ns"
+            )
+        else:
+            assert ratio < 2, (
+                f"before 3.12 the walk is linear: {small:.0f} ns against {large:.0f} ns"
+            )
+
+
+class TestPureRowsWithVersionMarkers:
+    """The rows whose note names a version, checked on this interpreter."""
+
+    def test_is_reserved_warns_from_313(self) -> None:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            pathlib.PureWindowsPath("CON").is_reserved()
+
+        deprecated = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+        assert bool(deprecated) is (sys.version_info >= (3, 13))
+
+    def test_purepath_as_uri_is_deprecated_in_314(self) -> None:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            pathlib.PurePosixPath("/a/b").as_uri()
+
+        deprecated = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+        assert bool(deprecated) is (sys.version_info >= (3, 14))
+
+    def test_path_as_uri_is_not(self) -> None:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            uri = pathlib.Path("/a/b").as_uri()
+
+        assert uri == "file:///a/b"
+        assert not [w for w in caught if issubclass(w.category, DeprecationWarning)]
+
+    def test_as_uri_needs_an_absolute_path(self) -> None:
+        with pytest.raises(ValueError):
+            pathlib.Path("relative/x").as_uri()
+
+    @POSIX_ONLY
+    def test_is_junction_is_false_on_posix(self, tmp_path: pathlib.Path) -> None:
+        if not hasattr(pathlib.Path, "is_junction"):
+            pytest.skip("Path.is_junction() is 3.12+")
+
+        assert tmp_path.is_junction() is False  # type: ignore[attr-defined]
+
+
+@pytest.mark.skipif(sys.version_info < (3, 14), reason="Path.info is 3.14+")
+class TestPathInfoCaches:
+    """`Path.info` | O(1) | O(1), caching what it stats.
+
+    Counted rather than timed: the value of the row is that repeated queries
+    cost one syscall between them, where the equivalent Path predicates cost
+    one each.
+    """
+
+    def test_many_queries_cost_one_stat(self, tmp_path: pathlib.Path) -> None:
+        target = tmp_path / "f.txt"
+        target.write_text("x", encoding="utf-8")
+
+        info = target.info  # type: ignore[attr-defined]
+        with counting_syscalls() as counter:
+            info.exists()
+            info.is_file()
+            info.is_dir()
+            info.exists()
+        cached_calls = counter.stat_family
+
+        with counting_syscalls() as counter:
+            target.exists()
+            target.is_file()
+            target.is_dir()
+            target.exists()
+        plain_calls = counter.stat_family
+
+        assert cached_calls == 1, f"info should stat once, made {cached_calls}"
+        assert plain_calls == 4, f"the predicates stat each time, made {plain_calls}"
+
+    def test_the_attribute_itself_is_cached(self, tmp_path: pathlib.Path) -> None:
+        assert tmp_path.info is tmp_path.info  # type: ignore[attr-defined]
+
+    def test_the_cache_does_not_expire(self, tmp_path: pathlib.Path) -> None:
+        """Which is why the page says to build a fresh Path where it matters."""
+        target = tmp_path / "f.txt"
+        target.write_text("x", encoding="utf-8")
+        info = target.info  # type: ignore[attr-defined]
+        assert info.exists()
+
+        target.unlink()
+
+        assert info.exists(), "the cached answer survives the file"
+        assert not pathlib.Path(str(target)).info.exists(), "a fresh Path stats again"  # type: ignore[attr-defined]
+
+
+@pytest.mark.skipif(sys.version_info < (3, 14), reason="Path.copy() is 3.14+")
+class TestCopyStreamsAndMoveRenames:
+    """`Path.copy()` | O(b) | O(1) and `Path.move()` | O(1) on one filesystem."""
+
+    def test_copy_holds_a_constant_however_large_the_file(self, tmp_path: pathlib.Path) -> None:
+        small, large = tmp_path / "small", tmp_path / "large"
+        small.write_bytes(b"x" * (1 << 20))
+        large.write_bytes(b"x" * (1 << 23))
+        destination = tmp_path / "out"
+
+        def copy(source: pathlib.Path) -> None:
+            source.copy(destination)  # type: ignore[attr-defined]
+            destination.unlink()
+
+        copy(small)
+        small_peak = peak_bytes(lambda: copy(small))
+        large_peak = peak_bytes(lambda: copy(large))
+
+        assert large_peak < 1.5 * small_peak, (
+            f"8x the file should not move a streaming copy: {small_peak} B against {large_peak} B"
+        )
+
+    def test_copy_and_move_move_the_bytes(self, tmp_path: pathlib.Path) -> None:
+        source = tmp_path / "report.txt"
+        source.write_text("contents", encoding="utf-8")
+
+        source.copy(tmp_path / "backup.txt")  # type: ignore[attr-defined]
+        assert (tmp_path / "backup.txt").read_text(encoding="utf-8") == "contents"
+        assert source.exists()
+
+        source.move(tmp_path / "archive.txt")  # type: ignore[attr-defined]
+        assert (tmp_path / "archive.txt").read_text(encoding="utf-8") == "contents"
+        assert not source.exists()
+
+    def test_copy_into_and_move_into_take_a_directory(self, tmp_path: pathlib.Path) -> None:
+        source = tmp_path / "f.txt"
+        source.write_text("contents", encoding="utf-8")
+        destination = tmp_path / "d"
+        destination.mkdir()
+
+        source.copy_into(destination)  # type: ignore[attr-defined]
+        assert (destination / "f.txt").read_text(encoding="utf-8") == "contents"
+
+        other = tmp_path / "e"
+        other.mkdir()
+        source.move_into(other)  # type: ignore[attr-defined]
+        assert (other / "f.txt").exists()
+        assert not source.exists()
 
 
 class TestCountingHarness:
@@ -960,6 +1382,11 @@ def _blocks() -> list[tuple[int, str]]:
     return found
 
 
+def _needs_314(source: str) -> bool:
+    """Blocks calling `Path.info` or `Path.copy`, which arrive in 3.14."""
+    return any(marker in source for marker in LATER_ONLY_MARKERS)
+
+
 def _run(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
     script = cwd / "_block.py"
     script.write_text(source, encoding="utf-8")
@@ -975,11 +1402,12 @@ def _run(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
 
 
 class TestDocumentedExamples:
-    """Every block runs, in a directory of its own, with nothing held back.
+    """Every block runs, in a directory of its own.
 
-    Nothing is pre-classified, which is what gives the check teeth: any
-    non-zero exit is a failure, so a NameError has nowhere to hide behind an
-    allowance for missing paths.
+    Nothing is pre-classified by outcome, which is what gives the check teeth:
+    any non-zero exit is a failure, so a NameError has nowhere to hide behind
+    an allowance for missing paths. The only blocks held back are the two that
+    call 3.14 APIs, and they are counted so the exclusion cannot widen.
     """
 
     def test_the_page_has_the_expected_blocks(self) -> None:
@@ -988,12 +1416,18 @@ class TestDocumentedExamples:
         assert len(blocks) == EXPECTED_BLOCKS, (
             f"expected {EXPECTED_BLOCKS} python blocks, found {len(blocks)}"
         )
+        later = [line for line, source in blocks if _needs_314(source)]
+        assert len(later) == EXPECTED_LATER_ONLY_BLOCKS, (
+            f"expected {EXPECTED_LATER_ONLY_BLOCKS} blocks using 3.14 APIs, found {later}"
+        )
 
     def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
         ran = 0
 
         for line, source in _blocks():
+            if _needs_314(source) and sys.version_info < (3, 14):
+                continue
             ran += 1
             workdir = tmp_path / f"block{line}"
             workdir.mkdir()
@@ -1002,7 +1436,10 @@ class TestDocumentedExamples:
                 failures.append(f"{PAGE.name}:{line} raised: {result.stderr.strip()[-400:]}")
 
         assert not failures, "\n".join(failures)
-        assert ran == EXPECTED_BLOCKS
+        expected = EXPECTED_BLOCKS
+        if sys.version_info < (3, 14):
+            expected -= EXPECTED_LATER_ONLY_BLOCKS
+        assert ran == expected, f"ran {ran} blocks, expected {expected}"
 
     def test_the_runner_catches_a_broken_block(self, tmp_path: pathlib.Path) -> None:
         """A runner that cannot fail proves nothing about the blocks it ran."""

@@ -2,25 +2,59 @@
 
 The `pathlib` module provides an object-oriented approach to filesystem path handling.
 
-## Classes and Methods
+## Complexity Reference
 
-| Method | Time | Space | Notes |
-|--------|------|-------|-------|
-| `Path(str)` | O(n) | O(n) | n = length of the string; from 3.12 both are O(1), the string being stored and parsed on first use |
-| `path / segment` | O(n) | O(n) | n = combined length; from 3.12 the segments are stored unparsed and the cost is deferred with the rest |
+Unless a row says otherwise, n is the number of components in the path and the
+bound covers one call on an already-parsed path. Nothing in the first table
+touches the filesystem.
+
+### Classes
+
+| Name | Time | Space | Notes |
+|------|------|-------|-------|
+| `PurePath`, `PurePosixPath`, `PureWindowsPath` | O(n) | O(n) | Construction only; these never touch the filesystem |
+| `Path`, `PosixPath`, `WindowsPath` | O(n) | O(n) | `Path()` returns the flavour matching the running platform |
+| `UnsupportedOperation` | O(1) | O(1) | Python 3.13+; raised where a flavour has no such operation |
+
+### Pure Path Operations
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `PurePath(str)` | O(n) | O(n) | n = length of the string; from 3.12 both are O(1), the string being stored and parsed on first use |
+| `path / segment`, `PurePath.joinpath()` | O(n) | O(n) | n = combined length; from 3.12 the segments are stored unparsed and the cost is deferred with the rest |
+| `PurePath.parts` | O(n) | O(n) | Rebuilt on every access from 3.12; cached after the first before that |
+| `PurePath.parent` | O(n) | O(n) | Builds a new path from the tail |
+| `PurePath.parents` | O(1) | O(1) | A lazy sequence; `parents[i]` costs O(n - i) and `list(parents)` is O(n²) |
+| `PurePath.name/stem/suffix/anchor/drive/root` | O(1) | O(1) | Read from the parsed path |
+| `PurePath.suffixes` | O(m) | O(m) | m = length of the final component |
+| `PurePath.with_name()`, `.with_stem()`, `.with_suffix()`, `.with_segments()` | O(n) | O(n) | `with_segments()` is 3.12+ |
+| `PurePath.relative_to()`, `.is_relative_to()` | O(n²) | O(n) | O(n) before 3.12, which walks the parents of both paths |
+| `PurePath.match()`, `.full_match()` | O(p + n) | O(1) | p = components in the pattern; `full_match()` is 3.13+ |
+| `PurePath.as_posix()`, `str(path)` | O(n) | O(n) | The string is cached after the first build |
+| `PurePath.as_uri()` | O(n) | O(n) | Return file:// URI; deprecated on `PurePath` in 3.14, so call it on a `Path` |
+| `PurePath.is_absolute()` | O(1) | O(1) | Reads the anchor |
+| `PurePath.is_reserved()` | O(1) | O(1) | Windows names only; deprecated in 3.13 |
+| `PurePath.parser` | O(1) | O(1) | Python 3.13+; the `posixpath` or `ntpath` module behind this flavour |
+
+### Filesystem Operations
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `Path.cwd()` | O(n) | O(n) | n = length of current directory |
 | `Path.home()` | O(n) | O(n) | n = length of home directory |
 | `Path.exists()` | O(1) | O(1) | One stat call |
 | `Path.is_file()` | O(1) | O(1) | One stat call |
 | `Path.is_dir()` | O(1) | O(1) | One stat call |
 | `Path.is_symlink()` | O(1) | O(1) | One lstat call |
-| `Path.is_mount()` | O(1), O(n) on 3.12 | O(1) | n = path components; stats the path and its parent; on 3.12 it resolves the parent instead, at one lstat per component |
+| `Path.is_junction()` | O(1) | O(1) | Python 3.12+; always False on POSIX |
+| `Path.is_mount()` | O(1) | O(1) | Stats the path and its parent; on 3.12 it resolves the parent instead, at one lstat per component |
 | `Path.is_socket()` | O(1) | O(1) | One stat call |
 | `Path.is_fifo()` | O(1) | O(1) | One stat call |
 | `Path.is_block_device()` | O(1) | O(1) | One stat call |
 | `Path.is_char_device()` | O(1) | O(1) | One stat call |
 | `Path.stat()` | O(1) | O(1) | Get file stats |
 | `Path.lstat()` | O(1) | O(1) | Like stat but don't follow symlinks |
+| `Path.info` | O(1) | O(1) | Python 3.14+; caches what it stats, so repeated queries cost one syscall between them |
 | `Path.resolve()` | O(n) | O(n) | n = path components; one lstat each |
 | `Path.absolute()` | O(n) | O(n) | Make absolute without resolving symlinks |
 | `Path.expanduser()` | O(n) | O(n) | Expand ~ to home directory |
@@ -36,6 +70,7 @@ The `pathlib` module provides an object-oriented approach to filesystem path han
 | `Path.rmdir()` | O(1) | O(1) | Delete empty directory |
 | `Path.symlink_to(target)` | O(1) | O(1) | Create symlink |
 | `Path.hardlink_to(target)` | O(1) | O(1) | Create hard link |
+| `Path.link_to(target)` | O(1) | O(1) | Removed in 3.12; use `hardlink_to()`, whose arguments are the other way round |
 | `Path.readlink()` | O(n) | O(n) | n = length of symlink target |
 | `Path.chmod(mode)` | O(1) | O(1) | Change file mode |
 | `Path.lchmod(mode)` | O(1) | O(1) | chmod without following symlinks |
@@ -47,7 +82,8 @@ The `pathlib` module provides an object-oriented approach to filesystem path han
 | `Path.read_bytes()` | O(n) | O(n) | Read file as bytes |
 | `Path.write_text()` | O(n) | O(n) | Write text to file |
 | `Path.write_bytes()` | O(n) | O(n) | Write bytes to file |
-| `Path.as_uri()` | O(n) | O(n) | Return file:// URI |
+| `Path.copy(target)`, `.copy_into(dir)` | O(b) | O(1) | Python 3.14+; b = bytes copied, streamed rather than held |
+| `Path.move(target)`, `.move_into(dir)` | O(1) | O(1) | Python 3.14+; O(b) across filesystems, where it copies and deletes |
 | `Path.from_uri(uri)` | O(n) | O(n) | Create Path from URI (Python 3.13+) |
 
 ## Path Construction
@@ -104,6 +140,72 @@ text = str(path)  # O(1)
 
 The same applies to joining, which is why `/` is cheap on recent versions and
 proportional to the path on older ones.
+
+## Pure Paths Never Touch the Filesystem
+
+`PurePath` and its two flavours are string manipulation with a path-shaped
+API. Every operation in the pure table above costs what parsing and rebuilding
+a string costs, and none of them can fail because a file is missing or a
+directory is unreadable.
+
+```python
+from pathlib import PurePosixPath, PureWindowsPath
+
+# No such directory anywhere; all of this still works
+p = PurePosixPath('/nowhere/at/all/report.tar.gz')
+
+p.name        # 'report.tar.gz'  O(1)
+p.stem        # 'report.tar'     O(1)
+p.suffix      # '.gz'            O(1)
+p.suffixes    # ['.tar', '.gz']  O(m) in the final component
+p.parts       # ('/', 'nowhere', 'at', 'all', 'report.tar.gz')  O(n)
+
+# Windows semantics on any platform
+PureWindowsPath('C:/Users/x').drive   # 'C:'  O(1)
+```
+
+`Path` inherits all of it and adds the operations that do make system calls.
+
+## Two Things That Cost More Than They Look
+
+### relative_to() Is Quadratic From Python 3.12
+
+`relative_to()` and `is_relative_to()` walk the parents of one path looking for
+the other, and testing each candidate scans the parents again. Before 3.12 the
+comparison was a slice; from 3.12 the search is quadratic in the number of
+components, which turns a deep path into real work.
+
+```python
+from pathlib import PurePosixPath
+
+deep = PurePosixPath('/' + '/'.join(f'd{i}' for i in range(200)) + '/f.txt')
+
+# O(n²) from 3.12, O(n) before it
+deep.relative_to('/d0')
+```
+
+For a path a handful of components long this is invisible. For one two hundred
+deep, called in a loop over many paths, it is the loop's dominant cost.
+
+### parts Is Rebuilt On Every Access From Python 3.12
+
+`parts` returns a fresh tuple each time it is read. Up to 3.11 the tuple was
+cached after the first access; from 3.12 it is not, so reading it inside a loop
+pays O(n) each time round.
+
+```python
+from pathlib import PurePosixPath
+
+p = PurePosixPath('/a/b/c/d/e/f.txt')
+
+# Read once, use many times
+parts = p.parts
+first, last = parts[0], parts[-1]
+```
+
+`parents` is the opposite: it is a lazy sequence, O(1) to obtain, and
+`parents[i]` builds only the path it returns. Materialising the whole of it
+with `list()` is O(n²), because each of the n parents holds up to n components.
 
 ## Path Operations
 
@@ -496,17 +598,57 @@ for i in range(100):
     files = list(Path('.').glob('*.py'))  # O(n) * 100
 ```
 
+## Python 3.14: info, copy and move
+
+`Path.info` is a cached view of what one stat call already told the
+interpreter. Each query on the same object is free; each `Path.exists()` is
+another syscall.
+
+```python
+from pathlib import Path
+
+path = Path('report.txt')
+path.write_text('contents')
+
+# One stat call answers all three
+info = path.info
+info.exists(), info.is_file(), info.is_dir()
+
+# Three separate stat calls
+path.exists(), path.is_file(), path.is_dir()
+```
+
+The cache never expires, so a long-lived `Path` whose file changes underneath
+it keeps answering from the old stat. Build a fresh `Path` where that matters.
+
+`copy()` streams, so it is O(b) in the bytes moved and O(1) in space however
+large the file is. `move()` on one filesystem is a rename and costs neither.
+
+```python
+from pathlib import Path
+
+source = Path('report.txt')
+source.write_text('contents')
+
+source.copy(Path('backup.txt'))   # O(b) time, O(1) space
+source.move(Path('archive.txt'))  # O(1) on the same filesystem
+```
+
 ## Version Notes
 
 - **Python 3.4+**: pathlib introduced
-- **Python 3.10+**: `Path.hardlink_to()` added
-- **Python 3.12+**: `Path.walk()` added; construction and joining defer parsing
-  to first use; the deprecated `Path.link_to()` removed
-- **Python 3.13+**: `Path.from_uri()` and `Path.full_match()` added;
-  `iterdir()` reads the directory when it is called rather than at the first
-  `next()`
+- **Python 3.10+**: `Path.hardlink_to()` added, deprecating `Path.link_to()`
+- **Python 3.12+**: `Path.walk()`, `Path.is_junction()` and
+  `PurePath.with_segments()` added; construction and joining defer parsing to
+  first use; `parts` is rebuilt per access and `relative_to()` becomes
+  quadratic; `Path.link_to()` removed
+- **Python 3.13+**: `Path.from_uri()`, `PurePath.full_match()`,
+  `PurePath.parser` and `UnsupportedOperation` added; `iterdir()` reads the
+  directory when it is called rather than at the first `next()`;
+  `PurePath.is_reserved()` deprecated
 - **Python 3.14+**: `Path.copy()`, `Path.copy_into()`, `Path.move()`,
-  `Path.move_into()` and `Path.info` added
+  `Path.move_into()` and `Path.info` added; `PurePath.as_uri()` deprecated in
+  favour of `Path.as_uri()`
 
 ## Related Documentation
 
