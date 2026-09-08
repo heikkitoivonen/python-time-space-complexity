@@ -99,6 +99,32 @@ live in `.claude/skills/`; edit the canonical skill rather than the symlink.
 
 ## Code Style & Standards
 
+### Write Forward
+
+Pages, test docstrings and skills are read by someone who was not here. They
+state what is true now. They are not a record of how they came to be written.
+
+Cut anything that only means something against an earlier version:
+
+- "was documented O(1)", "the page used to say", "the first draft claimed"
+- "did not survive measurement", "found while running the tests on 3.12"
+- which approach was tried first, which review comment turned out wrong, what
+  the sentence replaced
+
+Keep anything a later reader needs to re-derive the result:
+
+- the bound, its size variables, and the version boundaries that move it
+- what a test measured and at what sizes, so a future release fails it loudly
+- the dimensions a test did **not** vary, so nobody reads it as covering them
+- why a claim cannot be settled by running code
+
+The test is direction, not length. "32x the depth costs x171 on 3.10 and x2.1
+on 3.14" is evidence a later reader can re-run and a later release can break.
+"The page said O(1) per item" is a diff, and git already has it.
+
+This binds test docstrings as tightly as it binds pages. A docstring may carry
+the whole measurement behind a row. It must not carry the row's history.
+
 ### Python Code
 - Line length: 100 characters (enforced by ruff)
 - No unused imports (enforced by ruff)
@@ -123,8 +149,9 @@ live in `.claude/skills/`; edit the canonical skill rather than the symlink.
 - **Keep the message short.** Say what was corrected or added and stop. Do
   not narrate what the code or claim used to be, how the defect was found,
   what was measured on the way, or which approaches were rejected — the
-  reader does not need it, and the evidence belongs in the test and its
-  docstring, where it can be re-run. Prefer a line or a few bullets:
+  reader does not need it. What was *measured* belongs in the test and its
+  docstring, where it can be re-run; what the page used to say belongs
+  nowhere. Prefer a line or a few bullets:
   ```
   Fix: Correct three os space bounds and add the module's tests
 
@@ -335,6 +362,8 @@ Test files: `tests/test_<module>_complexity.py` for a module's table,
   (see SEO.md)
 - Dim text with `opacity` - it fails contrast and SC 1.4.1 both
 - Skip a heading level (`##` straight to `####`)
+- Write a page, test docstring or skill as a record of what changed - state
+  what is true, not what it used to say (see Write Forward)
 
 ### ✓ DO
 - Always run quality checks before committing
@@ -382,6 +411,7 @@ Before every commit, verify:
 - [ ] Translations updated if an English page changed
 - [ ] Accessibility rules honoured if colours/headings/`lang` changed
 - [ ] No test files left uncommitted
+- [ ] Nothing written reads as a diff against a previous version
 
 ## Examples
 

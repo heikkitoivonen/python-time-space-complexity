@@ -1,6 +1,6 @@
 ---
 name: testing-complexity-claims
-description: Designs and reviews tests for every complexity, behavioral, and performance claim in documentation. Use when adding or changing claims, auditing claim coverage, or creating module complexity tests.
+description: Designs and reviews tests for every complexity, behavioral, and performance claim in documentation. Use when adding or changing claims, auditing claim or API coverage, or creating module complexity tests.
 ---
 
 # Testing Complexity Claims
@@ -47,6 +47,15 @@ Read the page and list all claims, not only Big-O notation:
 Map every inventory item to one test or to an explicit untestable rationale.
 Test names and docstrings are labels, not evidence: confirm each assertion
 actually distinguishes the documented behavior from a plausible wrong one.
+
+An inventory lists what the page says, so it can never surface what the page
+leaves out: a missing API is not a claim to inventory, and a claim-by-claim
+review passes a page that documents a fifth of its module. Coverage is the
+other axis and needs its own check - compare the documented names against
+`dir(module)` before starting, and pin the result with a test. See *Coverage Is
+a Claim* in `documenting-complexity-modules`. Filling a gap is itself claim
+work: the rows added arrive untested, and the reading behind them turns up
+defects in the rows that were already there.
 
 ## Classify Each Claim
 

@@ -1,6 +1,6 @@
 ---
 name: documenting-complexity-modules
-description: Authors or expands Python builtin and standard-library complexity pages, including API coverage, navigation, examples, translations, audit metadata, and verification. Use when adding a module/type page or materially expanding one.
+description: Authors, expands, or reviews Python builtin and standard-library complexity pages, including API coverage, navigation, examples, translations, audit metadata, and verification. Use when adding a module/type page, materially expanding one, or reviewing an existing one for correctness - a review covers what the page omits as well as what it claims.
 ---
 
 # Documenting Complexity Modules
@@ -19,7 +19,8 @@ the repository's highest-risk content.
    should cover. Use official Python documentation plus runtime inspection such
    as `dir(module)` and `dir(class)`. Filter private names, then distinguish
    callables from data attributes. Record intentional omissions in the page or
-   test rationale; do not silently omit APIs.
+   test rationale; do not silently omit APIs. Then pin the result with a
+   coverage test - see *Coverage Is a Claim* below.
 3. Define every size variable before using it. Avoid an ambiguous `n` when an
    operation depends on several dimensions; use terms such as input length,
    output length, fields, vertices, edges, matches, or returned items.
@@ -96,6 +97,46 @@ Keep these off the page:
 Apply one test to every note: would removing it change how someone uses the
 operation? If not, cut it. An empty Notes cell beside a correct bound is a good
 outcome, not an unfinished one.
+
+## Coverage Is a Claim
+
+The set of APIs a page documents is a claim about the module, and it is the one
+claim a reader of the page cannot check. A table covering a fifth of its module
+reads exactly like one covering all of it, and the toolchain agrees: lint,
+types and the whole suite pass either way.
+
+So test it. Enumerate the module's public names before writing, and pin the
+result when the page is done:
+
+```python
+def test_no_public_name_is_missing_from_the_table(self) -> None:
+    public = {name for name in dir(module) if not name.startswith("_")}
+    missing = sorted(public - _documented_names())
+    assert not missing, f"{len(missing)} public names absent: {missing}"
+```
+
+`_documented_names()` parses the page's own Complexity Reference table, so it
+has to match how that table writes names. Assert both directions - a name the
+table invents is as wrong as one it omits - and allow, explicitly and by name,
+only those documented APIs that a supported version lacks, checking that each
+such row carries its version marker.
+
+Confirm the extractor is not vacuous before trusting it. One that matches
+nothing reports perfect coverage: drop a known row from the set it returns and
+assert that the check would have failed.
+
+Two things make this affordable on a wide module:
+
+- **Group families into one row.** `module.sin/cos/tan(x)` names three
+  functions in one line, and a slash-separated run parses back to three names.
+  Twenty-odd rows can cover sixty-odd names without a wall of table.
+- **Cover first, then look for content.** Most of a wide module is one bound
+  repeated. Give those a row and move on; the reading is only worth doing where
+  the row would otherwise be a guess.
+
+Expect the coverage pass to produce claims, not just rows. The APIs a page
+skipped are where its remaining defects sit, and the rows added arrive with
+none of the scrutiny the existing ones have had - inventory them the same way.
 
 ## Test Every Claim
 
@@ -179,7 +220,8 @@ make check
 
 Also inspect the final diff for:
 
-- complete public API coverage or explained omissions;
+- complete public API coverage or explained omissions, pinned by a coverage
+  test rather than by having looked once;
 - defined size variables and bounds qualified only where the qualification
   changes a decision;
 - notes that survive the removal test, carrying no measured constants,
