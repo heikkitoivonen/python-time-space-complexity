@@ -28,7 +28,7 @@ touches the filesystem.
 | `PurePath.name/stem/suffix/anchor/drive/root` | O(1) | O(1) | Read from the parsed path |
 | `PurePath.suffixes` | O(m) | O(m) | m = length of the final component |
 | `PurePath.with_name()`, `.with_stem()`, `.with_suffix()`, `.with_segments()` | O(n) | O(n) | `with_segments()` is 3.12+ |
-| `PurePath.relative_to()`, `.is_relative_to()` | O(n²) | O(n) | O(n) before 3.12, which walks the parents of both paths |
+| `PurePath.relative_to()`, `.is_relative_to()` | O(n²) | O(n) | O(n) before 3.12 |
 | `PurePath.match()`, `.full_match()` | O(p + n) | O(1) | p = components in the pattern; `full_match()` is 3.13+ |
 | `PurePath.as_posix()`, `str(path)` | O(n) | O(n) | The string is cached after the first build |
 | `PurePath.as_uri()` | O(n) | O(n) | Return file:// URI; deprecated on `PurePath` in 3.14, so call it on a `Path` |

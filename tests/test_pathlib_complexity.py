@@ -59,9 +59,9 @@ more than their API suggests:
   `p.parts is p.parts` is False from 3.12 and True before.
 * `PurePath.relative_to()` and `is_relative_to()` are O(n²) from 3.12, where
   the search walks one path's parents and rescans the other's for each
-  candidate. Doubling the components costs x2.0 to x2.7 there against x1.04
-  to x1.15 before, and at 200 components the call is 2.5 us on 3.10 against
-  402 us on 3.14.
+  candidate. 4x the components costs x8.2 to x9.1 there against x1.7 to x2.0
+  before, and at 200 components the call is 2.2 us on 3.10 against 393 us on
+  3.14.
 * `PurePath.parents` is a lazy sequence, O(1) to obtain and holding nothing,
   but `list(parents)` is O(n²): each of the n parents holds up to n
   components.
@@ -74,7 +74,7 @@ for a 1 MB file and an 8 MB one.
 
 pathlib's public surface is `pathlib.__all__` plus the public attributes of
 PurePath and Path. `dir(pathlib)` is not the right set - the module leaks its
-own imports, and on 3.14 that is a few hundred errno constants.
+own imports, and on 3.14 that is a hundred-odd errno constants.
 TestEveryPublicNameIsDocumented compares the tables against that surface in
 both directions.
 
@@ -485,8 +485,9 @@ class TestRelativeToGrowth:
     """`PurePath.relative_to()` | O(n²) | O(n), and O(n) before 3.12.
 
     The search walks the parents of one path and tests each candidate against
-    the parents of the other, so the work squares from 3.12. Elapsed time is
-    what separates them: neither branch allocates in proportion to n.
+    the parents of the other, so the work squares from 3.12. Both versions
+    peak at the O(n) result they return, so elapsed time is what separates
+    them.
     """
 
     @staticmethod
@@ -512,18 +513,31 @@ class TestRelativeToGrowth:
 
     @pytest.mark.timing
     def test_the_growth_squares_from_312(self) -> None:
-        """x2.0 to x2.7 per doubling from 3.12; x1.04 to x1.15 before it."""
-        small, large = self._relative_ns(50), self._relative_ns(200)
+        """x8.2 to x9.1 for 4x the components from 3.12; x1.7 to x2.0 before it.
+
+        Linear growth would be x4 at this step and a clean square x16, so both
+        thresholds sit either side of the linear point - at 50 to 200
+        components the quadratic term does not dominate and a linear
+        implementation passes as quadratic.
+
+        x8 rather than x16 because the quadratic term is still arriving. The
+        measured exponent rises 1.21, 1.45, 1.63 and 1.81 across n = 100, 200,
+        400, 800 and 1,600 on 3.14, converging on 2, which is what the row
+        claims. Before 3.12 the same sweep stays between 0.3 and 0.9.
+        """
+        small, large = self._relative_ns(200), self._relative_ns(800)
         ratio = large / small
 
         if CONSTRUCTION_IS_DEFERRED:
-            assert ratio > 3, (
-                f"4x the components should cost more than 4x from 3.12: "
-                f"{small:.0f} ns against {large:.0f} ns"
+            assert ratio > 6, (
+                f"4x the components should cost well over the 4x a linear "
+                f"scan would: {small:.0f} ns against {large:.0f} ns"
             )
         else:
-            assert ratio < 2, (
-                f"before 3.12 the walk is linear: {small:.0f} ns against {large:.0f} ns"
+            assert ratio < 4, (
+                f"before 3.12 the cost stays under the 4x a linear scan "
+                f"would cost, let alone the 16x a square would: "
+                f"{small:.0f} ns against {large:.0f} ns"
             )
 
 
