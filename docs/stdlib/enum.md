@@ -1,20 +1,64 @@
 # enum Module Complexity
 
-The `enum` module provides a way to define a set of symbolic names (members) bound to unique, constant values.
+The `enum` module binds symbolic names to constant values. Almost everything it does costs once,
+when the class body runs: the metaclass builds the members, indexes them by name and by value, and
+freezes the result.
+
+After that, both lookups are dict lookups. **n** is the members of an enum; the only operations
+that pay it are the class definition itself and anything that walks the members.
+
+!!! note "Lookup by value is a dict, not a scan"
+    `Color(1)` goes through `_value2member_map_`, so it is O(1) — the last member declared costs
+    the same as the first, whether the enum has ten members or a thousand. Only a value the map
+    does not hold falls through to `_missing_()`.
 
 ## Complexity Reference
 
+### Building an enum
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `Enum()` class definition | O(n) | O(n) | n = number of members |
-| Access member by name | O(1) | O(1) | Direct attribute lookup |
-| Access member by value | O(n) | O(1) | Linear search through members |
-| Iteration `for e in EnumClass` | O(n) | O(1) | n = number of members |
-| `len(EnumClass)` | O(1) | O(1) | Cached member count |
-| `name` / `value` access | O(1) | O(1) | Direct attribute |
-| `auto()` | O(1) | O(1) | Auto-value sentinel |
-| `unique()` | O(n) | O(1) | Validate aliases in class |
-| `verify()` | O(n) | O(1) | Validate member constraints |
+| `class C(enum.Enum)` — the class body | O(n) | O(n) | n = members; each is instantiated and indexed by name and by value |
+| `enum.Enum(name, names)` — the functional API | O(n) | O(n) | Builds the same class at run time |
+| `enum.auto()` | O(1) | O(1) | A sentinel resolved by `_generate_next_value_` when the class is built |
+| `enum.member(obj)`, `enum.nonmember(obj)` | O(1) | O(1) | Python 3.11+; force a class-body name to be, or not be, a member |
+| `enum.property` | O(1) | O(1) | Python 3.11+; the descriptor behind `.name` and `.value`, which shadows a member of the same name |
+| `enum.EnumDict` | O(1) | O(1) | Python 3.13+; the mapping the class body is executed in |
+
+### Looking members up
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `C.MEMBER` | O(1) | O(1) | An attribute lookup on the class |
+| `C['MEMBER']` | O(1) | O(1) | `_member_map_`, a dict keyed by name |
+| `C(value)` | O(1) | O(1) | `_value2member_map_`, a dict keyed by value; a miss calls `_missing_()` |
+| `member.name`, `member.value` | O(1) | O(1) | Stored on the member |
+| `len(C)` | O(1) | O(1) | The canonical member list's length |
+| `iter(C)` | O(n) | O(1) | Canonical members only — aliases are skipped |
+| `C.__members__` | O(1) | O(n) | A mapping proxy including aliases; building the view is O(1), reading it all is O(n) |
+| `x in C` | O(1) | O(1) | A non-member value raises `TypeError` before 3.12 and answers `True`/`False` from 3.12 |
+
+### Variants
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `enum.IntEnum`, `enum.StrEnum` | O(1) | O(1) | Members are `int`s and `str`s, so they compare and format as one; `StrEnum` is 3.11+ |
+| `enum.ReprEnum` | O(1) | O(1) | Python 3.11+; the base that keeps the mixed-in type's `__str__` and `__format__` |
+| `enum.Flag`, `enum.IntFlag` | O(1) | O(1) | Members are powers of two, so `\|` and `&` are single integer operations |
+| Iterating or `len()` on a combined flag | O(b) | O(1) | b = bits set; Python 3.11+, where a combination became sized and iterable |
+| `enum.EnumMeta`, `enum.EnumType` | O(n) | O(n) | The metaclass that does the building; `EnumType` is the 3.11+ name for the same object |
+
+### Validation and helpers
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `enum.unique(cls)` | O(n) | O(a) | a = aliases found; raises `ValueError` if there are any |
+| `enum.verify(*checks)` | O(n) | O(n) | Python 3.11+; a class decorator running the `EnumCheck` constraints |
+| `enum.EnumCheck` — `enum.UNIQUE`, `enum.CONTINUOUS`, `enum.NAMED_FLAGS` | O(1) | O(1) | Python 3.11+; the constraints `verify()` applies |
+| `enum.FlagBoundary` — `enum.STRICT`, `enum.CONFORM`, `enum.EJECT`, `enum.KEEP` | O(1) | O(1) | Python 3.11+; what a flag does with bits no member claims |
+| `enum.global_enum(cls)`, `enum.global_str(self)` | O(n) | O(n) | Python 3.11+; copies the members into the defining module's namespace |
+| `enum.global_enum_repr(self)`, `enum.global_flag_repr(self)` | O(1) | O(1) | Python 3.11+; the `repr` that names the module rather than the class |
+| `enum.pickle_by_global_name(self, proto)`, `enum.pickle_by_enum_name(self, proto)` | O(1) | O(1) | Python 3.11+; `__reduce_ex__` implementations |
 
 ## Enum Basics
 
@@ -23,19 +67,18 @@ The `enum` module provides a way to define a set of symbolic names (members) bou
 ```python
 from enum import Enum
 
-# Define enum - O(n) for n members
+# The class body runs once - O(n) in members
 class Color(Enum):
     RED = 1
     GREEN = 2
     BLUE = 3
 
-# Access by name - O(1)
-print(Color.RED)       # Color.RED
-print(Color.RED.name)  # 'RED'
-print(Color.RED.value) # 1
+assert Color.RED.name == 'RED'    # O(1)
+assert Color.RED.value == 1       # O(1)
+assert str(Color.RED) == 'Color.RED'
 ```
 
-### Member Access
+### Both Lookups Are Dict Lookups
 
 ```python
 from enum import Enum
@@ -45,390 +88,223 @@ class Status(Enum):
     ACTIVE = 'active'
     DONE = 'done'
 
-# By name - O(1)
-status = Status.ACTIVE      # Direct lookup
-print(status.name)          # 'ACTIVE'
+assert Status.ACTIVE is Status['ACTIVE']    # O(1) - by name
+assert Status.ACTIVE is Status('active')    # O(1) - by value
 
-# By value - O(n)
-status = Status('active')   # Must search all members
-print(status.value)         # 'active'
+# A value with no member raises, having consulted the map and then _missing_
+try:
+    Status('missing')
+except ValueError as error:
+    assert 'is not a valid Status' in str(error)
 ```
 
-### Iteration
+### Members Are Singletons
+
+There is exactly one object per member, so `is` is the right comparison and identity checks cost
+nothing.
 
 ```python
 from enum import Enum
 
-class Priority(Enum):
-    LOW = 1
-    MEDIUM = 2
-    HIGH = 3
+class Color(Enum):
+    RED = 1
 
-# Iterate all members - O(n)
-for priority in Priority:
-    print(f"{priority.name}: {priority.value}")
+assert Color(1) is Color.RED
+assert Color(1) is Color['RED']
+assert Color.RED == Color.RED and Color.RED is Color.RED
 
-# Output:
-# LOW: 1
-# MEDIUM: 2
-# HIGH: 3
+# An Enum member is not its value
+assert Color.RED != 1
 ```
 
-## Enum Types
+### Iteration Skips Aliases
 
-### IntEnum - Integer-like
+A second name for the same value is an alias. It is reachable by name and appears in
+`__members__`, but iteration and `len()` see only the canonical members.
+
+```python
+from enum import Enum
+
+class Color(Enum):
+    RED = 1
+    CRIMSON = 1   # an alias for RED
+    GREEN = 2
+
+assert Color.CRIMSON is Color.RED
+
+assert [c.name for c in Color] == ['RED', 'GREEN']   # O(n), aliases skipped
+assert len(Color) == 2                                # O(1)
+assert list(Color.__members__) == ['RED', 'CRIMSON', 'GREEN']  # aliases included
+```
+
+## Membership
+
+```python
+import sys
+from enum import Enum
+
+class Color(Enum):
+    RED = 1
+
+assert Color.RED in Color   # O(1) on every version
+
+# For a plain value the answer changed in 3.12
+if sys.version_info >= (3, 12):
+    assert (1 in Color) is True
+    assert (99 in Color) is False
+```
+
+!!! warning "`value in EnumClass` raised before Python 3.12"
+    On 3.10 and 3.11 testing a non-member raises `TypeError` (with a `DeprecationWarning` saying
+    the behaviour will change). Write `value in EnumClass._value2member_map_` if you must support
+    those versions, or catch the `TypeError`.
+
+## Integer and String Enums
+
+`IntEnum` and `StrEnum` members *are* `int`s and `str`s, so they interoperate with code that has
+never heard of the enum — at the cost of comparing equal to a bare value.
 
 ```python
 from enum import IntEnum
 
-# IntEnum allows comparison with integers - O(1)
-class Code(IntEnum):
-    OK = 200
-    CREATED = 201
-    BAD_REQUEST = 400
-    NOT_FOUND = 404
+class Priority(IntEnum):
+    LOW = 1
+    HIGH = 3
 
-# Compare with integers - O(1)
-if Code.OK == 200:          # True
-    print("Success")
-
-if Code.NOT_FOUND > 400:    # True
-    print("Client error")
-
-# Can be used in arithmetic - O(1)
-total = Code.OK + Code.CREATED  # 401
+assert Priority.HIGH > Priority.LOW    # O(1) - an int comparison
+assert Priority.HIGH == 3              # unlike a plain Enum
+assert Priority.HIGH + 1 == 4
+assert sorted(Priority) == [Priority.LOW, Priority.HIGH]
 ```
 
-### Flag - Bitwise Operations
+## Flags
+
+`Flag` members are powers of two, so combining and testing them are single integer operations. A
+combination is iterable and sized from Python 3.11.
 
 ```python
+import sys
 from enum import Flag, auto
 
-# Flag enum for combining values - O(1) per operation
 class Permission(Flag):
-    READ = auto()      # 1
-    WRITE = auto()     # 2
-    EXECUTE = auto()   # 4
+    READ = auto()
+    WRITE = auto()
+    EXECUTE = auto()
 
-# Combine flags - O(1)
-user_perms = Permission.READ | Permission.WRITE
+combined = Permission.READ | Permission.WRITE   # O(1)
 
-# Check flags - O(1)
-if Permission.READ in user_perms:
-    print("Can read")
+assert Permission.READ in combined              # O(1) - a bitwise test
+assert Permission.EXECUTE not in combined
+assert combined & Permission.READ == Permission.READ
 
-if Permission.EXECUTE not in user_perms:
-    print("Cannot execute")
+# A combination is looked up by value like any other member
+assert Permission(combined.value) is combined
 
-# Remove flags - O(1)
-user_perms = user_perms & ~Permission.WRITE
+if sys.version_info >= (3, 11):
+    assert len(combined) == 2                        # O(b) in bits set
+    assert {p.name for p in combined} == {'READ', 'WRITE'}
 ```
 
-### IntFlag - Integer Flag Combination
+## Validation
+
+`unique()` walks the members once and refuses aliases. `verify()` (3.11+) generalizes that to the
+other constraints.
 
 ```python
-from enum import IntFlag, auto
-
-class Status(IntFlag):
-    READY = auto()        # 1
-    WAITING = auto()      # 2
-    ERROR = auto()        # 4
-
-# Combine with | operator - O(1)
-task_status = Status.READY | Status.WAITING
-
-# Test with & operator - O(1)
-if task_status & Status.READY:
-    print("Task is ready")
-
-# Convert from integer - O(n) for lookup
-s = Status(3)  # Status.READY | Status.WAITING
-```
-
-## Common Operations
-
-### Comparison
-
-```python
-from enum import Enum
-
-class Environment(Enum):
-    DEV = 'development'
-    PROD = 'production'
-
-env = Environment.DEV
-
-# Identity comparison - O(1)
-if env is Environment.DEV:
-    print("Development environment")
-
-# Equality comparison - O(1)
-if env == Environment.DEV:
-    print("Using DEV")
-
-# String comparison - O(1)
-if env.value == 'development':
-    print("Match by value")
-```
-
-### Member Lookup
-
-```python
-from enum import Enum
-
-class Animal(Enum):
-    DOG = 1
-    CAT = 2
-    BIRD = 3
-
-# Get by name - O(1)
-animal = Animal['DOG']          # Animal.DOG
-print(animal.value)              # 1
-
-# Get by value - O(n)
-animal = Animal(2)               # Animal.CAT (searches all)
-
-# Safe get by name - O(1)
-try:
-    animal = Animal['FISH']
-except KeyError:
-    print("Not found")
-```
-
-### Check Membership
-
-```python
-from enum import Enum
-
-class Size(Enum):
-    SMALL = 'S'
-    MEDIUM = 'M'
-    LARGE = 'L'
-
-# Check by name - O(1)
-if 'SMALL' in Size.__members__:
-    print("Size.SMALL exists")
-
-# Check by member - O(1)
-if Size.SMALL in Size:
-    print("SMALL is valid size")
-
-# Get all names - O(n)
-names = list(Size.__members__.keys())  # ['SMALL', 'MEDIUM', 'LARGE']
-```
-
-## Advanced Patterns
-
-### Enum with Methods
-
-```python
-from enum import Enum
-
-class Status(Enum):
-    PENDING = 'pending'
-    PROCESSING = 'processing'
-    DONE = 'done'
-    
-    # Method - O(1)
-    def is_final(self):
-        return self == Status.DONE
-    
-    # Method - O(1)
-    def is_active(self):
-        return self in (Status.PENDING, Status.PROCESSING)
-
-# Use methods - O(1)
-status = Status.PROCESSING
-if status.is_active():
-    print("Task is running")
-```
-
-### Enum Aliases
-
-```python
-from enum import Enum
-
-class Color(Enum):
-    RED = 1
-    CRIMSON = 1      # Alias for RED
-    GREEN = 2
-    BLUE = 3
-
-# All refer to same member - O(1)
-print(Color.RED is Color.CRIMSON)  # True
-print(len(Color))                  # 3 (aliases don't count)
-```
-
-### Functional API
-
-```python
-from enum import Enum
-
-# Create enum from list - O(n)
-Animal = Enum('Animal', 'DOG CAT BIRD')
-# Equivalent to:
-# class Animal(Enum):
-#     DOG = 1
-#     CAT = 2
-#     BIRD = 3
-
-# Access - O(1)
-print(Animal.DOG)      # Animal.DOG
-print(Animal.DOG.value) # 1
-```
-
-### Custom Value Processing
-
-```python
-from enum import Enum
-
-class HttpStatus(Enum):
-    OK = (200, 'OK')
-    CREATED = (201, 'Created')
-    BAD_REQUEST = (400, 'Bad Request')
-    
-    def __init__(self, code, message):
-        self.code = code
-        self.message = message
-    
-    # O(1)
-    def __str__(self):
-        return f"{self.code} {self.message}"
-
-# Access - O(1)
-status = HttpStatus.OK
-print(status.code)      # 200
-print(status.message)   # 'OK'
-print(str(status))      # '200 OK'
-```
-
-## Performance Comparison
-
-### Access Methods
-
-```python
-from enum import Enum
-
-class Day(Enum):
-    MONDAY = 1
-    TUESDAY = 2
-    WEDNESDAY = 3
-    THURSDAY = 4
-    FRIDAY = 5
-    SATURDAY = 6
-    SUNDAY = 7
-
-# By name - O(1), fastest
-day = Day.MONDAY
-
-# By name with getattr - O(1)
-day = getattr(Day, 'MONDAY')
-
-# By name dict - O(1)
-day = Day.__members__['MONDAY']
-
-# By value - O(n), iterates all members
-day = Day(1)
-```
-
-### Iteration vs Lookup
-
-```python
-from enum import Enum
-
-class Status(Enum):
-    PENDING = 'pending'
-    ACTIVE = 'active'
-    DONE = 'done'
-
-# Get all - O(n)
-all_statuses = list(Status)  # 3 operations
-
-# Get one by name - O(1)
-status = Status.PENDING
-
-# Get one by value - O(n)
-status = Status('pending')   # Must search
-```
-
-## When to Use Enum
-
-### Good For
-- Fixed set of named constants
-- Type safety (prevents invalid values)
-- Better readability than magic numbers/strings
-- Clear intent and documentation
-
-```python
-from enum import Enum
-
-# Good: Type-safe status
-class OrderStatus(Enum):
-    PENDING = 'pending'
-    SHIPPED = 'shipped'
-    DELIVERED = 'delivered'
-
-def process_order(status: OrderStatus) -> None:
-    if status == OrderStatus.PENDING:
-        send_to_warehouse()
-```
-
-### Avoid When
-- Set changes frequently
-- Need dynamic values
-- Simple flags where tuples work
-- Performance-critical lookup by value
-
-```python
-from enum import Enum
-
-# Avoid: Frequent changes needed
-# Use dict or database instead
-STATUSES = {1: 'pending', 2: 'active'}  # Easier to modify
-```
-
-## Memory Efficiency
-
-### Enum Instance Caching
-
-```python
-from enum import Enum
-
-class Color(Enum):
-    RED = 1
-    GREEN = 2
-    BLUE = 3
-
-# All references same instance - O(1) memory per unique value
-color1 = Color.RED
-color2 = Color.RED
-color3 = Color.RED
-
-print(id(color1) == id(color2) == id(color3))  # True
-```
-
-### Small Memory Footprint
-
-```python
-from enum import Enum
 import sys
+from enum import Enum, unique
 
-class Status(Enum):
-    OK = 1
-    ERROR = 2
+# unique() rejects an alias - O(n)
+try:
+    @unique
+    class Duplicated(Enum):
+        A = 1
+        B = 1
+except ValueError as error:
+    assert 'duplicate values' in str(error)
 
-# Enum members are cached singletons
-status = Status.OK
-print(sys.getsizeof(status))  # Very small, reused instance
+if sys.version_info >= (3, 11):
+    from enum import CONTINUOUS, verify
+
+    # CONTINUOUS refuses a gap in the values - O(n)
+    try:
+        @verify(CONTINUOUS)
+        class Gapped(Enum):
+            A = 1
+            C = 3
+    except ValueError as error:
+        assert 'invalid enum' in str(error) or 'are missing' in str(error)
 ```
+
+## The Functional API
+
+`Enum(name, names)` builds the same class the `class` statement would, at the same O(n) — just
+later.
+
+```python
+from enum import Enum
+
+Color = Enum('Color', ['RED', 'GREEN', 'BLUE'])   # O(n)
+
+assert Color.RED.value == 1        # auto-numbered from 1
+assert len(Color) == 3
+assert Color(1) is Color.RED       # O(1) - by value, like any other enum
+
+# A mapping gives explicit values
+Status = Enum('Status', {'OK': 200, 'MISSING': 404})
+assert Status(404) is Status.MISSING   # O(1)
+```
+
+## Methods on an Enum
+
+Methods and non-member attributes live on the class, not among the members, so adding them does
+not change any bound.
+
+```python
+from enum import Enum
+
+class Planet(Enum):
+    MERCURY = (3.303e23, 2.4397e6)
+    EARTH = (5.976e24, 6.37814e6)
+
+    def __init__(self, mass, radius):
+        self.mass = mass
+        self.radius = radius
+
+    @property
+    def surface_gravity(self):
+        return 6.67300E-11 * self.mass / (self.radius * self.radius)
+
+assert len(Planet) == 2                     # the property is not a member
+assert round(Planet.EARTH.surface_gravity, 2) == 9.80
+```
+
+## Version Notes
+
+- **Python 3.11+**: `StrEnum`, `ReprEnum`, `EnumType`, `verify` with `EnumCheck`, `FlagBoundary`,
+  `member`/`nonmember`, `enum.property`, the `global_*` and `pickle_by_*` helpers; a combined
+  `Flag` became sized and iterable
+- **Python 3.12+**: `value in EnumClass` answers `True`/`False` instead of raising `TypeError`
+- **Python 3.13+**: `EnumDict`, the class-body mapping, became public
 
 ## Related Documentation
 
-- [Collections Module](collections.md)
-- [Typing Module](typing.md)
-- [Dataclasses Module](dataclasses.md)
+- **[dataclasses](dataclasses.md)** - the other decorator that builds methods at import
+- **[typing](typing.md)** - `Literal` as the alternative when you want no runtime object at all
+- **[collections](collections.md)** - `namedtuple` for a fixed record rather than a fixed set
 
-## Further Reading
+## Best Practices
 
-- [CPython Internals: enum](https://zpoint.github.io/CPython-Internals/BasicObject/enum/enum.html){ target="_blank" rel="noopener" }:material-open-in-new: -
-  Deep dive into CPython's enum implementation
+✅ **Do**:
+
+- Look up by value with `C(value)` — it is a dict lookup, not a scan
+- Compare members with `is`; there is exactly one object per member
+- Use `IntEnum` or `StrEnum` only where the value has to cross an API that wants a plain int or str
+- Reach for `unique()` when the values come from somewhere you do not control
+
+❌ **Avoid**:
+
+- Building an enum inside a function that runs often — the class body is the O(n) part
+- Iterating to find a member by value
+- Assuming `__members__` and iteration agree; aliases appear in one and not the other
+- `value in EnumClass` if you still support 3.10 or 3.11
