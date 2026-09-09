@@ -87,7 +87,7 @@ result = 3 in items  # O(k) - same speed, more readable
 ### Validation with Early Exit
 
 ```python
-# O(n*k) with early exit
+# O(k) - stops at the first non-int; O(n) when every item is an int
 def has_invalid_item(items):
     return any(not isinstance(item, int) for item in items)
 

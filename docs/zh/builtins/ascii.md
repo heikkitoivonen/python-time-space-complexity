@@ -1,5 +1,5 @@
 ---
-source_sha: f3da73a0aa7274df261f80a8ebb8ec4e8e71890246b89496a5a34ba9d6daab50
+source_sha: 566a10b86e581df5f28a1ccd48bd41752fbfcc78d082fd8181c1aab2007650d7
 translated: machine
 ---
 
@@ -62,7 +62,7 @@ ascii("abc")  # O(3)
 ascii("a" * 1000)  # O(1000)
 
 # Unicode requiring escaping
-ascii("é" * 100)   # O(100) - each é becomes \xé9 (5 chars)
+ascii("é" * 100)   # O(100) - each é becomes \xe9 (4 chars)
 ```
 
 ### 转义序列

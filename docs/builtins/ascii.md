@@ -57,7 +57,7 @@ ascii("abc")  # O(3)
 ascii("a" * 1000)  # O(1000)
 
 # Unicode requiring escaping
-ascii("é" * 100)   # O(100) - each é becomes \xé9 (5 chars)
+ascii("é" * 100)   # O(100) - each é becomes \xe9 (4 chars)
 ```
 
 ### Escape Sequences

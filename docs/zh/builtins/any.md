@@ -1,5 +1,5 @@
 ---
-source_sha: a72a48299f85e3408cda9b0f6e893398da3d2a272fad9f895c318e92cf24671e
+source_sha: 4986cd2cdbf0f4e76eccafca68e381976e54cac8590eba28f052b75e09ace1ad
 translated: machine
 ---
 
@@ -92,7 +92,7 @@ result = 3 in items  # O(k) - same speed, more readable
 ### 带提前退出的校验
 
 ```python
-# O(n*k) with early exit
+# O(k) - stops at the first non-int; O(n) when every item is an int
 def has_invalid_item(items):
     return any(not isinstance(item, int) for item in items)
 

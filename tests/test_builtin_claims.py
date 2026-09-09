@@ -30,6 +30,78 @@ def best_time(func: Callable[[], Any], repeats: int = 5) -> float:
     return min(times)
 
 
+class TestAnyStopsAtFirstTruthy:
+    """docs/builtins/any.md: a validation scan built on any() costs O(k) for k
+    = the position of the first item that fails, and O(n) only when none does.
+    Counted by predicate calls, so no timing tolerance is involved.
+
+    The predicate here is isinstance, whose own cost is not varied."""
+
+    @staticmethod
+    def scan(items: list[object]) -> tuple[bool, int]:
+        """Return has_invalid_item(items) and how many items it looked at."""
+        checked = 0
+
+        def not_an_int(item: object) -> bool:
+            nonlocal checked
+            checked += 1
+            return not isinstance(item, int)
+
+        return any(not_an_int(item) for item in items), checked
+
+    def test_stops_at_the_first_non_int(self) -> None:
+        found, checked = self.scan([1, 2, "three", 4, 5])
+        assert found is True
+        assert checked == 3  # k, the position of "three", not the 5 items
+
+    def test_checks_every_item_when_all_are_ints(self) -> None:
+        found, checked = self.scan([1, 2, 3, 4, 5])
+        assert found is False
+        assert checked == 5
+
+    def test_a_list_comprehension_gives_up_the_early_exit(self) -> None:
+        checked = 0
+
+        def not_an_int(item: object) -> bool:
+            nonlocal checked
+            checked += 1
+            return not isinstance(item, int)
+
+        items = [1, 2, "three", 4, 5]
+        # The eager list is the point: it runs the predicate before any() sees it.
+        assert any([not_an_int(item) for item in items]) is True  # noqa: C419
+        assert checked == 5
+
+
+class TestAsciiEscapeWidths:
+    """docs/builtins/ascii.md: an escaped character expands to a fixed width -
+    4 for \\xHH, 6 for \\uHHHH, 10 for \\UHHHHHHHH - so ascii() grows its
+    output by a constant per escaped character, not a variable one.
+
+    Widths are read back off ascii() rather than written out as literals."""
+
+    @staticmethod
+    def escape(char: str) -> str:
+        """Return the escape ascii() produces for char, without the quotes."""
+        return ascii(char)[1:-1]
+
+    def test_latin1_escape_is_four_characters(self) -> None:
+        assert self.escape("\xe9") == "\\xe9"
+        assert len(self.escape("\xe9")) == 4
+
+    def test_basic_plane_escape_is_six_characters(self) -> None:
+        assert self.escape("\u0101") == "\\u0101"
+        assert len(self.escape("\u0101")) == 6
+
+    def test_astral_escape_is_ten_characters(self) -> None:
+        assert self.escape("\U0001f600") == "\\U0001f600"
+        assert len(self.escape("\U0001f600")) == 10
+
+    def test_output_length_is_the_escape_width_times_the_repeat(self) -> None:
+        # The two quotes are the only part that does not repeat.
+        assert len(ascii("\xe9" * 100)) == 100 * 4 + 2
+
+
 class TestBoolSingletons:
     """docs/builtins/bool.md: True and False are cached singletons, so every
     comparison is a pointer or small-int check, never a scan."""
