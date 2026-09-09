@@ -97,6 +97,15 @@ ignore = [
     "B008",   # do not perform function calls in argument defaults
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# The typing page documents the difference between `typing.List[int]`, which is
+# memoized, and `list[int]`, which is not - and between `Union[X, Y]` and
+# `X | Y`, which stopped being the same object in 3.14. UP006, UP007 and UP045
+# rewrite one side of each comparison into the other, which silently turns those
+# tests into tautologies. F722 reads the deliberately non-type string handed to
+# `cast()` as a broken forward annotation.
+"tests/test_typing_complexity.py" = ["UP006", "UP007", "UP045", "F722"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["python_time_space_complexity"]
 
