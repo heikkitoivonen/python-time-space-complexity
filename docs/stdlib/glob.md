@@ -1,20 +1,31 @@
 # glob Module Complexity
 
-The `glob` module provides Unix shell-style pathname expansion using wildcard patterns to find files matching specific criteria.
+The `glob` module expands shell-style pathname patterns. Its cost is set by how much of the
+filesystem the pattern makes it look at, not by how much it finds: a pattern that matches one file
+in a directory of 20,000 still reads all 20,000 names.
+
+Three size variables run through the table. **E** is the entries examined across every directory
+the pattern reaches, **e** is the entries in the largest single directory among them, and **m** is
+the matches returned.
 
 ## Complexity Reference
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `glob()` function | O(n) | O(n) | n = matching files |
-| `iglob()` function | O(1) init | O(1) per item | Iterator, lazy evaluation |
-| Pattern matching | O(n) | O(1) | n = files in directory |
-| Recursive search `**` | O(E) | O(1) per file | E = entries examined across the walked tree |
-| `escape()` | O(n) | O(n) | Escape metacharacters |
-| `has_magic()` | O(n) | O(1) | Detect pattern magic |
-| `glob0()` | O(1) | O(1) | Single-directory literal/implicit match |
-| `glob1()` | O(n) | O(n) | One-level pattern match |
-| `translate()` | O(n) | O(n) | Convert glob to regex |
+| `glob.glob(pathname, *, root_dir, dir_fd, recursive, include_hidden)` | O(E) | O(e + m) | `list(iglob(...))`; the returned order is undefined |
+| `glob.iglob(pathname, ...)` | O(1) to build, O(E) to exhaust | O(e) | Lazy per directory, not per entry: a directory is listed whole before any of its matches are yielded |
+| `glob.escape(pathname)` | O(n) | O(n) | n = name length; wraps each metacharacter in a character class |
+| `glob.has_magic(s)` | O(n) | O(1) | n = string length; one regex search for `*?[` |
+| `glob.translate(pat, *, recursive, include_hidden, seps)` | O(n) | O(n) | Python 3.13+; n = pattern length, producing a regex |
+| `glob.glob0(dirname, pattern)` | O(1) | O(1) | Deprecated in 3.14; one `lexists` check, no pattern matching |
+| `glob.glob1(dirname, pattern)` | O(e) | O(e + m) | Deprecated in 3.14; lists one directory and filters it |
+| `glob.magic_check`, `glob.magic_check_bytes` | O(1) | O(1) | The compiled patterns `has_magic()` and `escape()` use |
+
+!!! warning "The pattern decides the cost, not the result"
+    Every wildcard segment lists its whole directory. `*.py` in a directory of 20,000 files reads
+    20,000 names whether it matches one file or all of them, and `**` repeats that for every
+    directory it descends into — including directories reached through a symbolic link, which is
+    how a link back up the tree turns a recursive glob into a very long one.
 
 ## Basic Globbing
 
@@ -22,431 +33,313 @@ The `glob` module provides Unix shell-style pathname expansion using wildcard pa
 
 ```python
 import glob
+import os
+import tempfile
 
-# Find all Python files - O(n)
-py_files = glob.glob('*.py')
-print(py_files)  # ['script.py', 'test.py', ...]
+with tempfile.TemporaryDirectory() as folder:
+    for name in ('script.py', 'test.py', 'notes.txt'):
+        open(os.path.join(folder, name), 'w').close()
 
-# Find all files in directory - O(n)
-all_files = glob.glob('*')
-print(all_files)  # All files in current directory
+    # Each pattern lists the directory once - O(E)
+    py_files = glob.glob(os.path.join(folder, '*.py'))
+    assert sorted(os.path.basename(p) for p in py_files) == ['script.py', 'test.py']
 
-# Find specific pattern - O(n)
-data_files = glob.glob('data/*.csv')
-print(data_files)  # ['data/file1.csv', 'data/file2.csv', ...]
+    everything = glob.glob(os.path.join(folder, '*'))
+    assert len(everything) == 3
 ```
 
 ### Pattern Wildcards
 
 ```python
 import glob
+import os
+import tempfile
 
-# * - matches any sequence of characters
-# [abc] - matches any character in brackets
-# [a-z] - matches character range
-# ? - matches single character
-# ** - matches zero or more directories (recursive)
+# * - any sequence of characters
+# ? - one character
+# [abc] / [a-z] - one character from the set or range
+# ** - zero or more directories, with recursive=True
 
-# Examples - each scans a directory: O(n) in its entries, O(n) for the result
-print(glob.glob('test*.py'))      # test_*.py files
-print(glob.glob('file?.txt'))     # file1.txt, fileA.txt, etc.
-print(glob.glob('[a-c]*.txt'))    # a*, b*, or c* txt files
-print(glob.glob('**/*.py'))       # O(E) - every entry in the tree is looked
-                                  # at, not just every directory
+with tempfile.TemporaryDirectory() as folder:
+    for name in ('file1.txt', 'fileA.txt', 'apple.txt', 'zebra.txt'):
+        open(os.path.join(folder, name), 'w').close()
+
+    def names(pattern):
+        return sorted(os.path.basename(p) for p in glob.glob(os.path.join(folder, pattern)))
+
+    assert names('file?.txt') == ['file1.txt', 'fileA.txt']  # O(E)
+    assert names('[a-c]*.txt') == ['apple.txt']              # O(E)
+```
+
+### Hidden Names Are Excluded
+
+`*`, `?` and `**` do not match a leading dot. Since Python 3.11 `include_hidden=True` turns that
+off; before it, the only way in is to write the dot into the pattern.
+
+```python
+import glob
+import os
+import sys
+import tempfile
+
+with tempfile.TemporaryDirectory() as folder:
+    open(os.path.join(folder, 'visible.py'), 'w').close()
+    open(os.path.join(folder, '.hidden.py'), 'w').close()
+
+    found = glob.glob(os.path.join(folder, '*.py'))
+    assert sorted(os.path.basename(p) for p in found) == ['visible.py']
+
+    # An explicit dot reaches it on every version
+    dotted = glob.glob(os.path.join(folder, '.*.py'))
+    assert [os.path.basename(p) for p in dotted] == ['.hidden.py']
+
+    if sys.version_info >= (3, 11):
+        both = glob.glob(os.path.join(folder, '*.py'), include_hidden=True)
+        assert len(both) == 2
 ```
 
 ## Iterator vs List
 
-### Using iglob for Large Directories
+### What iglob Actually Saves
+
+`iglob()` saves you the result *list*. It does not save you the directory listing: each directory
+the pattern reaches is read whole, into a list of names, before the first match from it is
+yielded. So the iterator's memory follows the largest directory, not the number of matches.
 
 ```python
 import glob
+import os
+import tempfile
+import tracemalloc
 
-# glob() returns list - O(n) space, all at once
-files = glob.glob('*.py')  # O(n) - loads all results
-for file in files:
-    print(file)
+with tempfile.TemporaryDirectory() as folder:
+    for index in range(2000):
+        open(os.path.join(folder, f'f{index}.dat'), 'w').close()
+    open(os.path.join(folder, 'only.py'), 'w').close()
 
-# iglob() returns iterator - O(1) space, lazy evaluation
-files = glob.iglob('*.py')  # O(1) - returns iterator
-for file in files:
-    print(file)  # Each iteration finds one match
+    pattern = os.path.join(folder, '*.py')
+
+    # Building the iterator does nothing - O(1)
+    tracemalloc.start()
+    iterator = glob.iglob(pattern)
+    build_peak = tracemalloc.get_traced_memory()[1]
+    tracemalloc.stop()
+
+    # The first step reads the whole directory - O(e)
+    tracemalloc.start()
+    first = next(iterator)
+    step_peak = tracemalloc.get_traced_memory()[1]
+    tracemalloc.stop()
+
+    assert os.path.basename(first) == 'only.py'
+    assert build_peak < step_peak  # the listing happens on the first step
 ```
 
-### Memory Efficiency
+### When the List Is the Problem
+
+Use `iglob()` when the *matches* are many. When one directory is huge and the matches are few,
+both forms pay the same O(e) to read it.
 
 ```python
 import glob
-import sys
+import os
+import tempfile
 
-# Large directory with many matches
-# glob() - loads all in memory
-all_files = glob.glob('**/*.txt', recursive=True)
-print(f"Memory used by glob: {sys.getsizeof(all_files)} bytes")
+with tempfile.TemporaryDirectory() as folder:
+    for index in range(100):
+        open(os.path.join(folder, f'log{index}.txt'), 'w').close()
 
-# iglob() - loads one at a time
-file_iter = glob.iglob('**/*.txt', recursive=True)
-print(f"Memory used by iglob: {sys.getsizeof(file_iter)} bytes")
+    # O(e + m): the listing plus the whole result list
+    everything = glob.glob(os.path.join(folder, '*.txt'))
+    assert len(everything) == 100
 
-# For large results, iglob is better
-for file in file_iter:
-    process(file)  # Process one at a time
+    # O(e): the listing, but one path at a time out of it
+    count = 0
+    for path in glob.iglob(os.path.join(folder, '*.txt')):
+        count += 1
+    assert count == 100
 ```
 
 ## Recursive Globbing
 
-### Find Files in Subdirectories
+`**` needs `recursive=True`; without it the pattern behaves like a single `*`. With it, every
+directory below the anchor is listed, so the cost is the whole subtree's entries.
 
 ```python
 import glob
+import os
+import tempfile
 
-# Recursive search with ** - O(E), E = entries examined in the whole tree
-# Must use recursive=True parameter
+with tempfile.TemporaryDirectory() as folder:
+    nested = os.path.join(folder, 'src', 'pkg')
+    os.makedirs(nested)
+    open(os.path.join(folder, 'top.py'), 'w').close()
+    open(os.path.join(nested, 'deep.py'), 'w').close()
 
-# Find all Python files recursively
-py_files = glob.glob('**/*.py', recursive=True)
-print(py_files)
+    # O(E) - every entry in the tree is looked at, not every directory
+    found = glob.glob(os.path.join(folder, '**', '*.py'), recursive=True)
+    assert sorted(os.path.basename(p) for p in found) == ['deep.py', 'top.py']
 
-# Find files at specific depth
-# All .txt files in any subdirectory
-txt_files = glob.glob('*/*.txt')  # One level deep
+    # Without recursive=True, ** is just one level
+    shallow = glob.glob(os.path.join(folder, '**', '*.py'))
+    assert [os.path.basename(p) for p in shallow] == []
+```
 
-# All .txt files recursively
-txt_files = glob.glob('**/*.txt', recursive=True)
+!!! warning "Recursive globs follow directory symlinks"
+    A `**` walk descends through symbolic links to directories, so the same file can be reported
+    under more than one path, and a link pointing back up the tree makes the walk far larger than
+    the tree. Use `os.walk(followlinks=False)` when that matters.
 
-# Find in nested structure
-nested = glob.glob('src/**/test_*.py', recursive=True)
+## Pattern Escaping
+
+`escape()` wraps each metacharacter in a character class, so a literal name can be used as a
+pattern. It is O(n) in the name — nothing next to the directory scan that follows.
+
+```python
+import glob
+import os
+import tempfile
+
+assert glob.escape('test[1].txt') == 'test[[]1].txt'
+assert glob.has_magic('a*b') is True
+assert glob.has_magic('plain.txt') is False
+
+with tempfile.TemporaryDirectory() as folder:
+    awkward = os.path.join(folder, 'data[backup].csv')
+    open(awkward, 'w').close()
+
+    # Unescaped, the brackets are a character class and match nothing
+    assert glob.glob(awkward) == []
+    assert glob.glob(glob.escape(awkward)) == [awkward]
+```
+
+## Turning a Pattern Into a Regex
+
+`translate()` (Python 3.13+) gives you the regular expression `glob` would match with, including
+the leading-dot rule.
+
+```python
+import glob
+import re
+import sys
+
+if sys.version_info >= (3, 13):
+    pattern = glob.translate('*.py')  # O(n) in the pattern
+    assert re.match(pattern, 'script.py')
+    assert re.match(pattern, '.hidden.py') is None  # the dot rule is baked in
 ```
 
 ## Common Patterns
 
-### Find Configuration Files
+### Collecting Several Extensions
 
-```python
-import glob
-
-# Find all config files - O(n)
-configs = glob.glob('**/*.conf', recursive=True)
-configs.extend(glob.glob('**/*.ini', recursive=True))
-configs.extend(glob.glob('**/*.yaml', recursive=True))
-
-print(f"Found {len(configs)} config files")
-```
-
-### Find Files by Extension
-
-```python
-import glob
-
-class FileCollector:
-    """Collect files by extension"""
-    
-    def __init__(self, root_dir='.'):
-        self.root = root_dir
-    
-    # Find by extension - O(n)
-    def find_by_extension(self, ext):
-        pattern = f'{self.root}/**/*.{ext}'
-        return glob.glob(pattern, recursive=True)
-    
-    # Find multiple extensions - O(n*m)
-    def find_by_extensions(self, *exts):
-        files = []
-        for ext in exts:  # O(m) extensions
-            pattern = f'{self.root}/**/*.{ext}'
-            files.extend(glob.glob(pattern, recursive=True))  # O(n)
-        return files
-    
-    # Find in specific directory - O(n)
-    def find_in_dir(self, subdir, ext):
-        pattern = f'{self.root}/{subdir}/*.{ext}'
-        return glob.glob(pattern)
-
-# Usage
-collector = FileCollector('.')
-py_files = collector.find_by_extension('py')
-all_code = collector.find_by_extensions('py', 'js', 'ts')
-```
-
-### Batch File Processing
+Each pattern is its own walk, so m extensions over a tree of E entries costs O(m·E). One pass with
+a broader pattern and a filter costs O(E).
 
 ```python
 import glob
 import os
+import tempfile
 
-def process_images(directory):
-    """Process all images in directory - O(n)"""
-    
-    image_exts = ['*.jpg', '*.jpeg', '*.png', '*.gif']
-    patterns = [f'{directory}/**/{ext}' for ext in image_exts]
-    
-    total_size = 0
-    count = 0
-    
-    # Process each pattern - O(n*m)
-    for pattern in patterns:
-        for image_path in glob.iglob(pattern, recursive=True):
-            # Process each image
-            size = os.path.getsize(image_path)
-            total_size += size
-            count += 1
-            
-            print(f"Processing: {image_path} ({size} bytes)")
-    
-    return count, total_size
+with tempfile.TemporaryDirectory() as folder:
+    for name in ('a.py', 'b.js', 'c.ts', 'd.md'):
+        open(os.path.join(folder, name), 'w').close()
 
-# Usage
-count, total = process_images('photos')
-print(f"Processed {count} images, {total} bytes")
+    # Three walks - O(3·E)
+    wanted = ('py', 'js', 'ts')
+    separately = []
+    for extension in wanted:
+        separately.extend(glob.glob(os.path.join(folder, f'*.{extension}')))
+    assert len(separately) == 3
+
+    # One walk, then a filter - O(E)
+    once = [
+        path for path in glob.iglob(os.path.join(folder, '*'))
+        if path.rsplit('.', 1)[-1] in wanted
+    ]
+    assert len(once) == 3
 ```
 
-### Compare with os.listdir
+### The Deprecated Pair
+
+`glob0()` and `glob1()` are left over from an older API and have been deprecated since Python
+3.14, which points you at `glob(pattern, root_dir=...)` instead. They are worth a look only
+because they show the split the table describes: `glob0` never matches a pattern, and `glob1` is
+the one-directory listing that `iglob` is built on.
 
 ```python
 import glob
 import os
+import tempfile
+import warnings
 
-# os.listdir() - non-recursive, simple
-files = os.listdir('.')  # O(n) - one level only
-print(files)
+with tempfile.TemporaryDirectory() as folder:
+    open(os.path.join(folder, 'a.py'), 'w').close()
 
-# glob.glob() - pattern matching, can recurse
-files = glob.glob('**/*.txt', recursive=True)  # O(n) - all levels
-print(files)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', DeprecationWarning)
 
-# glob is better for searching, os.listdir better for listing
+        # glob0 checks one literal name - O(1)
+        assert glob.glob0(folder, 'a.py') == ['a.py']
+        assert glob.glob0(folder, '*.py') == []
+
+        # glob1 lists the directory and filters it - O(e)
+        assert glob.glob1(folder, '*.py') == ['a.py']
 ```
 
-## Pattern Escaping
+## Version Notes
 
-### Handle Special Characters
-
-```python
-import glob
-
-# Filenames with special characters need escaping
-# * ? [ ] { } are glob metacharacters
-
-# Files that contain brackets
-# File: test[1].txt
-
-# Escape with [brackets]
-pattern = glob.escape('test[1].txt')  # O(n) in the name - 'test[[]1].txt'
-result = glob.glob(pattern)           # O(n) in directory entries
-
-# Escape before using in patterns
-filename = "data[backup].csv"
-pattern = glob.escape(filename)  # O(n) - cheap next to the directory scan
-result = glob.glob(pattern)
-```
-
-
-## Common Use Cases
-
-### Find Recent Files
-
-```python
-import glob
-import os
-import time
-
-def find_recent_files(directory, minutes=60):
-    """Find files modified in last N minutes - O(n)"""
-    
-    cutoff_time = time.time() - (minutes * 60)
-    recent = []
-    
-    # Get all files recursively - O(n)
-    for file_path in glob.iglob(f'{directory}/**/*', recursive=True):
-        if os.path.isfile(file_path):
-            mtime = os.path.getmtime(file_path)
-            if mtime > cutoff_time:
-                recent.append((file_path, mtime))
-    
-    return sorted(recent, key=lambda x: x[1], reverse=True)
-
-# Usage
-recent = find_recent_files('.', minutes=30)
-for path, mtime in recent:
-    print(f"{path}: {time.ctime(mtime)}")
-```
-
-### Build System File Finding
-
-```python
-import glob
-
-class BuildSystem:
-    """Find source files for building"""
-    
-    def __init__(self, project_root):
-        self.root = project_root
-    
-    # Find source files
-    def find_sources(self, language):
-        """Find source files - O(n)"""
-        
-        patterns = {
-            'python': '**/*.py',
-            'javascript': '**/*.js',
-            'cpp': ['**/*.cpp', '**/*.h'],
-            'java': '**/*.java'
-        }
-        
-        if language not in patterns:
-            return []
-        
-        pattern_list = patterns[language]
-        if isinstance(pattern_list, str):
-            pattern_list = [pattern_list]
-        
-        files = []
-        for pattern in pattern_list:
-            full_pattern = f'{self.root}/{pattern}'
-            files.extend(glob.glob(full_pattern, recursive=True))
-        
-        return files
-    
-    # Find test files
-    def find_tests(self):
-        """Find test files - O(n)"""
-        patterns = [
-            f'{self.root}/**/test_*.py',
-            f'{self.root}/**/*_test.py',
-            f'{self.root}/**/tests.py'
-        ]
-        
-        tests = []
-        for pattern in patterns:
-            tests.extend(glob.glob(pattern, recursive=True))
-        
-        return list(set(tests))  # Remove duplicates
-
-# Usage
-build = BuildSystem('.')
-py_sources = build.find_sources('python')
-tests = build.find_tests()
-```
-
-### Package Discovery
-
-```python
-import glob
-import os
-
-def find_python_packages(directory):
-    """Find all Python packages - O(n)"""
-    
-    packages = []
-    
-    # Find __init__.py files - O(n)
-    init_files = glob.glob(f'{directory}/**/__init__.py', recursive=True)
-    
-    for init_file in init_files:
-        # Package is directory containing __init__.py
-        package_dir = os.path.dirname(init_file)
-        # Convert path to module name
-        module_name = package_dir.replace(os.sep, '.')
-        packages.append(module_name)
-    
-    return sorted(packages)
-
-# Usage
-packages = find_python_packages('src')
-print("Found packages:", packages)
-```
-
-## Performance Characteristics
-
-### Time Complexity
-- **glob()**: O(n) where n = total matching files
-- **iglob()**: O(1) initialization + O(k) for first k items
-- **Pattern matching**: O(n) to scan all files
-- **Recursive search**: O(E) proportional to entries examined, not tree depth
-
-### Space Complexity
-- **glob()**: O(n) for result list
-- **iglob()**: O(1) memory, iterator-based
-- **Pattern processing**: O(1) per match
-
-### Performance Tips
-
-```python
-import glob
-import time
-
-# Slow: Multiple glob calls
-start = time.time()
-py_files = glob.glob('*.py')
-txt_files = glob.glob('*.txt')
-md_files = glob.glob('*.md')
-time1 = time.time() - start
-
-# Better: Single glob with pattern
-start = time.time()
-all_files = glob.glob('[!_]*.[pytm]*')
-time2 = time.time() - start
-
-# Fast: Using iglob for processing
-start = time.time()
-for file in glob.iglob('**/*', recursive=True):
-    if file.endswith('.py'):
-        process(file)
-time3 = time.time() - start
-
-print(f"Multiple: {time1:.4f}s")
-print(f"Single: {time2:.4f}s")
-print(f"Iterator: {time3:.4f}s")
-```
+- **Python 3.11+**: `include_hidden` on `glob()` and `iglob()`
+- **Python 3.13+**: `glob.translate()`
+- **Python 3.14**: `glob0()` and `glob1()` are deprecated in favour of `root_dir`; the
+  docstring states what was always true — the returned order is undefined
 
 ## Limitations
 
-- Cannot check file type before returning
-- No built-in size filtering
-- No date/time filtering
-- Patterns are shell-style, not regex
+- No filtering by size, type or time; that is a `stat()` per result afterwards
+- Patterns are shell-style, not regular expressions
+- Nothing is cached between calls, so two globs over one tree read it twice
 
 ## Alternatives
 
 ```python
-# For more control, use pathlib
-from pathlib import Path
-
-# glob with pathlib - O(E) over the tree, same work as glob.glob()
-path = Path('.')
-py_files = list(path.glob('**/*.py'))
-
-# For regex patterns, use os.walk + re
 import os
 import re
-
-for root, dirs, files in os.walk('.'):
-    for file in files:
-        if re.match(r'test_.*\.py$', file):
-            print(os.path.join(root, file))
-
-# For filtering by attributes
+import tempfile
 from pathlib import Path
-import os
 
-py_files = [f for f in Path('.').glob('**/*.py') 
-            if f.stat().st_size < 1000]  # < 1KB
+with tempfile.TemporaryDirectory() as folder:
+    Path(folder, 'pkg').mkdir()
+    Path(folder, 'pkg', 'test_one.py').touch()
+
+    # pathlib.Path.glob - the same walk, yielding Path objects
+    assert [p.name for p in Path(folder).glob('**/*.py')] == ['test_one.py']
+
+    # os.walk plus re - when the pattern is not shell-shaped
+    matched = [
+        name
+        for _, _, files in os.walk(folder)
+        for name in files
+        if re.match(r'test_.*\.py$', name)
+    ]
+    assert matched == ['test_one.py']
 ```
 
 ## Best Practices
 
-### Do's
-- Use glob for simple wildcard matching
-- Use iglob for large result sets
-- Escape filenames with special characters
-- Use recursive=True for deep searches
-- Cache results if used multiple times
+✅ **Do**:
 
-### Avoid's
-- Don't use glob for complex filtering
-- Don't use glob inside tight loops
-- Don't assume pattern will find files quickly
-- Don't rely on glob for file existence checking
+- Escape a literal name before using it as a pattern
+- Anchor the pattern as deeply as you can, so fewer directories are listed
+- Use `iglob()` when the matches are many; it does not help when one directory is
+- Cache the result if you will use it twice — nothing else does
+
+❌ **Avoid**:
+
+- Reading `glob()` as O(matches); it is O(entries examined)
+- One walk per extension when one walk and a filter will do
+- `**` over a tree with directory symlinks you have not checked
+- `glob()` as an existence check — `os.path.lexists()` is the O(1) answer
 
 ## Related Documentation
 
