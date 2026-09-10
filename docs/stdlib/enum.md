@@ -4,13 +4,15 @@ The `enum` module binds symbolic names to constant values. Almost everything it 
 when the class body runs: the metaclass builds the members, indexes them by name and by value, and
 freezes the result.
 
-After that, both lookups are dict lookups. **n** is the members of an enum; the only operations
-that pay it are the class definition itself and anything that walks the members.
+**n** is the number of member names, including aliases. Name lookup uses a dictionary;
+value lookup uses a dictionary for hashable values and scans for unhashable values.
+Lookup bounds assume constant-cost hashing and equality and exclude custom `_missing_()` work.
+Construction bounds below cover ordinary hashable values.
 
-!!! note "Lookup by value is a dict, not a scan"
-    `Color(1)` goes through `_value2member_map_`, so it is O(1) — the last member declared costs
-    the same as the first, whether the enum has ten members or a thousand. Only a value the map
-    does not hold falls through to `_missing_()`.
+!!! note "Value lookup depends on hashability"
+    `Color(1)` uses the reverse value dictionary, giving expected O(1) lookup. List- and
+    dict-valued enums are supported too, but looking up an unhashable value requires up to
+    O(n) equality comparisons before a match or a call to `_missing_()`.
 
 ## Complexity Reference
 
@@ -31,12 +33,12 @@ that pay it are the class definition itself and anything that walks the members.
 |-----------|------|-------|-------|
 | `C.MEMBER` | O(1) | O(1) | An attribute lookup on the class |
 | `C['MEMBER']` | O(1) | O(1) | `_member_map_`, a dict keyed by name |
-| `C(value)` | O(1) | O(1) | `_value2member_map_`, a dict keyed by value; a miss calls `_missing_()` |
+| `C(value)` | O(1) expected for hashable values; O(n) comparisons for unhashable values | O(1) auxiliary | A failed lookup calls `_missing_()`; comparison and hook costs are additional |
 | `member.name`, `member.value` | O(1) | O(1) | Stored on the member |
 | `len(C)` | O(1) | O(1) | The canonical member list's length |
 | `iter(C)` | O(n) | O(1) | Canonical members only — aliases are skipped |
-| `C.__members__` | O(1) | O(n) | A mapping proxy including aliases; building the view is O(1), reading it all is O(n) |
-| `x in C` | O(1) | O(1) | A non-member value raises `TypeError` before 3.12 and answers `True`/`False` from 3.12 |
+| `C.__members__` | O(1) | O(1) auxiliary | Read-only proxy over the existing dictionary, including aliases; copying it to a dict or list costs O(n) time and space |
+| `x in C` | O(1) for a member; up to O(n) comparisons for raw values from 3.13 | O(1) auxiliary, excluding hooks | A raw value raises `TypeError` before 3.12; from 3.12 a hashable one answers `True`/`False`, while an unhashable one still raises until 3.13 compares it |
 
 ### Variants
 
@@ -56,7 +58,10 @@ that pay it are the class definition itself and anything that walks the members.
 | `enum.verify(*checks)` | O(n) | O(n) | Python 3.11+; a class decorator running the `EnumCheck` constraints |
 | `enum.EnumCheck` — `enum.UNIQUE`, `enum.CONTINUOUS`, `enum.NAMED_FLAGS` | O(1) | O(1) | Python 3.11+; the constraints `verify()` applies |
 | `enum.FlagBoundary` — `enum.STRICT`, `enum.CONFORM`, `enum.EJECT`, `enum.KEEP` | O(1) | O(1) | Python 3.11+; what a flag does with bits no member claims |
-| `enum.global_enum(cls)`, `enum.global_str(self)` | O(n) | O(n) | Python 3.11+; copies the members into the defining module's namespace |
+| `enum.global_enum(cls)` | O(n) | O(n) | Python 3.11+; exports members into the defining module and changes their string representations |
+| `enum.global_str(member)` | O(1) for a named member | O(1) auxiliary for a named member | Python 3.11+; returns the stored name; unnamed members instead incur value-formatting costs |
+| `enum.show_flag_values(value)` | O(b·w) bit work | O(b·w) bits | Python 3.11+; returns b powers of two in ascending order; w = positive input's bit length; zero takes O(1) |
+| `enum.bin(num, max_bits=None)` | O(w) formatting plus integer exponentiation | O(w) | Python 3.11+; w = output width including padding; also computes `2 ** num.bit_length()` |
 | `enum.global_enum_repr(self)`, `enum.global_flag_repr(self)` | O(1) | O(1) | Python 3.11+; the `repr` that names the module rather than the class |
 | `enum.pickle_by_global_name(self, proto)`, `enum.pickle_by_enum_name(self, proto)` | O(1) | O(1) | Python 3.11+; `__reduce_ex__` implementations |
 
@@ -78,7 +83,7 @@ assert Color.RED.value == 1       # O(1)
 assert str(Color.RED) == 'Color.RED'
 ```
 
-### Both Lookups Are Dict Lookups
+### Name and Value Lookup
 
 ```python
 from enum import Enum
@@ -89,7 +94,10 @@ class Status(Enum):
     DONE = 'done'
 
 assert Status.ACTIVE is Status['ACTIVE']    # O(1) - by name
-assert Status.ACTIVE is Status('active')    # O(1) - by value
+assert Status.ACTIVE is Status('active')    # O(1) expected - hashable value
+
+Lists = Enum('Lists', {'FIRST': [1], 'SECOND': [2]})
+assert Lists([2]) is Lists.SECOND           # O(n) comparisons - unhashable value
 
 # A value with no member raises, having consulted the map and then _missing_
 try:
@@ -154,10 +162,12 @@ if sys.version_info >= (3, 12):
     assert (99 in Color) is False
 ```
 
-!!! warning "`value in EnumClass` raised before Python 3.12"
+!!! warning "`value in EnumClass` was not always a question you could ask"
     On 3.10 and 3.11 testing a non-member raises `TypeError` (with a `DeprecationWarning` saying
-    the behaviour will change). Write `value in EnumClass._value2member_map_` if you must support
-    those versions, or catch the `TypeError`.
+    the behaviour will change). Python 3.12 answers for a hashable value but still raises
+    `TypeError: unhashable type` for a list- or dict-valued member; 3.13 is the first release that
+    compares one. For hashable values, use `value in EnumClass._value2member_map_` to support the
+    older versions, or catch the `TypeError`.
 
 ## Integer and String Enums
 
@@ -248,7 +258,7 @@ Color = Enum('Color', ['RED', 'GREEN', 'BLUE'])   # O(n)
 
 assert Color.RED.value == 1        # auto-numbered from 1
 assert len(Color) == 3
-assert Color(1) is Color.RED       # O(1) - by value, like any other enum
+assert Color(1) is Color.RED       # O(1) expected - hashable value
 
 # A mapping gives explicit values
 Status = Enum('Status', {'OK': 200, 'MISSING': 404})
@@ -282,8 +292,8 @@ assert round(Planet.EARTH.surface_gravity, 2) == 9.80
 ## Version Notes
 
 - **Python 3.11+**: `StrEnum`, `ReprEnum`, `EnumType`, `verify` with `EnumCheck`, `FlagBoundary`,
-  `member`/`nonmember`, `enum.property`, the `global_*` and `pickle_by_*` helpers; a combined
-  `Flag` became sized and iterable
+  `member`/`nonmember`, `enum.property`, `show_flag_values`, `enum.bin`, the `global_*` and
+  `pickle_by_*` helpers; a combined `Flag` became sized and iterable
 - **Python 3.12+**: `value in EnumClass` answers `True`/`False` instead of raising `TypeError`
 - **Python 3.13+**: `EnumDict`, the class-body mapping, became public
 
@@ -297,7 +307,7 @@ assert round(Planet.EARTH.surface_gravity, 2) == 9.80
 
 ✅ **Do**:
 
-- Look up by value with `C(value)` — it is a dict lookup, not a scan
+- Use `C(value)` for value lookup; hashable values use the reverse dictionary
 - Compare members with `is`; there is exactly one object per member
 - Use `IntEnum` or `StrEnum` only where the value has to cross an API that wants a plain int or str
 - Reach for `unique()` when the values come from somewhere you do not control

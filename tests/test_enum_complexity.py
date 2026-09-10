@@ -1,42 +1,25 @@
-"""Tests to verify documented behaviour of the enum module.
+"""Evidence for docs/stdlib/enum.md.
 
-docs/stdlib/enum.md said lookup by value was "O(n), linear search through
-members". It is a dict lookup. `_value2member_map_` is built when the class body
-runs, and the measurement is flat in both directions:
+Hashable integer lookup is measured across 10 and 1,000 members and between
+first and last members. Unhashable list/dict values count comparisons at
+10 and 100 members with constant-size values. Proxy allocations vary member
+count, and a live backing-map mutation distinguishes a view from a copy.
+Named global_str results use identity at both enum widths; global_enum exports
+are checked in an isolated module. show_flag_values varies set-bit count and
+integer width independently, checking output allocation in both dimensions.
+The bit-work upper bound follows released CPython 3.14 Lib/enum.py's repeated
+integer operations; no timing exponent is inferred from output allocation.
+The bin helper checks padded output length, signs, and allocation growth. Its
+integer exponentiation cost is left separate, as seen in released CPython
+3.11 and 3.14 Lib/enum.py; output allocation alone does not bound that work.
 
-* Ten members against a thousand: 252ns and 247ns on 3.10, 140ns and 195ns on
-  3.14. A scan over a thousand members would be a hundred times the ten-member
-  case, not the same.
-* Within one enum, the last member declared costs what the first does - 247ns
-  against 220ns at a thousand members on 3.10, 195ns against 180ns on 3.14.
-  A scan would find the first immediately and the last after n steps.
-
-Lookup by name is flat the same way, and iteration is the operation that is
-genuinely O(n): 1.1us for ten members against 67.6us for a thousand on 3.10.
-
-Two version boundaries:
-
-* `value in EnumClass` raises `TypeError` on 3.10 and 3.11 (with a
-  `DeprecationWarning` announcing the change) and answers `True`/`False` from
-  3.12.
-* A combined `Flag` became sized and iterable in 3.11; before that `len()` on
-  one raises.
-
-The module also grew from 7 exported names on 3.10 to 30 on 3.14 - 22 of them
-arriving at once in 3.11 - and the page's `verify()` row named something 3.10
-does not have.
-
-Not settled here:
-
-* What `_missing_()` costs. It is caller-supplied by definition, and the page
-  names it rather than pricing it.
-* `global_enum` and the `pickle_by_*` helpers beyond their existence; both act
-  on module namespaces and pickling, neither of which is a bound.
-* `FlagBoundary` behaviour for out-of-range bits, which changes the result
-  rather than the cost.
-
-Axes not varied: enums with unhashable values (which fall back to a scan),
-`__init_subclass__` hooks, and members whose values are other enums.
+Coverage includes enum.__all__ and the documented non-exported APIs listed at
+https://docs.python.org/3/library/enum.html#module-contents.
+All ten code blocks execute in subprocesses. Version gates cover membership,
+flag iteration, and later APIs. Construction timings cover hashable integers.
+Custom _missing_, hashing, equality and value formatting can execute arbitrary
+code and are excluded from the simple lookup/helper bounds. Tests do not vary
+custom class-building hooks, nested enum values or FlagBoundary policies.
 """
 
 import enum
@@ -46,6 +29,8 @@ import subprocess
 import sys
 import textwrap
 import time
+import tracemalloc
+import types
 import warnings
 from collections.abc import Callable
 from enum import Enum, Flag, IntEnum, auto, unique
@@ -82,9 +67,19 @@ ADDED_AFTER_310 = dict.fromkeys(
         "pickle_by_global_name",
         "property",
         "verify",
+        "show_flag_values",
+        "bin",
     ],
     "3.11",
 ) | {"EnumDict": "3.13"}
+
+
+# Public in the official module reference, but absent from enum.__all__.
+DOCUMENTED_NON_EXPORTS = {"show_flag_values", "bin"}
+
+
+def _public_names() -> set[str]:
+    return set(enum.__all__) | {name for name in DOCUMENTED_NON_EXPORTS if hasattr(enum, name)}
 
 
 def best_ns(func: Callable[[], Any], repeats: int = 9, inner: int = 1) -> float:
@@ -114,20 +109,20 @@ def _documented_names() -> set[str]:
 
 
 class TestEveryPublicNameIsDocumented:
-    """The tables have to name every entry in `enum.__all__`.
+    """The tables cover exports plus documented public helpers outside __all__.
 
     enum went from 7 names to 30 across the supported range, so most of the
     table is version-gated and the interpreter decides how much is live.
     """
 
     def test_no_exported_name_is_missing_from_the_tables(self) -> None:
-        missing = sorted(set(enum.__all__) - _documented_names())
+        missing = sorted(_public_names() - _documented_names())
 
         assert not missing, f"{len(missing)} exported names absent from the tables: {missing}"
 
     def test_the_tables_name_nothing_that_does_not_exist(self) -> None:
         """The other direction, so a typo cannot pass as coverage."""
-        unknown = sorted(_documented_names() - set(enum.__all__) - set(ADDED_AFTER_310))
+        unknown = sorted(_documented_names() - _public_names() - set(ADDED_AFTER_310))
 
         assert not unknown, f"the tables name attributes enum does not have: {unknown}"
 
@@ -163,13 +158,13 @@ class TestEveryPublicNameIsDocumented:
 
         assert {"Enum", "Flag", "IntEnum", "auto", "unique"} <= documented
         thinned = documented - {"IntFlag"}
-        assert set(enum.__all__) - thinned == {"IntFlag"}, (
+        assert _public_names() - thinned == {"IntFlag"}, (
             "dropping one row from the extracted set should surface it as missing"
         )
 
 
 class TestLookupByValueIsADict:
-    """`C(value)` | O(1) | O(1).
+    """Hashable integer `C(value)` | O(1) expected | O(1).
 
     Two directions are measured: across enum sizes, and within one enum between
     the first member declared and the last. A linear search would fail both.
@@ -531,3 +526,163 @@ class TestDocumentedExamples:
 
         assert result.returncode != 0
         assert "ImportError" in result.stderr
+
+
+class TestUnhashableLookup:
+    @pytest.mark.parametrize("kind", [list, dict])
+    @pytest.mark.parametrize("count", [10, 100])
+    def test_lookup_scans_values(self, kind: type, count: int) -> None:
+        comparisons = 0
+
+        class Value(kind):
+            def __eq__(self, other: object) -> bool:
+                nonlocal comparisons
+                comparisons += 1
+                return super().__eq__(other)
+
+        def value(index: int) -> Any:
+            return Value([index] if kind is list else {"v": index})
+
+        cls: Any = Enum("Values", {f"M{i}": value(i) for i in range(count)})
+        assert not cls._value2member_map_
+        for index in (0, count - 1):
+            comparisons = 0
+            assert cls(value(index)) is cls[f"M{index}"]
+            assert comparisons == index + 1
+        comparisons = 0
+        with pytest.raises(ValueError):
+            cls(value(-1))
+        assert count <= comparisons <= 2 * count
+        if sys.version_info >= (3, 13):
+            comparisons = 0
+            assert value(count - 1) in cls
+            assert count <= comparisons <= 2 * count
+        else:
+            # 3.10 and 3.11 refuse any raw value; 3.12 hashes before comparing,
+            # so an unhashable one raises there too. 3.13 is the first to scan.
+            with pytest.raises(TypeError):
+                assert value(count - 1) in cls
+
+    @pytest.mark.skipif(sys.version_info < (3, 12), reason="value containment is 3.12+")
+    @pytest.mark.parametrize("count", [10, 100])
+    def test_raw_hashable_containment_can_scan(self, count: int) -> None:
+        comparisons = 0
+
+        class Value(int):
+            __hash__ = int.__hash__
+
+            def __eq__(self, other: object) -> bool:
+                nonlocal comparisons
+                comparisons += 1
+                return int.__eq__(self, other)
+
+        cls: Any = Enum("Values", {f"M{i}": Value(i) for i in range(count)})
+        comparisons = 0
+        assert Value(-1) not in cls
+        assert comparisons <= 2 * count
+        if sys.version_info >= (3, 14):
+            assert comparisons == count
+
+
+class TestMembersProxy:
+    def test_proxy_is_live_and_read_only(self) -> None:
+        cls = numbered(10)
+        proxy = cls.__members__
+        assert isinstance(proxy, types.MappingProxyType)
+        with pytest.raises(TypeError):
+            proxy["EXTRA"] = cls.M0  # type: ignore[index]
+        cls._member_map_["EXTRA"] = cls.M0
+        assert proxy["EXTRA"] is cls.M0
+
+    def test_view_allocation_stays_small_while_copy_grows(self) -> None:
+        peaks, copies = [], []
+        for count in (100, 1_000):
+            cls = numbered(count)
+            tracemalloc.start()
+            try:
+                proxy = cls.__members__
+                peaks.append(tracemalloc.get_traced_memory()[1])
+            finally:
+                tracemalloc.stop()
+            tracemalloc.start()
+            try:
+                copied = dict(proxy)
+                copies.append(tracemalloc.get_traced_memory()[0])
+            finally:
+                tracemalloc.stop()
+            assert len(proxy) == count
+            assert copied == proxy
+        assert max(peaks) < copies[0] // 4, (peaks, copies)
+        assert copies[1] > copies[0] * 5, copies
+
+
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="helpers are 3.11+")
+class TestPublicHelpers:
+    @pytest.mark.parametrize("count", [10, 1_000])
+    def test_global_str_returns_the_stored_name(self, count: int) -> None:
+        cls = numbered(count)
+        member = cls[f"M{count - 1}"]
+        assert enum.global_str(member) is member.name  # type: ignore[attr-defined]
+
+    def test_global_str_formats_unnamed_values(self) -> None:
+        flags = Flag("Bits", {"A": 1})
+        assert flags(0).name is None
+        assert enum.global_str(flags(0)) == "Bits(0)"  # type: ignore[attr-defined]
+
+    @pytest.mark.parametrize("count", [10, 100])
+    def test_global_enum_exports_members(self, count: int, monkeypatch: pytest.MonkeyPatch) -> None:
+        module = types.ModuleType("_enum_helper_test")
+        monkeypatch.setitem(sys.modules, module.__name__, module)
+        cls: Any = Enum("Exported", {f"M{i}": i for i in range(count)}, module=module.__name__)
+        assert enum.global_enum(cls) is cls  # type: ignore[attr-defined]
+        assert all(vars(module)[name] is member for name, member in cls.__members__.items())
+        assert str(cls.M0) == "M0"
+        assert repr(cls.M0) == "_enum_helper_test.M0"
+
+    def test_non_exported_helpers_are_in_the_coverage_inventory(self) -> None:
+        assert DOCUMENTED_NON_EXPORTS <= _public_names()
+        for name in DOCUMENTED_NON_EXPORTS:
+            thinned = _documented_names() - {name}
+            assert _public_names() - thinned == {name}
+
+    @pytest.mark.parametrize("dimension", ["bits", "width"])
+    def test_show_flag_values_output_scales_in_both_dimensions(self, dimension: str) -> None:
+        retained = []
+        sizes = ((8, 4096), (128, 4096)) if dimension == "bits" else ((16, 256), (16, 8192))
+        for count, width in sizes:
+            expected = [1 << index for index in range(width - count, width)]
+            value = sum(expected)
+            tracemalloc.start()
+            try:
+                result = enum.show_flag_values(value)  # type: ignore[attr-defined]
+                retained.append(tracemalloc.get_traced_memory()[0])
+            finally:
+                tracemalloc.stop()
+            assert result == expected
+            assert len(result) == count
+            assert value.bit_length() == width
+        assert retained[1] > retained[0] * 5, retained
+
+    def test_show_flag_values_accepts_flags_and_zero(self) -> None:
+        flags = Flag("Bits", {"A": 1, "B": 4})
+        assert enum.show_flag_values(flags.A | flags.B) == [1, 4]  # type: ignore[attr-defined]
+        assert enum.show_flag_values(0) == []  # type: ignore[attr-defined]
+        with pytest.raises(ValueError):
+            enum.show_flag_values(-1)  # type: ignore[attr-defined]
+
+    @pytest.mark.parametrize("padding", [False, True])
+    def test_bin_output_scales_with_width(self, padding: bool) -> None:
+        retained = []
+        for width in (100, 10_000):
+            value = 10 if padding else (1 << (width - 1))
+            tracemalloc.start()
+            try:
+                result = enum.bin(value, width if padding else None)  # type: ignore[attr-defined]
+                retained.append(tracemalloc.get_traced_memory()[0])
+            finally:
+                tracemalloc.stop()
+            assert result.startswith("0b0 ")
+            assert len(result) == width + 4
+            assert int(result[4:], 2) == value
+        assert retained[1] > retained[0] * 20, retained
+        assert enum.bin(-11) == "0b1 0101"  # type: ignore[attr-defined]
