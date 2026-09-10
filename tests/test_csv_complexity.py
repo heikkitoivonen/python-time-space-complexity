@@ -1,16 +1,14 @@
 """Tests to verify documented behaviour of the csv module.
 
-docs/stdlib/csv.md claims the module works a row at a time and holds nothing
-whole. That is the part worth measuring, and three of the page's original rows
-did not survive it:
+docs/stdlib/csv.md describes row-at-a-time processing. Readers retain parsed
+fields, and writers build a whole formatted row before handing it to the sink:
 
 * `writerow()` builds the entire formatted line as one string before writing
-  it, so its space is O(k), not O(1). Traced peak tracks the output almost
+  it, so its space is O(k). Traced peak tracks the output almost
   exactly: 1,100,050 bytes for a line of 1,100,001 characters, on 3.10 and 3.14
   alike.
 * `writerows()` is that in a loop. Two hundred rows of 11,000 characters peak at
-  11,098 bytes - the widest row, not the batch - so its space is O(k) and not
-  O(1) either.
+  11,098 bytes - the widest row, so its space is O(k).
 * `Sniffer.sniff()` is O(s) in space as well as time. Its peak rises 36 KB, 105
   KB, 411 KB for samples of 1.2 KB, 14.7 KB and 86.7 KB.
 
@@ -24,8 +22,32 @@ Both `Sniffer` methods are linear in the sample: x9.5 to x10.7 per 10x on 3.10
 and 3.14. `has_header()` tracks `sniff()` because it calls it first and only
 then types twenty rows.
 
+Dictionary dimensions are tested independently:
+
+* Header access, writeheader and dictionary writerow hold the field count at
+  two while each string grows from 1,000 to 100,000 characters. Time grows
+  92-101x on Python 3.10 and 3.14; allocation grows 38-92x. Parsing uses
+  a fresh reader each time; writers reuse their buffer after a warm-up. Input
+  strings and the sink are prepared outside the measurements. The sink does
+  not retain output, so its storage cannot explain the allocation growth.
+* Ragged rows hold the input at one field while the header grows from 10 to
+  10,000 fixed-length names. Every missing name gets the same restval object;
+  the returned dictionary and its allocation grow with header width. Header
+  creation and initial key hashing are outside the per-row measurement.
+
+These cases use ASCII strings, unique field names, the default dialect, and
+successful rows without surplus dictionary keys. They do not vary custom
+conversion costs, key hashing/comparison costs, or error-message lengths.
+The O(m + k) and O(m + h) upper bounds follow Lib/csv.py's projection and
+missing-field loops plus Modules/_csv.c's per-character parsing/rendering:
+https://github.com/python/cpython/blob/3.10/Lib/csv.py
+https://github.com/python/cpython/blob/3.14/Lib/csv.py
+https://github.com/python/cpython/blob/3.14/Modules/_csv.c
+
 Not settled here:
 
+* Treating field-name hashing and comparison as O(1) is a cost-model assumption
+  for data rows; arbitrary key costs are outside those bounds.
 * Whether `sniff()` stays linear on adversarial input. It runs regex
   alternations over the whole sample, and only well-formed delimited text was
   measured.
@@ -51,6 +73,8 @@ import textwrap
 import time
 import tracemalloc
 from collections.abc import Callable, Iterator
+from functools import partial
+from itertools import repeat
 from typing import Any
 
 import pytest
@@ -314,6 +338,22 @@ class TestDictReaderIsLazyToo:
             {"a": "4", "b": "?"},
         ]
 
+    def test_short_rows_grow_with_header_width(self) -> None:
+        peaks = []
+        missing = object()
+        for width in (10, 10_000):
+            fields = [f"f{index:05d}" for index in range(width)]
+            reader = csv.DictReader(repeat("x\n"), fieldnames=fields, restval=missing)
+            next(reader)  # populate field-name hashes outside the measurement
+            peaks.append(peak_bytes(partial(next, reader)))
+            row = next(reader)
+
+            assert len(row) == width
+            assert row[fields[0]] == "x"
+            assert all(row[name] is missing for name in fields[1:])
+
+        assert peaks[1] > peaks[0] * 20, f"fixed short row must allocate with header width: {peaks}"
+
 
 class TestDictWriterProjectsOntoFieldnames:
     """`DictWriter`: O(m) to project a dict onto the field order, O(k) to
@@ -349,6 +389,53 @@ class TestDictWriterProjectsOntoFieldnames:
         writer.writerow({"a": 1, "z": 2})
 
         assert buffer.getvalue() == "1\r\n"
+
+
+class TestDictionaryTextLengths:
+    """Vary row/header characters independently of the two-field count."""
+
+    class Sink:
+        """Report the rendered length without retaining the output string."""
+
+        def write(self, text: str) -> int:
+            return len(text)
+
+    @classmethod
+    def operation(cls, name: str, size: int) -> Callable[[], Any]:
+        value = "x" * size
+        fields = [value + "a", value + "b"]
+        if name == "fieldnames":
+            line = ",".join(fields) + "\n"
+            return lambda: csv.DictReader([line]).fieldnames
+        if name == "writeheader":
+            return csv.DictWriter(cls.Sink(), fields).writeheader
+        writer = csv.DictWriter(cls.Sink(), ["a", "b"])
+        return partial(writer.writerow, {"a": value, "b": value})
+
+    @pytest.mark.parametrize("name", ["fieldnames", "writeheader", "writerow"])
+    def test_text_length_controls_allocation_at_fixed_field_count(self, name: str) -> None:
+        peaks = []
+        for size in (1000, 100_000):
+            operation = self.operation(name, size)
+            result = operation()  # warm writer buffers before measuring output allocation
+            if name == "fieldnames":
+                assert result == ["x" * size + "a", "x" * size + "b"]
+            else:
+                assert result == 2 * size + (5 if name == "writeheader" else 3)
+            peaks.append(peak_bytes(operation))
+
+        assert peaks[1] > peaks[0] * 20, f"{name} must allocate with text length: {peaks}"
+
+    @pytest.mark.timing
+    @pytest.mark.parametrize("name", ["fieldnames", "writeheader", "writerow"])
+    def test_text_length_controls_time_at_fixed_field_count(self, name: str) -> None:
+        operations = [self.operation(name, size) for size in (1000, 100_000)]
+        for operation in operations:
+            operation()
+        durations = [best_ns(operation, inner=5) for operation in operations]
+        ratio = durations[1] / durations[0]
+
+        assert ratio > 20, f"{name}: 100x text at two fields took {durations} ns, ratio={ratio:.2f}"
 
 
 class TestDialects:

@@ -5,7 +5,9 @@ delimiters and embedded newlines. The parser and formatter are C, and both work 
 nothing in the module holds a whole file unless you ask it to.
 
 Rows are the unit throughout. `n` is rows, `k` is the characters in one row, `m` is the fields in
-the header, and `d` is registered dialects.
+the header, `h` is the characters in the header row, and `d` is registered dialects.
+Data-row dictionary bounds treat field-name hashing and comparison as O(1). A `DictReader`
+also retains its O(m + h) header separately from the per-row storage.
 
 ## Complexity Reference
 
@@ -17,11 +19,11 @@ the header, and `d` is registered dialects.
 | `writer.writerow(row)` | O(k) | O(k) | The whole line is built as one string before it is written |
 | `writer.writerows(rows)` | O(n·k) | O(k) | One `writerow` per row, so the peak is the widest row, not the batch |
 | `csv.DictReader(f, fieldnames=None, restkey=None, restval=None)` | O(1) | O(1) | The header is not read until `.fieldnames` is touched or iteration starts |
-| `DictReader.fieldnames` | O(m) | O(m) | Reads and keeps the first row on first access, then O(1) |
-| Iterating a `DictReader` | O(k) | O(k) | One parse, then one dict of m entries; `restkey` collects any surplus fields |
+| `DictReader.fieldnames` | O(m + h) | O(m + h) | Reads and keeps the header on first access when fieldnames are omitted; subsequent access is O(1) |
+| Iterating a `DictReader` | O(k + m) per row | O(k + m) per row | After one-time header processing; missing fields use `restval`, and `restkey` collects surplus fields |
 | `csv.DictWriter(f, fieldnames, restval='', extrasaction='raise')` | O(m) | O(m) | Keeps the field order it was given |
-| `DictWriter.writeheader()` | O(m) | O(m) | One `writerow` of the field names |
-| `DictWriter.writerow(rowdict)` | O(m) | O(k) | Projects the dict onto the field order; `extrasaction='raise'` scans for surplus keys |
+| `DictWriter.writeheader()` | O(m + h) | O(m + h) | Builds a header dictionary and renders all header characters |
+| `DictWriter.writerow(rowdict)` | O(m + k) | O(m + k) | Successful rows without surplus keys: projects the field order, validates keys by default, and renders all row characters |
 | `csv.field_size_limit([new_limit])` | O(1) | O(1) | Returns the previous limit; a field longer than it raises `csv.Error` mid-parse |
 | `csv.register_dialect(name, dialect, **fmtparams)` | O(1) | O(1) | One dict entry |
 | `csv.unregister_dialect(name)` | O(1) | O(1) | Raises `csv.Error` if the name is unknown |
@@ -142,9 +144,9 @@ import io
 data = "name,age,city\nAlice,30,NYC\nBob,25,LA\n"
 
 reader = csv.DictReader(io.StringIO(data))  # O(1) - the header is not read yet
-assert reader.fieldnames == ['name', 'age', 'city']  # O(m) once, then O(1)
+assert reader.fieldnames == ['name', 'age', 'city']  # O(m + h) once, then O(1)
 
-for row in reader:      # O(k) per row
+for row in reader:      # O(k + m) per row
     name = row['name']  # O(1)
     assert isinstance(name, str)
 ```
@@ -152,7 +154,8 @@ for row in reader:      # O(k) per row
 ### Ragged Rows
 
 A row with more fields than the header puts the surplus under `restkey`; one with fewer fills the
-gap with `restval`. Neither costs an extra pass.
+gap with `restval`. Filling the gap visits each missing header name, so a short row can still
+produce an m-entry dictionary.
 
 ```python
 import csv
@@ -162,7 +165,7 @@ reader = csv.DictReader(
     io.StringIO("a,b\n1,2,3\n4\n"), restkey='extra', restval='?'
 )
 
-rows = list(reader)  # O(n·k)
+rows = list(reader)  # O(m + h + n·(k + m))
 assert rows[0] == {'a': '1', 'b': '2', 'extra': ['3']}
 assert rows[1] == {'a': '4', 'b': '?'}
 ```
@@ -176,8 +179,8 @@ import io
 buffer = io.StringIO()
 writer = csv.DictWriter(buffer, fieldnames=['Name', 'Age'])  # O(m)
 
-writer.writeheader()  # O(m)
-writer.writerow({'Name': 'Alice', 'Age': 30})  # O(m) to project, O(k) to render
+writer.writeheader()  # O(m + h)
+writer.writerow({'Name': 'Alice', 'Age': 30})  # O(m + k) to project and render
 
 assert buffer.getvalue() == 'Name,Age\r\nAlice,30\r\n'
 
@@ -280,7 +283,7 @@ from collections import defaultdict
 data = "name,city\nAlice,NYC\nBob,LA\nCara,NYC\n"
 counts = defaultdict(int)
 
-for row in csv.DictReader(io.StringIO(data)):  # O(k) per row
+for row in csv.DictReader(io.StringIO(data)):  # O(k + m) per row
     counts[row['city']] += 1  # O(1) amortized
 
 assert dict(counts) == {'NYC': 2, 'LA': 1}  # O(unique cities)
