@@ -35,12 +35,16 @@ Not settled here:
   waiting costs no CPU, which is the part `time` controls.
 * `tzset()` re-reads the platform's timezone database. What that costs is
   libc's, not Python's.
-* Which `CLOCK_*` ids exist is platform-dependent. This suite sees Linux, where
-  all seven documented ids are present.
+* Clock availability follows the platform and Python version, as listed in
+  https://docs.python.org/3.14/library/time.html#clock-id-constants.
+  Coverage permits only explicitly listed optional names; execution checks
+  exercise the clocks available on the running interpreter.
 
 Axes not varied: non-C locales for `strftime`/`strptime` output, non-Linux
-platforms, and the resolution of any clock beyond what `get_clock_info()`
-reports.
+platforms, the resolution of any clock beyond what `get_clock_info()` reports,
+and timestamps before the epoch - the Windows CRT rejects those in
+`gmtime`/`localtime`/`ctime`, so the fixed-width tests stay at or after it and
+reach the pre-1000 and post-9999 years through `struct_time` instead.
 """
 
 import _strptime
@@ -61,7 +65,39 @@ PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "time.md"
 EXPECTED_BLOCKS = 5
 
 # Documented, but absent outside Unix. Each has to say so in its own row.
-UNIX_ONLY = {"clock_settime", "clock_settime_ns", "pthread_getcpuclockid", "tzset"}
+UNIX_ONLY = {
+    "clock_gettime",
+    "clock_gettime_ns",
+    "clock_getres",
+    "clock_settime",
+    "clock_settime_ns",
+    "pthread_getcpuclockid",
+    "tzset",
+}
+CLOCK_IDS = {
+    "CLOCK_REALTIME",
+    "CLOCK_MONOTONIC",
+    "CLOCK_MONOTONIC_RAW",
+    "CLOCK_BOOTTIME",
+    "CLOCK_PROCESS_CPUTIME_ID",
+    "CLOCK_THREAD_CPUTIME_ID",
+    "CLOCK_TAI",
+    "CLOCK_HIGHRES",
+    "CLOCK_PROF",
+    "CLOCK_UPTIME",
+    "CLOCK_UPTIME_RAW",
+    "CLOCK_MONOTONIC_RAW_APPROX",
+    "CLOCK_UPTIME_RAW_APPROX",
+}
+OPTIONAL_NAMES = UNIX_ONLY | CLOCK_IDS | {"thread_time", "thread_time_ns"}
+
+
+def require_clock(*names: str) -> None:
+    """Skip execution only when a required clock API is unavailable."""
+    missing = [name for name in names if not hasattr(time, name)]
+    if missing:
+        pytest.skip(f"clock APIs unavailable: {', '.join(missing)}")
+
 
 ClockName = Literal["time", "monotonic", "perf_counter", "process_time", "thread_time"]
 NAMED_CLOCKS: tuple[ClockName, ...] = (
@@ -113,7 +149,7 @@ class TestEveryPublicNameIsDocumented:
         """The other direction, so a typo cannot pass as coverage."""
         public = {name for name in dir(time) if not name.startswith("_")}
 
-        unknown = sorted(_documented_names() - public - UNIX_ONLY)
+        unknown = sorted(_documented_names() - public - OPTIONAL_NAMES)
 
         assert not unknown, f"the table names attributes time does not have: {unknown}"
 
@@ -128,13 +164,16 @@ class TestEveryPublicNameIsDocumented:
             assert len(owning) == 1, f"expected one row naming {name}, found {len(owning)}"
             assert "Unix only" in owning[0], f"the {name} row should say Unix only: {owning[0]}"
 
-    def test_the_module_has_not_grown_names_this_suite_has_not_seen(self) -> None:
-        """Counted, so a new release adding a clock fails here first."""
-        public = {name for name in dir(time) if not name.startswith("_")}
-
-        assert 34 <= len(public) <= 40, (
-            f"time has {len(public)} public names; re-run the coverage audit"
-        )
+    def test_optional_clock_rows_have_availability_notes(self) -> None:
+        rows = [
+            line for line in PAGE.read_text(encoding="utf-8").splitlines() if line.startswith("|")
+        ]
+        for name in sorted(CLOCK_IDS | {"thread_time", "thread_time_ns"}):
+            owning = [row for row in rows if name in set(re.findall(r"time\.(\w+)", row))]
+            assert len(owning) == 1
+            assert "platform-dependent" in owning[0]
+            if name.endswith("_APPROX"):
+                assert "Python 3.13+" in owning[0]
 
     def test_the_coverage_check_would_notice_a_gap(self) -> None:
         """A coverage test that cannot fail proves nothing about coverage."""
@@ -148,12 +187,32 @@ class TestEveryPublicNameIsDocumented:
             "dropping one row from the extracted set should surface it as missing"
         )
 
+    @pytest.mark.parametrize("with_posix_clocks", [False, True])
+    def test_coverage_accepts_optional_api_sets(
+        self, monkeypatch: pytest.MonkeyPatch, with_posix_clocks: bool
+    ) -> None:
+        """Exercise absent Unix APIs and optional clock ids without a host dependency."""
+        for name in OPTIONAL_NAMES:
+            monkeypatch.delattr(time, name, raising=False)
+        if with_posix_clocks:
+            for name in CLOCK_IDS:
+                monkeypatch.setattr(time, name, 1, raising=False)
+
+        self.test_no_public_name_is_missing_from_the_table()
+        self.test_the_table_names_nothing_that_does_not_exist()
+        self.test_the_coverage_check_would_notice_a_gap()
+
+        monkeypatch.setattr(time, "CLOCK_UNDOCUMENTED", 1, raising=False)
+        with pytest.raises(AssertionError, match="CLOCK_UNDOCUMENTED"):
+            self.test_no_public_name_is_missing_from_the_table()
+
 
 class TestTheClockReadersAreConstant:
     """The clock rows: one read each, and no input whose size could vary."""
 
     @pytest.mark.parametrize("name", NAMED_CLOCKS)
     def test_each_clock_has_a_float_and_an_int_form(self, name: ClockName) -> None:
+        require_clock(name, f"{name}_ns")
         seconds = getattr(time, name)()
         nanoseconds = getattr(time, f"{name}_ns")()
 
@@ -162,6 +221,7 @@ class TestTheClockReadersAreConstant:
 
     @pytest.mark.parametrize("name", NAMED_CLOCKS)
     def test_get_clock_info_describes_each_of_them(self, name: ClockName) -> None:
+        require_clock(name)
         info = time.get_clock_info(name)
 
         assert isinstance(info, types.SimpleNamespace)
@@ -173,28 +233,54 @@ class TestTheClockReadersAreConstant:
         assert readings == sorted(readings)
         assert time.get_clock_info("monotonic").monotonic is True
 
-    def test_the_named_readers_agree_with_the_posix_clock_they_wrap(self) -> None:
+    def test_a_named_reader_that_wraps_a_posix_clock_names_which_one(self) -> None:
+        """The page's wrapper claim, read off CPython's own description.
+
+        Portable in the shape it asserts rather than in the ids it expects:
+        whichever readers report a `clock_gettime(...)` implementation must
+        name an id the table documents, and that id must be readable. On this
+        suite's Linux all five report one; macOS reaches some of these clocks
+        by another route, which is why the set is not fixed.
+        """
+        require_clock("clock_gettime")
+
+        wrappers: dict[str, str] = {}
+        for name in NAMED_CLOCKS:
+            if not hasattr(time, name):
+                continue
+            match = re.fullmatch(
+                r"clock_gettime\((CLOCK_\w+)\)", time.get_clock_info(name).implementation
+            )
+            if match:
+                wrappers[name] = match.group(1)
+
+        assert wrappers, "no named reader reported a clock_gettime implementation"
+        for name, clock_id in wrappers.items():
+            assert clock_id in CLOCK_IDS, f"{name} names {clock_id}, absent from the table"
+            assert time.clock_gettime(getattr(time, clock_id)) >= 0
+
+    def test_posix_seconds_and_nanoseconds_read_the_same_clock(self) -> None:
+        require_clock("clock_gettime", "clock_gettime_ns", "CLOCK_MONOTONIC")
         before = time.clock_gettime(time.CLOCK_MONOTONIC)
-        middle = time.monotonic()
+        middle = time.clock_gettime_ns(time.CLOCK_MONOTONIC) / 1_000_000_000
         after = time.clock_gettime(time.CLOCK_MONOTONIC)
 
         assert before <= middle <= after
 
     def test_clock_getres_reports_a_tick_not_a_call_cost(self) -> None:
+        require_clock("clock_getres", "CLOCK_MONOTONIC")
         resolution = time.clock_getres(time.CLOCK_MONOTONIC)
 
         assert isinstance(resolution, float)
         assert 0 < resolution <= 1
 
     def test_every_documented_clock_id_can_be_read(self) -> None:
-        ids = [name for name in dir(time) if name.startswith("CLOCK_")]
+        require_clock("clock_gettime")
+        ids = sorted(CLOCK_IDS & set(dir(time)))
 
-        assert len(ids) >= 5
         for name in ids:
             clock_id = getattr(time, name)
             assert isinstance(clock_id, int)
-            if name == "CLOCK_TAI" and time.clock_gettime(clock_id) == 0.0:
-                continue  # present but unconfigured on some kernels
             assert time.clock_gettime(clock_id) >= 0
 
 
@@ -224,7 +310,7 @@ class TestStructTimeIsFixedWidth:
     forms O(1), and the timestamp does not change the shape."""
 
     def test_nine_fields_for_any_timestamp(self) -> None:
-        widths = {len(time.gmtime(stamp)) for stamp in (0, 10**9, 2 * 10**9, -(10**8))}
+        widths = {len(time.gmtime(stamp)) for stamp in (0, 10**9, 2 * 10**9)}
 
         assert widths == {9}
 
@@ -254,7 +340,7 @@ class TestFixedWidthFormatting:
     characters for any four-digit year and not for years outside that."""
 
     def test_twenty_four_characters_across_four_digit_years(self) -> None:
-        stamps = (0, 10**9, 2 * 10**9, 1_234_567_890, -(10**9))
+        stamps = (0, 10**9, 2 * 10**9, 1_234_567_890)
 
         assert {len(time.asctime(time.gmtime(stamp))) for stamp in stamps} == {24}
         assert {len(time.ctime(stamp)) for stamp in stamps} == {24}
@@ -435,6 +521,7 @@ class TestPthreadClockId:
     def test_the_id_reads_as_a_clock(self) -> None:
         import threading
 
+        require_clock("clock_gettime")
         clock_id = time.pthread_getcpuclockid(threading.get_ident())
 
         assert isinstance(clock_id, int)
@@ -507,3 +594,15 @@ class TestDocumentedExamples:
 
         assert result.returncode != 0
         assert "NameError" in result.stderr
+
+    def test_clock_example_runs_without_posix_apis(self, tmp_path: Any) -> None:
+        prelude = (
+            "import time\n"
+            "for name in list(vars(time)):\n"
+            "    if name.startswith(('clock_', 'CLOCK_')):\n"
+            "        delattr(time, name)\n"
+        )
+        result = _run(prelude + _blocks()[0][1], tmp_path)
+
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.startswith("True ")

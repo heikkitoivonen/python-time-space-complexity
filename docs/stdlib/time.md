@@ -15,10 +15,10 @@ input whose length can grow.
 | `time.monotonic()`, `time.monotonic_ns()` | O(1) | O(1) | Never goes backwards, and is unaffected by changes to the system clock |
 | `time.perf_counter()`, `time.perf_counter_ns()` | O(1) | O(1) | Highest resolution clock the platform offers |
 | `time.process_time()`, `time.process_time_ns()` | O(1) | O(1) | CPU time of the process; time spent blocked in `sleep()` does not count |
-| `time.thread_time()`, `time.thread_time_ns()` | O(1) | O(1) | CPU time of the calling thread |
-| `time.clock_gettime(clk_id)`, `time.clock_gettime_ns(clk_id)` | O(1) | O(1) | Reads a named POSIX clock; the named readers above are wrappers over it |
+| `time.thread_time()`, `time.thread_time_ns()` | O(1) | O(1) | CPU time of the calling thread; availability is platform-dependent |
+| `time.clock_gettime(clk_id)`, `time.clock_gettime_ns(clk_id)` | O(1) | O(1) | Unix only; reads a named POSIX clock, and where it exists the named readers above are wrappers over it |
 | `time.clock_settime(clk_id, t)`, `time.clock_settime_ns(clk_id, t)` | O(1) | O(1) | Unix only, and needs privileges |
-| `time.clock_getres(clk_id)` | O(1) | O(1) | The clock's tick, which is not the cost of reading it |
+| `time.clock_getres(clk_id)` | O(1) | O(1) | Unix only; the clock's tick, which is not the cost of reading it |
 | `time.get_clock_info(name)` | O(1) | O(1) | Builds a four-field namespace |
 | `time.pthread_getcpuclockid(thread_id)` | O(1) | O(1) | Unix only |
 | `time.sleep(secs)` | O(1) | O(1) | Blocks for at least `secs`; the waiting is not work, and the call costs the same whatever `secs` is |
@@ -30,7 +30,8 @@ input whose length can grow.
 | `time.struct_time(seq)` | O(1) | O(1) | Nine fixed fields; indexing and attribute access are O(1) |
 | `time.tzset()` | O(1) | O(1) | Unix only; re-reads `TZ` and refreshes the four attributes below |
 | `time.timezone`, `time.altzone`, `time.daylight`, `time.tzname` | O(1) | O(1) | Module attributes, set at import and again by `tzset()` |
-| `time.CLOCK_REALTIME`, `time.CLOCK_MONOTONIC`, `time.CLOCK_MONOTONIC_RAW`, `time.CLOCK_BOOTTIME`, `time.CLOCK_PROCESS_CPUTIME_ID`, `time.CLOCK_THREAD_CPUTIME_ID`, `time.CLOCK_TAI` | O(1) | O(1) | Integer clock ids for `clock_gettime()`; which of them exist is platform-dependent |
+| `time.CLOCK_REALTIME`, `time.CLOCK_MONOTONIC`, `time.CLOCK_MONOTONIC_RAW`, `time.CLOCK_BOOTTIME`, `time.CLOCK_PROCESS_CPUTIME_ID`, `time.CLOCK_THREAD_CPUTIME_ID`, `time.CLOCK_TAI`, `time.CLOCK_HIGHRES`, `time.CLOCK_PROF`, `time.CLOCK_UPTIME`, `time.CLOCK_UPTIME_RAW` | O(1) | O(1) | Integer clock ids for `clock_gettime()`; which of them exist is platform-dependent |
+| `time.CLOCK_MONOTONIC_RAW_APPROX`, `time.CLOCK_UPTIME_RAW_APPROX` | O(1) | O(1) | Python 3.13+; platform-dependent integer clock ids for `clock_gettime()` |
 
 ## Getting Current Time
 
@@ -48,8 +49,9 @@ start = time.monotonic()  # O(1)
 # ... do work ...
 elapsed = time.monotonic() - start  # O(1)
 
-# The underlying POSIX clock, and what the platform says about it
-raw = time.clock_gettime(time.CLOCK_MONOTONIC)  # O(1)
+# Read a POSIX clock where available
+if hasattr(time, "clock_gettime") and hasattr(time, "CLOCK_MONOTONIC"):
+    raw = time.clock_gettime(time.CLOCK_MONOTONIC)  # O(1)
 info = time.get_clock_info("monotonic")  # O(1)
 print(info.monotonic, info.resolution)
 ```
