@@ -1,17 +1,34 @@
 """Tests to verify documented behaviour of the glob module.
 
 docs/stdlib/glob.md turns on one claim: the cost is the entries examined, not
-the matches returned. Two measurements carry it.
+the matches returned. Flat-directory and recursive memory are measured separately.
 
 * `glob()` is O(E) in time, and the match count belongs only to the space row.
   A directory of 1,000 entries holding one `.py` costs 477-508 us; the same one
   match among 20,000 entries costs 9.4-11.2 ms. Twenty times the entries, one
   match either way, twenty times the time.
-* `iglob()` is O(e) in the largest directory, not O(1). Building the iterator
+* A single-directory `iglob()` uses O(e) space. Building the iterator
   peaks at about 1.5 KB, but its *first* step peaks at 1.2-1.3 MB over 20,000
   entries: each directory is read whole into a list of names before any of its
   matches are yielded. The peak rises x17.1 on 3.10 and x19.2 on 3.14 for 20x
   the entries.
+
+* Recursive `**/*.py` walks at depths 5 and 80 have maximum directory width
+  21 and exactly one match. Both APIs peak around 11-12 KB and 140 KB on
+  Python 3.10 and 3.14. Setup and pattern-cache warm-up are outside the
+  measurement. Directory components keep their lengths, but full path lengths
+  necessarily grow with depth, so this does not establish a growth exponent.
+* Weak references to the lists returned by `_listdir` observe exactly the
+  active path staying live at a deep match - eight ancestor listings out of
+  thirty-three made - so retention follows the descent rather than the tree.
+  This distinguishes retained listings from path-string allocation alone.
+
+The recursive storage explanation follows `_rlistdir` in released CPython
+3.10 through 3.14: suspended loops retain `names` and partial paths while
+recursing. The O(e) and O(e + m) rows are scoped to one directory; no recursive
+byte bound is inferred from counting directory entries as fixed-size objects.
+https://github.com/python/cpython/blob/3.10/Lib/glob.py
+https://github.com/python/cpython/blob/3.14/Lib/glob.py
 
 The rest is observation. Hidden names are excluded from `*` unless
 `include_hidden=True` (3.11+) or the dot is written into the pattern; `escape()`
@@ -19,9 +36,15 @@ wraps metacharacters in character classes; `glob0()` never matches a pattern
 while `glob1()` lists a directory; a `**` walk descends through directory
 symlinks, so one file can be reported under two paths.
 
-`glob0()` and `glob1()` are deprecated from 3.14; the tests assert that they
+`glob0()` and `glob1()` are deprecated from 3.13; the tests assert that they
 warn there and stay silent before it, so the page's version note cannot drift
 from the interpreter.
+https://github.com/python/cpython/blob/3.13/Lib/glob.py
+
+What `iterator.close()` releases differs by version: 3.10, 3.11, 3.13 and
+3.14 drop the ancestor listings, while 3.12.3 keeps all eight even after a
+`gc.collect()`. The claim above does not rest on it, so the tests assert
+release during the walk instead of after it.
 
 Not settled here:
 
@@ -46,6 +69,7 @@ import textwrap
 import time
 import tracemalloc
 import warnings
+import weakref
 from collections.abc import Callable, Iterator
 from typing import Any
 
@@ -150,7 +174,7 @@ class TestEveryPublicNameIsDocumented:
 
 
 class TestCostFollowsEntriesNotMatches:
-    """`glob()` | O(E) | O(e + m): the pattern decides the cost.
+    """Single-directory `glob()` | O(E) | O(e + m).
 
     Both directories below hold exactly one match, so anything that scaled with
     the result would be flat here.
@@ -192,7 +216,7 @@ class TestCostFollowsEntriesNotMatches:
 
 
 class TestIglobIsLazyPerDirectoryNotPerEntry:
-    """`iglob()` | O(1) to build, O(E) to exhaust | O(e).
+    """Single-directory `iglob()` | O(1) to build, O(E) to exhaust | O(e).
 
     A generator is not O(1) memory when its first step reads a whole
     directory.
@@ -295,6 +319,88 @@ class TestRecursiveWalks:
 
         assert len(found) == 2, f"expected the file under both paths, got {found}"
 
+    @staticmethod
+    def fixed_width_chain(root: pathlib.Path, depth: int) -> list[pathlib.Path]:
+        """Twenty empty side directories and one child at every ancestor."""
+        root.mkdir()
+        current = root
+        ancestors = []
+        for _ in range(depth):
+            ancestors.append(current)
+            for index in range(20):
+                (current / f"s{index:02}").mkdir()
+            current = current / "d"
+            current.mkdir()
+        (current / "only.py").touch()
+        return ancestors
+
+    @pytest.mark.parametrize("api", ["glob", "iglob"])
+    def test_recursive_space_grows_with_depth_at_fixed_width_and_match_count(
+        self, tmp_path: pathlib.Path, api: str
+    ) -> None:
+        peaks = []
+        for depth in (5, 80):
+            root = tmp_path / f"depth{depth}"
+            ancestors = self.fixed_width_chain(root, depth)
+            assert len(ancestors) == depth
+            assert {len(list(folder.iterdir())) for folder in ancestors} == {21}
+            pattern = str(root / "**" / "*.py")
+            assert glob.glob(pattern, recursive=True) == [str(ancestors[-1] / "d" / "only.py")]
+
+            def exhaust(pattern: str = pattern) -> int:
+                if api == "glob":
+                    return len(glob.glob(pattern, recursive=True))
+                return sum(1 for _ in glob.iglob(pattern, recursive=True))
+
+            peaks.append(peak_bytes(exhaust))
+            assert exhaust() == 1
+
+        assert peaks[1] > peaks[0] * 4, (
+            f"{api}: depth 5 -> 80 at width 21 and one match peaked at {peaks}; "
+            "a largest-directory-only bound would stay flat"
+        )
+
+    def test_ancestor_listings_stay_live_until_descent_finishes(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        root = tmp_path / "tree"
+        ancestors = self.fixed_width_chain(root, 8)
+
+        class Names(list[str]):
+            """A directory listing that supports weak references."""
+
+        listings: list[tuple[str, weakref.ReferenceType[Names]]] = []
+        original = glob._listdir  # type: ignore[attr-defined]
+
+        def tracked_listdir(dirname: str, *args: Any, **kwargs: Any) -> list[str]:
+            names = Names(original(dirname, *args, **kwargs))
+            listings.append((dirname, weakref.ref(names)))
+            return names
+
+        monkeypatch.setattr(glob, "_listdir", tracked_listdir)
+        iterator: Any = glob.iglob(str(root / "**" / "*.py"), recursive=True)
+        try:
+            assert next(iterator) == str(ancestors[-1] / "d" / "only.py")
+            live_sizes = {
+                path: len(reference() or [])
+                for path, reference in listings
+                if reference() is not None
+            }
+            assert {str(path): 21 for path in ancestors}.items() <= live_sizes.items()
+
+            # Exactly the active path is retained, and no more: each level's
+            # twenty side directories were listed and released on the way down.
+            # That is the release evidence, so the control does not depend on
+            # what closing the iterator frees - which varies by version.
+            assert set(live_sizes) == {str(path) for path in ancestors}
+            assert len(listings) > 4 * len(live_sizes), (
+                f"{len(listings)} listings made, {len(live_sizes)} still live at the match"
+            )
+        finally:
+            iterator.close()
+
+        assert listings, "the listing probe must observe the recursive walk"
+
     @pytest.mark.timing
     def test_a_deeper_tree_costs_its_entries(self, tmp_path: pathlib.Path) -> None:
         shallow = tmp_path / "shallow"
@@ -350,7 +456,7 @@ class TestEscapingAndMagic:
 class TestTheDeprecatedPair:
     """`glob0` never matches a pattern; `glob1` lists one directory.
 
-    Both are deprecated from 3.14, which is the one thing about them a reader
+    Both are deprecated from 3.13, which is the one thing about them a reader
     needs, so the deprecation is asserted rather than just silenced.
     """
 
@@ -379,8 +485,8 @@ class TestTheDeprecatedPair:
 
         assert glob.glob1(str(tmp_path), "*.py") == []
 
-    @pytest.mark.skipif(sys.version_info < (3, 14), reason="deprecated from 3.14")
-    def test_they_warn_from_314(self, tmp_path: pathlib.Path) -> None:
+    @pytest.mark.skipif(sys.version_info < (3, 13), reason="deprecated from 3.13")
+    def test_they_warn_from_313(self, tmp_path: pathlib.Path) -> None:
         (tmp_path / "a.py").touch()
 
         with warnings.catch_warnings(record=True) as caught:
@@ -393,13 +499,14 @@ class TestTheDeprecatedPair:
         assert all(issubclass(entry.category, DeprecationWarning) for entry in caught)
         assert all("deprecated" in message for message in messages)
 
-    @pytest.mark.skipif(sys.version_info >= (3, 14), reason="silent before 3.14")
-    def test_they_are_silent_before_314(self, tmp_path: pathlib.Path) -> None:
+    @pytest.mark.skipif(sys.version_info >= (3, 13), reason="silent before 3.13")
+    def test_they_are_silent_before_313(self, tmp_path: pathlib.Path) -> None:
         (tmp_path / "a.py").touch()
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             glob.glob0(str(tmp_path), "a.py")
+            glob.glob1(str(tmp_path), "*.py")
 
         assert [entry for entry in caught if issubclass(entry.category, DeprecationWarning)] == []
 

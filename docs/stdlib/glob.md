@@ -12,14 +12,17 @@ the matches returned.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `glob.glob(pathname, *, root_dir, dir_fd, recursive, include_hidden)` | O(E) | O(e + m) | `list(iglob(...))`; the returned order is undefined |
-| `glob.iglob(pathname, ...)` | O(1) to build, O(E) to exhaust | O(e) | Lazy per directory, not per entry: a directory is listed whole before any of its matches are yielded |
+| `glob.glob(pathname, *, root_dir, dir_fd, recursive, include_hidden)` | O(E) | O(e + m) for one directory | `list(iglob(...))`; the returned order is undefined |
+| `glob.iglob(pathname, ...)` | O(1) to build, O(E) to exhaust | O(e) for one directory | Lazy per directory, not per entry: a directory is listed whole before any of its matches are yielded |
 | `glob.escape(pathname)` | O(n) | O(n) | n = name length; wraps each metacharacter in a character class |
 | `glob.has_magic(s)` | O(n) | O(1) | n = string length; one regex search for `*?[` |
 | `glob.translate(pat, *, recursive, include_hidden, seps)` | O(n) | O(n) | Python 3.13+; n = pattern length, producing a regex |
-| `glob.glob0(dirname, pattern)` | O(1) | O(1) | Deprecated in 3.14; one `lexists` check, no pattern matching |
-| `glob.glob1(dirname, pattern)` | O(e) | O(e + m) | Deprecated in 3.14; lists one directory and filters it |
+| `glob.glob0(dirname, pattern)` | O(1) | O(1) | Deprecated in 3.13; one `lexists` check, no pattern matching |
+| `glob.glob1(dirname, pattern)` | O(e) | O(e + m) | Deprecated in 3.13; lists one directory and filters it |
 | `glob.magic_check`, `glob.magic_check_bytes` | O(1) | O(1) | The compiled patterns `has_magic()` and `escape()` use |
+
+The first two space bounds apply to patterns confined to one directory, such as `*.py`.
+[Recursive globbing](#recursive-globbing) also retains ancestor listings and partial paths.
 
 !!! warning "The pattern decides the cost, not the result"
     Every wildcard segment lists its whole directory. `*.py` in a directory of 20,000 files reads
@@ -104,7 +107,8 @@ with tempfile.TemporaryDirectory() as folder:
 
 `iglob()` saves you the result *list*. It does not save you the directory listing: each directory
 the pattern reaches is read whole, into a list of names, before the first match from it is
-yielded. So the iterator's memory follows the largest directory, not the number of matches.
+yielded. For a pattern confined to one directory, iterator memory follows that directory's size.
+Recursive traversal also keeps ancestor listings alive while descending.
 
 ```python
 import glob
@@ -137,8 +141,8 @@ with tempfile.TemporaryDirectory() as folder:
 
 ### When the List Is the Problem
 
-Use `iglob()` when the *matches* are many. When one directory is huge and the matches are few,
-both forms pay the same O(e) to read it.
+Use `iglob()` when the *matches* are many. For a pattern confined to one directory, both forms
+pay O(e) to read the listing, even when the matches are few.
 
 ```python
 import glob
@@ -164,6 +168,11 @@ with tempfile.TemporaryDirectory() as folder:
 
 `**` needs `recursive=True`; without it the pattern behaves like a single `*`. With it, every
 directory below the anchor is listed, so the cost is the whole subtree's entries.
+
+Each ancestor's names list remains live while the walk descends, along with partial paths and
+iterator state. Recursive memory therefore depends on the listings retained across the active
+descent, not just the largest single directory. It can grow with depth even when directory width
+and match count stay fixed. `glob()` additionally keeps the returned paths in its result list.
 
 ```python
 import glob
@@ -263,7 +272,7 @@ with tempfile.TemporaryDirectory() as folder:
 ### The Deprecated Pair
 
 `glob0()` and `glob1()` are left over from an older API and have been deprecated since Python
-3.14, which points you at `glob(pattern, root_dir=...)` instead. They are worth a look only
+3.13, which points you at `glob(pattern, root_dir=...)` instead. They are worth a look only
 because they show the split the table describes: `glob0` never matches a pattern, and `glob1` is
 the one-directory listing that `iglob` is built on.
 
@@ -290,9 +299,8 @@ with tempfile.TemporaryDirectory() as folder:
 ## Version Notes
 
 - **Python 3.11+**: `include_hidden` on `glob()` and `iglob()`
-- **Python 3.13+**: `glob.translate()`
-- **Python 3.14**: `glob0()` and `glob1()` are deprecated in favour of `root_dir`; the
-  docstring states what was always true — the returned order is undefined
+- **Python 3.13+**: `glob.translate()`; `glob0()` and `glob1()` are deprecated in favour of
+  `glob(pattern, root_dir=...)`
 
 ## Limitations
 
