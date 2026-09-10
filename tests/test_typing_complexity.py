@@ -1,51 +1,33 @@
-"""Tests to verify documented behaviour of the typing module.
+"""Evidence for docs/stdlib/typing.md.
 
-docs/stdlib/typing.md had three rows and claimed type hints cost nothing at
-runtime. Both parts needed work, and the measurements are what settled the
-replacement.
+Memoized fixed-arity aliases and ordinary get_args use identity assertions.
+Callable/Annotated output allocations vary arity from 10 to 10,000. Tuple
+cache hits count parameter hashes, and fresh unions count hashing/equality
+with distinct, repeated and colliding arguments. Python 3.14 also reuses tuple
+hashes when the exact parameter tuple is reused. Protocol checks vary method/data member
+counts independently; decorator iteration and retained data names are observed.
+ForwardRef constructors observe compilation at source lengths 10 and 10,000;
+3.14 evaluation varies resolved arity with the reference text held fixed and
+also demonstrates caller-defined expression work.
 
-Three facts drive the page, and all three move with the version:
-
-* **Subscription is memoized.** `List[int] is List[int]` on every supported
-  version, while `list[int] is not list[int]` - the builtin generics do not
-  share that cache. Identity, so no tolerance is involved.
-* **`isinstance()` against a runtime protocol is O(m) until 3.12.** One member
-  against forty costs 2,480ns to 10,429ns on 3.10 and 2,121ns to 9,219ns on
-  3.11. From 3.12 the answer is cached per class and the width stops mattering:
-  207/209ns on 3.12, 163/163 on 3.13, 169/169 on 3.14.
-* **Annotations are evaluated when the `def` runs, until 3.14.** Defining a
-  function with three parameterized hints against a bare one costs x16.0 on
-  3.10, x15.2 on 3.11, x22.5 on 3.12 and x16.7 on 3.13. PEP 649 makes 3.14
-  lazy, and the gap falls to x1.7.
-
-`Union` is the fourth version boundary: it flattens and deduplicates on every
-version, but from 3.14 it produces a `types.UnionType` - the same object `X | Y`
-gives - and is no longer memoized, so two identical unions stop being identical.
-
-`get_type_hints()` is the one linear introspection, x7.4 to x8.3 per 10x the
-annotations at the larger step.
-
-Not settled here:
-
-* What a `typing` import costs. The module builds every alias at import, but a
-  suite that has already imported it cannot measure that without a subprocess
-  per version, and the number would be a constant.
-* Whether the protocol cache from 3.12 can be defeated. It is keyed per class,
-  and only the documented shape was measured.
-* The eight names the page marks 3.12+, 3.13+ or 3.14+ on interpreters that
-  lack them; the coverage check allows those absences and asserts the marker.
-
-Axes not varied: protocols with non-method members, generic classes with more
-than two parameters, and `get_type_hints` over deep inheritance beyond one
-merge.
+Compilation and arbitrary annotation evaluation have no universal bound based
+only on source length: compiler structure and user code determine their costs.
+Released CPython Lib/typing.py (3.10, 3.12, 3.14) and 3.14 Lib/annotationlib.py
+supply the implementation basis. Tests do not vary compiler grammar complexity,
+protocol inheritance depth, or get_type_hints beyond one MRO merge.
+Existing timing evidence covers method protocols, hint count and eager versus
+lazy function annotations; all eight documentation examples run in subprocesses.
 """
 
+import builtins
+import inspect
 import pathlib
 import re
 import subprocess
 import sys
 import textwrap
 import time
+import tracemalloc
 import typing
 from collections.abc import Callable
 from typing import (
@@ -199,7 +181,7 @@ class TestSubscriptionIsMemoized:
 
 
 class TestUnionNormalises:
-    """`Union` flattens and deduplicates, which is why its row is O(p²)."""
+    """Unions flatten and deduplicate their arguments."""
 
     def test_duplicates_are_dropped(self) -> None:
         assert Union[int, str, int] == Union[int, str]
@@ -228,7 +210,7 @@ class TestUnionNormalises:
 
 class TestRuntimeProtocols:
     """`isinstance()` against a runtime-checkable protocol: O(m) before 3.12,
-    a cached lookup from 3.12."""
+    a cached successful class-level lookup from 3.12."""
 
     @staticmethod
     def _protocol(members: int) -> type:
@@ -291,7 +273,7 @@ class TestRuntimeProtocols:
 
     @pytest.mark.timing
     @pytest.mark.skipif(sys.version_info < (3, 12), reason="O(m) before 3.12")
-    def test_the_width_stops_costing_from_312(self) -> None:
+    def test_cached_method_protocol_width_stops_costing_from_312(self) -> None:
         narrow, wide = self._protocol(1), self._protocol(40)
         obj = self._implementation(40)
         assert isinstance(obj, narrow) and isinstance(obj, wide)
@@ -546,3 +528,218 @@ class TestDocumentedExamples:
 
         assert result.returncode != 0
         assert "ImportError" in result.stderr
+
+
+class TestIndependentTypingDimensions:
+    @pytest.mark.parametrize("kind", ["callable", "annotated"])
+    def test_get_args_reconstructs_variable_length_output(self, kind: str) -> None:
+        peaks = []
+        for count in (10, 10_000):
+            alias = (
+                typing.Callable[[int] * count, str]  # type: ignore[valid-type]
+                if kind == "callable"
+                else typing.Annotated[(int, *range(count))]
+            )
+            first = get_args(alias)
+            tracemalloc.start()
+            try:
+                second = get_args(alias)
+                peaks.append(tracemalloc.get_traced_memory()[1])
+            finally:
+                tracemalloc.stop()
+            assert first == second and first is not second
+            if kind == "callable":
+                assert first[0] is not second[0]
+                assert len(second[0]) == count
+            else:
+                assert len(second) == count + 1
+        assert peaks[1] > peaks[0] * 20, peaks
+
+    @pytest.mark.parametrize("count", [10, 100])
+    def test_cached_tuple_hashes_each_parameter(self, count: int) -> None:
+        hashes = 0
+
+        class Meta(type):
+            def __hash__(cls) -> int:
+                nonlocal hashes
+                hashes += 1
+                return type.__hash__(cls)
+
+        params = tuple(Meta(f"T{i}", (), {}) for i in range(count))
+        alias = typing.Tuple[params]
+        hashes = 0
+        assert typing.Tuple[params] is alias
+        assert hashes == (0 if sys.version_info >= (3, 14) else count)
+        fresh = tuple(list(params))  # noqa: C414 - force a distinct, unhashed tuple
+        assert fresh == params and fresh is not params
+        hashes = 0
+        assert typing.Tuple[fresh] is alias
+        assert hashes == count
+
+    @pytest.mark.parametrize("count", [10, 100])
+    @pytest.mark.parametrize("duplicates", [False, True])
+    def test_fresh_union_uses_linear_hash_work(self, count: int, duplicates: bool) -> None:
+        hashes = comparisons = 0
+
+        class Meta(type):
+            def __hash__(cls) -> int:
+                nonlocal hashes
+                hashes += 1
+                return type.__hash__(cls)
+
+            def __eq__(cls, other: object) -> bool:
+                nonlocal comparisons
+                comparisons += 1
+                return cls is other
+
+        params = tuple(Meta(f"T{i}", (), {}) for i in range(count))
+        result = Union[params * (2 if duplicates else 1)]
+        assert get_args(result) == params
+        assert count <= hashes <= 20 * count, hashes
+        assert comparisons < 20 * count, comparisons
+
+    @pytest.mark.parametrize("count", [10, 10_000])
+    def test_forward_ref_constructor_compilation(
+        self, count: int, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        compiled = []
+        original = builtins.compile
+
+        def record(source, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
+            compiled.append(source)
+            return original(source, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "compile", record)
+        source = "T" * count
+        ref = typing.ForwardRef(source)
+        assert ref.__forward_arg__ is source
+        assert compiled == ([source] if sys.version_info < (3, 14) else [])
+        if sys.version_info < (3, 14):
+            with pytest.raises(SyntaxError):
+                typing.ForwardRef("int[")
+        else:
+            assert typing.ForwardRef("int[").__forward_arg__ == "int["
+
+    @pytest.mark.parametrize("count", [1, 40])
+    def test_data_protocol_checks_visit_instance_members(
+        self, count: int, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        names = {f"field{i}" for i in range(count)}
+        bases: tuple[type, ...] = (Protocol,)  # type: ignore[assignment]
+        proto = runtime_checkable(
+            type("Data", bases, {"__annotations__": dict.fromkeys(names, int)})
+        )
+        obj = type("Impl", (), {})()
+        for name in names:
+            setattr(obj, name, 1)
+        assert isinstance(obj, proto)
+        visits = []
+        if sys.version_info >= (3, 12):
+            lookup_module = typing if hasattr(typing, "getattr_static") else inspect
+            original = lookup_module.getattr_static  # type: ignore[attr-defined]
+
+            def record(target, name, *args):  # noqa: ANN001, ANN002, ANN202
+                if target is obj and name in names:
+                    visits.append(name)
+                return original(target, name, *args)
+
+            if hasattr(typing, "_lazy_load_getattr_static"):
+                monkeypatch.setattr(typing, "_lazy_load_getattr_static", lambda: record)
+            else:
+                monkeypatch.setattr(lookup_module, "getattr_static", record)
+        else:
+            original_getattribute = type(obj).__getattribute__
+
+            def record_attr(target, name):  # noqa: ANN001, ANN202
+                if target is obj and name in names:
+                    visits.append(name)
+                return original_getattribute(target, name)
+
+            monkeypatch.setattr(type(obj), "__getattribute__", record_attr)
+        assert isinstance(obj, proto)
+        assert set(visits) == names
+        assert count <= len(visits) <= 2 * count
+        with pytest.raises(TypeError):
+            issubclass(type(obj), proto)
+
+    @pytest.mark.parametrize("count", [1, 40])
+    def test_runtime_decoration_traverses_members_from_3122(self, count: int) -> None:
+        names = {f"field{i}" for i in range(count)}
+        bases: tuple[type, ...] = (Protocol,)  # type: ignore[assignment]
+        proto = type("Data", bases, {"__annotations__": dict.fromkeys(names, int)})
+        visits = []
+
+        class Members(set[str]):
+            def __iter__(self):  # noqa: ANN204
+                for name in super().__iter__():
+                    visits.append(name)
+                    yield name
+
+        if sys.version_info >= (3, 12, 2):
+            proto.__protocol_attrs__ = Members(names)
+        assert runtime_checkable(proto) is proto
+        if sys.version_info >= (3, 12, 2):
+            assert set(visits) == names and len(visits) == count
+            assert proto.__non_callable_proto_members__ == names
+        else:
+            assert not hasattr(proto, "__non_callable_proto_members__")
+
+    def test_runtime_alias_checks_and_typeguard(self) -> None:
+        assert isinstance([], typing.List)
+        assert isinstance({}, typing.Mapping)
+        for obj, alias in (([], typing.List[int]), ({}, typing.Mapping[str, int])):
+            with pytest.raises(TypeError):
+                isinstance(obj, alias)  # type: ignore[arg-type]
+        assert get_origin(typing.TypeGuard[int]) is typing.TypeGuard
+
+    @pytest.mark.skipif(sys.version_info < (3, 14), reason="evaluate_forward_ref is 3.14+")
+    @pytest.mark.parametrize("count", [1, 100])
+    def test_forward_evaluation_traverses_resolved_type(
+        self, count: int, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        original = typing._eval_type  # type: ignore[attr-defined]
+        visits = 0
+
+        def record(value, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
+            nonlocal visits
+            if value is int:
+                visits += 1
+            return original(value, *args, **kwargs)
+
+        monkeypatch.setattr(typing, "_eval_type", record)
+        alias = tuple[(int,) * count]
+        result = typing.evaluate_forward_ref(  # type: ignore[attr-defined]
+            typing.ForwardRef("Alias"), globals={"Alias": alias}, type_params=()
+        )
+        assert result == alias
+        assert visits == count
+        work = []
+
+        def resolve() -> type:
+            work.extend(range(count))
+            return int
+
+        assert (
+            typing.evaluate_forward_ref(  # type: ignore[attr-defined]
+                typing.ForwardRef("resolve()"), globals={"resolve": resolve}, type_params=()
+            )
+            is int
+        )
+        assert len(work) == count
+
+    @pytest.mark.parametrize("count", [10, 100])
+    def test_union_hash_collisions_can_require_quadratic_comparisons(self, count: int) -> None:
+        comparisons = 0
+
+        class Meta(type):
+            def __hash__(cls) -> int:
+                return 1
+
+            def __eq__(cls, other: object) -> bool:
+                nonlocal comparisons
+                comparisons += 1
+                return cls is other
+
+        params = tuple(Meta(f"T{i}", (), {}) for i in range(count))
+        assert get_args(Union[params]) == params
+        assert comparisons >= count * (count - 1) // 2

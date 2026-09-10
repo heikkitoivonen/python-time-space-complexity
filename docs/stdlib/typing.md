@@ -5,12 +5,13 @@ time — the cost lands when a module is imported, when a generic is parameteriz
 something asks about the types afterwards.
 
 Three sizes matter. **k** is the annotations on an object, **p** is the parameters in a
-subscription, and **m** is the members of a protocol.
+subscription, and **m** is the members of a protocol. Subscription bounds assume ordinary
+type arguments with constant-time hashing and equality; **p** counts flattened arguments for unions.
 
 The two operations worth knowing before you write anything: parameterizing a `typing` generic is
-memoized, so `List[int]` is built once and handed back forever after; and `isinstance()` against a
-runtime-checkable `Protocol` walks its members on Python 3.10 and 3.11, and is a cached lookup from
-3.12.
+memoized, so a cache hit reuses `List[int]`; and `isinstance()` against a runtime-checkable
+`Protocol` can walk its members even after earlier checks succeeded. From 3.12, successful
+class-level structural checks have a constant-time cached path; instance data checks do not.
 
 ## Complexity Reference
 
@@ -19,26 +20,28 @@ runtime-checkable `Protocol` walks its members on Python 3.10 and 3.11, and is a
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `typing.get_type_hints(obj)` | O(k·s) | O(k) | k = annotations, s = the source of each; string annotations are `eval`'d, and a class walks its whole MRO |
-| `typing.get_args(tp)`, `typing.get_origin(tp)` | O(1) | O(1) | Attribute reads on an already-built alias |
+| `typing.get_origin(tp)` | O(1) | O(1) | Reads the origin of an already-built alias |
+| `typing.get_args(tp)` | O(p) for explicit `Callable` parameters or `Annotated` metadata; otherwise O(1) | O(p) for those allocating cases; otherwise O(1) | Reconstructs a parameter list or origin-and-metadata tuple; ordinary aliases reuse their argument tuple |
 | `typing.cast(typ, val)` | O(1) | O(1) | Returns `val` itself; the type is never looked at |
 | `typing.is_typeddict(tp)`, `typing.is_protocol(tp)` | O(1) | O(1) | `is_protocol` is 3.13+ |
 | `typing.get_protocol_members(tp)` | O(m) | O(m) | Python 3.13+; builds the member set |
 | `typing.get_overloads(func)`, `typing.clear_overloads()` | O(v) | O(v) | Python 3.11+; v = registered variants |
 | `typing.assert_type(val, typ)`, `typing.reveal_type(val)` | O(1) | O(1) | Python 3.11+; both return the value, `reveal_type` also writes to stderr |
 | `typing.assert_never(arg)` | O(1) | O(1) | Python 3.11+; always raises |
-| `typing.evaluate_forward_ref(ref)` | O(s) | O(s) | Python 3.14+; s = the reference's source |
+| `typing.evaluate_forward_ref(ref)` | Depends on evaluation and resolved type | Depends on evaluation and resolved type | Python 3.14+; evaluates the expression and recursively traverses the resulting hint; source length alone gives no bound |
 | `typing.no_type_check(arg)`, `typing.no_type_check_decorator(dec)` | O(a) | O(1) | a = attributes on a class, each marked in turn |
 
 ### Building parameterized types
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `typing.List[X]`, `typing.Dict[K, V]`, `typing.Tuple[...]`, `typing.Type[X]` | O(p) first time, O(1) after | O(p) | Subscription is memoized, so the same parameters return the same object |
-| `typing.Optional[X]`, `typing.Union[X, Y]` | O(p²) | O(p) | Arguments are flattened and deduplicated pairwise; from 3.14 the result is `X \| Y` and no longer memoized |
+| `typing.List[X]`, `typing.Dict[K, V]`, `typing.Type[X]` | O(1) | O(1) | Fixed arity; a cache hit reuses the alias |
+| `typing.Tuple[...]` | O(p), including hits with fresh parameter tuples | O(p) on construction; O(1) auxiliary on a hit with an existing parameter tuple | From 3.14, reusing the same already-hashed tuple permits O(1) hits |
+| `typing.Optional[X]`, `typing.Union[X, Y]` | O(p) expected | O(p) | Ordinary hashable types use hash-based deduplication; from 3.14 the result is `X \| Y` and no longer memoized |
 | `typing.Literal[...]`, `typing.Annotated[X, ...]` | O(p) | O(p) | `Literal` deduplicates its values, `Annotated` keeps its metadata verbatim |
 | `typing.Callable[[...], R]`, `typing.Concatenate[...]` | O(p) | O(p) | p = parameter types |
 | `typing.ClassVar[X]`, `typing.Final[X]`, `typing.Required[X]`, `typing.NotRequired[X]`, `typing.ReadOnly[X]` | O(1) | O(1) | `Required`/`NotRequired` are 3.11+, `ReadOnly` 3.13+ |
-| `typing.TypeGuard[X]`, `typing.TypeIs[X]`, `typing.Unpack[X]` | O(1) | O(1) | `TypeIs` is 3.13+, `TypeGuard` and `Unpack` 3.11+ |
+| `typing.TypeGuard[X]`, `typing.TypeIs[X]`, `typing.Unpack[X]` | O(1) | O(1) | `TypeIs` is 3.13+, `TypeGuard` 3.10+, `Unpack` 3.11+ |
 
 ### Declaring types
 
@@ -50,7 +53,7 @@ runtime-checkable `Protocol` walks its members on Python 3.10 and 3.11, and is a
 | `typing.NamedTuple`, `typing.TypedDict` | O(k) | O(k) | k = fields; one class is built per declaration, at import time |
 | `typing.Generic`, `typing.Protocol` | O(p) | O(p) | Subclassing costs its parameters; see the protocol note below |
 | `typing.TypeAlias`, `typing.TypeAliasType` | O(1) | O(1) | `TypeAliasType` is 3.12+ and evaluates its value lazily |
-| `typing.ForwardRef(arg)` | O(1) | O(1) | Holds the string; the compile happens when it is evaluated |
+| `typing.ForwardRef(arg)` | Compilation cost on 3.10–3.13; O(1) from 3.14 | Compilation storage on 3.10–3.13; O(1) auxiliary from 3.14 | Older versions eagerly compile the source (at least a scan of its length); 3.14 retains the string and defers compilation |
 
 ### Decorators
 
@@ -58,7 +61,7 @@ runtime-checkable `Protocol` walks its members on Python 3.10 and 3.11, and is a
 |-----------|------|-------|-------|
 | `typing.overload(func)` | O(1) | O(1) | Registers the variant and returns a stub that raises if called |
 | `typing.final(f)`, `typing.override(m)` | O(1) | O(1) | Sets one attribute; `override` is 3.12+ |
-| `typing.runtime_checkable(cls)` | O(1) | O(1) | Marks the protocol; the member walk happens per `isinstance` |
+| `typing.runtime_checkable(cls)` | O(1) before 3.12.2; O(m) from 3.12.2 | O(1) before 3.12.2; up to O(m) from 3.12.2 | Newer versions classify and retain non-method member names |
 | `typing.dataclass_transform(...)` | O(1) | O(1) | Python 3.11+; sets one attribute for the type checker |
 
 ### Markers with no parameters
@@ -70,8 +73,9 @@ runtime-checkable `Protocol` walks its members on Python 3.10 and 3.11, and is a
 
 ### Aliases of concrete and abstract collections
 
-Every alias below is a `_GenericAlias` built at import time. Subscripting one is memoized like any
-other; the alias itself is not a distinct type at runtime, and `isinstance()` against one raises.
+The collection aliases below are available at import time. Unparameterized aliases such as
+`List` and `Mapping` support `isinstance()`; their parameterized forms, such as `List[int]`
+and `Mapping[str, int]`, raise `TypeError` in runtime checks.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
@@ -87,9 +91,10 @@ other; the alias itself is not a distinct type at runtime, and `isinstance()` ag
 
 ## Subscription Is Memoized
 
-Parameterizing a `typing` generic goes through a cache, so the same parameters give back the same
-object. The builtin generics — `list[int]`, `dict[str, int]` — do not share that cache and build a
-fresh alias each time.
+For cacheable subscriptions such as `List[int]`, a cache hit returns the same alias. Variable-arity
+`Tuple[...]` still costs O(p) on a hit with a fresh parameter tuple. From 3.14, reusing
+the same already-hashed tuple permits O(1) hits. The builtin generics — `list[int]`,
+`dict[str, int]` — do not share that cache and build a fresh alias each time.
 
 ```python
 from typing import Dict, List
@@ -106,7 +111,8 @@ assert list[int] == list[int]
 ## Union Flattens and Deduplicates
 
 `Union` is not a plain container of its arguments: nested unions are flattened and duplicates
-removed, which is why its cost grows faster than the parameter count.
+removed. For ordinary hashable types this takes expected O(p) time and O(p) space. Hash
+collisions can require quadratic work; that is separate from the normal hash-based bound.
 
 ```python
 from typing import Optional, Union, get_args
@@ -123,11 +129,14 @@ assert set(get_args(Union[int, str])) == {int, str}      # O(1) to read back
     rather than a `typing.Union` alias — and it is no longer memoized, so two identical unions are
     equal but not identical. Compare unions with `==`, never with `is`.
 
-## Protocols Cost Their Members, Until 3.12
+## Runtime Protocol Checks
 
 `runtime_checkable` lets `isinstance()` work against a `Protocol`. On Python 3.10 and 3.11 each
 check walks the protocol's members with `hasattr`, so a wide protocol costs more than a narrow one.
-From 3.12 the answer is cached per class, and the width stops mattering.
+From 3.12, a cached successful class-level structural check takes O(1). Protocols with instance
+data members still inspect up to m attributes on each check, and unsuccessful class-level
+checks can fall through to that member walk. These bounds assume constant-cost attribute access
+and fixed inheritance depth.
 
 ```python
 from typing import Protocol, runtime_checkable
@@ -150,6 +159,19 @@ try:
     isinstance(Handle(), Unmarked)
 except TypeError as error:
     assert 'runtime_checkable' in str(error)
+
+# A data member is not covered by that cache: the check reads the instance,
+# so its cost follows the member count on every version
+@runtime_checkable
+class Sized2D(Protocol):
+    width: int
+    height: int
+
+class Box:
+    def __init__(self):
+        self.width = self.height = 1
+
+assert isinstance(Box(), Sized2D)   # O(m), cached or not
 ```
 
 !!! warning "isinstance checks members, not signatures"
@@ -202,7 +224,7 @@ hints = get_type_hints(transform)  # O(k·s)
 assert hints['limit'] is int
 assert hints['return'] == List[int]
 
-# Taking an alias apart is O(1) either way
+# Origin and ordinary-alias arguments are O(1); Callable/Annotated get_args can copy
 assert get_origin(Dict[str, int]) is dict
 assert get_args(Dict[str, int]) == (str, int)
 ```
@@ -250,8 +272,8 @@ assert cast('anything at all', values) is values
 - **Python 3.11+**: `Self`, `Never`, `LiteralString`, `Required`, `NotRequired`, `TypeVarTuple`,
   `Unpack`, `assert_type`, `assert_never`, `reveal_type`, `dataclass_transform`, `get_overloads`,
   `clear_overloads`
-- **Python 3.12+**: `override`, `TypeAliasType`, and the cached protocol `isinstance` that makes a
-  wide protocol no dearer than a narrow one
+- **Python 3.12+**: `override`, `TypeAliasType`, and a constant-time path for cached successful
+  class-level protocol checks
 - **Python 3.13+**: `TypeIs`, `ReadOnly`, `NoDefault`, `is_protocol`, `get_protocol_members`
 - **Python 3.14+**: `evaluate_forward_ref`; annotations are evaluated lazily, and `Union[X, Y]`
   produces `X | Y` and is no longer memoized
@@ -274,7 +296,8 @@ assert cast('anything at all', values) is values
 
 ❌ **Avoid**:
 
-- `isinstance()` against a protocol in a hot loop on 3.10 and 3.11, where it is O(members)
+- Repeated protocol checks in a hot loop when they must inspect members: on 3.10–3.11,
+  and for instance data checks on newer versions too
 - Treating a runtime protocol check as a signature check; it only looks for the names
 - `get_type_hints()` inside a request path — it re-resolves the whole MRO every call
 - Assuming annotations are free before 3.14
