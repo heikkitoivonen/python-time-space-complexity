@@ -1,9 +1,7 @@
 """Tests to verify documented behaviour of the dataclasses module.
 
 docs/stdlib/dataclasses.md distinguishes two sizes: n, the fields on a class,
-and N, the values a recursive walk reaches. Conflating them is what the page's
-`asdict()` and `astuple()` rows did, and separating them is what these tests
-mostly do.
+and N, the values a recursive walk reaches.
 
 * `asdict()` is O(N) in the values reached, with depth and width the same
   variable. A chain of 100, 200 and 400 one-field nodes costs 120, 253 and 503 us on 3.10
@@ -32,9 +30,19 @@ Not settled here:
 
 * What `@dataclass` costs at import as an absolute number. It is a constant of
   the machine and the release, and the page carries no constants.
-* `slots=True`, which changes attribute storage rather than any bound.
+* `slots=True` beyond the storage order. It stays O(n) - 200 bytes against 400
+  at ten fields, 47,856 against 78,840 at a thousand - so it is a smaller
+  per-field constant, not a different bound. Attribute lookup through slots is
+  not compared here.
 * Whether the 3.13 change to `__eq__` extends to the ordering methods; only
   `__eq__` was measured.
+
+Initialization storage is measured with 100 and 1,000 fields, allocating the
+class, bare instance and input values before tracing. On Python 3.11 retained
+allocation is 3,264 and 25,968 bytes. Dictionary access returns the identical
+dictionary at both widths; shallow copies retain 3,264 and 25,968 bytes and
+share their values. These tests hold value size fixed and exclude factory and
+post-init callbacks, whose arbitrary costs cannot be bounded by field count.
 
 Axes not varied: `unsafe_hash`, dataclasses over non-dataclass containers
 beyond one list, and inheritance deeper than one base.
@@ -597,3 +605,76 @@ class TestDocumentedExamples:
 
         assert result.returncode != 0
         assert "ImportError" in result.stderr
+
+
+class TestInstanceDictionaryStorage:
+    def test_initialization_retains_storage_for_each_field(self) -> None:
+        retained = []
+        for count in (100, 1_000):
+            cls = wide(count)
+            value = object()
+            args = (value,) * count
+            obj = object.__new__(cls)
+            tracemalloc.start()
+            try:
+                cls.__init__(obj, *args)
+                retained.append(tracemalloc.get_traced_memory()[0])
+            finally:
+                tracemalloc.stop()
+            assert len(vars(obj)) == count
+            assert all(item is value for item in vars(obj).values())
+        assert retained[0] > 0
+        assert retained[1] > retained[0] * 5, retained
+
+    def test_slots_keep_the_storage_linear_at_a_smaller_constant(self) -> None:
+        """So the row's slots clause is measured, not assumed."""
+        peaks: dict[bool, list[int]] = {False: [], True: []}
+        for slotted in (False, True):
+            for count in (10, 1_000):
+                built = make_dataclass(
+                    f"S{slotted}{count}",
+                    [(f"f{index}", int) for index in range(count)],
+                    slots=slotted,
+                )
+                built(*range(count))  # warm the class before tracing
+                peaks[slotted].append(peak_bytes(lambda b=built, c=count: b(*range(c))))
+
+        for series in peaks.values():
+            assert series[1] > series[0] * 5, f"storage should follow the fields: {series}"
+        assert peaks[True][1] < peaks[False][1], (
+            f"slots should hold the same fields more cheaply: {peaks}"
+        )
+
+    @pytest.mark.parametrize("access", [vars, lambda obj: obj.__dict__], ids=["vars", "__dict__"])
+    def test_access_reuses_the_dictionary_while_copying_allocates(
+        self, access: Callable[[Any], dict]
+    ) -> None:
+        access_peaks = []
+        copies = []
+        for count in (100, 1_000):
+            value: list[int] = []
+            obj = wide(count)(*((value,) * count))
+            existing = obj.__dict__
+            assert access(obj) is existing  # warm the access callable before tracing
+            tracemalloc.start()
+            try:
+                attributes = access(obj)
+                access_peaks.append(tracemalloc.get_traced_memory()[1])
+            finally:
+                tracemalloc.stop()
+            assert attributes is existing
+            assert access(obj) is attributes
+            tracemalloc.start()
+            try:
+                shallow = attributes.copy()
+                copies.append(tracemalloc.get_traced_memory()[0])
+            finally:
+                tracemalloc.stop()
+            assert shallow == existing and shallow is not existing
+            assert len(shallow) == count
+            assert all(item is value for item in shallow.values())
+            shallow["f0"] = [1]
+            assert existing["f0"] is value
+        assert copies[0] > 0
+        assert copies[1] > copies[0] * 5, copies
+        assert max(access_peaks) < copies[0] // 4, (access_peaks, copies)

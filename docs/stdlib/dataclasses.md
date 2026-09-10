@@ -18,7 +18,7 @@ cost their node count, not fields times depth.
 | `dataclasses.field(...)` | O(1) | O(1) | Records the options; `default_factory` is called per instance, not here |
 | `dataclasses.Field` | O(1) | O(1) | What `field()` returns and `fields()` hands back |
 | Attribute access on an instance | O(1) | O(1) | An ordinary instance `__dict__` lookup; no descriptor is involved |
-| Generated `__init__(...)` | O(n) | O(1) | One assignment per field; `frozen=True` routes each through `object.__setattr__` |
+| Generated `__init__(...)` | O(n) | O(n) | The space is the fields it stores; `slots=True` keeps that O(n) at a smaller per-field constant. Factory and `__post_init__` costs are additional |
 | Generated `__repr__()` | O(n) | O(n) | Formats every field into one string |
 | Generated `__eq__(other)` | O(n) | O(n) | Compares the fields as two tuples; from 3.13 those are not materialized, making it O(1) |
 | Generated `__lt__`/`__le__`/`__gt__`/`__ge__` | O(n) | O(n) | With `order=True`, the same tuple comparison |
@@ -241,15 +241,21 @@ assert converted['inner']['values'] is not outer.inner.values
 
 assert astuple(outer) == (([1, 2, 3],), 'x')  # O(N), same walk
 
-# A shallow view of the top level only, when that is all you need - O(n)
-assert vars(outer) == {'inner': outer.inner, 'label': 'x'}
-assert vars(outer)['inner'] is outer.inner
+# Access the existing instance dictionary - O(1) time and space
+attributes = vars(outer)
+assert attributes is outer.__dict__
+assert attributes == {'inner': outer.inner, 'label': 'x'}
+
+# A separate shallow dictionary copy - O(n) time and space
+shallow = attributes.copy()
+assert shallow == attributes and shallow is not attributes
+assert shallow['inner'] is outer.inner
 ```
 
 !!! note "asdict() is not a cheap projection"
-    Reach for `vars(obj)` or `obj.__dict__` when you want the top-level fields, and keep
-    `asdict()` for when you genuinely want the whole structure copied out. The difference is
-    O(n) against O(N).
+    For ordinary non-slotted instances, `vars(obj)` and `obj.__dict__` return the existing
+    instance dictionary in O(1) time and space. Use `vars(obj).copy()` for a separate shallow
+    dictionary in O(n) time and space, or `asdict()` for the recursive copy in O(N).
 
 ## Introspection
 
