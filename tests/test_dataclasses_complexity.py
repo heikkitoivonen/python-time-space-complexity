@@ -5,15 +5,15 @@ and N, the values a recursive walk reaches. Conflating them is what the page's
 `asdict()` and `astuple()` rows did, and separating them is what these tests
 mostly do.
 
-* `asdict()` was documented O(n·m) for n fields and m nesting depth. It is O(N).
-  A chain of 100, 200 and 400 one-field nodes costs 120, 253 and 503 us on 3.10
+* `asdict()` is O(N) in the values reached, with depth and width the same
+  variable. A chain of 100, 200 and 400 one-field nodes costs 120, 253 and 503 us on 3.10
   and 57, 118 and 242 us on 3.14 - linear in nodes either way - and a flat class
   of 100, 200 and 400 fields costs 64, 127 and 257 us on 3.10. Depth and width
   are the same variable to it.
 * `asdict()` also deep-copies: the list inside a converted instance is not the
   list the instance holds. That is why it is not a cheap projection, and why the
   page points at `vars()` for the shallow view.
-* The generated `__eq__` compares two tuples, so its space is O(n) and not O(1).
+* The generated `__eq__` compares two tuples, so its space is O(n).
   The peak tracks the field count exactly on 3.10 - 408, 4,880 and 48,208 bytes
   for 10, 200 and 2,000 fields - and 3.13 stops materializing them, reaching
   zero at every width on 3.13 and 3.14. (3.11 and 3.12 report zero at 10 fields
@@ -149,8 +149,8 @@ class TestEveryPublicNameIsDocumented:
 class TestAsdictWalksValuesNotFields:
     """`asdict`/`astuple` | O(N) | O(N) | N = values reached.
 
-    The row the page had wrong. Depth and width are the same variable here, so
-    the two shapes below are both linear in their node count.
+    Depth and width are the same variable here, so the two shapes below are
+    both linear in their node count.
     """
 
     @staticmethod

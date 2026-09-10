@@ -14,7 +14,7 @@ runs, and the measurement is flat in both directions:
 Lookup by name is flat the same way, and iteration is the operation that is
 genuinely O(n): 1.1us for ten members against 67.6us for a thousand on 3.10.
 
-Two version boundaries the page had no note for:
+Two version boundaries:
 
 * `value in EnumClass` raises `TypeError` on 3.10 and 3.11 (with a
   `DeprecationWarning` announcing the change) and answers `True`/`False` from
@@ -169,7 +169,7 @@ class TestEveryPublicNameIsDocumented:
 
 
 class TestLookupByValueIsADict:
-    """`C(value)` | O(1) | O(1). The row the page had wrong.
+    """`C(value)` | O(1) | O(1).
 
     Two directions are measured: across enum sizes, and within one enum between
     the first member declared and the last. A linear search would fail both.

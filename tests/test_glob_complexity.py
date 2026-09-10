@@ -1,19 +1,17 @@
 """Tests to verify documented behaviour of the glob module.
 
 docs/stdlib/glob.md turns on one claim: the cost is the entries examined, not
-the matches returned. Two of the page's original rows said otherwise, and the
-measurements are what corrected them.
+the matches returned. Two measurements carry it.
 
-* `glob()` was documented O(n) in matching files. A directory of 1,000 entries
-  holding one `.py` costs 477-508 us; the same one match among 20,000 entries
-  costs 9.4-11.2 ms. Twenty times the entries, one match either way, twenty
-  times the time - so the time row is O(E) and the match count belongs only in
-  the space row.
-* `iglob()` was documented O(1) memory. Building the iterator peaks at about
-  1.5 KB, but its *first* step peaks at 1.2-1.3 MB over 20,000 entries: each
-  directory is read whole into a list of names before any of its matches are
-  yielded. The peak rises x17.1 on 3.10 and x19.2 on 3.14 for 20x the entries,
-  so the space is O(e) in the largest directory, not O(1).
+* `glob()` is O(E) in time, and the match count belongs only to the space row.
+  A directory of 1,000 entries holding one `.py` costs 477-508 us; the same one
+  match among 20,000 entries costs 9.4-11.2 ms. Twenty times the entries, one
+  match either way, twenty times the time.
+* `iglob()` is O(e) in the largest directory, not O(1). Building the iterator
+  peaks at about 1.5 KB, but its *first* step peaks at 1.2-1.3 MB over 20,000
+  entries: each directory is read whole into a list of names before any of its
+  matches are yielded. The peak rises x17.1 on 3.10 and x19.2 on 3.14 for 20x
+  the entries.
 
 The rest is observation. Hidden names are excluded from `*` unless
 `include_hidden=True` (3.11+) or the dot is written into the pattern; `escape()`
@@ -196,8 +194,8 @@ class TestCostFollowsEntriesNotMatches:
 class TestIglobIsLazyPerDirectoryNotPerEntry:
     """`iglob()` | O(1) to build, O(E) to exhaust | O(e).
 
-    The claim the page had wrong: a generator is not O(1) memory when its first
-    step reads a whole directory.
+    A generator is not O(1) memory when its first step reads a whole
+    directory.
     """
 
     def test_building_the_iterator_touches_nothing(self, tmp_path: pathlib.Path) -> None:

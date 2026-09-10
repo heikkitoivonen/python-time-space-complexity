@@ -1,17 +1,17 @@
 """Tests to verify documented behaviour of the shutil module.
 
-docs/stdlib/shutil.md had six rows for a module of twenty-six exported names,
-and two of them described the wrong shape of tree.
+docs/stdlib/shutil.md turns on which shape of tree a directory operation pays
+for.
 
-* `copytree()` was documented O(E) in space and `rmtree()` O(d) for an
-  undefined d. Both list each directory whole before walking it, so the peak
-  follows the *widest* directory rather than the deepest path. A tree 60 levels
+* `copytree()` and `rmtree()` are O(e + depth) in space. Both list each
+  directory whole before walking it, so the peak follows the *widest* directory
+  rather than the deepest path. A tree 60 levels
   deep with two files per level peaks at 224 KB (3.10) and 391 KB (3.14) under
   `copytree`; a tree two levels deep with 3,000 files peaks at 4.06 MB and
   4.66 MB. `rmtree` splits the same way: 103 KB and 68 KB deep against 809 KB
   and 381 KB wide.
-* The copy rows' O(1) space is O(1) *in the file*, which is worth measuring
-  rather than assuming: 1 MiB and 16 MiB peak identically, at 10 KB on 3.10 and
+* The copy rows' O(1) space is O(1) *in the file*, and one `COPY_BUFSIZE`
+  rather than nothing: 1 MiB and 16 MiB peak identically, at 10 KB on 3.10 and
   264 KB on 3.14. The difference between the versions is `COPY_BUFSIZE`, which
   went from 64 KiB to 256 KiB in 3.14.
 
@@ -238,8 +238,7 @@ class TestWhatEachCopyCarries:
 class TestTreeMemoryFollowsTheWidestDirectory:
     """`copytree` and `rmtree` | O(e + depth) in space.
 
-    The rows the page had wrong: neither holds the whole tree, and neither is
-    driven by its depth.
+    Neither holds the whole tree, and neither is driven by its depth.
     """
 
     @pytest.fixture
