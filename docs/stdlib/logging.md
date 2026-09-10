@@ -7,8 +7,11 @@ it pays for the record, the walk up the logger hierarchy, every filter and forma
 and finally the handler's I/O.
 
 The size variables: **a** is the ancestors between a logger and the root, **h** is the handlers
-found along that walk, **f** is the filters attached to a logger or handler, and **k** is the
-length of the formatted message.
+found along that walk, **F** is the total filter calls across the logger and all reached handlers,
+and **k** bounds each handler's formatted output length. Emission bounds cover standard stream
+handlers, constant-cost filters, and ordinary message formatting, excluding custom callbacks,
+exception/stack payloads, and stream I/O costs beyond writing the text. Space excludes output
+retained by the destination.
 
 !!! note "A suppressed call is about forty times cheaper than an emitted one"
     Not free, but close: `logger.debug(...)` under an `INFO` level is one cache lookup. Which is
@@ -22,8 +25,8 @@ length of the formatted message.
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `logger.debug/info/warning/error/critical(msg, *args)` — suppressed | O(1) | O(1) | One lookup in the logger's level cache; no record, no formatting |
-| `logger.debug/info/warning/error/critical(msg, *args)` — emitted | O(a + h + f + k) | O(k) | Record, ancestor walk, filters, then each handler's format and write |
-| `logging.debug/info/warning/error/critical/log/exception/fatal/warn(...)` | O(a + h + f + k) | O(k) | The module-level functions, which call `basicConfig()` on first use if the root has no handler |
+| `logger.debug/info/warning/error/critical(msg, *args)` — emitted | O(a + h + F + h·k) | O(k) auxiliary | Each accepting handler formats and writes independently |
+| `logging.debug/info/warning/error/critical/log/exception/fatal/warn(...)` | O(a + h + F + h·k) when emitted | O(k) auxiliary | Same handler costs; an unconfigured root also incurs `basicConfig()` |
 | `logger.isEnabledFor(level)` | O(1) | O(1) | Cached per logger and level; the cache is dropped whenever any level changes |
 | `logging.LogRecord(...)` | O(1) | O(1) | Attribute assignment only; `getMessage()` is where `msg % args` happens |
 | `logging.makeLogRecord(dict)` | O(d) | O(d) | d = keys in the dict |
@@ -33,9 +36,9 @@ length of the formatted message.
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `logging.getLogger(name)` — known name | O(1) | O(1) | A dict lookup in the manager |
-| `logging.getLogger(name)` — first time | O(d) | O(d) | d = dot-separated components; a placeholder is created for each missing ancestor |
+| `logging.getLogger(name)` — first time | O(S + c·ℓ) | O(S) | S = total length of dotted prefixes, including the full name; ℓ = name length; c = descendants inspected when replacing a placeholder |
 | `logging.Logger` | O(1) | O(1) | The class itself; instances come from `getLogger()` |
-| `logger.setLevel(level)` | O(L) | O(1) | L = loggers in the manager, whose level caches are all cleared |
+| `logger.setLevel(level)` | O(L) | O(1) | L = manager registry entries scanned to clear logger level caches |
 | `logging.disable(level)` | O(L) | O(1) | The same cache-wide clear, applied globally |
 | `logging.LoggerAdapter(logger, extra)` | O(1) | O(1) | Wraps a logger; `process()` runs per call |
 | `logging.getLoggerClass()`, `logging.setLoggerClass(cls)` | O(1) | O(1) | The class `getLogger()` will instantiate |
@@ -49,8 +52,9 @@ length of the formatted message.
 | `logging.FileHandler(filename, ...)` | O(1) | O(1) | Opens the file eagerly unless `delay=True` |
 | `logging.NullHandler()` | O(1) | O(1) | Discards the record, and exists so a library can stay silent |
 | `handler.setLevel(level)` | O(1) | O(1) | Checked per record, after the logger's own level |
-| `logging.getHandlerNames()`, `logging.getHandlerByName(name)` | O(1) | O(1) | Python 3.12+; the registry `dictConfig` fills in |
-| `logging.shutdown()` | O(h) | O(1) | h = handlers registered; each is flushed and closed |
+| `logging.getHandlerByName(name)` | O(1) expected | O(1) | Python 3.12+; lookup in the named-handler registry |
+| `logging.getHandlerNames()` | O(n) | O(n) | Python 3.12+; fresh frozenset snapshot of n registered handler names |
+| `logging.shutdown()` | O(h), plus flush/close work | O(h) auxiliary, plus handler work | Copies the h registered handler references before flushing and closing |
 | `logging.lastResort` | O(1) | O(1) | The handler used when a record reaches no other |
 
 ### Filters and formatters
@@ -58,17 +62,18 @@ length of the formatted message.
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `logging.Filter(name)` | O(1) | O(1) | Name-prefix matching; `filter()` is called per record |
-| `logger.addFilter(f)`, `handler.addFilter(f)` | O(1) | O(1) | Appended; every record then pays O(f) |
+| `logger.addFilter(filter)`, `handler.addFilter(filter)` | O(f) | O(1) amortized added storage | f = existing filters; scans for duplicates before appending, assuming constant-cost equality |
 | `logging.Formatter(fmt, datefmt, style)` | O(1) | O(1) | Parses the format string once |
 | `formatter.format(record)` | O(k) | O(k) | k = output length; `%(asctime)s` adds a `time.localtime` and `time.strftime` and roughly doubles it |
-| `logging.BufferingFormatter(linefmt)` | O(r) | O(r) | r = records formatted together |
+| `logging.BufferingFormatter(linefmt)` | O(1) | O(1) | Stores the line formatter; no records are formatted |
+| `buffering_formatter.format(records)` | O(r + K) with amortized string growth | O(r + K) | r = records; K = total output characters; standard line formatting and empty default header/footer; custom formatting adds its own cost |
 | `logging.BASIC_FORMAT` | O(1) | O(1) | The format string `basicConfig()` defaults to |
 
 ### Configuration and levels
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `logging.basicConfig(**kwargs)` | O(1) | O(1) | Builds one handler and formatter; does nothing if the root already has handlers and `force` is not set |
+| `logging.basicConfig(**kwargs)` | O(1) no-op; O(h² + L) for fresh configuration without `force` | O(h) for fresh configuration | h = supplied handlers (one by default); L = registry entries if `level` is supplied, otherwise zero; fixed-size format arguments. `force=True` additionally removes/closes old handlers |
 | `logging.addLevelName(level, name)` | O(1) | O(1) | Two dict entries |
 | `logging.getLevelName(level)` | O(1) | O(1) | A dict lookup; an unknown level returns a string rather than raising |
 | `logging.getLevelNamesMapping()` | O(v) | O(v) | Python 3.11+; v = level names, copied into a new dict |
@@ -139,12 +144,15 @@ logging.disable(logging.NOTSET)
 ## Getting a Logger
 
 A name already in the manager is a dict lookup. The first request for a dotted name creates a
-placeholder for each ancestor that does not exist yet, so it costs its depth — once.
+placeholder for each missing ancestor and retains its full prefix string. With d fixed-length
+components on a fresh branch, those strings total Θ(d²) characters, so creation takes O(d²)
+time and space. Creating a logger at an existing placeholder also visits its descendants to
+repair their parent links; the name's depth alone does not bound that case.
 
 ```python
 import logging
 
-first = logging.getLogger('app.db.pool')   # O(d) - creates app, app.db placeholders
+first = logging.getLogger('app.db.pool')   # O(d²) for a fresh branch with fixed-length components
 second = logging.getLogger('app.db.pool')  # O(1) - the same object back
 
 assert first is second
@@ -157,8 +165,9 @@ assert logging.getLogger().name == 'root'
 
 ## Handlers and Formatters
 
-A record walks from its logger up to the root, and every handler found along the way formats and
-writes it. That is the O(a + h) part; the handler's I/O is usually what dominates.
+A record walks the logger hierarchy and checks the handlers along the way, costing O(a + h).
+Each accepting stream handler then formats and writes the message independently: h such handlers
+with k-character output cost O(h·k), plus the total filter work. Handler I/O can add further cost.
 
 ```python
 import io
@@ -198,8 +207,10 @@ assert 'INFO hello world' in timed.format(record)          # O(k), plus the cloc
 
 ## Filters
 
-Every filter runs on every record that gets past the level check, on the logger and again on each
-handler.
+Only the *originating* logger's filters run, then each reached handler's own filters after its
+level check. A filter on an ancestor logger is never consulted for a child's record, even though
+that ancestor's handlers still receive it. A rejecting filter stops that chain, so F counts the
+filters actually called.
 
 ```python
 import io
@@ -213,7 +224,7 @@ stream = io.StringIO()
 handler = logging.StreamHandler(stream)
 logger = logging.getLogger('filters.example')
 logger.addHandler(handler)
-logger.addFilter(OnlyEven())   # O(1) to add, O(f) per record thereafter
+logger.addFilter(OnlyEven())   # O(f) to add among f filters; up to O(f) per record
 logger.setLevel(logging.INFO)
 logger.propagate = False
 
@@ -221,6 +232,19 @@ for index in range(4):
     logger.info('record %s', index, extra={'index': index})
 
 assert stream.getvalue().split() == ['record', '0', 'record', '2']
+
+# A filter on an ancestor does not see the child's record, though the
+# ancestor's handlers still do
+ancestor_stream = io.StringIO()
+ancestor = logging.getLogger('ancestor.example')
+ancestor.addHandler(logging.StreamHandler(ancestor_stream))
+ancestor.addFilter(OnlyEven())          # never consulted for a child's record
+ancestor.setLevel(logging.INFO)
+
+child = logging.getLogger('ancestor.example.child')
+child.info('sent up', extra={'index': 1})   # odd, so OnlyEven would have rejected it
+
+assert 'sent up' in ancestor_stream.getvalue()
 ```
 
 ## Levels

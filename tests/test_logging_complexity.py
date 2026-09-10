@@ -1,41 +1,24 @@
-"""Tests to verify documented behaviour of the logging module.
+"""Evidence for docs/stdlib/logging.md.
 
-docs/stdlib/logging.md had four rows, three of which said "Varies". What varies
-is worth naming, and the measurements name it:
+Suppression, level caches and timestamp formatting have focused behavioral and
+timing tests. Emitted calls vary handler count, message length and filter count
+independently, counting formatting, written characters and filter invocations.
+Fresh logger branches vary depth with fixed-length components and measure the
+sum of retained prefix lengths; placeholder promotion counts descendant visits.
+Handler-name snapshots and shutdown list copies have size/allocation checks.
+Filter registration counts equality operations, including repeated registration.
+BufferingFormatter construction stores its argument, while formatting tests
+vary record count at empty output and output length at one record separately.
+The O(r + K) formatting row explicitly assumes amortized string growth; repeated
+concatenation is visible in released CPython 3.10 and 3.14 Lib/logging/__init__.py.
+No allocator-independent worst-case concatenation time is inferred here.
+basicConfig tests isolate the root and manager, count cache clears and handler
+comparisons, and check the no-op path. All eight page examples run separately.
 
-* A suppressed call is one cache lookup. `logger.debug(...)` under an INFO level
-  costs 152ns on 3.10 and 83ns on 3.14, against 5,718ns and 3,491ns for an
-  emitted `info()` - about forty times cheaper either way.
-* It is also lazy. A suppressed call never converts its arguments: a counting
-  `__str__` fires zero times below the level and once at it. That needs no
-  stopwatch, and it is what makes `'%s'` different from an f-string.
-* `isEnabledFor()` is cached per logger and level in `Logger._cache`, which is
-  why the check is O(1) rather than a walk to the root. `setLevel()` on any
-  logger and `logging.disable()` both empty it - observable directly, so the
-  invalidation is asserted rather than assumed.
-* `%(asctime)s` calls `time.localtime` and `time.strftime` per record: 725ns
-  against 1,652ns on 3.10 and 483ns against 1,397ns on 3.14.
-* `getLogger()` is a dict lookup for a name already known (203-375ns) and O(d)
-  the first time a dotted name is seen (3.2-7.6us for six components), because
-  a placeholder is created for each missing ancestor.
-
-Measured and found flat, so the page claims nothing about it: stack depth. An
-`info()` call and a bare `findCaller()` cost the same at 400 frames deep as at
-one, because `findCaller` stops at the first frame outside the logging module.
-An earlier attempt appeared to show a 2x rise, which was the recursion that
-built the stack being inside the timed region rather than outside it.
-
-Not settled here:
-
-* Handler I/O. Every emitted-record measurement here writes to a `StringIO`, so
-  what a real file or socket costs is the operating system's, not `logging`'s.
-* Thread contention on the module lock, which needs concurrency to show and
-  would measure the scheduler.
-* `logging.config` and `logging.handlers`, which are separate modules with
-  separate surfaces.
-
-Axes not varied: `exc_info` and `stack_info` payloads, non-`%` format styles,
-and more than one handler on a single logger.
+Outside these bounds: custom callbacks, exception and stack payloads, operating
+system I/O costs and lock contention. No finite field-count bound captures
+arbitrary filter, formatter, flush or close callbacks. Non-default format styles
+and forced replacement of an existing handler set are not measured here.
 """
 
 import io
@@ -48,6 +31,8 @@ import sys
 import tempfile
 import textwrap
 import time
+import tracemalloc
+import weakref
 from collections.abc import Callable, Iterator
 from typing import Any
 
@@ -287,7 +272,7 @@ class TestTheLevelCache:
 
 
 class TestGetLogger:
-    """A known name is a dict lookup; a new dotted name costs its depth once."""
+    """Known-name lookup and fresh dotted-name construction."""
 
     def test_the_same_name_gives_the_same_object(self) -> None:
         first = logging.getLogger("app.db.pool")
@@ -404,6 +389,37 @@ class TestFiltersRunPerRecord:
         logger.info("m")
 
         assert calls == ["first", "second"]
+
+    def test_an_ancestor_loggers_filters_are_not_consulted(self) -> None:
+        """Which is why F counts the originating logger, not the whole chain."""
+        calls: list[str] = []
+
+        class Recording(logging.Filter):
+            def __init__(self, tag: str) -> None:
+                super().__init__()
+                self.tag = tag
+
+            def filter(self, record: logging.LogRecord) -> bool:
+                calls.append(self.tag)
+                return True
+
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        parent = logging.Logger(f"ancestor{id(self)}")
+        parent.addHandler(handler)
+        parent.setLevel(logging.INFO)
+        parent.addFilter(Recording("ancestor-logger"))
+        handler.addFilter(Recording("handler"))
+        child = logging.Logger(f"{parent.name}.child")
+        child.parent = parent
+        child.setLevel(logging.INFO)
+        child.addFilter(Recording("originating-logger"))
+
+        child.info("m")
+
+        assert calls == ["originating-logger", "handler"], calls
+        assert stream.getvalue() == "m\n", "the ancestor's handler still received it"
+        handler.close()
 
     def test_a_suppressed_record_reaches_no_filter(
         self, captured: tuple[logging.Logger, io.StringIO]
@@ -525,8 +541,7 @@ class TestStackDepthDoesNotMatter:
     def _at_depth(depth: int, measure: Callable[[], float]) -> float:
         """Reach `depth` frames, then run `measure` there.
 
-        The recursion is outside the timed region on purpose - putting it
-        inside is what made an earlier attempt appear to show a 2x rise.
+        Stack construction is outside the timed region.
         """
         if depth:
             return TestStackDepthDoesNotMatter._at_depth(depth - 1, measure)
@@ -630,3 +645,298 @@ def test_the_temporary_directory_helper_is_reachable() -> None:
     """tempfile is imported for the FileHandler example's guard above."""
     with tempfile.TemporaryDirectory() as folder:
         assert pathlib.Path(folder).is_dir()
+
+
+@pytest.fixture
+def isolated_root(monkeypatch: pytest.MonkeyPatch) -> Iterator[logging.RootLogger]:
+    root = logging.RootLogger(logging.INFO)
+    manager = logging.Manager(root)
+    monkeypatch.setattr(logging, "root", root)
+    monkeypatch.setattr(logging.Logger, "manager", manager)
+    try:
+        yield root
+    finally:
+        for handler in root.handlers:
+            handler.close()
+
+
+class TestEmissionDimensions:
+    @pytest.mark.parametrize("module_call", [False, True])
+    @pytest.mark.parametrize("handlers", [1, 5])
+    @pytest.mark.parametrize("length", [10, 10_000])
+    @pytest.mark.parametrize("filters", [1, 3])
+    def test_each_handler_formats_writes_and_filters(
+        self,
+        isolated_root: logging.RootLogger,
+        module_call: bool,
+        handlers: int,
+        length: int,
+        filters: int,
+    ) -> None:
+        isolated_root.handlers.clear()  # pytest installs capture handlers at call entry
+        conversions = filter_calls = written = formats = 0
+
+        class Argument:
+            def __str__(self) -> str:
+                nonlocal conversions
+                conversions += 1
+                return "x" * length
+
+        class Sink:
+            def write(self, text: str) -> None:
+                nonlocal written
+                written += len(text)
+
+            def flush(self) -> None:
+                pass
+
+        class Formatter(logging.Formatter):
+            def format(self, record: logging.LogRecord) -> str:
+                nonlocal formats
+                formats += 1
+                return super().format(record)
+
+        class Filter(logging.Filter):
+            def filter(self, record: logging.LogRecord) -> bool:
+                nonlocal filter_calls
+                filter_calls += 1
+                return True
+
+        for _ in range(filters):
+            isolated_root.addFilter(Filter())
+        for _ in range(handlers):
+            handler = logging.StreamHandler(Sink())
+            handler.setFormatter(Formatter("%(message)s"))
+            for _ in range(filters):
+                handler.addFilter(Filter())
+            isolated_root.addHandler(handler)
+        emit = logging.info if module_call else isolated_root.info
+        emit("%s", Argument())
+        assert conversions == formats == handlers
+        assert written == handlers * (length + 1)
+        assert filter_calls == (handlers + 1) * filters
+
+
+class TestLoggerCreationDimensions:
+    @pytest.mark.parametrize("depth", [10, 100])
+    def test_fresh_branch_retains_quadratic_prefix_text(self, depth: int) -> None:
+        manager = logging.Manager(logging.RootLogger(logging.WARNING))
+        name = ".".join(["x"] * depth)
+        made = manager.getLogger(name)
+        expected = {".".join(["x"] * count) for count in range(1, depth + 1)}
+        assert set(manager.loggerDict) == expected
+        assert sum(map(len, manager.loggerDict)) == depth * depth
+        assert all(
+            isinstance(manager.loggerDict[prefix], logging.PlaceHolder)
+            for prefix in expected - {name}
+        )
+        assert manager.getLogger(name) is made
+
+    @pytest.mark.parametrize("count", [10, 100])
+    def test_promoting_a_placeholder_visits_its_descendants(self, count: int) -> None:
+        manager = logging.Manager(logging.RootLogger(logging.WARNING))
+        children = [manager.getLogger(f"parent.child{i}") for i in range(count)]
+        placeholder: Any = manager.loggerDict["parent"]
+        visits = []
+
+        class Descendants(dict):
+            def keys(self):  # type: ignore[override]  # noqa: ANN202
+                for child in super().keys():
+                    visits.append(child)
+                    yield child
+
+        placeholder.loggerMap = Descendants(placeholder.loggerMap)
+        parent = manager.getLogger("parent")
+        assert visits == children
+        assert all(child.parent is parent for child in children)
+
+
+class TestHandlerStorage:
+    @pytest.mark.skipif(sys.version_info < (3, 12), reason="named handler APIs are 3.12+")
+    @pytest.mark.parametrize("count", [10, 100])
+    def test_named_handler_snapshot_is_independent(
+        self, count: int, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(logging, "_handlers", weakref.WeakValueDictionary())
+        handlers = [logging.NullHandler() for _ in range(count)]
+        try:
+            for index, handler in enumerate(handlers):
+                handler.name = f"handler{index}"
+            first = logging.getHandlerNames()  # type: ignore[attr-defined]
+            second = logging.getHandlerNames()  # type: ignore[attr-defined]
+            assert isinstance(first, frozenset)
+            assert first == second and first is not second
+            assert len(first) == count
+            assert logging.getHandlerByName("handler0") is handlers[0]  # type: ignore[attr-defined]
+            handlers[0].name = "renamed"
+            assert "handler0" in first and "renamed" not in first
+            assert "renamed" in logging.getHandlerNames()  # type: ignore[attr-defined]
+        finally:
+            for handler in handlers:
+                handler.close()
+
+    def test_shutdown_allocates_a_reference_snapshot(self) -> None:
+        peaks = []
+        for count in (10, 1_000):
+            closes = flushes = 0
+
+            class Handler:
+                def acquire(self) -> None:
+                    pass
+
+                def release(self) -> None:
+                    pass
+
+                def flush(self) -> None:
+                    nonlocal flushes
+                    flushes += 1
+
+                def close(self) -> None:
+                    nonlocal closes
+                    closes += 1
+
+            handlers = [Handler() for _ in range(count)]
+            refs = [weakref.ref(handler) for handler in handlers]
+            tracemalloc.start()
+            try:
+                logging.shutdown(refs)  # type: ignore[arg-type]
+                peaks.append(tracemalloc.get_traced_memory()[1])
+            finally:
+                tracemalloc.stop()
+            assert closes == flushes == count
+        assert peaks[1] > peaks[0] * 5, peaks
+
+
+class TestFilterRegistration:
+    @pytest.mark.parametrize("handler_target", [False, True])
+    @pytest.mark.parametrize("count", [10, 100])
+    def test_repeated_additions_check_all_existing_filters(
+        self, handler_target: bool, count: int
+    ) -> None:
+        comparisons = 0
+
+        class Filter(logging.Filter):
+            def __eq__(self, other: object) -> bool:
+                nonlocal comparisons
+                comparisons += 1
+                return self is other
+
+        target = logging.Handler() if handler_target else logging.Logger("filters")
+        try:
+            for _ in range(count):
+                target.addFilter(Filter())
+            assert comparisons == count * (count - 1) // 2
+            comparisons = 0
+            added = Filter()
+            target.addFilter(added)
+            assert comparisons == count
+            target.addFilter(added)
+            assert len(target.filters) == count + 1
+        finally:
+            if isinstance(target, logging.Handler):
+                target.close()
+
+
+class TestBufferingFormatterDimensions:
+    def test_construction_stores_the_line_formatter_without_using_it(self) -> None:
+        class Line(logging.Formatter):
+            def format(self, record: logging.LogRecord) -> str:
+                raise AssertionError("construction must not format a record")
+
+        line = Line("%(message)s")
+        buffered = logging.BufferingFormatter(line)
+        assert buffered.linefmt is line
+        assert buffered.format([]) == ""
+
+    @pytest.mark.parametrize("count", [1, 100])
+    def test_record_traversal_with_empty_output(self, count: int) -> None:
+        calls = 0
+
+        class Line(logging.Formatter):
+            def format(self, record: logging.LogRecord) -> str:
+                nonlocal calls
+                calls += 1
+                return super().format(record)
+
+        records = [logging.LogRecord("n", logging.INFO, "p", 1, "", (), None) for _ in range(count)]
+        assert all("message" not in vars(record) for record in records)
+        formatter = logging.BufferingFormatter(Line("%(message)s"))
+        assert formatter.format(records) == ""
+        assert calls == count
+        assert all(record.message == "" for record in records)
+
+    def test_one_record_can_allocate_arbitrary_output(self) -> None:
+        retained = []
+        formatter = logging.BufferingFormatter(logging.Formatter("[%(message)s]"))
+        for length in (100, 10_000):
+            record = logging.LogRecord("n", logging.INFO, "p", 1, "x" * length, (), None)
+            tracemalloc.start()
+            try:
+                result = formatter.format([record])
+                retained.append(tracemalloc.get_traced_memory()[0])
+            finally:
+                tracemalloc.stop()
+            assert result == "[" + "x" * length + "]"
+        assert retained[1] > retained[0] * 20, retained
+
+
+class TestBasicConfigDimensions:
+    @pytest.mark.parametrize("count", [10, 100])
+    def test_level_clears_every_logger_cache(
+        self, isolated_root: logging.RootLogger, count: int
+    ) -> None:
+        isolated_root.handlers.clear()
+        cleared = []
+
+        class Cache(dict):
+            def clear(self) -> None:
+                cleared.append(self)
+                super().clear()
+
+        loggers = [isolated_root.manager.getLogger(f"logger{i}") for i in range(count)]
+        for logger in loggers:
+            logger._cache = Cache({logging.INFO: True})  # type: ignore[attr-defined]
+        logging.basicConfig(level=logging.DEBUG)
+        assert len(cleared) == count
+        assert all(level_cache(logger) == {} for logger in loggers)
+        assert isolated_root.level == logging.DEBUG
+
+    @pytest.mark.parametrize("count", [10, 100])
+    def test_supplying_handlers_has_quadratic_duplicate_checks(
+        self, isolated_root: logging.RootLogger, count: int
+    ) -> None:
+        isolated_root.handlers.clear()
+        comparisons = 0
+
+        class Handler(logging.NullHandler):
+            __hash__ = object.__hash__
+
+            def __eq__(self, other: object) -> bool:
+                nonlocal comparisons
+                comparisons += 1
+                return self is other
+
+        handlers = [Handler() for _ in range(count)]
+        logging.basicConfig(handlers=handlers)
+        assert comparisons == count * (count - 1) // 2
+        assert len(isolated_root.handlers) == count
+        assert all(
+            left is right for left, right in zip(isolated_root.handlers, handlers, strict=True)
+        )
+
+    def test_existing_handler_makes_configuration_a_noop(
+        self, isolated_root: logging.RootLogger
+    ) -> None:
+        isolated_root.handlers.clear()
+        original = logging.NullHandler()
+        isolated_root.addHandler(original)
+        level_cache(isolated_root)[logging.INFO] = True
+
+        def forbidden():  # noqa: ANN202
+            raise AssertionError("no-op configuration must not consume handlers")
+            yield  # pragma: no cover
+
+        logging.basicConfig(level=logging.DEBUG, handlers=forbidden())
+        assert isolated_root.handlers == [original]
+        assert isolated_root.level == logging.INFO
+        assert level_cache(isolated_root) == {logging.INFO: True}
