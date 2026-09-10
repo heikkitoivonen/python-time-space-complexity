@@ -5,9 +5,8 @@ them back together, `urllib.request` for fetching them, `urllib.error` for the e
 raises, `urllib.response` for the file-like objects it returns, and `urllib.robotparser` for
 `robots.txt`.
 
-Only `urllib.parse` does work whose cost Python controls. Everything in `urllib.request` is
-dominated by a network round trip, so its rows describe the local work: what the call does before
-and after the wait, not how long the wait is.
+The tables describe local processing and memory use. Network and filesystem waits are additional;
+`data:` URLs are decoded entirely in process.
 
 ## Complexity Reference
 
@@ -15,7 +14,7 @@ and after the wait, not how long the wait is.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `urllib.parse.urlsplit(url)` | O(n) | O(n) | n = URL length; the result is memoized, so re-splitting the same string hands back the same object |
+| `urllib.parse.urlsplit(url)` | O(n) | O(n) | n = URL length; cache misses. A cache hit with the same `str` object is O(1) time and space on Python 3.11+; Python 3.10 still scans the URL |
 | `urllib.parse.urlparse(url)` | O(n) | O(n) | n = URL length; splits, then rebuilds a six-field result, so only the split half is memoized |
 | `urllib.parse.urlunsplit(parts)`, `urllib.parse.urlunparse(parts)` | O(n) | O(n) | n = combined length of the parts |
 | `urllib.parse.urljoin(base, url)` | O(n) | O(n) | n = combined length; resolving `..` walks the path segments |
@@ -31,11 +30,13 @@ and after the wait, not how long the wait is.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `urllib.request.urlopen(url)` | O(1) + round trip | O(1) | Returns once the response headers have arrived; the body is not read here |
-| `urllib.request.urlretrieve(url, filename)` | O(n) + round trip | O(1) | n = response size; copied to disk in chunks, so nothing is held whole |
+| `urllib.request.urlopen(url)` (HTTP(S), `file:`, FTP) | O(1) + I/O wait | O(1) | Relative to body size, with fixed request metadata; returns a stream without buffering the whole body |
+| `urllib.request.urlopen(url)` (`data:`) | O(n) | O(n) | n = encoded URL length; decodes the entire payload before returning |
+| `urllib.request.urlretrieve(url, filename)` | O(n) + I/O wait | O(1) streaming; O(n) for `data:` | n = response size (encoded URL length for `data:`); chunked copying adds to the scheme's opening cost |
 | `urllib.request.urlcleanup()` | O(k) | O(1) | k = temporary files `urlretrieve` left behind |
 | `urllib.request.Request(url, ...)` | O(n) | O(n) | n = URL and header lengths; the URL is split once here |
-| `urllib.request.build_opener(*handlers)`, `urllib.request.install_opener(opener)` | O(h) | O(h) | h = handlers; each is registered under the protocols it names |
+| `urllib.request.build_opener(*handlers)` | O(h²) worst; O(h log h) for nondecreasing priorities | O(h) | h = handlers, with a fixed number of methods per handler; sorted insertion shifts existing handlers |
+| `urllib.request.install_opener(opener)` | O(1) | O(1) | Installs an already-built opener |
 | `urllib.request.OpenerDirector`, `urllib.request.BaseHandler` | O(h) | O(h) | Dispatch walks the handlers registered for the scheme, in order |
 | `urllib.request.HTTPHandler`, `urllib.request.HTTPSHandler`, `urllib.request.FileHandler`, `urllib.request.DataHandler`, `urllib.request.FTPHandler`, `urllib.request.CacheFTPHandler`, `urllib.request.UnknownHandler` | O(1) | O(1) | Construction only; the transfer is the network's or the filesystem's |
 | `urllib.request.ProxyHandler(proxies)` | O(p) | O(p) | p = proxy entries, one bound method installed per scheme |
@@ -65,11 +66,16 @@ and after the wait, not how long the wait is.
 
 ### urllib.robotparser
 
+`RobotFileParser` matches literal path prefixes: no supported version reads `*` or `$` in a rule,
+so a pattern is compared as the characters it is written with. A repeated `User-agent` group does
+not merge with the earlier one either — `can_fetch()` returns on the first entry that applies, and
+a second group for the same agent is never consulted.
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `urllib.robotparser.RobotFileParser().read()` | O(n) + round trip | O(n) | n = `robots.txt` size |
-| `urllib.robotparser.RobotFileParser().parse(lines)` | O(n) | O(r) | n = lines, r = rules kept |
-| `urllib.robotparser.RobotFileParser().can_fetch(agent, url)` | O(r) | O(1) | r = rules; the entries are scanned in order, not indexed |
+| `urllib.robotparser.RobotFileParser().parse(lines)` | O(l + t) | O(l + t) | l = lines, t = total input text; retained rules and directive values include their text, not just one record per line |
+| `urllib.robotparser.RobotFileParser().can_fetch(agent, url)` | O(e·a + r·n) | O(n + a) | e = entries scanned before one applies, a = agent-name length, r = that entry's rules, n = URL length; the URL is normalized once and each rule is a prefix comparison against it |
 
 ## URL Parsing
 
@@ -94,9 +100,9 @@ fragment = parsed.fragment  # 'fragment'
 
 ### Splitting Is Memoized
 
-`urlsplit()` remembers what it has already split, so parsing the same URL twice hands back the
-same object rather than scanning it again. The cache is bounded and keyed on the exact string, so
-a stream of distinct URLs gets nothing from it.
+`urlsplit()` caches split results. On Python 3.11+, a cache hit with the same `str` object avoids
+the URL scan and takes O(1) time. Python 3.10 scans before checking its cache, so a hit still takes
+O(n) time. The cache is bounded; a stream of distinct URLs still needs parsing.
 
 ```python
 from urllib.parse import urlsplit, urlparse
@@ -104,11 +110,10 @@ from urllib.parse import urlsplit, urlparse
 url = "https://example.com/path?query=1#frag"
 
 first = urlsplit(url)   # O(n)
-second = urlsplit(url)  # O(1) - the same object comes back
+second = urlsplit(url)  # O(1) on Python 3.11+; O(n) on 3.10
 assert first is second
 
-# urlparse builds its six-field result on top of that split, so the scan is
-# saved but the result object is not
+# urlparse builds a fresh six-field result even when urlsplit has a cache hit
 assert urlparse(url) is not urlparse(url)
 
 # Reconstruct - O(n)
@@ -184,8 +189,10 @@ except ValueError as error:
 
 ### Basic URL Fetching
 
-`urlopen()` returns as soon as the response headers arrive. The body is not read, and not held in
-memory, until you read it — which is why the fetch is O(1) space and `read()` is O(n).
+For HTTP(S), `urlopen()` returns after reading the response headers, without buffering the whole
+body. With request metadata fixed, opening uses O(1) space relative to body size, while reading the
+whole body uses O(n). The `file:` and FTP handlers also return streams. A `data:` URL instead
+decodes its entire payload before returning, taking O(n) time and space in the encoded URL length.
 
 ```python
 from urllib.request import urlopen
@@ -333,7 +340,7 @@ already installed, which makes them the cheapest way to see what `urlopen()` doe
 import tempfile, pathlib
 from urllib.request import urlopen, pathname2url
 
-# data: URLs are decoded in process - O(n)
+# data: URLs are decoded before opening returns - O(n) time and space
 with urlopen('data:,hello%20world') as response:
     assert response.read() == b'hello world'
 

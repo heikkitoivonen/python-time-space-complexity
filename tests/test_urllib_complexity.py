@@ -1,11 +1,9 @@
 """Tests to verify documented behaviour of the urllib package.
 
-docs/stdlib/urllib.md covers five modules, and only `urllib.parse` does work
-whose cost Python controls. The rows there are measured; the `urllib.request`
-rows describe the local work around a network round trip, and the round trip
-itself is not something this suite can stage.
+docs/stdlib/urllib.md covers local processing in five modules. Network waits
+are external to these bounds. File and data handlers are exercised locally.
 
-What the measurements found:
+Measurement scope:
 
 * `urlsplit()` memoizes. Splitting the same string twice returns the *same
   object* on every supported version, which needs no stopwatch. The machinery
@@ -13,15 +11,41 @@ What the measurements found:
   with maxsize 128 from 3.11 - and so does the payoff: a repeat split of a long
   URL costs x1.5 less on 3.10, where the cache is consulted after a pass over
   the string, and x142 less on 3.14. `urlparse()` builds a fresh six-field
-  result on top, so it saves the scan but not the object.
+  result on top; result identity alone does not establish the scanning cost.
 * `urlencode()` and `parse_qsl()` charge per field, not per character. Ten
   fields of 1,000 characters against a thousand fields of ten, at comparable
   total length, cost x27 more for `urlencode` and x40 more for `parse_qsl` on
   3.10 and 3.14 alike. That is why both rows carry two size variables.
 * `quote()` is linear in its input: x9.2 to x10.1 per 10x on both boundaries.
-* `urlopen()` returns before the body is read. Opening a 4 MB `file:` URL peaks
-  at 7 KB of traced allocation and reading it peaks at 4.19 MB, so the O(1)
-  space in the row is a measurement rather than an assumption.
+* `file:` opening is bounded relative to body size: a 4 MB body peaks at 7 KB
+  during open and 4.19 MB during read. `data:` opening retains the decoded
+  body before read. At 10 KB and 1 MB of literal payload, peaks are 41 KB and
+  4 MB on 3.10, and 31 KB and 3 MB on 3.14.
+* Opener registration counts comparisons and displaced list entries for equal,
+  ascending, and descending priorities at 128 and 2,048 handlers. Each handler
+  has one protocol method; callback and constructor cost are not varied.
+* Robot parsing and lookup vary literal path length from 10 KB to 1 MB at one
+  rule. Peaks grow from about 30 KB to 3 MB on both boundary versions. Separate
+  checks vary rule count with fixed text lengths. The documented upper bounds
+  cover literal paths and distinct agent groups; no supported version matches
+  `*` or `$` in a rule, and a repeated agent group is never consulted, both of
+  which are asserted rather than assumed.
+* Warm `urlsplit` calls on the same string object at 10 KB and 1 MB take about
+  10 us and 965 us on 3.10, but about 75 ns at both sizes on 3.14. The same
+  object matters: an equal but newly built 1 MB URL costs about 397 us on 3.14
+  against 77 ns for the object already in the cache, because a fresh string has
+  to be hashed before the lookup can miss or hit.
+
+Source evidence: Lib/urllib/{parse,request,robotparser}.py on released CPython
+3.10 through 3.14 branches. In parse.py, 3.10 sanitizes before the cache lookup;
+3.11+ wraps urlsplit in lru_cache. Request registration uses bisect.insort,
+install_opener assigns _opener, and DataHandler decodes into BytesIO. Robot
+lookup normalizes the URL and compares configured text; literal RuleLine paths
+use prefix matching on every supported version.
+https://github.com/python/cpython/blob/3.10/Lib/urllib/parse.py
+https://github.com/python/cpython/blob/3.11/Lib/urllib/parse.py
+https://github.com/python/cpython/blob/3.14/Lib/urllib/request.py
+https://github.com/python/cpython/blob/3.14/Lib/urllib/robotparser.py
 
 Not settled here:
 
@@ -40,6 +64,7 @@ Axes not varied: non-ASCII and IDNA host names, `bytes` URLs through the
 `*ResultBytes` types, and any `safe` set for `quote()` beyond the default.
 """
 
+import bisect
 import email.message
 import pathlib
 import re
@@ -55,6 +80,7 @@ import urllib.request
 import urllib.response
 import urllib.robotparser
 from collections.abc import Callable
+from functools import partial
 from typing import Any
 
 import pytest
@@ -202,7 +228,7 @@ class TestUrlsplitIsMemoized:
 
         assert urllib.parse.urlsplit(self.URL) is not first
 
-    def test_urlparse_saves_the_scan_but_not_the_result(self) -> None:
+    def test_urlparse_builds_a_fresh_result(self) -> None:
         assert urllib.parse.urlparse(self.URL) is not urllib.parse.urlparse(self.URL)
         assert urllib.parse.urlparse(self.URL) == urllib.parse.urlparse(self.URL)
 
@@ -213,6 +239,19 @@ class TestUrlsplitIsMemoized:
             urllib.parse.urlsplit(f"https://example.com/{index}")
 
         assert urllib.parse.urlsplit(self.URL) is not first
+
+    @pytest.mark.timing
+    def test_cache_hit_scaling_matches_the_python_version(self) -> None:
+        urls = ["https://example.com/" + "a" * size for size in (10_000, 1_000_000)]
+        for url in urls:
+            urllib.parse.urlsplit(url)
+        durations = [best_ns(partial(urllib.parse.urlsplit, url), inner=50) for url in urls]
+        ratio = durations[1] / durations[0]
+
+        if sys.version_info < (3, 11):
+            assert ratio > 20, f"3.10 must scan before a cache hit: {durations}, ratio={ratio}"
+        else:
+            assert ratio < 5, f"cache hit must avoid a URL-length scan: {durations}, ratio={ratio}"
 
     @pytest.mark.timing
     def test_a_repeat_split_is_cheaper_than_the_first(self) -> None:
@@ -436,12 +475,8 @@ class TestResultTypesAreNamedTuples:
         assert urllib.parse.urlparse(url).geturl() == url
 
 
-class TestUrlopenDoesNotReadTheBody:
-    """`urlopen()` | O(1) + round trip | O(1) | the body is not read here.
-
-    Measured over `file:`, whose handler is installed by default and needs no
-    peer. The HTTP path is the same `OpenerDirector` dispatch onto a stream.
-    """
+class TestUrlopenSchemeBuffering:
+    """File URLs stream; data URLs decode and retain their body during open."""
 
     BODY = b"x" * (4 * 1024 * 1024)
 
@@ -475,6 +510,28 @@ class TestUrlopenDoesNotReadTheBody:
         with urllib.request.urlopen("data:,hello%20world") as response:
             assert response.read() == b"hello world"
 
+    @pytest.mark.parametrize("encoding", ["percent", "base64"])
+    def test_data_open_allocates_the_body_before_reading(self, encoding: str) -> None:
+        import base64
+        import io
+
+        urllib.request.urlopen("data:,warm").close()
+        peaks = []
+        for size in (10_000, 1_000_000):
+            body = b"x" * size
+            url = (
+                "data:," + "%78" * size
+                if encoding == "percent"
+                else "data:;base64," + base64.b64encode(body).decode("ascii")
+            )
+            peaks.append(peak_bytes(lambda url=url: urllib.request.urlopen(url).close()))
+            with urllib.request.urlopen(url) as response:
+                assert isinstance(response.fp, io.BytesIO)
+                assert response.fp.getvalue() == body
+                assert response.fp.tell() == 0
+
+        assert peaks[1] > 20 * peaks[0], f"opening must allocate with payload size: {peaks}"
+
     def test_read_with_a_size_bounds_both(self, file_url: str) -> None:
         with urllib.request.urlopen(file_url) as response:
             chunk = response.read(1024)
@@ -503,8 +560,7 @@ class TestRequestSplitsItsUrlOnce:
 
 
 class TestOpenerRegistration:
-    """`build_opener`/`OpenerDirector`: one registration per handler, and
-    dispatch walks the handlers registered for the scheme."""
+    """Sorted handler insertion: O(h log h) comparisons and O(h²) worst-case shifts."""
 
     def test_build_opener_registers_the_default_handlers(self) -> None:
         opener = urllib.request.build_opener()
@@ -519,6 +575,69 @@ class TestOpenerRegistration:
         handlers = opener.handlers  # type: ignore[attr-defined]
         classes = {type(handler).__name__ for handler in handlers}
         assert "HTTPCookieProcessor" in classes
+
+    @pytest.mark.parametrize("order", ["equal", "ascending", "descending"])
+    def test_registration_comparisons_and_shifts_grow_with_handlers(
+        self, monkeypatch: pytest.MonkeyPatch, order: str
+    ) -> None:
+        comparisons = 0
+        shifted = 0
+
+        class Handler(urllib.request.BaseHandler):
+            def __init__(self, priority: int) -> None:
+                self.handler_order = priority  # type: ignore[misc]
+
+            def sample_open(self, request: Any) -> None:
+                pass
+
+            def __lt__(self, other: Any) -> bool:
+                nonlocal comparisons
+                comparisons += 1
+                return self.handler_order < other.handler_order
+
+        original = bisect.insort
+
+        def record_insert(items: list[Any], handler: Any) -> None:
+            nonlocal shifted
+            original(items, handler)
+            if isinstance(handler, Handler):
+                position = next(i for i, item in enumerate(items) if item is handler)
+                shifted += len(items) - position - 1
+
+        monkeypatch.setattr(bisect, "insort", record_insert)
+        counts = []
+        for size in (128, 2048):
+            comparisons = shifted = 0
+            priorities = {
+                "equal": [2000] * size,
+                "ascending": list(range(2000, 2000 + size)),
+                "descending": list(range(2000 + size, 2000, -1)),
+            }[order]
+            handlers = [Handler(priority) for priority in priorities]
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), *handlers)
+            counts.append(comparisons)
+            registered = opener.handle_open["sample"]  # type: ignore[attr-defined]
+            assert len(registered) == size
+            assert [h.handler_order for h in registered] == sorted(priorities)
+            if order == "descending":
+                assert shifted == size * (size - 1), (size, shifted)
+            else:
+                assert shifted == 0, (order, size, shifted)
+
+        assert 18 < counts[1] / counts[0] < 35, f"expected h log h comparisons: {counts}"
+
+    def test_install_opener_only_installs_the_supplied_object(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        opener = urllib.request.OpenerDirector()
+        monkeypatch.setattr(urllib.request, "_opener", None)
+
+        def unexpected_registration(handler: Any) -> None:
+            pytest.fail("install_opener must not register handlers")
+
+        monkeypatch.setattr(opener, "add_handler", unexpected_registration)
+        assert urllib.request.install_opener(opener) is None
+        assert urllib.request._opener is opener  # type: ignore[attr-defined]
 
     def test_a_proxy_handler_installs_one_method_per_scheme(self) -> None:
         handler = urllib.request.ProxyHandler({"http": "http://p:1", "https": "http://p:2"})
@@ -638,7 +757,7 @@ class TestResponseWrappersAddNoBuffering:
 
 
 class TestRobotFileParserScansItsRules:
-    """`can_fetch()` | O(r) | O(1) | r = rules, walked in order."""
+    """Literal rule parsing and lookup depend on text lengths as well as counts."""
 
     @staticmethod
     def _parser(lines: list[str]) -> urllib.robotparser.RobotFileParser:
@@ -669,6 +788,82 @@ class TestRobotFileParserScansItsRules:
         rate = parser.request_rate("bot")
         assert rate is not None
         assert (rate.requests, rate.seconds) == (1, 10)
+
+    def test_no_supported_version_matches_a_wildcard_or_anchor(self) -> None:
+        """The page says rules are literal prefixes; a hedge would say maybe."""
+        parser = self._parser(["User-agent: *", "Disallow: /a*/secret", "Disallow: /end$"])
+
+        # `*` is a character in the path, not a wildcard
+        assert parser.can_fetch("bot", "https://example.com/ax/secret") is True
+        assert parser.can_fetch("bot", "https://example.com/a*/secret") is False
+
+        # `$` is a character too, so it anchors nothing
+        assert parser.can_fetch("bot", "https://example.com/end") is True
+        assert parser.can_fetch("bot", "https://example.com/end$") is False
+
+    def test_a_repeated_agent_group_is_never_consulted(self) -> None:
+        """`can_fetch` returns on the first entry that applies."""
+        parser = self._parser(
+            ["User-agent: bot", "Disallow: /one", "User-agent: bot", "Disallow: /two"]
+        )
+
+        assert parser.can_fetch("bot", "https://example.com/one") is False
+        assert parser.can_fetch("bot", "https://example.com/two") is True
+
+    def test_parse_and_lookup_allocate_with_text_length_at_fixed_rule_count(self) -> None:
+        parse_peaks, lookup_peaks = [], []
+        try:
+            for size in (10_000, 1_000_000):
+                path = "/" + "a" * size
+                lines = ["User-agent: *", "Disallow: " + path]
+                parser = urllib.robotparser.RobotFileParser()
+                clear_parse_cache()
+                parse_peaks.append(peak_bytes(partial(parser.parse, lines)))
+                assert path in str(parser)
+                url = "https://example.com" + path
+                clear_parse_cache()
+                lookup_peaks.append(peak_bytes(partial(parser.can_fetch, "bot", url)))
+                assert parser.can_fetch("bot", url) is False
+
+            for peaks in (parse_peaks, lookup_peaks):
+                assert peaks[1] > 20 * peaks[0], (
+                    f"fixed rule count still allocates with text: {peaks}"
+                )
+        finally:
+            clear_parse_cache()
+
+    def test_rule_count_controls_retained_records_and_prefix_checks(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        rule_type = urllib.robotparser.RuleLine  # type: ignore[attr-defined]
+        original = rule_type.applies_to
+        checked = 0
+
+        def record(rule: Any, path: str) -> Any:
+            nonlocal checked
+            checked += 1
+            return original(rule, path)
+
+        monkeypatch.setattr(rule_type, "applies_to", record)
+        for size in (10, 1000):
+            parser = self._parser(["User-agent: *"] + ["Disallow: /blocked"] * size)
+            assert str(parser).count("Disallow: /blocked") == size
+            checked = 0
+            assert parser.can_fetch("bot", "https://example.com/allowed") is True
+            assert checked == size
+
+    @pytest.mark.parametrize("growing_agent", ["caller", "configured"])
+    def test_lookup_allocates_with_agent_text_at_fixed_url_length(self, growing_agent: str) -> None:
+        peaks = []
+        for size in (10_000, 1_000_000):
+            caller = "B" * size if growing_agent == "caller" else "bot"
+            configured = "A" * size if growing_agent == "configured" else "otherbot"
+            parser = self._parser(["User-agent: " + configured, "Disallow: /"])
+            url = "https://example.com/path"
+            peaks.append(peak_bytes(partial(parser.can_fetch, caller, url)))
+            assert parser.can_fetch(caller, url) is True
+
+        assert peaks[1] > 20 * peaks[0], f"agent text must count toward lookup space: {peaks}"
 
 
 def _blocks() -> list[tuple[int, str]]:
@@ -779,3 +974,14 @@ class TestTemporaryFileCleanup:
         assert pathlib.Path(filename) == target
         assert target.read_text() == "body"
         assert headers is not None
+
+    def test_data_urlretrieve_buffers_despite_chunked_copy(self, tmp_path: pathlib.Path) -> None:
+        target = tmp_path / "data.txt"
+        peaks = []
+        urllib.request.urlopen("data:,warm").close()
+        for size in (10_000, 1_000_000):
+            url = "data:," + "x" * size
+            peaks.append(peak_bytes(partial(urllib.request.urlretrieve, url, str(target))))
+            assert target.stat().st_size == size
+
+        assert peaks[1] > 20 * peaks[0], f"data URL opening retains the body: {peaks}"
