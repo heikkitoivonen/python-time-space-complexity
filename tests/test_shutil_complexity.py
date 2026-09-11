@@ -1,48 +1,28 @@
-"""Tests to verify documented behaviour of the shutil module.
+"""Observe shutil allocation and traversal dimensions.
 
-docs/stdlib/shutil.md turns on which shape of tree a directory operation pays
-for.
+Tree tests vary width and depth independently and count retained ancestor entries.
+Archive tests observe member indexes; buffer, PATH, and extended-attribute tests
+measure peak allocation with input construction outside the measurement where appropriate.
+Registry tests count comparisons and extension visits, and failure tests distinguish
+copy aggregation from deletion callbacks. Every documentation example runs.
 
-* `copytree()` and `rmtree()` are O(e + depth) in space. Both list each
-  directory whole before walking it, so the peak follows the *widest* directory
-  rather than the deepest path. A tree 60 levels
-  deep with two files per level peaks at 224 KB (3.10) and 391 KB (3.14) under
-  `copytree`; a tree two levels deep with 3,000 files peaks at 4.06 MB and
-  4.66 MB. `rmtree` splits the same way: 103 KB and 68 KB deep against 809 KB
-  and 381 KB wide.
-* The copy rows' O(1) space is O(1) *in the file*, and one `COPY_BUFSIZE`
-  rather than nothing: 1 MiB and 16 MiB peak identically, at 10 KB on 3.10 and
-  264 KB on 3.14. The difference between the versions is `COPY_BUFSIZE`, which
-  went from 64 KiB to 256 KiB in 3.14.
-
-`move()` within one filesystem is a rename, and that needs no stopwatch: the
-inode is unchanged afterwards.
-
-Not settled here:
-
-* The cross-filesystem branch of `move()`. Staging a second mount point is not
-  something a test suite should do, so only the rename branch is exercised and
-  the fallback is read from the source.
-* `sendfile`. `copyfile` uses it on Linux, which is why its peak is smaller than
-  `copyfileobj`'s, but whether a given filesystem takes that path is the
-  platform's decision.
-* Compression. `make_archive` costs what the format costs; the tests assert the
-  round trip, not the ratio.
-* `chown`, which needs privileges to do anything observable.
-
-Axes not varied: symlinks through `copytree(symlinks=True)`, `dirs_exist_ok`,
-extended attributes in `copystat`, and non-POSIX platforms.
+Filesystem syscall costs, custom callbacks, compression workspace, privileged chown,
+and cross-mount move costs are source-backed exclusions, not measured bounds.
+Symlink variants and non-POSIX filesystem behavior are not varied here.
 """
 
 import os
 import pathlib
+import random
 import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import textwrap
 import tracemalloc
-from collections.abc import Callable, Iterator
+import zipfile
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -150,6 +130,8 @@ class TestCopyingIsBoundedByTheBuffer:
 
     def test_the_buffer_is_one_of_the_two_documented_sizes(self) -> None:
         expected = 256 * 1024 if sys.version_info >= (3, 14) else 64 * 1024
+        if os.name == "nt":
+            expected = 1024 * 1024
 
         assert copy_buffer_size() == expected
 
@@ -235,55 +217,89 @@ class TestWhatEachCopyCarries:
             shutil.copyfile(source, source)
 
 
-class TestTreeMemoryFollowsTheWidestDirectory:
-    """`copytree` and `rmtree` | O(e + depth) in space.
+class TestTreeStorage:
+    """Count live ancestor entries while varying width and depth independently."""
 
-    Neither holds the whole tree, and neither is driven by its depth.
-    """
-
-    @pytest.fixture
-    def shapes(self, tmp_path: pathlib.Path) -> Iterator[tuple[pathlib.Path, pathlib.Path]]:
-        deep = build_tree(tmp_path / "deep", depth=60, width=2)
-        wide = build_tree(tmp_path / "wide", depth=2, width=3_000)
-        yield deep, wide
-
-    def test_the_two_shapes_hold_comparable_totals(
-        self, shapes: tuple[pathlib.Path, pathlib.Path]
+    @pytest.mark.parametrize("depth", [2, 20])
+    @pytest.mark.parametrize("width", [2, 20])
+    def test_copytree_retains_ancestor_listings(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, depth: int, width: int
     ) -> None:
-        """Both trees are within an order of magnitude in entries."""
-        deep, wide = shapes
+        source = build_tree(tmp_path / "src", depth, width)
+        original = shutil._copytree  # type: ignore[attr-defined]
+        active: list[int] = []
+        peak = 0
 
-        deep_entries = sum(len(files) + len(dirs) for _, dirs, files in os.walk(deep))
-        wide_entries = sum(len(files) + len(dirs) for _, dirs, files in os.walk(wide))
+        def observe(entries: Any, *args: Any, **kwargs: Any) -> Any:
+            nonlocal peak
+            active.append(len(entries))
+            peak = max(peak, sum(active))
+            try:
+                return original(entries, *args, **kwargs)
+            finally:
+                active.pop()
 
-        assert 120 <= deep_entries <= 200
-        assert 6_000 <= wide_entries <= 6_100
+        monkeypatch.setattr(shutil, "_copytree", observe)
+        shutil.copytree(source, tmp_path / "dst")
+        assert peak == depth * (width + 1)
+        assert not active
 
-    def test_copytree_peaks_on_the_wide_tree(
-        self, shapes: tuple[pathlib.Path, pathlib.Path], tmp_path: pathlib.Path
+    @pytest.mark.skipif(sys.version_info >= (3, 12), reason="recursive rmtree before 3.12")
+    @pytest.mark.parametrize("depth", [2, 20])
+    @pytest.mark.parametrize("width", [2, 20])
+    def test_recursive_rmtree_retains_ancestor_listings(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, depth: int, width: int
     ) -> None:
-        deep, wide = shapes
+        source = build_tree(tmp_path / "src", depth, width)
+        original = os.unlink
+        peak = 0
 
-        deep_peak = peak_bytes(lambda: shutil.copytree(deep, tmp_path / "deepcopy"))
-        wide_peak = peak_bytes(lambda: shutil.copytree(wide, tmp_path / "widecopy"))
+        def observe(*args: Any, **kwargs: Any) -> None:
+            nonlocal peak
+            frame = sys._getframe(1)
+            retained = 0
+            while frame is not None:
+                if frame.f_code.co_name in ("_rmtree_safe_fd", "_rmtree_unsafe"):
+                    retained += len(frame.f_locals.get("entries", []))
+                frame = frame.f_back
+            peak = max(peak, retained)
+            original(*args, **kwargs)
 
-        assert wide_peak > deep_peak * 5, (
-            f"a wide tree peaked at {wide_peak} bytes against a deep one's {deep_peak}; "
-            "the row claims the widest directory sets the peak"
-        )
+        monkeypatch.setattr(os, "unlink", observe)
+        shutil.rmtree(source)
+        assert peak == depth * (width + 1)
+        assert not source.exists()
 
-    def test_rmtree_splits_the_same_way(
-        self, shapes: tuple[pathlib.Path, pathlib.Path], tmp_path: pathlib.Path
+    @staticmethod
+    def _bushy(base: pathlib.Path, siblings: int, width: int) -> pathlib.Path:
+        """The same entries as a chain, reachable through a two-level path."""
+        base.mkdir(parents=True)
+        for index in range(siblings):
+            branch = base / f"s{index:04}"
+            branch.mkdir()
+            for leaf in range(width):
+                (branch / f"f{leaf:04}").touch()
+        return base
+
+    def test_equal_trees_of_different_shape_do_not_cost_the_same(
+        self, tmp_path: pathlib.Path
     ) -> None:
-        deep, wide = shapes
-        shutil.copytree(deep, tmp_path / "deepcopy")
-        shutil.copytree(wide, tmp_path / "widecopy")
+        """Why the row is O(d·e) and not the whole tree's metadata: two trees
+        of identical entry count peak several-fold apart."""
+        deep = build_tree(tmp_path / "deep", depth=50, width=40)
+        bushy = self._bushy(tmp_path / "bushy", siblings=50, width=40)
 
-        deep_peak = peak_bytes(lambda: shutil.rmtree(tmp_path / "deepcopy"))
-        wide_peak = peak_bytes(lambda: shutil.rmtree(tmp_path / "widecopy"))
+        def entries(root: pathlib.Path) -> int:
+            return sum(len(dirs) + len(files) for _, dirs, files in os.walk(root))
 
-        assert wide_peak > deep_peak * 2, (
-            f"removing a wide tree peaked at {wide_peak} bytes against a deep one's {deep_peak}"
+        assert abs(entries(deep) - entries(bushy)) <= 2, "the two shapes must hold equal entries"
+
+        deep_peak = peak_bytes(lambda: shutil.copytree(deep, tmp_path / "cd"))
+        bushy_peak = peak_bytes(lambda: shutil.copytree(bushy, tmp_path / "cb"))
+
+        assert deep_peak > bushy_peak * 1.5, (
+            f"equal entry counts peaked at {deep_peak} deep against {bushy_peak} bushy; "
+            "a whole-tree bound would call these the same"
         )
 
     def test_rmtree_removes_everything(self, tmp_path: pathlib.Path) -> None:
@@ -574,3 +590,195 @@ class TestDocumentedExamples:
 
         assert result.returncode != 0
         assert "NameError" in result.stderr
+
+
+@pytest.mark.parametrize("length", [1024, 1024 * 1024, -1])
+def test_copyfileobj_length_controls_allocation(tmp_path: pathlib.Path, length: int) -> None:
+    """Fixed 8 MiB input separates small/large buffers from a read-all request."""
+    source = tmp_path / "input"
+    source.write_bytes(b"x" * (8 << 20))
+
+    def copy() -> None:
+        with (
+            source.open("rb", buffering=0) as reader,
+            open(os.devnull, "wb", buffering=0) as writer,
+        ):
+            shutil.copyfileobj(reader, writer, length)
+
+    peak = peak_bytes(copy)
+    if length < 0:
+        assert peak >= 8 << 20
+    else:
+        assert length <= peak < 3 * length + 32_000
+
+
+@pytest.mark.skipif(not hasattr(os, "listxattr"), reason="extended attributes unavailable")
+@pytest.mark.parametrize("dimension", ["names", "value"])
+def test_copystat_attribute_allocation(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, dimension: str
+) -> None:
+    """Name-list length and largest value size grow independently of file bytes."""
+    source, target = tmp_path / "src", tmp_path / "dst"
+    source.touch()
+    target.touch()
+    peaks = []
+    for size in (10, 10_000):
+        count = size if dimension == "names" else 1
+        value_size = size * 100 if dimension == "value" else 1
+        copied = [0]
+
+        def names(*args: Any, count: int = count, **kwargs: Any) -> list[str]:
+            return [f"user.key{i:06}" for i in range(count)]
+
+        def value(*args: Any, value_size: int = value_size, **kwargs: Any) -> bytes:
+            return b"x" * value_size
+
+        def assign(*args: Any, copied: list[int] = copied, **kwargs: Any) -> None:
+            # Count without retaining attribute names or values.
+            copied[0] += 1
+
+        monkeypatch.setattr(os, "listxattr", names)
+        monkeypatch.setattr(os, "getxattr", value)
+        monkeypatch.setattr(os, "setxattr", assign)
+        peaks.append(peak_bytes(lambda: shutil.copystat(source, target)))
+        assert copied[0] == count
+    assert peaks[1] > peaks[0] * 20
+
+
+@pytest.mark.skipif(os.name == "nt", reason="isolates POSIX PATH from PATHEXT")
+def test_which_materializes_path_before_first_match(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = 0
+
+    def accept(*args: Any) -> bool:
+        nonlocal calls
+        calls += 1
+        return True
+
+    monkeypatch.setattr(shutil, "_access_check", accept)
+    peaks = []
+    for count in (100, 10_000):
+        path = os.pathsep.join(f"/directory{i:06}" for i in range(count))
+        calls = 0
+        peaks.append(peak_bytes(lambda path=path: shutil.which("command", path=path)))
+        assert calls == 1
+    assert peaks[1] > peaks[0] * 20
+
+
+@pytest.mark.parametrize("format_name", ["zip", "tar"])
+@pytest.mark.parametrize("count", [10, 100])
+def test_archives_retain_member_metadata(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, format_name: str, count: int
+) -> None:
+    """Observe the writer and reader member indexes with fixed empty payloads."""
+    source = tmp_path / "src"
+    source.mkdir()
+    for index in range(count):
+        (source / f"file{index:04}").touch()
+    cls: Any = zipfile.ZipFile if format_name == "zip" else tarfile.TarFile
+    field = "filelist" if format_name == "zip" else "members"
+    original = cls.close
+    sizes: list[int] = []
+
+    def close(self: Any) -> None:
+        sizes.append(len(getattr(self, field)))
+        original(self)
+
+    monkeypatch.setattr(cls, "close", close)
+    archive = shutil.make_archive(str(tmp_path / "bundle"), format_name, str(source))
+    assert max(sizes) >= count
+    sizes.clear()
+    shutil.unpack_archive(archive, str(tmp_path / "out"))
+    assert max(sizes) >= count
+    assert len(list((tmp_path / "out").iterdir())) == count
+
+
+@pytest.mark.parametrize("unpack", [False, True])
+@pytest.mark.parametrize("count", [32, 512])
+def test_format_getters_sort_arbitrary_registration_order(
+    monkeypatch: pytest.MonkeyPatch, unpack: bool, count: int
+) -> None:
+    comparisons = 0
+
+    class Name(str):
+        def __lt__(self, other: str) -> bool:
+            nonlocal comparisons
+            comparisons += 1
+            return super().__lt__(other)
+
+    names = [Name(f"format{i:04}") for i in range(count)]
+    random.Random(42).shuffle(names)
+    info: Any = ([], None, [], "description") if unpack else (None, [], "description")
+    monkeypatch.setattr(
+        shutil, "_UNPACK_FORMATS" if unpack else "_ARCHIVE_FORMATS", dict.fromkeys(names, info)
+    )
+    getter = shutil.get_unpack_formats if unpack else shutil.get_archive_formats
+    result = getter()
+    assert comparisons > count * 2
+    assert [str(row[0]) for row in result] == sorted(str(name) for name in names)
+    assert len(result) == count
+
+
+@pytest.mark.parametrize("count", [10, 10_000])
+def test_unpack_registration_visits_existing_extensions(
+    monkeypatch: pytest.MonkeyPatch, count: int
+) -> None:
+    visits = 0
+
+    class Extensions(list[str]):
+        def __iter__(self) -> Any:
+            nonlocal visits
+            for value in super().__iter__():
+                visits += 1
+                yield value
+
+    extensions = Extensions(f".ext{i:05}" for i in range(count))
+    monkeypatch.setattr(shutil, "_UNPACK_FORMATS", {"existing": (extensions, None, [], "")})
+    peak = peak_bytes(lambda: shutil.register_unpack_format("new", [".new"], lambda *a: None))
+    assert visits == count
+    if count == 10_000:
+        assert peak > count * 10  # Temporary dictionary slots, with strings preallocated.
+
+
+def test_copytree_aggregates_copy_failures(tmp_path: pathlib.Path) -> None:
+    source = tmp_path / "src"
+    source.mkdir()
+    for name in ("a", "b"):
+        (source / name).touch()
+    calls = []
+
+    def fail(src: Any, dst: Any) -> None:
+        calls.append(src)
+        raise PermissionError("denied")
+
+    with pytest.raises(shutil.Error) as error:
+        shutil.copytree(source, tmp_path / "dst", copy_function=fail)
+    assert len(calls) == len(error.value.args[0]) == 2
+
+
+def test_rmtree_stops_or_calls_error_handler(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "src"
+    source.mkdir()
+    for name in ("a", "b"):
+        (source / name).touch()
+    calls = []
+    handled = []
+
+    def fail(*args: Any, **kwargs: Any) -> None:
+        calls.append(args)
+        raise PermissionError("denied")
+
+    def handle(*args: Any) -> None:
+        handled.append(args)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "unlink", fail)
+        with pytest.raises(PermissionError):
+            shutil.rmtree(source)
+        assert len(calls) == 1
+        calls.clear()
+        options: Any = {"onexc" if sys.version_info >= (3, 12) else "onerror": handle}
+        shutil.rmtree(source, **options)
+        assert len(calls) == 2
+        assert len(handled) == 3  # Two unlinks and removal of the still-nonempty directory.

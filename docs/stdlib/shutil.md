@@ -4,13 +4,13 @@ The `shutil` module is the high-level layer over `os`: copy a file, copy a tree,
 move something, find a program on `PATH`. Its cost is the filesystem's, and the module's own
 contribution is how much it holds while the filesystem works.
 
-Four sizes. **n** is bytes moved, **E** is the entries in a whole tree, **e** is the entries in
-the largest single directory in it, and **p** is the entries on `PATH`.
-
-The one thing worth knowing before the table: **a tree operation's memory follows the widest
-directory, not the deepest path.** `copytree()` and `rmtree()` list each directory into a list
-before working through it, so a tree of 3,000 files in one directory holds far more than a tree
-60 levels deep with two files at each level.
+**n** is bytes moved, **E** is total tree/archive entries, **e** is entries in one directory and
+**d** is the depth of the deepest path. **M** is total archive metadata, including member records
+and name text. A recursive walk holds the listings along its *active path*, so tree space is
+O(d·e) — neither the largest directory alone nor the whole tree.
+File buffers are fixed unless specified; custom callbacks and compression workspace are excluded.
+Tree time bounds below count entry visits and payload bytes, assuming bounded metadata work per
+entry; long paths and extended attributes add their processing costs.
 
 ## Complexity Reference
 
@@ -19,34 +19,35 @@ before working through it, so a tree of 3,000 files in one directory holds far m
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `shutil.copyfile(src, dst)` | O(n) | O(1) | n = bytes; on Linux `sendfile` moves them without passing through Python at all |
-| `shutil.copyfileobj(fsrc, fdst, length)` | O(n) | O(1) | Streams through one buffer, `shutil.COPY_BUFSIZE` by default |
+| `shutil.copyfileobj(fsrc, fdst, length)` | O(n) | O(b) | Ordinary binary files: positive length selects buffer b; default is fixed `shutil.COPY_BUFSIZE`. Negative length reads all remaining bytes, using O(n) space |
 | `shutil.copy(src, dst)` | O(n) | O(1) | `copyfile` plus `copymode` |
-| `shutil.copy2(src, dst)` | O(n) | O(1) | `copyfile` plus `copystat`, so times and flags survive |
+| `shutil.copy2(src, dst)` | O(n) + copystat cost | O(1) + copystat space | Copies bytes, then metadata |
 | `shutil.copymode(src, dst)` | O(1) | O(1) | One `stat` and one `chmod` |
-| `shutil.copystat(src, dst)` | O(x) | O(1) | x = extended attributes, each copied in turn |
+| `shutil.copystat(src, dst)` | O(1 + x + a + v) | O(1 + x + a + v_max) | Where supported: x attribute names of total length a, total value bytes v, largest value v_max; retains all names and copies values individually |
 
 !!! note "O(1) space means O(1) in the file, not zero"
     The copy runs through a fixed buffer — `shutil.COPY_BUFSIZE`, 64 KiB before Python 3.14 and
-    256 KiB from it. A 1 MiB file and a 16 MiB file peak at the same allocation, which is the
+    256 KiB from it on non-Windows systems; Windows uses 1 MiB. A 1 MiB file and a 16 MiB file peak at the same allocation, which is the
     claim; that allocation is not nothing.
 
 ### Trees
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `shutil.copytree(src, dst, ...)` | O(n + E) | O(e + depth) | Each directory is listed whole before it is walked; the widest one sets the peak |
-| `shutil.rmtree(path, ...)` | O(E) | O(e + depth) | The same listing, and the same peak |
-| `shutil.move(src, dst)` | O(1) or O(n + E) | O(1) or O(e + depth) | A rename within one filesystem, keeping the inode; a copy and a delete across two |
+| `shutil.copytree(src, dst, ...)` | O(n + E) | O(d·e) | Each ancestor's listing stays live while the walk descends, so shape matters: two trees of equal E can differ several-fold |
+| `shutil.rmtree(path, ...)` | O(E) | O(d·e) | The same active-path retention, whether the version keeps ancestor listings or an explicit traversal stack |
+| `shutil.move(src, dst)` | O(1) or O(n + E) | O(1) or O(d·e) | A rename within one filesystem, keeping the inode; a copy and a delete across two |
 | `shutil.ignore_patterns(*patterns)` | O(1) | O(1) | Returns a callable that then costs O(patterns · e) per directory |
 
 ### Archives
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `shutil.make_archive(base, format, root)` | O(n + E) | O(1) | Compression is the format's cost, not the module's |
-| `shutil.unpack_archive(filename, dir, format)` | O(n + E) | O(1) | Format guessed from the extension when not given |
-| `shutil.get_archive_formats()`, `shutil.get_unpack_formats()` | O(f) | O(f) | f = registered formats, built into a fresh list |
-| `shutil.register_archive_format(...)`, `shutil.register_unpack_format(...)` | O(1) | O(1) | One dict entry |
+| `shutil.make_archive(base, format, root)` | O(n + E) | O(M) | Built-in ZIP/TAR retain member metadata; add compression time and workspace |
+| `shutil.unpack_archive(filename, dir, format)` | O(n + E) | O(M) | Built-in ZIP/TAR retain member metadata; add decompression time and workspace |
+| `shutil.get_archive_formats()`, `shutil.get_unpack_formats()` | O(f log f) | O(f) | f registered formats; builds and sorts a fresh list, assuming bounded name comparisons |
+| `shutil.register_archive_format(...)` | O(1) | O(1) | One dict insertion with fixed-size extra arguments |
+| `shutil.register_unpack_format(...)` | O(u + v) | O(u + 1) | Validates u existing extensions against v supplied extensions using a temporary dictionary; assumes bounded extension lengths |
 | `shutil.unregister_archive_format(name)`, `shutil.unregister_unpack_format(name)` | O(1) | O(1) | One dict removal |
 
 ### Querying
@@ -54,7 +55,7 @@ before working through it, so a tree of 3,000 files in one directory holds far m
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `shutil.disk_usage(path)` | O(1) | O(1) | One `statvfs` |
-| `shutil.which(cmd, mode, path)` | O(p) | O(1) | p = `PATH` entries, each checked until one matches |
+| `shutil.which(cmd, mode, path)` | O(p + L) | O(p + L) | p PATH entries, L total PATH characters; splits the whole PATH and tracks visited directories. Fixed command and Windows PATHEXT sizes |
 | `shutil.get_terminal_size(fallback)` | O(1) | O(1) | An `ioctl`, or the `COLUMNS`/`LINES` environment variables |
 | `shutil.chown(path, user, group)` | O(1) | O(1) | Name-to-id lookups then one `chown`; Unix only |
 
@@ -62,7 +63,7 @@ before working through it, so a tree of 3,000 files in one directory holds far m
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `shutil.Error` | O(1) | O(1) | Carries the list of per-file failures a tree operation collected |
+| `shutil.Error` | O(1) | O(1) | Carries the list of per-file failures `copytree()` collected |
 | `shutil.SameFileError` | O(1) | O(1) | Source and destination are the same file |
 | `shutil.SpecialFileError` | O(1) | O(1) | A named pipe or similar, which cannot be copied as a file |
 | `shutil.ExecError` | O(1) | O(1) | Deprecated in Python 3.14 and no longer exported; nothing in `shutil` raises it |
@@ -108,13 +109,17 @@ with tempfile.TemporaryDirectory() as folder:
 import shutil
 
 # The size of the one buffer a copy streams through
-assert shutil.COPY_BUFSIZE in (64 * 1024, 256 * 1024)
+assert shutil.COPY_BUFSIZE in (64 * 1024, 256 * 1024, 1024 * 1024)
 ```
 
 ## Copying and Removing Trees
 
-`copytree()` and `rmtree()` both list a directory into memory before working through it. The peak
-follows the widest directory in the tree.
+`copytree()` retains each ancestor directory listing during recursion, so what it holds is the
+listings along the path it is currently descending — O(d·e), not the whole tree and not one
+directory. Shape decides it: a chain 50 deep with 40 entries per level and a two-level tree of 50
+such directories hold the same 2,050 entries, yet the chain peaks several times higher. Python
+3.10–3.11 `rmtree()` retains ancestor listings the same way; newer versions keep an explicit
+traversal stack, which is bounded the same.
 
 ```python
 import os
@@ -180,7 +185,7 @@ with tempfile.TemporaryDirectory() as folder:
 import os
 import shutil
 
-# One check per PATH entry until something matches - O(p)
+# Checks stop at a match; splitting PATH still uses O(p + L) time and space
 assert shutil.which('definitely-not-a-real-command') is None
 
 found = shutil.which('python3')
@@ -226,7 +231,7 @@ with tempfile.TemporaryDirectory() as folder:
     shutil.unpack_archive(archive, restored)   # O(n + E)
     assert open(os.path.join(restored, 'a.txt')).read() == 'contents'
 
-    # The registries are lists built fresh from a dict - O(f)
+    # Fresh lists sorted by format name - O(f log f) worst-case time
     names = [name for name, _ in shutil.get_archive_formats()]
     assert 'tar' in names and 'zip' in names
     assert [name for name, _, _ in shutil.get_unpack_formats()]
@@ -249,8 +254,9 @@ assert 'demo' not in [name for name, _ in shutil.get_archive_formats()]
 
 ## Errors
 
-A tree operation does not stop at the first failure: it collects them and raises one `Error`
-carrying the list.
+`copytree()` collects per-entry copy failures and raises `Error` carrying their list.
+`rmtree()` instead propagates a deletion exception immediately by default. Its `onexc` callback
+(Python 3.12+) or older `onerror` callback can handle a failure and allow traversal to continue.
 
 ```python
 import shutil
@@ -266,7 +272,7 @@ assert error.args[0][0] == ('src', 'dst', 'permission denied')
 
 ## Version Notes
 
-- **Python 3.14**: `COPY_BUFSIZE` rose from 64 KiB to 256 KiB; `zstdtar` joined the archive
+- **Python 3.14**: on non-Windows systems, `COPY_BUFSIZE` rose from 64 KiB to 256 KiB; `zstdtar` joined the archive
   formats; `ExecError` was deprecated and dropped from `__all__`
 
 ## Related Documentation
@@ -280,7 +286,7 @@ assert error.args[0][0] == ('src', 'dst', 'permission denied')
 ✅ **Do**:
 
 - Use `copy2()` when timestamps matter and `copyfile()` when only the bytes do
-- Expect a tree operation's memory to follow the widest directory, not the deepest path
+- Budget for retained ancestor listings and paths as well as directory width
 - Use `move()` within one filesystem when you want the rename; check the mount if it matters
 - Pass `ignore=` to `copytree()` rather than copying and then deleting
 
