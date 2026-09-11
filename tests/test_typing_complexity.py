@@ -709,7 +709,11 @@ class TestIndependentTypingDimensions:
         monkeypatch.setattr(typing, "_eval_type", record)
         alias = tuple[(int,) * count]
         result = typing.evaluate_forward_ref(  # type: ignore[attr-defined]
-            typing.ForwardRef("Alias"), globals={"Alias": alias}, type_params=()
+            typing.ForwardRef("Alias"),
+            globals={"Alias": alias},
+            # typeshed declares a heterogeneous 3-tuple here; CPython iterates
+            # any tuple of type params, so the empty tuple is valid.
+            type_params=(),  # pyright: ignore[reportArgumentType]
         )
         assert result == alias
         assert visits == count
@@ -721,7 +725,9 @@ class TestIndependentTypingDimensions:
 
         assert (
             typing.evaluate_forward_ref(  # type: ignore[attr-defined]
-                typing.ForwardRef("resolve()"), globals={"resolve": resolve}, type_params=()
+                typing.ForwardRef("resolve()"),
+                globals={"resolve": resolve},
+                type_params=(),  # pyright: ignore[reportArgumentType]
             )
             is int
         )

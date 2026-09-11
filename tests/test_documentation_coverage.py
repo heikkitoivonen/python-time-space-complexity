@@ -1,5 +1,6 @@
 """Live interpreter coverage and navigation retention, including removed modules."""
 
+import re
 import shutil
 import subprocess
 import sys
@@ -127,5 +128,5 @@ def test_audit_command_prints_without_writing_files(documentation_tree: Path) ->
     assert "DOCUMENTATION COVERAGE AUDIT" in result.stdout
     assert "BUILTINS" in result.stdout
     assert "STDLIB MODULES" in result.stdout
-    assert "Coverage: 100.0%" in result.stdout
+    assert re.findall(r"Coverage: ([\d.]+)%", result.stdout) == ["100.0"] * 3
     assert set(documentation_tree.rglob("*")) == before

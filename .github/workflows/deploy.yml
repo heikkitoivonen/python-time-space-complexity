@@ -44,6 +44,10 @@ jobs:
         run: uv run pytest -m "not timing"
 
       - name: Check documentation coverage on newest supported Python
+        # Its own environment: `uv run --python` replaces `.venv`, which would
+        # hand the site build an interpreter no earlier step exercised.
+        env:
+          UV_PROJECT_ENVIRONMENT: .venv-newest
         run: uv run --python 3.14.7 --frozen pytest tests/test_documentation_coverage.py
 
       - name: Build site

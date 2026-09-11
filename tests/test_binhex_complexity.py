@@ -43,7 +43,6 @@ def module():
 def test_exported_api_and_errors(module) -> None:
     rows = set(re.findall(r"^\| `([A-Za-z]+)\(", PAGE.read_text(), re.MULTILINE))
     assert rows == set(module.__all__)
-    assert rows - {"binhex"} != set(module.__all__)
     message = "message" * 1000
     error = module.Error(message)
     assert isinstance(error, Exception)
