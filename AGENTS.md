@@ -78,7 +78,7 @@ git commit -m "Your message"
 - `PERFORMANCE.md` - critical path, vendored fonts, and what was left alone
 - `SEO.md` - hreflang, canonical URLs, sitemaps, `robots.txt`
 - `scripts/validate_translations.py` - Translation structure/staleness checker
-- `.python-version` - Python 3.11 specification
+- `.python-version` - the interpreter local commands use (the newest supported)
 - `uv.lock` - Dependency lock file (reproducible builds)
 
 ## Repository Skills
@@ -186,6 +186,24 @@ make types          # Run type checks
 make test           # Run all tests
 make check          # Run lint + types + tests (recommended before commit)
 ```
+
+### Python Versions
+
+`make test` uses the interpreter in `.python-version`, the newest supported
+patch release. That is the default for local work. CI runs the full supported
+matrix on every push, so do not reproduce the matrix by hand before a commit.
+
+Run another interpreter only for the tests whose claim is about that version -
+a version-gated skip, a bound that moves at a release, an API added or removed:
+
+```bash
+UV_PROJECT_ENVIRONMENT=/tmp/py312 uv run --python 3.12.14 --frozen \
+  pytest tests/test_enum_complexity.py -k unhashable
+```
+
+Keep those environments outside the worktree, and delete them afterwards. The
+exception is a change to the supported range itself, where both new boundaries
+have to be installed and run - see the `updating-python-support` skill.
 
 ## Dependency Management
 
@@ -311,13 +329,14 @@ Things worth knowing before you rely on a test:
   counts that rose in iteration order, the one shape that defeats the heap,
   and the docs told four languages that passing k never pays. On random or
   Zipf-like counts it wins by eight times.
-- Run it on every version the project supports, not just the pinned one -
-  and not just the oldest and newest. Tests asserting that `prepare()` may be
-  called once passed on 3.11 and failed on 3.14, which relaxed it. Three later
-  escapes were invisible at *both* boundaries and failed only in the middle:
+- Version differences hide in the middle of the range as readily as at its
+  ends, so the two boundaries are not a shortcut for reasoning about the set.
   `glob0`/`glob1` deprecation warnings start in 3.13, `iglob`'s recursive
-  listings survive `close()` on 3.12 alone, and `value in EnumClass` raises for
-  an unhashable value on 3.12 while 3.11 and 3.13 do not.
+  listings survive `close()` on 3.12 alone, `value in EnumClass` raises for an
+  unhashable value on 3.12 while 3.11 and 3.13 do not, and `prepare()` may be
+  called twice only from 3.14. CI runs the whole matrix, which is where a test
+  meant to hold everywhere gets held to it; locally, run the version a claim is
+  actually about.
 - Pick the framing with the widest gap, not the one that mirrors the sentence
   most directly. Four timing tests here had to be widened after the fact,
   each because it compared the smallest pair that demonstrated the claim -
@@ -414,8 +433,8 @@ Before every commit, verify:
 - [ ] Changes are focused/minimal
 - [ ] Documentation updated if needed
 - [ ] New complexity claims tested, or recorded as untestable (see above)
-- [ ] Edited code blocks actually run, and new tests pass on **every**
-      supported Python, not just the pinned one or the two boundaries
+- [ ] Edited code blocks actually run, and new tests pass on the pinned
+      interpreter - plus the specific version a version-dependent claim is about
 - [ ] Translations updated if an English page changed
 - [ ] Accessibility rules honoured if colours/headings/`lang` changed
 - [ ] No test files left uncommitted

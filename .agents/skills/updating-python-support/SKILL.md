@@ -159,6 +159,10 @@ patch release. Preserve historical navigation targets when modules are removed.
 
 ## Verify Both Support Boundaries
 
+Ordinary work runs the pinned interpreter and leaves the matrix to CI. A change
+to the supported range is the exception: the pins themselves are what is under
+test, so both new boundaries are installed and run here.
+
 Install and test the exact oldest and newest patch releases selected for CI.
 Keep temporary environments outside the worktree and run sequentially so timing
 tests do not compete for CPU:

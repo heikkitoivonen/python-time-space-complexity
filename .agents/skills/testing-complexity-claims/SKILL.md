@@ -169,10 +169,12 @@ If direct observation cannot distinguish the growth class:
 5. Pick the framing with the widest empirical gap, not the smallest example
    that happens to pass.
 6. Mark the test `@pytest.mark.timing`.
-7. Run it under every supported Python version when the claim can differ by
-   implementation version - the boundaries alone are not enough, because a
-   behaviour can change in a middle release and change back, or start there.
-   Prefer one robust invariant over version branching when possible.
+7. Run it on the pinned interpreter, which is the newest supported version. CI
+   covers the whole matrix, so reproduce the matrix locally only for a test
+   whose claim is about another version, and then run just that version. Prefer
+   one robust invariant over version branching: a behaviour can change in a
+   middle release and change back, so the two boundaries settle nothing about
+   the versions between them.
 8. Include measured values in assertion failures so regressions are
    diagnosable. Those values stay in the test; never quote them on the page.
 

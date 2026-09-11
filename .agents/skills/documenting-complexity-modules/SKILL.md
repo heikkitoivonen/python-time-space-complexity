@@ -25,9 +25,12 @@ the repository's highest-risk content.
    operation depends on several dimensions; use terms such as input length,
    output length, fields, vertices, edges, matches, or returned items.
 4. Verify implementation-specific claims against the corresponding released
-   CPython branch, never `main`. Check every Python version the project supports.
-   Use official documentation where behavior is contractual and source where
-   implementation determines the bound.
+   CPython branch, never `main`. Read every Python version the project
+   supports - a bound can move in a middle release - but run the pinned
+   interpreter unless a claim is about a particular version, in which case run
+   that one for the tests asserting it; CI covers the matrix. Use official
+   documentation where behavior is contractual and source where implementation
+   determines the bound.
 
 Do not trust an existing claim, a plausible review comment, or a generic
 complexity rule without checking the operation's actual code path.
