@@ -2,7 +2,6 @@
 
 import builtins
 import inspect
-import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -148,7 +147,6 @@ def generate_audit_report(workspace_root: Path) -> dict[str, Any]:
 
     # Create report
     report: dict[str, Any] = {
-        "timestamp": None,
         "builtins": {
             "total": len(all_builtins),
             "documented": covered_builtins,
@@ -175,18 +173,6 @@ def generate_audit_report(workspace_root: Path) -> dict[str, Any]:
     }
 
     return report
-
-
-def save_audit_report(report: dict[str, Any], workspace_root: Path) -> Path:
-    """Save audit report to JSON file."""
-    data_dir = workspace_root / "data"
-    data_dir.mkdir(exist_ok=True)
-
-    report_file = data_dir / "documentation_audit.json"
-    with open(report_file, "w") as f:
-        json.dump(report, f, indent=2)
-
-    return report_file
 
 
 def print_report(report: dict[str, Any]) -> None:
@@ -231,10 +217,6 @@ if __name__ == "__main__":
 
     # Generate report
     report = generate_audit_report(workspace_root)
-
-    # Save to JSON
-    report_file = save_audit_report(report, workspace_root)
-    print(f"✅ Audit report saved to: {report_file}")
 
     # Print to console
     print_report(report)

@@ -15,11 +15,9 @@ Found an error in complexity analysis? Open an issue with:
 
 ### Add Documentation
 
-Help us expand coverage for:
-- More stdlib modules (`itertools`, `functools`, `json`, etc.)
-- Additional built-in functions
-- Implementation-specific details
-- Version-specific behavior
+Help document APIs introduced by supported Python releases and improve existing
+pages with verified operation coverage, implementation details, and
+version-specific behavior.
 
 ### Improve Existing Content
 
@@ -42,6 +40,23 @@ below and the full guide in [TRANSLATING.md](TRANSLATING.md).
 3. **Make changes** following guidelines below
 4. **Test locally**: `mkdocs serve`
 5. **Submit PR** with clear description
+
+## Documentation Coverage
+
+Run `make audit` to print coverage for the current interpreter and English
+`docs/builtins/` and `docs/stdlib/` trees. Discovery uses the `builtins` namespace
+and `sys.stdlib_module_names`; totals depend on the Python version running the
+command. The command does not write files.
+
+When adding a page, follow the documentation style below and add its path to
+`mkdocs.yml` navigation. Run `make check` before submitting. Live tests name any
+missing builtin or standard-library module, and CI also runs coverage tests on
+the pinned newest supported Python patch. Page coverage does not establish
+complete API coverage or prove complexity claims; those need focused tests.
+
+Keep historical pages for removed modules and EOL Python versions. Navigation
+target checks protect these pages even when the current interpreter no longer
+includes the module.
 
 ## Accessibility
 

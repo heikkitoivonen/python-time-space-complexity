@@ -25,7 +25,7 @@ help:
 	@echo "  make types       Run pyright type checker"
 	@echo "  make check       Run lint and type checks"
 	@echo "  make test        Run tests with pytest"
-	@echo "  make audit       Audit documentation coverage"
+	@echo "  make audit       Print live documentation coverage (no files written)"
 	@echo ""
 	@echo "Maintenance:"
 	@echo "  make clean       Remove build artifacts and cache"

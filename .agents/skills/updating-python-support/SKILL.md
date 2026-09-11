@@ -152,10 +152,10 @@ translation:
 Never hand-edit `source_sha`. If a faithful translation cannot be made, leave it
 explicitly stale rather than certifying incorrect content.
 
-When adding documentation pages, run `make audit` (or
-`python scripts/audit_documentation.py`) and reconcile
-`DOCUMENTATION_STATUS.md` with `data/documentation_audit.json` as required by
-the repository workflow.
+When adding documentation pages, run `make audit` to print live coverage without
+writing files. Update the newest-version coverage check in CI alongside the
+supported range, and run `tests/test_documentation_coverage.py` on that exact
+patch release. Preserve historical navigation targets when modules are removed.
 
 ## Verify Both Support Boundaries
 

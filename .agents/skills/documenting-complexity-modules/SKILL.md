@@ -208,10 +208,10 @@ unit tests even when a generic code-block runner also executes the example.
 
 1. Add the English page to the appropriate alphabetized navigation section in
    `mkdocs.yml`.
-2. Run `python scripts/audit_documentation.py` (or `make audit`) to regenerate
-   `data/documentation_audit.json`. Then update `DOCUMENTATION_STATUS.md` from
-   that report: adjust totals and percentages and move the module from missing
-   to documented. Confirm all values agree with the generated JSON.
+2. Run `make audit` to print live coverage without writing files. Coverage tests
+   compare the current interpreter with the English documentation tree; CI also
+   checks the pinned newest supported Python patch. Preserve navigation targets
+   for historical modules even when the current interpreter no longer has them.
 3. Look for existing translations at the equivalent `docs/<locale>/...` path.
    If they exist, faithfully mirror the English change and run:
 
@@ -242,7 +242,7 @@ Also inspect the final diff for:
 - every claim mapped to evidence;
 - every fenced code section tested or explicitly accounted for, with semantic
   assertions where execution alone is insufficient;
-- alphabetized navigation and correct audit changes;
+- alphabetized navigation and passing live coverage checks;
 - translations updated where an equivalent page exists;
 - no unrelated formatting or content changes.
 

@@ -150,6 +150,7 @@ nav:
     - Base64: stdlib/base64.md
     - Bdb: stdlib/bdb.md
     - Binascii: stdlib/binascii.md
+    - Binhex: stdlib/binhex.md
     - Bisect: stdlib/bisect.md
     - Builtins (module): stdlib/builtins.md
     - Bz2: stdlib/bz2.md

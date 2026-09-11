@@ -118,7 +118,6 @@ Estimated Complexity: O(n) (Linear)
 │   ├── stdlib/                 # Standard library modules
 │   ├── implementations/        # CPython, PyPy, Jython, IronPython
 │   └── versions/               # Python version guides (3.10–3.14)
-├── data/                       # JSON data files
 ├── scripts/                    # Utility scripts
 ├── tests/                      # Test files
 ├── .github/workflows/          # GitHub Actions CI/CD

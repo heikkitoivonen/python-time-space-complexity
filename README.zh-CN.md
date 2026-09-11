@@ -1,4 +1,4 @@
-<!-- source_sha: e95558c3fb078a86adbf9492ed4e57d3da21cd0251fd29e2f3691b9b9b186f1a -->
+<!-- source_sha: 433f7c6e2b7024533bc8f22fd348b3641287ebb76730bba7f3d1e8b86ff20699 -->
 <!-- translated: machine -->
 
 [English](README.md) | **简体中文**
@@ -121,7 +121,6 @@ Estimated Complexity: O(n) (Linear)
 │   ├── stdlib/                 # Standard library modules
 │   ├── implementations/        # CPython, PyPy, Jython, IronPython
 │   └── versions/               # Python version guides (3.10–3.14)
-├── data/                       # JSON data files
 ├── scripts/                    # Utility scripts
 ├── tests/                      # Test files
 ├── .github/workflows/          # GitHub Actions CI/CD

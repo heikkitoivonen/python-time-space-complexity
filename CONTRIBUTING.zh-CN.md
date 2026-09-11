@@ -1,4 +1,4 @@
-<!-- source_sha: 071d8ffaf87d6fcebd2c00ac9eca9e06db0d876a72e4dad701278b0eb1f604ae -->
+<!-- source_sha: 8e6ed3c22fa6839fc28dd8a90fb67f3caa0d49160c2409cf519e323f06e3b42d -->
 <!-- translated: machine -->
 
 [English](CONTRIBUTING.md) | **简体中文**
@@ -18,11 +18,7 @@
 
 ### 添加文档
 
-帮助我们扩展以下内容的覆盖范围：
-- 更多标准库模块(`itertools`、`functools`、`json` 等)
-- 更多内置函数
-- 实现特定的细节
-- 版本特定的行为
+帮助记录受支持 Python 版本引入的 API，并通过经过验证的操作覆盖、实现细节和版本特定行为来完善现有页面。
 
 ### 改进现有内容
 
@@ -42,6 +38,14 @@
 3. **修改代码**，遵循下方指南
 4. **本地测试**:`mkdocs serve`
 5. **提交 PR**，附上清晰描述
+
+## 文档覆盖率
+
+运行 `make audit`，查看当前解释器以及英文 `docs/builtins/` 和 `docs/stdlib/` 目录的覆盖率。发现逻辑使用 `builtins` 命名空间和 `sys.stdlib_module_names`；总数取决于运行命令的 Python 版本。该命令不会写入文件。
+
+添加页面时，请遵循下方文档风格指南，并将其路径加入 `mkdocs.yml` 导航。提交前运行 `make check`。实时测试会列出缺少文档的内置项或标准库模块，CI 也会在固定的最新受支持 Python 补丁版本上运行覆盖率测试。页面覆盖率并不代表 API 覆盖完整，也不能证明复杂度声明；这些需要有针对性的测试。
+
+请保留已移除模块和已结束支持的 Python 版本的历史页面。即使当前解释器已不再包含某个模块，导航目标检查也会保护这些页面。
 
 ## 无障碍访问
 

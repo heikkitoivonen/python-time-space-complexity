@@ -68,7 +68,6 @@ git commit -m "Your message"
 - `/docs/<locale>` - Translations mirroring the English tree (e.g. `/docs/fi`)
 - `/tests` - Python test files
 - `/scripts` - Utility scripts (templates)
-- `/data` - JSON data files for documentation
 
 ### Key Files
 - `pyproject.toml` - Project config, dependencies, tool settings
@@ -178,7 +177,7 @@ the whole measurement behind a row. It must not carry the row's history.
 
 ### Test Files Location
 - `tests/test_documentation.py` - Main test file
-- Must test documentation structure, data files, project files
+- Must test documentation structure, live coverage, and project files
 
 ### Running Tests
 ```bash
@@ -209,16 +208,16 @@ uv add --dev package-name
 ### Adding Documentation
 1. Create markdown file in `/docs`
 2. Update navigation in `mkdocs.yml`
-3. Run `make audit` to update `DOCUMENTATION_STATUS.md`
+3. Run `make audit` to inspect live documentation coverage
 4. Run `make serve` to preview
 5. Run `make check` to verify
 6. Commit with message: `Add: Topic name documentation`
 
-**CRITICAL:** Always update `DOCUMENTATION_STATUS.md` after adding new documentation files:
-- Run `python scripts/audit_documentation.py` to regenerate the coverage report
-- Update the coverage percentages and totals in DOCUMENTATION_STATUS.md
-- Move documented items from "Missing" to "Documented" sections
-- Never commit without updating this file - it tracks project coverage goals
+Coverage tests compare the current interpreter's builtins and standard library
+with the current English documentation tree. Run `make audit` for a readable
+report; it prints results without writing files. Keep every navigation target,
+including pages for removed modules and EOL Python versions. CI also checks
+coverage on the pinned newest supported Python patch.
 
 ### Editing an English Page That Has Translations
 
