@@ -1,14 +1,21 @@
 """Tests for docs/builtins/pow.md.
 
-The page's own framing is what these tests defend: `O(log y)` is a count of
-multiplications, not a time bound, and the cost of an integer power is set by
-the width of its result, `r = b * y` bits for a `b`-bit base.
+Integer powers with abs(x) >= 2 and y > 0 have result width r = Θ(b * y).
+Bases 0 and ±1 keep bounded results while still scanning the exponent.
+Result sizes and traced allocation cover these cases independently of timing.
 
-Where the page states a cost, the preferred evidence here is a width or an
-allocation rather than a stopwatch. `sys.getsizeof` settles the space rows with
-no tolerance, and `tracemalloc` settles "no intermediate exceeds `m` bits": the
-three-argument form's traced peak stays inside the modulus and does not move
-when the exponent grows tenfold, while the two-step form's tracks the exponent.
+Modular powers include base preprocessing, O(m)-bit arithmetic, and, for a
+negative exponent, an O(e)-space exponent copy. Independent probes vary base
+width, positive and negative exponent width, and modulus width. Inputs are
+constructed before tracing. Peak allocation establishes growth, not an exact
+bound on the bit width of each intermediate product.
+
+The grade-school upper bounds follow long_pow, long_invmod, and division in
+CPython's Objects/longobject.c (released 3.10–3.14 branches). Initial division
+of a b-bit base by an m-bit modulus costs O(b*m); the remaining inversion
+costs O(m²), and O(e) modular steps cost O(e*m²). Allocation probes and finite
+timings cover the size dimensions, not a proof of these asymptotic bounds.
+Source: https://github.com/python/cpython/blob/v3.14.7/Objects/longobject.c#L4584
 
 The rest need elapsed time, each framed to leave the widest gap measured:
 
@@ -89,11 +96,53 @@ def traced_peak(func: Callable[[], Any]) -> int:
 
 class TestIntegerPowerWidth:
     """The `Integer base, y >= 0` row: O(r²) time and Θ(r) space for a result
-    of r = b * y bits. The space half needs no timing at all."""
+    of r = Θ(b * y) bits when abs(x) >= 2 and y > 0."""
 
     def test_result_width_is_linear_in_the_exponent(self) -> None:
         assert pow(WORD, 1_000).bit_length() == pytest.approx(64_000, rel=0.01)
         assert pow(WORD, 4_000).bit_length() == pytest.approx(256_000, rel=0.01)
+
+    @pytest.mark.parametrize("base", [2, 3, -2, -3])
+    def test_growing_results_at_the_unit_base_boundary(self, base: int) -> None:
+        """For b-bit bases of magnitude at least two, the width lies between
+        (b - 1) * y + 1 and b * y. Both exponent parities are covered.
+        """
+        bits = base.bit_length()
+        for exponent in (1, 100, 101, 10_000):
+            width = pow(base, exponent).bit_length()
+            assert (bits - 1) * exponent + 1 <= width <= bits * exponent
+
+    @pytest.mark.parametrize("base", [0, 1, -1])
+    @pytest.mark.parametrize("odd", [False, True])
+    def test_bounded_results_do_not_allocate_with_exponent_width(
+        self, base: int, odd: bool
+    ) -> None:
+        """100x the exponent bits, with fixed base and parity, leaves O(1) space.
+
+        Inputs are allocated before tracing. This checks result size and peak
+        workspace separately; it does not infer running time from result size.
+        """
+        exponents = [(1 << bits) + odd for bits in (100, 10_000)]
+        expected = 0 if base == 0 else (-1 if base == -1 and odd else 1)
+        for exponent in exponents:
+            result = pow(base, exponent)
+            assert result == expected
+            assert result.bit_length() <= 1
+        peaks = [traced_peak(lambda y=y: pow(base, y)) for y in exponents]
+        assert peaks[1] <= peaks[0] + 512, f"bounded-result peak grew: {peaks}"
+
+    @pytest.mark.timing
+    @pytest.mark.parametrize("base", [0, 1, -1])
+    def test_bounded_results_still_scan_the_exponent(self, base: int) -> None:
+        """100x the exponent bits costs about 70x on CPython 3.14.
+
+        The odd, sparse exponent shape and base stay fixed. A constant-time
+        parity shortcut would give a ratio near one.
+        """
+        small_exp, large_exp = (1 << 100) + 1, (1 << 10_000) + 1
+        small = best_time(lambda: [pow(base, small_exp) for _ in range(100)])
+        large = best_time(lambda: [pow(base, large_exp) for _ in range(100)])
+        assert 10 < large / small < 300, f"exponent scan: {small:.2e}s vs {large:.2e}s"
 
     def test_result_space_is_linear_in_the_exponent(self) -> None:
         """Θ(r), not the O(1) a logarithmic reading would imply."""
@@ -189,20 +238,52 @@ class TestFloatPower:
 
 
 class TestModularExponentiation:
-    """The `pow(x, y, z), y >= 0` row: O(log y * m²) time, Θ(m) space."""
+    """Base preprocessing and modular arithmetic, with independent size probes."""
 
     EXPONENT = (1 << 256) + 1
     MODULUS = (1 << 1024) - 159
+
+    @pytest.mark.parametrize("exponent", [2, -2])
+    @pytest.mark.parametrize("sign", [1, -1])
+    def test_wide_base_preprocessing_allocates_with_base_width(
+        self, exponent: int, sign: int
+    ) -> None:
+        """Fixed exponent and 128-bit modulus isolate the base-width term.
+
+        Bases of 10,001 and 1,000,001 bits yield peaks around 2,752 and
+        266,752 bytes on CPython 3.14. Both base and exponent signs are covered;
+        the base shape and modulus width do not vary.
+        """
+        modulus = (1 << 128) - 159
+        bases = [sign * ((1 << bits) + 1) for bits in (10_000, 1_000_000)]
+        for base in bases:
+            assert pow(base, exponent, modulus) == pow(base % modulus, exponent, modulus)
+        peaks = [traced_peak(lambda x=x: pow(x, exponent, modulus)) for x in bases]
+        assert 30 < peaks[1] / peaks[0] < 200, f"base preprocessing peaks: {peaks}"
+
+    @pytest.mark.timing
+    @pytest.mark.parametrize("exponent", [2, -2])
+    def test_wide_base_preprocessing_time_tracks_base_width(self, exponent: int) -> None:
+        """100x the base width costs about 60–110x at fixed y and m on 3.14.
+
+        Base construction is excluded. The modulus is fixed at 128 bits;
+        this does not measure the joint growth of b and m.
+        """
+        modulus = (1 << 128) - 159
+        small_base, large_base = (1 << 10_000) + 1, (1 << 1_000_000) + 1
+        small = best_time(lambda: pow(small_base, exponent, modulus))
+        large = best_time(lambda: pow(large_base, exponent, modulus))
+        assert 10 < large / small < 300, f"base preprocessing: {small:.2e}s vs {large:.2e}s"
 
     def test_stated_values(self) -> None:
         assert pow(2, 10, 1000) == 24
         assert pow(3, 100, 7) == 4
         assert pow(2, 1000, 13) == 3
 
-    def test_intermediates_never_exceed_the_modulus(self) -> None:
-        """Reduced mod z every step, without a stopwatch: the three-argument
-        form's traced peak stays within the modulus, while the two-step form
-        allocates the whole power."""
+    def test_reduced_base_workspace_is_bounded_by_modulus_width(self) -> None:
+        """With a reduced base, workspace stays O(m); the two-step form
+        allocates the whole power. Tracing measures total peak bytes, not
+        the bit width of each arithmetic intermediate."""
         modular = traced_peak(lambda: pow(3, 100_000, self.MODULUS))
         naive = traced_peak(lambda: (3**100_000) % self.MODULUS)
 
@@ -213,8 +294,8 @@ class TestModularExponentiation:
         assert naive / modular > 20, f"the two-step form peaked at {naive} bytes against {modular}"
 
     def test_the_traced_peak_does_not_grow_with_the_exponent(self) -> None:
-        """Theta(m), not Theta(r): x10 in y leaves the modular peak where it
-        was and multiplies the two-step form's by ten."""
+        """With fixed reduced base and modulus, x10 in positive y leaves
+        modular workspace bounded and multiplies the two-step peak by ten."""
         modular = [traced_peak(lambda y=y: pow(3, y, self.MODULUS)) for y in (10**5, 10**6)]
         naive = [traced_peak(lambda y=y: (3**y) % self.MODULUS) for y in (10**5, 10**6)]
 
@@ -224,7 +305,7 @@ class TestModularExponentiation:
         )
 
     def test_the_result_is_bounded_by_the_modulus(self) -> None:
-        """Θ(m) space, whatever the exponent."""
+        """The result width is at most m; this does not measure workspace."""
         assert pow(3, 10**6, self.MODULUS).bit_length() <= self.MODULUS.bit_length()
 
     def test_a_negative_modulus_gives_a_negative_result(self) -> None:
@@ -274,6 +355,21 @@ class TestModularInverse:
         assert pow(3, -1, 1000) == 667
         assert 3 * 667 % 1000 == 1
 
+    def test_negative_exponent_copy_allocates_with_exponent_width(self) -> None:
+        """Fixed base 2 and modulus 1009 isolate the negative-exponent copy.
+
+        Exponents have 10,001 and 1,000,001 bits, allocated before tracing.
+        Negative peaks are about 1,360 and 133,360 bytes on CPython 3.14;
+        positive exponents of the same widths are the control.
+        """
+        positive = [1 << bits for bits in (10_000, 1_000_000)]
+        negative = [-y for y in positive]
+        positive_peaks = [traced_peak(lambda y=y: pow(2, y, 1009)) for y in positive]
+        negative_peaks = [traced_peak(lambda y=y: pow(2, y, 1009)) for y in negative]
+        assert positive_peaks[1] <= positive_peaks[0] + 512, positive_peaks
+        assert 30 < negative_peaks[1] / negative_peaks[0] < 200, negative_peaks
+        assert negative_peaks[1] > 20 * (positive_peaks[1] + 512)
+
     def test_a_negative_exponent_below_minus_one_inverts_then_exponentiates(self) -> None:
         assert pow(3, -5, 1000) == 107
         assert pow(3, -5, 1000) == pow(pow(3, -1, 1000), 5, 1000)
@@ -283,7 +379,7 @@ class TestModularInverse:
             pow(4, -1, 8)
 
     def test_the_inverse_is_bounded_by_the_modulus(self) -> None:
-        """Θ(m) space, as for the non-negative case."""
+        """The inverse result fits in m bits; exponent-copy space is separate."""
         modulus = (1 << 1024) - 159
 
         assert pow(3, -1, modulus).bit_length() <= modulus.bit_length()

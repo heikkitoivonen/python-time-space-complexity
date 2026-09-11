@@ -6,31 +6,41 @@ every step, so it is not a shortcut spelling of `(x ** y) % z`.
 
 ## Complexity Analysis
 
-The exponent alone does not determine the cost, so three size variables: `b` is
-the bit length of the base, `y` is the exponent, and `m` is the bit length of
-the modulus. A two-argument integer power is `r = b * y` bits wide.
+For integer operands, let `b = max(1, abs(x).bit_length())`,
+`e = max(1, abs(y).bit_length())`, and `m = abs(z).bit_length()` for a nonzero
+modulus. For `abs(x) >= 2` and `y > 0`, the result width is
+`r = floor(y * log2(abs(x))) + 1 = Θ(b * y)`; `b * y` is a size estimate,
+not an exact bit count. Space includes the result and temporary allocations,
+but excludes the input integers.
 
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
 | Float base or exponent | O(1) | O(1) | One libm call, independent of magnitude |
 | Integer base, `y < 0` | O(1) | O(1) | Returns a float; `OverflowError` once the base exceeds float range |
-| Integer base, `y >= 0` | O(r²) | Θ(r) | `r = b * y`, the width of the result |
-| `pow(x, y, z)`, `y >= 0` | O(log y * m²) | Θ(m) | Reduced mod `z` every step, so no intermediate exceeds `m` bits |
-| `pow(x, y, z)`, `y < 0` | O(log \|y\| * m²) | Θ(m) | 3.8+. One O(m²) inversion of the base, then exponentiates |
+| Integer base, `y = 0` | O(1) | O(1) | Returns `1`, including `0 ** 0` |
+| Integer base `0`, `1`, or `-1`, `y > 0` | O(e) | O(1) | The result is `0`, `1`, or `-1`; scanning the exponent still costs time |
+| Integer base with `abs(x) >= 2`, `y > 0` | O(r²) | Θ(r) | The result grows with both base width and exponent |
+| `pow(x, y, z)`, `y >= 0` | O(b * m + e * m²) | O(b + m) | Includes initial reduction of a wide base; subsequent modular arithmetic uses O(m)-bit values |
+| `pow(x, y, z)`, `y < 0` | O(b * m + e * m²) | O(b + m + e) | 3.8+. Includes base inversion and an allocated copy of the exponent |
 | Any other type | `type(x).__pow__` | — | `Decimal`, `Fraction`, `complex`, NumPy scalars and the rest delegate; cost is the operand type's |
 
-Exponentiation by squaring performs about `log2(y)` multiplications, and that
-count is the only logarithmic thing about the integer case. Their operands
-double in width as the loop runs - the final squaring works on `r/2` bits - so
-doubling `y` does not add one step. It widens every multiplication in the second
-half of the loop, and the cost grows faster than `y` does.
+The modular bounds are worst-case upper bounds. With an already-reduced base
+(`0 <= x < abs(z)`), they simplify to O(e * m²) time and O(m) space for
+nonnegative exponents, or O(m + e) space for negative exponents. Reduction
+limits residues to `m` bits; products before reduction can be wider.
+[CPython's integer power implementation](https://github.com/python/cpython/blob/v3.14.7/Objects/longobject.c#L4584)
+includes both base preprocessing and the negative-exponent copy.
+
+Exponentiation by squaring uses O(e) multiplications. For a two-argument power
+with `abs(x) >= 2`, those multiplications operate on growing integers, so their
+count alone is not a time bound.
 
 ## Basic Usage
 
 ### Integer Powers
 
 ```python
-# O(r²) for an r = b*y bit result
+# O(r²) for a result of r = Θ(b*y) bits
 pow(2, 3)      # 8
 pow(2, 10)     # 1024
 pow(2, 100)    # 1267650600228229401496703205376
@@ -60,7 +70,7 @@ pow(-8, 1 / 3)        # (1.0000000000000002+1.7320508075688772j)
 ### Modular Exponentiation
 
 ```python
-# O(log y * m²) - no intermediate exceeds the modulus
+# O(e * m²) for these already-reduced bases
 pow(2, 10, 1000)      # 24
 pow(3, 100, 7)        # 4
 pow(2, 1000, 13)      # 3
@@ -85,7 +95,7 @@ A negative exponent alongside a modulus inverts the base, which is the cheapest
 way to divide in modular arithmetic.
 
 ```python
-# Python 3.8+. O(m²) to invert, then O(log |y| * m²) to exponentiate
+# Python 3.8+. O(e * m²) time and O(m + e) space for a reduced base
 pow(3, -1, 1000)      # 667, because 3 * 667 == 2001 == 1 (mod 1000)
 pow(3, -5, 1000)      # 107
 
@@ -98,18 +108,17 @@ except ValueError:
 
 ## Reducing During or After
 
-The three-argument form holds every intermediate under `m` bits. The two-step
-form builds the whole `b * y`-bit power first and reduces afterwards. They cost
-the same while that power is small, and diverge as soon as it is not.
+After base preprocessing, the three-argument form uses O(m)-bit arithmetic
+values. For `abs(x) >= 2` and `y > 0`, the two-step form builds the whole
+Θ(b * y)-bit power first and reduces afterwards.
 
 ```python
-# Both give 24. The 11-bit intermediate is no wider than the modulus, so
-# there is nothing for the three-argument form to save
+# Both give 24. The full power is only 11 bits in this small example
 pow(2, 10, 1000)
 (2 ** 10) % 1000
 
 # Both give 115812009. The two-step form builds a 353,397-bit intermediate;
-# the three-argument form never exceeds the modulus' 30 bits
+# the three-argument form keeps residues within the 30-bit modulus
 message, exponent, modulus = 42, 65537, 10**9 + 7
 pow(message, exponent, modulus)
 (message ** exponent) % modulus
@@ -120,8 +129,7 @@ hashes, number theory. Below that the spelling is a matter of taste.
 
 ## Exact Powers of Two
 
-An exact power of two is both the cheapest base `pow()` can be given and the one
-case where a shift replaces the loop outright.
+For an exact power of two, a shift replaces the exponentiation loop.
 
 ```python
 n = 1_000_000
@@ -139,7 +147,7 @@ pow(0, 0)        # 1, by convention
 pow(-5, 0)       # 1
 pow(2.5, 0)      # 1.0
 
-# O(1) - returns the base
+# Returns the base value; a wide integer result takes O(b) space
 pow(base, 1)     # 7
 pow(2.5, 1)      # 2.5
 
