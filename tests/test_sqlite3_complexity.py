@@ -1,50 +1,23 @@
-"""Tests to verify documented behaviour of the sqlite3 module.
+"""Evidence for docs/stdlib/sqlite3.md.
 
-docs/stdlib/sqlite3.md had five rows, one of them "Varies", for a module with
-206 public names on 3.14. Most of what a query costs belongs to SQLite's planner
-rather than to Python, so the page names the two things the module itself
-controls, and these tests measure them.
+Statement caching, query plans and Row lookup have focused behavior/timing
+checks. Fixed-SQL scripts and fetches count SQLite VM progress at increasing
+table sizes. Fetch allocation varies TEXT/BLOB bytes with row/column count held
+fixed. Two equal-payload rows exercise the next-row prefetch on Python 3.10;
+first-row conversion happens in execute there, and during fetch on 3.11+. Binding timings vary payload bytes with one parameter and fixed SQL
+returning only typeof(value); mutation of a bytearray after binding proves
+SQLite retains a copy. tracemalloc does not measure SQLite-owned allocations:
+that storage term is sourced from SQLITE_TRANSIENT binding in released CPython
+3.10/3.14 Modules/_sqlite/cursor.c, not inferred from Python allocation traces.
+Description identity and construction tests vary column count and name length.
+DBCONFIG coverage permits subsets of known constants because module.c uses
+conditional compilation; a runtime SQLite version need not match build headers.
+All eight documentation examples run in separate processes.
 
-* **Statements are cached.** Re-executing one SQL text costs 972ns on 3.10 and
-  1,056ns on 3.14; a fresh text each time costs 2,840ns and 2,815ns. The
-  connection keeps the last `cached_statements` compiled, so parameter
-  placeholders are a performance argument as well as a safety one.
-* **`sqlite3.Row` looks a column up by scanning the names.** On a three-column
-  row the first and last differ by little; on a sixty-column row the first name
-  costs 34-45ns and the last 579-615ns, about seventeen times. Index access is
-  flat at 29-41ns either way.
-
-The planner claims are asserted through `EXPLAIN QUERY PLAN`, which says SEARCH
-or SCAN in as many words - no tolerance, and it is SQLite's own answer rather
-than a timing inference. The timings behind it, on 50,000 rows: 1.67us by
-rowid, 1.48ms scanning for an unindexed name, and 1.9-2.0us once an index
-exists - about 750 times.
-
-Fetching separates by allocation rather than by clock: 20,000 rows collected
-with `fetchall()` peak at 7.6-7.8MB, the same rows streamed through the cursor
-at 426-1,097 bytes, and `fetchmany(100)` at 5.6-6.9KB.
-
-Not settled here:
-
-* Durability. Every measurement uses `:memory:`, so no commit here pays for an
-  fsync. What a commit costs on real storage is the filesystem's.
-* SQLite's own bounds. The B-tree descent and the page cache are the library's,
-  documented by SQLite; the page cites them rather than re-deriving them.
-`Error.sqlite_errorcode` and `sqlite_errorname` are 3.11+, and `version` and
-`version_info` were deprecated in 3.12 but only removed in 3.14 - they stay
-reachable through a module `__getattr__` in between, so the check uses
-`hasattr` rather than `dir()`.
-
-The constant families are counted rather than listed: 37 authorizer codes on
-every version, plus 103 result codes and 12 `SQLITE_LIMIT_*` from 3.11 and 16
-`SQLITE_DBCONFIG_*` from 3.12 - not 3.11, which is where a first pass put
-them.
-
-* `executemany` against a loop of `execute`. It is 1.4-1.7x on 5,000 inserts,
-  which is real but too close to leave as a threshold on a shared runner.
-
-Axes not varied: WAL mode, concurrent connections, `detect_types` beyond one
-adapter/converter round trip, and blob I/O through `sqlite3.Blob`.
+Outside these tests: disk durability, SQLite planner/workspace bounds, WAL and
+concurrent connections, custom conversion costs beyond one round trip, and
+incremental sqlite3.Blob I/O. Query costs are kept separate from wrapper bounds;
+fixed SQL length does not constrain the work it can request.
 """
 
 import inspect
@@ -58,6 +31,7 @@ import time
 import tracemalloc
 import warnings
 from collections.abc import Callable, Iterator
+from functools import partial
 from typing import Any
 
 import pytest
@@ -128,6 +102,26 @@ VERSION_MARKERS = {
 
 # A public submodule, so `inspect.ismodule` filters it out of the name sweep.
 SUBMODULES = {"dbapi2"}
+
+
+DBCONFIG_NAMES = {
+    "SQLITE_DBCONFIG_DEFENSIVE",
+    "SQLITE_DBCONFIG_DQS_DDL",
+    "SQLITE_DBCONFIG_DQS_DML",
+    "SQLITE_DBCONFIG_ENABLE_FKEY",
+    "SQLITE_DBCONFIG_ENABLE_FTS3_TOKENIZER",
+    "SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION",
+    "SQLITE_DBCONFIG_ENABLE_QPSG",
+    "SQLITE_DBCONFIG_ENABLE_TRIGGER",
+    "SQLITE_DBCONFIG_ENABLE_VIEW",
+    "SQLITE_DBCONFIG_LEGACY_ALTER_TABLE",
+    "SQLITE_DBCONFIG_LEGACY_FILE_FORMAT",
+    "SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE",
+    "SQLITE_DBCONFIG_RESET_DATABASE",
+    "SQLITE_DBCONFIG_TRIGGER_EQP",
+    "SQLITE_DBCONFIG_TRUSTED_SCHEMA",
+    "SQLITE_DBCONFIG_WRITABLE_SCHEMA",
+}
 
 
 def best_ns(func: Callable[[], Any], repeats: int = 7, inner: int = 1) -> float:
@@ -224,11 +218,15 @@ class TestEveryPublicNameIsDocumented:
         assert authorizer == AUTHORIZER_CODES, "the authorizer family should be complete"
         assert len(limits | dbconfig | authorizer | results) == len(constants)
 
-        # 37 on 3.10; 3.11 adds the result codes and the limit categories, 3.12
-        # the dbconfig switches. The counts have been stable since each landed.
+        # DBCONFIG names are conditional on the build's SQLite headers.
         assert len(limits) == (12 if sys.version_info >= (3, 11) else 0)
         assert len(results) == (103 if sys.version_info >= (3, 11) else 0)
-        assert len(dbconfig) == (16 if sys.version_info >= (3, 12) else 0)
+        assert dbconfig <= DBCONFIG_NAMES, (
+            f"unreviewed configuration constants: {dbconfig - DBCONFIG_NAMES}"
+        )
+        if sys.version_info < (3, 12):
+            assert not dbconfig
+        assert all(isinstance(getattr(sqlite3, name), int) for name in dbconfig)
 
     def test_the_family_counts_match_the_page(self) -> None:
         """So a release that adds a constant fails here rather than drifting."""
@@ -237,7 +235,9 @@ class TestEveryPublicNameIsDocumented:
         assert "| 37 |" in text, "the authorizer family row should say 37"
         assert "| 103 |" in text, "the result-code family row should say 103"
         assert "| 12 |" in text, "the limit family row should say 12"
-        assert "| 16 |" in text, "the dbconfig family row should say 16"
+        # Tied to the reviewed allowlist rather than typed twice, so a switch
+        # added to one fails the other.
+        assert f"`SQLITE_DBCONFIG_*` | {len(DBCONFIG_NAMES)} where available |" in text
 
     def test_the_family_table_names_each_of_the_four(self) -> None:
         text = PAGE.read_text(encoding="utf-8")
@@ -379,7 +379,7 @@ class TestIndexesDecideThePlan:
 
 
 class TestFetchingHoldsWhatYouAskFor:
-    """`fetchall()` | O(r·c) | O(r·c) against iteration's O(c)."""
+    """Fixed-width values isolate the retained row-count dimension."""
 
     @pytest.fixture
     def payloads(self) -> Iterator[sqlite3.Connection]:
@@ -661,3 +661,174 @@ class TestDocumentedExamples:
 
         assert result.returncode != 0
         assert "NameError" in result.stderr
+
+
+class TestExecutionAndFetchWork:
+    @pytest.mark.parametrize(
+        "operation", ["script", "fetchone", "fetchmany", "fetchall", "iterate"]
+    )
+    def test_fixed_sql_can_do_more_work_as_the_table_grows(self, operation: str) -> None:
+        work = []
+        for count in (100, 10_000):
+            connection = sqlite3.connect(":memory:")
+            try:
+                connection.execute("CREATE TABLE t (x INTEGER)")
+                connection.executemany("INSERT INTO t VALUES (?)", ((i,) for i in range(count)))
+                steps = 0
+
+                def progress() -> int:
+                    nonlocal steps
+                    steps += 1
+                    return 0
+
+                if operation == "script":
+                    connection.set_progress_handler(progress, 1)
+                    connection.executescript("SELECT sum(x) FROM t;")
+                else:
+                    # execute positions at x=0; fetching it scans the remaining
+                    # nonmatching rows while trying to advance to the next result.
+                    cursor = connection.execute("SELECT x FROM t WHERE x = 0")
+                    connection.set_progress_handler(progress, 1)
+                    if operation == "fetchone":
+                        assert cursor.fetchone() == (0,)
+                    elif operation == "fetchmany":
+                        assert cursor.fetchmany(1) == [(0,)]
+                    elif operation == "fetchall":
+                        assert cursor.fetchall() == [(0,)]
+                    else:
+                        assert next(cursor) == (0,)
+                work.append(steps)
+                connection.set_progress_handler(None, 0)
+            finally:
+                connection.close()
+        assert work[1] > work[0] * 50, work
+
+    @pytest.mark.parametrize("operation", ["fetchone", "fetchmany", "fetchall", "iterate"])
+    @pytest.mark.parametrize("kind", [str, bytes])
+    def test_one_column_payload_controls_fetch_allocation(self, operation: str, kind: type) -> None:
+        retained = []
+        connection = sqlite3.connect(":memory:")
+        try:
+            for length in (1_000, 1_000_000):
+                value = "x" * length if kind is str else b"x" * length
+                cursor = connection.execute("SELECT ? UNION ALL SELECT ?", (value, value))
+                tracemalloc.start()
+                try:
+                    if operation == "fetchone":
+                        result = cursor.fetchone()
+                    elif operation == "fetchmany":
+                        result = cursor.fetchmany(1)
+                    elif operation == "fetchall":
+                        result = cursor.fetchall()
+                    else:
+                        result = next(cursor)
+                    retained.append(tracemalloc.get_traced_memory()[0])
+                finally:
+                    tracemalloc.stop()
+                row = result[0] if operation in ("fetchmany", "fetchall") else result
+                assert len(row) == 1 and row[0] == value
+                assert row[0] is not value
+        finally:
+            connection.close()
+        assert retained[1] > retained[0] * 100, retained
+
+
+class TestBoundPayloads:
+    @pytest.mark.timing
+    @pytest.mark.parametrize("kind", [str, bytes])
+    @pytest.mark.parametrize("many", [False, True])
+    def test_binding_cost_grows_at_fixed_parameter_count(self, kind: type, many: bool) -> None:
+        """1 KB versus 1 MB; Python 3.11 takes ~1 us versus tens of us.
+
+        SQL returns/stores only the fixed-size type name, so result copying and
+        table storage do not grow with the parameter bytes. SQLite's native
+        allocation is outside tracemalloc. Setup and input allocation are untimed.
+        """
+        times = []
+        connection = sqlite3.connect(":memory:")
+        try:
+            connection.execute("CREATE TABLE t (v TEXT)")
+            cursor = connection.cursor()
+            for length in (1_000, 1_000_000):
+                value = "x" * length if kind is str else b"x" * length
+                params = (value,)
+                sets = [params] * 3
+                if many:
+                    call = partial(cursor.executemany, "INSERT INTO t VALUES (typeof(?))", sets)
+                else:
+                    call = partial(cursor.execute, "SELECT typeof(?)", params)
+                call()  # warm the statement cache
+                times.append(best_ns(call, inner=10))
+        finally:
+            connection.close()
+        assert times[1] > times[0] * 5, times
+
+    def test_binding_copies_mutable_blob_contents(self) -> None:
+        connection = sqlite3.connect(":memory:")
+        try:
+            for length in (1_000, 1_000_000):
+                value = bytearray(b"x" * length)
+                cursor = connection.execute("SELECT ?", (value,))
+                value[:] = b"y" * length
+                assert cursor.fetchone() == (b"x" * length,)
+        finally:
+            connection.close()
+
+
+class TestDescriptionStorage:
+    @pytest.mark.parametrize("count", [1, 100])
+    @pytest.mark.parametrize("name_length", [10, 1_000])
+    def test_execution_builds_metadata_and_access_reuses_it(
+        self, count: int, name_length: int
+    ) -> None:
+        connection = sqlite3.connect(":memory:")
+        try:
+            names = [f"c{i}" + "x" * name_length for i in range(count)]
+            sql = "SELECT " + ", ".join(f'1 AS "{name}"' for name in names)
+            cursor: Any = connection.cursor()
+            assert connection.cursor().description is None
+            cursor.execute(sql)
+            first = cursor.description
+            assert first is not None
+            assert len(first) == count
+            assert [column[0] for column in first] == names
+            assert all(len(column) == 7 and column[1:] == (None,) * 6 for column in first)
+            assert cursor.description is first
+            cursor.fetchall()
+            assert cursor.description is first
+            cursor.execute(sql)  # the cached statement still builds fresh metadata
+            assert cursor.description == first and cursor.description is not first
+        finally:
+            connection.close()
+
+
+class TestConditionalConfigurationConstants:
+    @pytest.mark.skipif(sys.version_info < (3, 12), reason="DBCONFIG constants are Python 3.12+")
+    def test_coverage_accepts_missing_header_dependent_constants(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        present = {name for name in dir(sqlite3) if name.startswith("SQLITE_DBCONFIG_")}
+        for name in present:
+            monkeypatch.delattr(sqlite3, name)
+        assert not {name for name in dir(sqlite3) if name.startswith("SQLITE_DBCONFIG_")}
+        TestEveryPublicNameIsDocumented().test_every_constant_falls_into_a_documented_family()
+
+
+def test_first_row_materialization_moves_from_execute_to_fetch_in_311() -> None:
+    connection = sqlite3.connect(":memory:")
+    conversions = []
+
+    def text_factory(raw: bytes) -> str:
+        conversions.append(len(raw))
+        return raw.decode("utf-8")
+
+    connection.text_factory = text_factory
+    try:
+        cursor = connection.execute("SELECT 'first' UNION ALL SELECT 'second'")
+        assert conversions == ([5] if sys.version_info < (3, 11) else [])
+        assert cursor.fetchone() == ("first",)
+        assert conversions == ([5, 6] if sys.version_info < (3, 11) else [5])
+        assert cursor.fetchall() == [("second",)]
+        assert conversions == [5, 6]
+    finally:
+        connection.close()

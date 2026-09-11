@@ -6,6 +6,11 @@ contribution is compiling the SQL, converting values, and building the row objec
 
 Four sizes run through the table. **n** is the rows in a table, **r** the rows a query returns,
 **c** the columns in a row, and **p** the parameters bound to a statement.
+Execution also pays for **B**, the bytes in bound TEXT/BLOB values, and **D**, result metadata
+(columns plus their name characters). Fetching pays for **V**, the returned TEXT/BLOB payload
+bytes, including any prefetched next row. **V₀** is the first-row payload materialized by
+`execute()` on Python 3.10 (zero on 3.11+). Bounds assume default built-in conversions; custom adapters, converters and row factories
+add their own costs. SQLite execution and workspace costs are additional to the wrapper's bounds.
 
 The two things the module itself controls, and both are worth knowing:
 
@@ -33,10 +38,10 @@ The two things the module itself controls, and both are worth knowing:
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `cursor.execute(sql, parameters)` — cached statement | O(p) + query | O(1) | The compile is skipped; the query itself is SQLite's cost |
-| `cursor.execute(sql, parameters)` — new statement text | O(len(sql)) + query | O(len(sql)) | Parsed and planned, then added to the connection's cache |
-| `cursor.executemany(sql, seq)` | O(m·p) + m queries | O(1) | m = parameter sets; one compile, then one bind-and-step each |
-| `cursor.executescript(sql)` | O(len(sql)) | O(len(sql)) | Not cached, and it commits any open transaction first |
+| `cursor.execute(sql, parameters)` — cached statement | O(p + B + D + V₀) + query work | O(p + B + D + V₀) + SQLite workspace | Copies bound payloads and builds result metadata; SQL preparation is skipped |
+| `cursor.execute(sql, parameters)` — new statement text | Preparation + O(p + B + D + V₀) + query work | Statement storage + O(p + B + D + V₀) + SQLite workspace | Preparation parses and plans the SQL; bindings and result metadata are additional |
+| `cursor.executemany(sql, seq)` | O(m·p + B) + preparation and execution | O(p + Bmax) + statement storage and SQLite workspace | m parameter sets; B = total bound bytes, Bmax = largest set; preparation can reuse the cache |
+| `cursor.executescript(sql)` | SQL preparation + execution of every statement | SQL text + SQLite workspace | Executes the whole script to completion; fixed SQL text can scan an arbitrarily large table |
 | SELECT with an indexed or rowid predicate | O(log n + r) | O(r) if collected | The index is a B-tree |
 | SELECT with no usable index | O(n) | O(r) if collected | A full table scan, whatever the result size |
 | INSERT | O(log n) per B-tree | O(1) | The table's tree plus one per index, then constraints and triggers |
@@ -48,14 +53,14 @@ The two things the module itself controls, and both are worth knowing:
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `cursor.fetchone()` | O(c) | O(c) | One row built from the current step |
-| `cursor.fetchmany(size)` | O(size·c) | O(size·c) | Holds only the batch |
-| `cursor.fetchall()` | O(r·c) | O(r·c) | Holds the whole result; the one operation here with unbounded memory |
-| Iterating a cursor | O(c) per row | O(c) | The streaming form, and what `fetchall()` gives up |
+| `cursor.fetchone()` | O(c + V) + remaining query work | O(c + V) + SQLite workspace | Materializes one row and advances the query |
+| `cursor.fetchmany(size)` | O(b·c + V) + remaining query work | O(b·c + V) + SQLite workspace | b = rows returned in this batch; V includes their payload and any prefetched row |
+| `cursor.fetchall()` | O(r·c + V) + remaining query work | O(r·c + V) + SQLite workspace | Holds all remaining rows and their payloads |
+| Iterating a cursor | O(c + V) + query work per advance | O(c + V) + SQLite workspace | V = current and prefetched row payloads; assumes the caller does not retain previous rows |
 | `sqlite3.Row` — `row[i]` | O(1) | O(1) | Tuple indexing |
 | `sqlite3.Row` — `row['name']` | O(c) | O(1) | Case-insensitive comparison against each column name in turn |
 | `sqlite3.Row.keys()` | O(c) | O(c) | Built from `cursor.description` |
-| `cursor.description` | O(c) | O(c) | Seven-tuple per column, six of them always `None` |
+| `cursor.description` | O(1) | O(1) additional | Reads the stored tuple; execution builds O(D) metadata, with a seven-tuple per column and its name |
 
 ### Type conversion
 
@@ -95,7 +100,7 @@ first; 3.11 added the next two, and 3.12 the last.
 | Authorizer action codes — `SQLITE_SELECT`, `SQLITE_INSERT`, `SQLITE_CREATE_TABLE`, and the rest, plus `SQLITE_OK`, `SQLITE_DENY`, `SQLITE_IGNORE`, `SQLITE_DONE` | 37 | What `connection.set_authorizer()` is handed and what it may return |
 | Result and error codes — `SQLITE_BUSY`, `SQLITE_CONSTRAINT_UNIQUE`, `SQLITE_IOERR_*`, and the rest | 103 | Python 3.11+; matched against `Error.sqlite_errorcode` |
 | `SQLITE_LIMIT_*` | 12 | Python 3.11+; the categories `connection.setlimit()` and `getlimit()` take |
-| `SQLITE_DBCONFIG_*` | 16 | Python 3.12+; the switches `connection.setconfig()` and `getconfig()` take |
+| `SQLITE_DBCONFIG_*` | 16 where available | Python 3.12+; each switch is compiled in only if the SQLite headers Python was built against declare it, so check a name before using it |
 
 ## Connecting and Executing
 
@@ -185,8 +190,10 @@ connection.close()
 
 ## Fetching Holds What You Ask For
 
-`fetchall()` is the one operation on this page with unbounded memory. Iterating the cursor, or
-`fetchmany()`, holds a row or a batch instead.
+`fetchall()` retains every remaining row; iteration and `fetchmany()` limit the number of rows
+held by the caller. A single TEXT or BLOB value can still be large. Each fetch may also advance
+SQLite through nonmatching rows or other query work, so result dimensions alone do not bound
+execution time or SQLite's workspace.
 
 ```python
 import sqlite3
@@ -199,13 +206,13 @@ connection.executemany(
 )
 
 tracemalloc.start()
-rows = connection.execute('SELECT * FROM t').fetchall()   # O(r·c) memory
+rows = connection.execute('SELECT * FROM t').fetchall()   # O(r·c + V) result memory
 collected = tracemalloc.get_traced_memory()[1]
 tracemalloc.stop()
 assert len(rows) == 20000
 
 tracemalloc.start()
-counted = sum(1 for _ in connection.execute('SELECT * FROM t'))   # O(c) memory
+counted = sum(1 for _ in connection.execute('SELECT * FROM t'))   # O(c + V) per-row memory
 streamed = tracemalloc.get_traced_memory()[1]
 tracemalloc.stop()
 assert counted == 20000
@@ -333,7 +340,7 @@ connection.close()
 - **Python 3.11+**: `Blob` for incremental blob I/O; `sqlite_errorcode` and `sqlite_errorname`
   on every `Error`; the 103 result-code constants and the 12 `SQLITE_LIMIT_*` categories, with
   the `setlimit`/`getlimit` methods that take them
-- **Python 3.12+**: `Connection.autocommit` and `LEGACY_TRANSACTION_CONTROL`; the 16
+- **Python 3.12+**: `Connection.autocommit` and `LEGACY_TRANSACTION_CONTROL`; build-dependent
   `SQLITE_DBCONFIG_*` switches with `setconfig`/`getconfig`; `enable_shared_cache` was removed
   and `version`/`version_info` deprecated
 - **Python 3.14**: `version` and `version_info` removed
