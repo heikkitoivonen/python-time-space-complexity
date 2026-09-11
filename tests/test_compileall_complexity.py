@@ -19,6 +19,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -109,23 +110,29 @@ class TestCompileDirComplexity:
             f"50 {few_time:.2e}s 400 {many_time:.2e}s"
         )
 
-    @pytest.mark.timing
-    def test_per_file_overhead_dominates_for_small_files(self, tmp_path: Path) -> None:
-        """Same total source, split two ways.
+    @pytest.mark.parametrize("file_count", [10, 1_000])
+    def test_per_file_work_at_fixed_source_bytes(self, tmp_path: Path, file_count: int) -> None:
+        """Splitting identical source bytes requires work for each file.
 
-        This is why the table is not priced in bytes alone: 1,000 ten-line
-        files cost several times what 10 thousand-line files do.
+        Both flat trees contain 10,000 copies of the same statement. Count
+        calls while executing real serial compilation: this covers the file
+        count term without asserting which term dominates elapsed time.
+        Source syntax, total bytes, and directory depth stay fixed.
         """
-        many_small = build_tree(tmp_path / "many_small", files=1_000, lines_each=10)
-        few_large = build_tree(tmp_path / "few_large", files=10, lines_each=1_000)
+        statement = b"x = 1\n"
+        body = statement * (10_000 // file_count)
+        sources = [tmp_path / f"m{index}.py" for index in range(file_count)]
+        for source in sources:
+            source.write_bytes(body)
+        assert sum(source.stat().st_size for source in sources) == len(statement) * 10_000
 
-        many_time = best_time(lambda: compile_fresh(many_small))
-        few_time = best_time(lambda: compile_fresh(few_large))
+        with patch.object(
+            compileall, "compile_file", wraps=compileall.compile_file
+        ) as compile_file:
+            assert compileall.compile_dir(tmp_path, quiet=2, force=True, workers=1)
 
-        assert many_time > few_time * 3, (
-            f"the same 10000 lines, and the file count is what costs: "
-            f"1000 files {many_time:.2e}s, 10 files {few_time:.2e}s"
-        )
+        assert compile_file.call_count == file_count
+        assert {Path(call.args[0]) for call in compile_file.call_args_list} == set(sources)
 
     @pytest.mark.timing
     def test_file_size_still_counts(self, tmp_path: Path) -> None:
