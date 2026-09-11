@@ -5,10 +5,9 @@ The `dataclasses` decorator writes the methods a data-holding class needs — `_
 the class. All of that happens once, when the module is imported. What is left at run time is
 ordinary attribute access.
 
-Two sizes matter, and the page's most common mistake is to conflate them. **n** is the fields on
-one class. **N** is the values a recursive walk reaches, which is what `asdict()` and `astuple()`
-actually pay for — a flat class with 400 fields and a chain of 400 nested one-field objects both
-cost their node count, not fields times depth.
+Two sizes matter. **n** is the fields on one class. **N** is the values a recursive walk reaches,
+which is what `asdict()` and `astuple()` actually pay for — a flat class with 400 fields and a
+chain of 400 nested one-field objects both cost their node count, not fields times depth.
 
 ## Complexity Reference
 
