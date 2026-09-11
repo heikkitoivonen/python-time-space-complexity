@@ -74,16 +74,18 @@ See the released [3.13.14 implementation](https://github.com/python/cpython/blob
 and [3.14.5 implementation](https://github.com/python/cpython/blob/v3.14.5/Lib/urllib/robotparser.py).
 
 The file-processing bounds below cover literal rules and one distinct agent per
-group, except for the repeated-group row. Wildcard rules additionally incur
-[regular-expression matching costs](re.md). On the newer releases, combining
-rules for the same agent into one group avoids repeated merging during parsing.
+group, except for the repeated-group row. On the newer releases, wildcard
+rules add [regular-expression costs](re.md): pattern preparation during
+`parse()` and matching for the selected group during `can_fetch()`. Lookups
+reuse the prepared matchers. Combining rules for the same agent into one
+group avoids repeated merging during parsing on these releases.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `urllib.robotparser.RobotFileParser().read()` | O(n) + round trip | O(n) | n = `robots.txt` size |
 | `urllib.robotparser.RobotFileParser().parse(lines)` | O(l + t) | O(l + t) | l = lines, t = total input text; distinct agent groups |
 | `urllib.robotparser.RobotFileParser().parse(lines)`, repeated groups | O(g²) | O(g) | 3.13.14+ and 3.14.5+; g groups for the same agent, one rule per group, fixed text lengths; earlier versions take O(g) time |
-| `urllib.robotparser.RobotFileParser().can_fetch(agent, url)` | O((e + 1)·a + (r + 1)·n) | O(n + a) | e = agent entries scanned, a = maximum caller/configured agent-name length, r = selected group's rules, n = URL length; literal rules |
+| `urllib.robotparser.RobotFileParser().can_fetch(agent, url)` | O((e + 1)·a + (r + 1)·n) | O(n + a) | e = agent entries scanned, a = maximum caller/configured agent-name length, r = selected group's rules, n = URL length; worst case for literal rules. 3.13.14+ and 3.14.5+ examine every rule in the selected group; earlier versions stop at the first rule that applies |
 
 ## URL Parsing
 

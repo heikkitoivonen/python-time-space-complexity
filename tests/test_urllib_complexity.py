@@ -33,7 +33,11 @@ Measurement scope:
   prefixes and the first matching group/rule. Versioned behavior tests cover
   these choices. Merge tests count copied rule references at 10 and 1,000
   single-rule groups with fixed text, and check retained references. Wildcard
-  tests count matcher calls; they do not establish a regex growth bound.
+  tests count `re.compile` calls during parsing and matcher calls during
+  lookup. Compile calls may use the regex cache; these counters do not establish
+  compilation work or a regex growth bound.
+  The longest-match rows include one where the longer rule is the `Disallow`,
+  since the rows where `Allow` is longer cannot tell length from allowance.
 * Warm `urlsplit` calls on the same string object at 10 KB and 1 MB take about
   10 us and 965 us on 3.10, but about 75 ns at both sizes on 3.14. The same
   object matters: an equal but newly built 1 MB URL costs about 397 us on 3.14
@@ -821,15 +825,26 @@ class TestRobotFileParserScansItsRules:
         assert parser.can_fetch("bot", "https://example.com/other") is True
 
     @pytest.mark.parametrize(
-        "rules",
+        ("rules", "rfc_allows", "legacy_allows"),
         [
-            ["Disallow: /", "Allow: /public"],
-            ["Disallow: /public", "Allow: /public"],
+            (["Disallow: /", "Allow: /public"], True, False),
+            (["Disallow: /public", "Allow: /public"], True, False),
+            (["Allow: /pub", "Disallow: /public"], False, True),
         ],
     )
-    def test_longest_match_and_allow_ties_follow_the_patch_release(self, rules: list[str]) -> None:
+    def test_longest_match_and_allow_ties_follow_the_patch_release(
+        self, rules: list[str], rfc_allows: bool, legacy_allows: bool
+    ) -> None:
+        """Length decides before allowance, so a longer `Disallow` has to win.
+
+        The first two rows are also what "Allow always wins" would produce.
+        The third is what separates longest-match from that reading, and from
+        the legacy first-applying-rule behaviour, which it inverts.
+        """
         parser = self._parser(["User-agent: *", *rules])
-        assert parser.can_fetch("bot", "https://example.com/public") is ROBOT_RFC_9309
+        expected = rfc_allows if ROBOT_RFC_9309 else legacy_allows
+
+        assert parser.can_fetch("bot", "https://example.com/public") is expected
 
     def test_repeated_groups_copy_quadratically_and_retain_linear_rules(
         self, monkeypatch: pytest.MonkeyPatch
@@ -902,6 +917,44 @@ class TestRobotFileParserScansItsRules:
         assert parser.can_fetch("bot", "https://example.com/ax/secret") is False
         assert checked == ["/ax/secret"]
 
+    def test_wildcard_matchers_are_prepared_during_parsing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Wildcard lookups reuse matchers prepared during parsing.
+
+        The counter observes public `re.compile` requests, which may hit its
+        cache, rather than fresh compilations. It excludes internal regex
+        requests made by `re.sub` while normalizing literal and wildcard paths.
+        """
+        if not ROBOT_RFC_9309:
+            parser = self._parser(["User-agent: bot", "Disallow: /a*/secret"])
+            assert not hasattr(parser.entries[0].rulelines[0], "matcher")  # type: ignore[attr-defined]
+            return
+
+        compiles = 0
+        original = re.compile
+
+        def counting(*args: Any, **kwargs: Any) -> Any:
+            nonlocal compiles
+            compiles += 1
+            return original(*args, **kwargs)
+
+        # `urllib.robotparser` compiles through the module-global `re`.
+        monkeypatch.setattr(re, "compile", counting)
+
+        literal = self._parser(["User-agent: bot", "Disallow: /plain/secret"])
+        assert compiles == 0
+
+        parser = self._parser(["User-agent: bot", "Disallow: /a*/secret", "Disallow: /b*/x"])
+        assert compiles == 2
+
+        matcher = parser.entries[0].rulelines[0].matcher  # type: ignore[attr-defined]
+        for _ in range(3):
+            assert parser.can_fetch("bot", "https://example.com/ax/secret") is False
+            assert literal.can_fetch("bot", "https://example.com/plain/secret") is False
+        assert compiles == 2
+        assert parser.entries[0].rulelines[0].matcher is matcher  # type: ignore[attr-defined]
+
     def test_parse_and_lookup_allocate_with_text_length_at_fixed_rule_count(self) -> None:
         parse_peaks, lookup_peaks = [], []
         try:
@@ -943,6 +996,9 @@ class TestRobotFileParserScansItsRules:
             checked = 0
             assert parser.can_fetch("bot", "https://example.com/allowed") is True
             assert checked == size
+            checked = 0
+            assert parser.can_fetch("bot", "https://example.com/blocked") is False
+            assert checked == (size if ROBOT_RFC_9309 else 1)
 
     @pytest.mark.parametrize("growing_agent", ["caller", "configured"])
     def test_lookup_allocates_with_agent_text_at_fixed_url_length(self, growing_agent: str) -> None:
