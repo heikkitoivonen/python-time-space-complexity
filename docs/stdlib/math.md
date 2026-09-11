@@ -211,8 +211,6 @@ math.isclose(0.1 + 0.2, 0.3)  # True
   the digit counts in the table, not with the numeric value of their arguments.
   The quadratic bounds are grade-school ones; CPython's Karatsuba multiplication
   beats them for large operands.
-- `fsum` trades speed for accuracy: it is the slower of the two on every
-  supported version, and the only one of them that is correctly rounded.
 
 ## Version Notes
 

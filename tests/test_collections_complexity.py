@@ -4,6 +4,7 @@ These tests use timing measurements to verify that operations scale
 according to their documented complexity.
 """
 
+import heapq
 import time
 from collections import (
     ChainMap,
@@ -636,12 +637,12 @@ class TestChainMapScalesWithMapCount:
 
 
 class TestCounterOperations:
-    """The Counter table rows that had no test.
+    """Counter growth and selection behavior.
 
-    most_common() is the interesting one: the O(n log k) bound is right, but
-    which side of it is faster depends on the counts. The two timing tests
-    below pin both directions - the heap wins on random counts, and loses
-    when counts rise in iteration order.
+    Small-k selection uses a bounded heap. Ascending counts require a
+    replacement for every item after initialization; descending counts require
+    none. Operation counts establish this input-shape difference independently
+    of the relative wall-clock speed of heap selection and a full sort.
     """
 
     SIZE = 200_000
@@ -663,13 +664,10 @@ class TestCounterOperations:
 
     @pytest.mark.timing
     def test_heap_path_beats_sorting_on_realistic_data(self) -> None:
-        """most_common(k) is the faster choice on data that looks like data.
+        """Compare k=10 against a full sort on 200,000 seeded random counts.
 
-        Counts that increase in iteration order are the one shape that
-        defeats the heap, and benchmarking only those gives the opposite
-        answer. On random counts the heap wins by roughly eight times,
-        because nlargest settles on a high threshold early and stops
-        replacing, while Timsort has no runs to exploit.
+        This measures one input distribution and fixed k, not a universal
+        ranking for ordered counts or other k/n ratios.
         """
         import random
 
@@ -683,24 +681,43 @@ class TestCounterOperations:
             f"on random counts the heap should win: k=10 {heap_time:.2e}s all {sorted_time:.2e}s"
         )
 
-    @pytest.mark.timing
-    def test_heap_path_loses_when_counts_rise_in_iteration_order(self) -> None:
-        """The adversarial ordering, kept because it is what misled us.
+    @pytest.mark.parametrize("ascending", [True, False])
+    @pytest.mark.parametrize("k", [2, 10, 64])
+    def test_count_order_controls_heap_replacements(
+        self, monkeypatch: pytest.MonkeyPatch, ascending: bool, k: int
+    ) -> None:
+        """Count replacements at 128 and 8,192 distinct fixed-width counts.
 
-        Every element beats the current top, so each one costs a
-        heapreplace; meanwhile the input is already sorted, which is
-        Timsort's best case. Benchmarking only this shape is how the docs
-        came to claim that passing k never pays.
+        Strictly rising counts replace the heap root n-k times; falling counts
+        replace it zero times. Heap size stays k and both orders return the
+        same top-k items. This does not compare elapsed time with sorting.
         """
-        counter = self._counter(self.SIZE)  # counts 0, 1, 2, ... in order
+        replacements = 0
+        original = heapq.heapreplace
+        original_heapify = heapq.heapify
+        heap_sizes: list[int] = []
 
-        sorted_time = measure_time(counter.most_common, iterations=3)
-        heap_time = measure_time(lambda: counter.most_common(10), iterations=3)
+        def heapify(heap: list[Any]) -> None:
+            heap_sizes.append(len(heap))
+            original_heapify(heap)
 
-        assert heap_time > sorted_time, (
-            f"ascending counts are the heap's worst case: k=10 {heap_time:.2e}s "
-            f"all {sorted_time:.2e}s"
-        )
+        def replace(heap: list[Any], item: Any) -> Any:
+            nonlocal replacements
+            replacements += 1
+            assert len(heap) == k
+            return original(heap, item)
+
+        monkeypatch.setattr(heapq, "heapreplace", replace)
+        monkeypatch.setattr(heapq, "heapify", heapify)
+        for size in (128, 8192):
+            counts = range(size) if ascending else range(size - 1, -1, -1)
+            counter = Counter({f"k{count}": count for count in counts})
+            replacements = 0
+            heap_sizes.clear()
+            result = counter.most_common(k)
+            assert heap_sizes == [k]
+            assert replacements == (size - k if ascending else 0)
+            assert result == [(f"k{count}", count) for count in range(size - 1, size - k - 1, -1)]
 
     def test_most_common_returns_what_it_claims(self) -> None:
         counter = Counter("aaabbc")

@@ -56,8 +56,7 @@ sum() and fsum() differ by version. gh-100425 gave the builtin a compensation
 term for floats in 3.12, so `sum([1e100, 1.0, -1e100])` is 0.0 before 3.12 and
 1.0 from 3.12, where fsum is 1.0 throughout. One compensation term is not
 exactness: [1e16, 1.0, 1e-16, -1e16, -1.0] sums to -1.0 before 3.12 and 0.0
-from 3.12, against fsum's correctly rounded 1e-16. fsum is the slower of the
-two, by x6.20 on 3.10, x2.32 on 3.12 and x3.00 on 3.14.
+from 3.12, against fsum's correctly rounded 1e-16.
 
 math has 62 public names across the supported versions.
 TestEveryPublicNameIsDocumented compares the page's table against dir(math) in
@@ -559,24 +558,6 @@ class TestFsumSpaceIsBounded:
         assert math.fsum(values) == 1e-16
         assert sum(values) != math.fsum(values)
         assert sum(values) == (0.0 if sys.version_info >= (3, 12) else -1.0)
-
-    @pytest.mark.timing
-    def test_fsum_is_the_slower_of_the_two(self) -> None:
-        """The Performance Note: fsum is the slower of the two.
-
-        By x6.20 on 3.10, x2.32 on 3.12 and x3.00 on 3.14 - a spread wide
-        enough that the page states the direction only, and the numbers stay
-        here.
-        """
-        generator = random.Random(5)
-        values = [generator.random() for _ in range(10_000)]
-
-        sum_ns = best_ns(lambda: sum(values), inner=20)
-        fsum_ns = best_ns(lambda: math.fsum(values), inner=20)
-
-        assert fsum_ns > 1.3 * sum_ns, (
-            f"fsum should cost more than sum: {sum_ns:.0f} ns against {fsum_ns:.0f} ns"
-        )
 
 
 class TestGcdAndLcmScaleWithDigits:
