@@ -312,9 +312,13 @@ Things worth knowing before you rely on a test:
   counts that rose in iteration order, the one shape that defeats the heap,
   and the docs told four languages that passing k never pays. On random or
   Zipf-like counts it wins by eight times.
-- Run it on every version the project supports, not just the pinned one.
-  Tests asserting that `prepare()` may be called once passed on 3.11 and
-  failed on 3.14, which relaxed it.
+- Run it on every version the project supports, not just the pinned one -
+  and not just the oldest and newest. Tests asserting that `prepare()` may be
+  called once passed on 3.11 and failed on 3.14, which relaxed it. Three later
+  escapes were invisible at *both* boundaries and failed only in the middle:
+  `glob0`/`glob1` deprecation warnings start in 3.13, `iglob`'s recursive
+  listings survive `close()` on 3.12 alone, and `value in EnumClass` raises for
+  an unhashable value on 3.12 while 3.11 and 3.13 do not.
 - Pick the framing with the widest gap, not the one that mirrors the sentence
   most directly. Four timing tests here had to be widened after the fact,
   each because it compared the smallest pair that demonstrated the claim -
@@ -323,6 +327,11 @@ Things worth knowing before you rely on a test:
 - A mutation check that does not apply proves nothing. Assert the
   substitution changed the file: one here silently matched nothing after
   `ruff format` rewrapped the assertion, and "passed" as the original test.
+- The autofixer can rewrite the *subject* too. `ruff check --fix` turned
+  `typing.List[int] is typing.List[int]` into `list[int] is list[int]`,
+  collapsing a memoization test into a tautology about one object. When a test
+  contrasts two spellings, add a per-file ignore with the reason and assert the
+  two forms are actually different objects.
 
 Test files: `tests/test_<module>_complexity.py` for a module's table,
 `tests/test_builtin_claims.py` and `tests/test_stdlib_claims.py` for kind A,
@@ -406,8 +415,8 @@ Before every commit, verify:
 - [ ] Changes are focused/minimal
 - [ ] Documentation updated if needed
 - [ ] New complexity claims tested, or recorded as untestable (see above)
-- [ ] Edited code blocks actually run, and new timing tests pass on the
-      oldest and newest supported Python, not just the pinned one
+- [ ] Edited code blocks actually run, and new tests pass on **every**
+      supported Python, not just the pinned one or the two boundaries
 - [ ] Translations updated if an English page changed
 - [ ] Accessibility rules honoured if colours/headings/`lang` changed
 - [ ] No test files left uncommitted

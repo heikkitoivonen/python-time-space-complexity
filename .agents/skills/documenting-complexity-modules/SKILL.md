@@ -98,6 +98,13 @@ Apply one test to every note: would removing it change how someone uses the
 operation? If not, cut it. An empty Notes cell beside a correct bound is a good
 outcome, not an unfinished one.
 
+A deliberately loose bound fails that test even when it is honest about being
+loose. Bounding a recursive tree walk by the whole tree's metadata is true, and
+tells the reader that shape does not matter - when two trees of equal entry
+count differ eightfold by shape. Give the tight bound and its size variables;
+"conservative" is a bound no release can ever falsify, which is the same as one
+no reader can use.
+
 ## Coverage Is a Claim
 
 The set of APIs a page documents is a claim about the module, and it is the one
@@ -124,6 +131,12 @@ such row carries its version marker.
 Confirm the extractor is not vacuous before trusting it. One that matches
 nothing reports perfect coverage: drop a known row from the set it returns and
 assert that the check would have failed.
+
+Re-run that check whenever the allowlist widens. Platform- and version-gated
+names need an exemption, but exempt them **by name**: excluding a pattern such
+as `CLOCK_*` also exempts `CLOCK_NONSENSE`, and the "the table names nothing
+that does not exist" half of the coverage test quietly stops working. An
+explicit list keeps the typo check alive and says which absences were reviewed.
 
 Two things make this affordable on a wide module:
 

@@ -69,6 +69,24 @@ Write a focused test. Prefer direct observation:
 - substitute a counting or recording object at the operation boundary;
 - compare state before and after the operation.
 
+Two probes settle most space and dimension claims on their own.
+
+**Check identity before you price a space bound.** An accessor that returns an
+existing object is O(1), however big that object is; one that builds a fresh
+copy is O(n). `vars(obj)`, `EnumClass.__members__`, `cursor.description` and
+`Row.keys()` all read as O(n) and are not. `a is b`, or a traced peak of zero,
+separates them with no tolerance - and the matching `.copy()` is the control
+that proves the O(1) is real rather than an unmeasured operation.
+
+**Vary shape at a fixed total to expose a hidden dimension.** When one variable
+is doing the work of two, build two inputs with the *same* total and different
+shape; a bound with only one variable predicts they cost the same. Equal-length
+query strings split into ten fields or a thousand differ by x27; equal node
+counts flat or nested differ by x2; directory trees of equal entry count differ
+by x8 deep against bushy; a one-character CSV row costs 923x more against a
+10,000-field header than a 10-field one. Each of those gaps is a size variable
+the row was missing.
+
 Place broadly shared prose-claim tests in `tests/test_builtin_claims.py` or
 `tests/test_stdlib_claims.py`, organized by page/module. If the module already
 has a cohesive test file, keep its claims there.
@@ -151,9 +169,10 @@ If direct observation cannot distinguish the growth class:
 5. Pick the framing with the widest empirical gap, not the smallest example
    that happens to pass.
 6. Mark the test `@pytest.mark.timing`.
-7. Run it under the oldest and newest supported Python versions when the claim
-   can differ by implementation version. Prefer one robust invariant over
-   version branching when possible.
+7. Run it under every supported Python version when the claim can differ by
+   implementation version - the boundaries alone are not enough, because a
+   behaviour can change in a middle release and change back, or start there.
+   Prefer one robust invariant over version branching when possible.
 8. Include measured values in assertion failures so regressions are
    diagnosable. Those values stay in the test; never quote them on the page.
 
