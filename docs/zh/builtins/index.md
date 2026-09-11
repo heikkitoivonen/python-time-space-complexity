@@ -1,5 +1,5 @@
 ---
-source_sha: 08a4849b104da34098abb6cc5221e9047211c8b2131acaf75182af067ffb4cce
+source_sha: bb38834457467fdb8f60ee91c273a2f3708dd3a94689cb64a15c697ed6fa9099
 translated: machine
 ---
 
@@ -77,7 +77,7 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 |----------|------|-------|-------|
 | [`abs()`](abs.md) | O(1) | O(1) | 自定义 `__abs__()` 为 O(k) |
 | [`divmod()`](divmod.md) | O(1) | O(1) | 任意精度整数为 O(n²) |
-| [`pow()`](pow.md) | O(log y) | O(1) | 快速幂；三参数形式保持模运算 |
+| [`pow()`](pow.md) | O(r²) | Θ(r) | r 为结果的位数；三参数形式为 O(log y * m²)，空间 Θ(m) |
 | [`round()`](round.md) | O(1) | O(1) | 恰为一半时采用银行家舍入 |
 | [`bin()`](bin.md) | O(log n) | O(log n) | 开销即输出的长度 |
 | [`hex()`](hex.md) | O(log n) | O(log n) | 开销即输出的长度 |

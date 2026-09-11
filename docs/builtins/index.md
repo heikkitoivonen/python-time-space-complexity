@@ -75,7 +75,7 @@ under Notes is what you pay to consume it.
 |----------|------|-------|-------|
 | [`abs()`](abs.md) | O(1) | O(1) | O(k) for a custom `__abs__()` |
 | [`divmod()`](divmod.md) | O(1) | O(1) | O(n²) for arbitrary-precision integers |
-| [`pow()`](pow.md) | O(log y) | O(1) | Fast exponentiation; 3-argument form stays modular |
+| [`pow()`](pow.md) | O(r²) | Θ(r) | r = bits of the result; the 3-argument form is O(log y * m²) in Θ(m) |
 | [`round()`](round.md) | O(1) | O(1) | Banker's rounding on exact halves |
 | [`bin()`](bin.md) | O(log n) | O(log n) | Cost is the length of the output |
 | [`hex()`](hex.md) | O(log n) | O(log n) | Cost is the length of the output |

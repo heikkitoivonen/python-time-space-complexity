@@ -1,5 +1,5 @@
 ---
-source_sha: 08a4849b104da34098abb6cc5221e9047211c8b2131acaf75182af067ffb4cce
+source_sha: bb38834457467fdb8f60ee91c273a2f3708dd3a94689cb64a15c697ed6fa9099
 translated: machine
 ---
 
@@ -76,7 +76,7 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 |----------|------|-------|-------|
 | [`abs()`](abs.md) | O(1) | O(1) | 独自の `__abs__()` では O(k) |
 | [`divmod()`](divmod.md) | O(1) | O(1) | 任意精度整数では O(n²) |
-| [`pow()`](pow.md) | O(log y) | O(1) | 高速べき乗、3 引数形式は剰余のまま計算する |
+| [`pow()`](pow.md) | O(r²) | Θ(r) | r は結果のビット数、3 引数形式は Θ(m) 空間で O(log y * m²) |
 | [`round()`](round.md) | O(1) | O(1) | ちょうど半分のときは銀行家の丸め |
 | [`bin()`](bin.md) | O(log n) | O(log n) | コストは出力の長さに等しい |
 | [`hex()`](hex.md) | O(log n) | O(log n) | コストは出力の長さに等しい |

@@ -1,5 +1,5 @@
 ---
-source_sha: 08a4849b104da34098abb6cc5221e9047211c8b2131acaf75182af067ffb4cce
+source_sha: bb38834457467fdb8f60ee91c273a2f3708dd3a94689cb64a15c697ed6fa9099
 translated: machine
 ---
 
@@ -80,7 +80,7 @@ mainittu kustannus on se, minkä maksat iteraattorin läpikäynnistä.
 |----------|------|-------|-------|
 | [`abs()`](abs.md) | O(1) | O(1) | O(k) omalle `__abs__()`-toteutukselle |
 | [`divmod()`](divmod.md) | O(1) | O(1) | O(n²) mielivaltaisen tarkkuuden kokonaisluvuille |
-| [`pow()`](pow.md) | O(log y) | O(1) | Nopea potenssiinkorotus; kolmen argumentin muoto pysyy modulaarisena |
+| [`pow()`](pow.md) | O(r²) | Θ(r) | r = tuloksen bittimäärä; kolmen argumentin muoto O(log y * m²) tilassa Θ(m) |
 | [`round()`](round.md) | O(1) | O(1) | Pankkiirin pyöristys tasan puolikkailla |
 | [`bin()`](bin.md) | O(log n) | O(log n) | Kustannus on tulosteen pituus |
 | [`hex()`](hex.md) | O(log n) | O(log n) | Kustannus on tulosteen pituus |

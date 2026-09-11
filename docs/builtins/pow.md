@@ -1,27 +1,45 @@
 # pow() Function Complexity
 
-The `pow()` function returns the power of a number with optional modulo operation.
+The `pow()` function raises a base to an exponent. `pow(x, y)` is the `**`
+operator; `pow(x, y, z)` is a separate algorithm that reduces modulo `z` at
+every step, so it is not a shortcut spelling of `(x ** y) % z`.
 
 ## Complexity Analysis
 
+The exponent alone does not determine the cost, so three size variables: `b` is
+the bit length of the base, `y` is the exponent, and `m` is the bit length of
+the modulus. A two-argument integer power is `r = b * y` bits wide.
+
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
-| `pow(x, y)` small exponent | O(log y) | O(1) | Fast exponentiation |
-| `pow(x, y)` large exponent | O(log y) | O(1) | Still logarithmic |
-| `pow(x, y, z)` modular | O(log y) | O(1) | Modular exponentiation; keeps intermediate values small |
-| Float exponentiation | O(1) | O(1) | Native operation |
+| Float base or exponent | O(1) | O(1) | One libm call, independent of magnitude |
+| Integer base, `y < 0` | O(1) | O(1) | Returns a float; `OverflowError` once the base exceeds float range |
+| Integer base, `y >= 0` | O(r²) | Θ(r) | `r = b * y`, the width of the result |
+| `pow(x, y, z)`, `y >= 0` | O(log y * m²) | Θ(m) | Reduced mod `z` every step, so no intermediate exceeds `m` bits |
+| `pow(x, y, z)`, `y < 0` | O(log \|y\| * m²) | Θ(m) | 3.8+. One O(m²) inversion of the base, then exponentiates |
+| Any other type | `type(x).__pow__` | — | `Decimal`, `Fraction`, `complex`, NumPy scalars and the rest delegate; cost is the operand type's |
+
+Exponentiation by squaring performs about `log2(y)` multiplications, and that
+count is the only logarithmic thing about the integer case. Their operands
+double in width as the loop runs - the final squaring works on `r/2` bits - so
+doubling `y` does not add one step. It widens every multiplication in the second
+half of the loop, and the cost grows faster than `y` does.
 
 ## Basic Usage
 
 ### Integer Powers
 
 ```python
-# O(log y) - exponentiation by squaring
+# O(r²) for an r = b*y bit result
 pow(2, 3)      # 8
 pow(2, 10)     # 1024
 pow(2, 100)    # 1267650600228229401496703205376
 
-# Negative exponents - returns float
+# The base's width counts as much as the exponent does
+(2 ** 1000).bit_length()    # 1001
+(10 ** 1000).bit_length()   # 3322
+
+# Negative exponent - O(1), but the result is a float
 pow(2, -1)     # 0.5
 pow(2, -2)     # 0.25
 ```
@@ -29,207 +47,153 @@ pow(2, -2)     # 0.25
 ### Float Powers
 
 ```python
-# O(1) - native operation
-pow(2.0, 3)    # 8.0
-pow(2.5, 2)    # 6.25
-pow(2.0, 0.5)  # 1.414... (square root)
-pow(2.0, -1)   # 0.5
+# O(1) - one libm call, whatever the magnitude
+pow(2.0, 3)           # 8.0
+pow(2.5, 2)           # 6.25
+pow(2.0, 0.5)         # 1.4142135623730951
+pow(1.7e308, 0.99)    # 1.4065152073912217e+305, no dearer than the line above
+
+# A negative base with a fractional exponent returns a complex number
+pow(-8, 1 / 3)        # (1.0000000000000002+1.7320508075688772j)
 ```
 
 ### Modular Exponentiation
 
 ```python
-# O(log y * log z) - optimized algorithm
-pow(2, 10, 1000)    # 24 (2^10 % 1000)
-pow(3, 100, 7)      # 4 (3^100 % 7)
-pow(2, 1000, 13)    # 3 (2^1000 % 13)
+# O(log y * m²) - no intermediate exceeds the modulus
+pow(2, 10, 1000)      # 24
+pow(3, 100, 7)        # 4
+pow(2, 1000, 13)      # 3
 
-# Much faster than (base ** exp) % mod
-# Avoids computing huge intermediate values
+# A negative modulus gives a negative result; a zero modulus is rejected
+pow(2, 10, -1000)     # -976
+try:
+    pow(2, 10, 0)
+except ValueError:
+    pass              # pow() 3rd argument cannot be 0
+
+# All three arguments must be integers
+try:
+    pow(2.0, 3, 5)
+except TypeError:
+    pass              # not allowed unless all arguments are integers
 ```
 
-## Performance Analysis
+## Modular Inverse
 
-### Exponentiation by Squaring
-
-```
-The algorithm works by:
-1. If y is even: pow(x, y) = pow(x*x, y/2)
-2. If y is odd: pow(x, y) = x * pow(x, y-1)
-
-This reduces exponent from y to log(y) multiplications
-```
-
-### vs ** Operator
+A negative exponent alongside a modulus inverts the base, which is the cheapest
+way to divide in modular arithmetic.
 
 ```python
-# Both use same algorithm
-2 ** 10        # 1024
-pow(2, 10)     # 1024 - same complexity O(log y)
+# Python 3.8+. O(m²) to invert, then O(log |y| * m²) to exponentiate
+pow(3, -1, 1000)      # 667, because 3 * 667 == 2001 == 1 (mod 1000)
+pow(3, -5, 1000)      # 107
 
-# Both are equivalent
-x ** y == pow(x, y)  # True
-
-# pow() with modulo is more efficient
-(x ** y) % z   # O(log y) exponentiation + expensive modulo
-pow(x, y, z)   # O(log y * log z) - keeps numbers small
+# The base has to be coprime with the modulus
+try:
+    pow(4, -1, 8)
+except ValueError:
+    pass              # base is not invertible for the given modulus
 ```
 
-## Common Patterns
+## Reducing During or After
 
-### Powers of 10
+The three-argument form holds every intermediate under `m` bits. The two-step
+form builds the whole `b * y`-bit power first and reduces afterwards. They cost
+the same while that power is small, and diverge as soon as it is not.
 
 ```python
-# O(log 10) - fast
-pow(10, 2)     # 100
-pow(10, 6)     # 1000000
-pow(10, 100)   # 10^100
+# Both give 24. The 11-bit intermediate is no wider than the modulus, so
+# there is nothing for the three-argument form to save
+pow(2, 10, 1000)
+(2 ** 10) % 1000
 
-# Useful for scientific notation
-factor = pow(10, 3)  # 1000
-result = 5 * factor
+# Both give 115812009. The two-step form builds a 353,397-bit intermediate;
+# the three-argument form never exceeds the modulus' 30 bits
+message, exponent, modulus = 42, 65537, 10**9 + 7
+pow(message, exponent, modulus)
+(message ** exponent) % modulus
 ```
 
-### Powers of 2
+Reach for `pow(x, y, z)` when `b * y` is large - RSA-sized exponents, rolling
+hashes, number theory. Below that the spelling is a matter of taste.
+
+## Exact Powers of Two
+
+An exact power of two is both the cheapest base `pow()` can be given and the one
+case where a shift replaces the loop outright.
 
 ```python
-# O(log 2) - very fast
-pow(2, 8)      # 256 (2^8)
-pow(2, 16)     # 65536 (2^16)
-pow(2, 32)     # 4294967296 (2^32)
-
-# Can use bit shift for exact powers of 2
-1 << 8  # 256 - even faster for powers of 2
-```
-
-### Cryptographic Operations
-
-```python
-# O(log y) - RSA-like operations, efficient modular exponentiation
-# Compute c = m^e mod n efficiently
-message = 42
-exponent = 65537
-modulus = 10**9 + 7
-
-ciphertext = pow(message, exponent, modulus)
-# O(log 65537 * log 10^9) - very efficient
-
-# Without modulo: would create huge intermediate value
-encrypted = (message ** exponent) % modulus  # Slower
-```
-
-### Modular Arithmetic
-
-```python
-# O(log y) - modular exponentiation
-a = pow(3, 100, 1000)  # 3^100 mod 1000
-b = pow(7, 200, 1000)  # 7^200 mod 1000
-
-# Useful for:
-# - Cryptography
-# - Number theory
-# - Hash functions
-# - Modular equations
-```
-
-## Performance Considerations
-
-### Large Exponents
-
-```python
-# O(log y) - still fast for huge exponents
-result = pow(2, 1000000)  # Computed efficiently
-
-# Not O(y) - exponentiation by squaring makes it logarithmic
-# This would be O(1000000) if done naively:
-result = 2 * 2 * 2 * ... * 2  # 1000000 times
-
-# pow() uses about 20 multiplications for 2^1000000
-```
-
-### Memory Usage
-
-```python
-# O(1) space - no intermediate lists
-result = pow(2, 100)  # O(1) space
-
-# Integer result may be large though
-result = pow(2, 1000)  # Result has ~300 digits
+n = 1_000_000
+pow(2, n) == 1 << n   # True, but the shift is Θ(n) and squares nothing
 ```
 
 ## Edge Cases
 
-### Zero Exponent
-
 ```python
-# O(1) - always returns 1
-pow(x, 0)      # 1
-pow(0, 0)      # 1 (by convention in Python)
-pow(-5, 0)     # 1
-pow(2.5, 0)    # 1.0
-```
+base = 7
 
-### One Exponent
+# O(1) - the loop never runs
+pow(base, 0)     # 1
+pow(0, 0)        # 1, by convention
+pow(-5, 0)       # 1
+pow(2.5, 0)      # 1.0
 
-```python
-# O(1) - returns base
-pow(x, 1)      # x
-pow(5, 1)      # 5
-pow(2.5, 1)    # 2.5
-```
+# O(1) - returns the base
+pow(base, 1)     # 7
+pow(2.5, 1)      # 2.5
 
-### Zero Base
-
-```python
-# O(1)
-pow(0, 5)      # 0
-pow(0, 0)      # 1 (convention)
+# Zero base
+pow(0, 5)        # 0
 try:
-    pow(0, -1)  # ZeroDivisionError
+    pow(0, -1)
 except ZeroDivisionError:
     pass
+
+# A negative exponent routes through float, which a wide base cannot reach
+try:
+    pow(10**1000, -1)
+except OverflowError:
+    pass         # int too large to convert to float
 ```
 
 ## Best Practices
 
 ✅ **Do**:
 
-- Use `pow(x, y, z)` for modular exponentiation
-- Use `pow(x, y)` or `x ** y` (equivalent for small values)
-- Use for cryptographic operations (efficient algorithm)
-- Remember O(log y) complexity - efficient even for large exponents
+- Use `pow(x, y, z)` wherever `b * y` would be large, and `pow(x, -1, z)` for a
+  modular inverse
+- Use `1 << n` for an exact power of two
+- Size an integer power from the width of its result, not from the exponent's
+  magnitude
 
 ❌ **Avoid**:
 
-- Computing `(x ** y) % z` - use `pow(x, y, z)` instead
-- Naive exponentiation (multiply x by itself y times)
-- Assuming O(y) complexity (it's O(log y))
+- Reading `O(log y)` as a time bound - it counts multiplications, whose operands
+  grow
+- Building `(x ** y) % z` for cryptographic-sized exponents
+- Calling `str()` on a wide result without raising
+  `sys.set_int_max_str_digits()`
+
+## Performance Notes
+
+- The quadratic bounds are grade-school ones; CPython's Karatsuba
+  multiplication beats them for large operands.
+- `pow(x, y)` and `x ** y` are one operation. With literal operands `**` is
+  folded at compile time, so only `pow()` is still a call at run time.
 
 ## Related Functions
 
 - **[abs()](abs.md)** - Absolute value
-- **[math.pow()](../stdlib/math.md)** - Float-only power
-- **operator\*\*** - Exponentiation (equivalent)
-- **[math.isqrt()](../stdlib/math.md)** - Integer square root
-
-## Comparison with Alternatives
-
-```python
-# pow() is more efficient for modular exponentiation
-x, y, z = 2, 100, 1000
-
-# O(log y) - fast, keeps intermediate values small via modular reduction
-result1 = pow(x, y, z)
-
-# O(log y) exponentiation but creates huge intermediate value - slower
-result2 = (x ** y) % z
-
-# O(y) - very slow
-result3 = (x * x * x * ... * x) % z  # 100 multiplications
-```
+- **[divmod()](divmod.md)** - Quotient and remainder in one call
+- **[int](int.md)** - Arbitrary-precision integer arithmetic, including `**`
+- **[math.pow()](../stdlib/math.md)** - Always returns a float, and overflows
+  where `pow()` stays exact
+- **[math.isqrt()](../stdlib/math.md)** - Exact integer square root
 
 ## Version Notes
 
-- **Python 2.x**: Basic functionality available
-- **Python 3.x**: Same behavior and complexity
-- **Python 3.8+**: Consistent performance across versions
+- **Python 3.8+**: `pow(x, y, z)` accepts a negative `y` and returns the modular
+  inverse; the arguments became keyword-capable as `base`, `exp` and `mod`
+- **Python 3.11+, and 3.10.7+**: `str()` on an integer wider than 4300 digits
+  raises `ValueError` until `sys.set_int_max_str_digits()` lifts the limit
