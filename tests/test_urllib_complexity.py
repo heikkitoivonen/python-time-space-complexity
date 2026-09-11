@@ -26,10 +26,14 @@ Measurement scope:
   has one protocol method; callback and constructor cost are not varied.
 * Robot parsing and lookup vary literal path length from 10 KB to 1 MB at one
   rule. Peaks grow from about 30 KB to 3 MB on both boundary versions. Separate
-  checks vary rule count with fixed text lengths. The documented upper bounds
-  cover literal paths and distinct agent groups; no supported version matches
-  `*` or `$` in a rule, and a repeated agent group is never consulted, both of
-  which are asserted rather than assumed.
+  checks vary rule count with fixed text lengths. Literal-path bounds cover
+  distinct, single-agent groups. Python 3.13.14+ and 3.14.5+ interpret wildcards
+  and anchors, merge repeated agent groups, and choose the longest matching
+  rule with Allow winning ties. Earlier patches and 3.10-3.12 use literal
+  prefixes and the first matching group/rule. Versioned behavior tests cover
+  these choices. Merge tests count copied rule references at 10 and 1,000
+  single-rule groups with fixed text, and check retained references. Wildcard
+  tests count matcher calls; they do not establish a regex growth bound.
 * Warm `urlsplit` calls on the same string object at 10 KB and 1 MB take about
   10 us and 965 us on 3.10, but about 75 ns at both sizes on 3.14. The same
   object matters: an equal but newly built 1 MB URL costs about 397 us on 3.14
@@ -40,12 +44,16 @@ Source evidence: Lib/urllib/{parse,request,robotparser}.py on released CPython
 3.10 through 3.14 branches. In parse.py, 3.10 sanitizes before the cache lookup;
 3.11+ wraps urlsplit in lru_cache. Request registration uses bisect.insort,
 install_opener assigns _opener, and DataHandler decodes into BytesIO. Robot
-lookup normalizes the URL and compares configured text; literal RuleLine paths
-use prefix matching on every supported version.
+lookup normalizes the URL and compares configured text. Literal RuleLine paths
+use prefix matching; the RFC 9309 implementation additionally compiles wildcard
+patterns and concatenates rule lists when merging repeated groups.
 https://github.com/python/cpython/blob/3.10/Lib/urllib/parse.py
 https://github.com/python/cpython/blob/3.11/Lib/urllib/parse.py
 https://github.com/python/cpython/blob/3.14/Lib/urllib/request.py
-https://github.com/python/cpython/blob/3.14/Lib/urllib/robotparser.py
+https://github.com/python/cpython/blob/v3.14.4/Lib/urllib/robotparser.py
+https://github.com/python/cpython/blob/v3.14.5/Lib/urllib/robotparser.py
+https://github.com/python/cpython/blob/v3.13.13/Lib/urllib/robotparser.py
+https://github.com/python/cpython/blob/v3.13.14/Lib/urllib/robotparser.py
 
 Not settled here:
 
@@ -89,6 +97,9 @@ PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "urllib.md"
 
 EXPECTED_BLOCKS = 16
 EXPECTED_NETWORK_BLOCKS = 8
+
+# RFC 9309 was backported to these maintenance releases, not to 3.10-3.12.
+ROBOT_RFC_9309 = sys.version_info >= (3, 14, 5) or ((3, 13, 14) <= sys.version_info < (3, 14))
 
 SUBMODULES = {
     "parse": urllib.parse,
@@ -789,26 +800,107 @@ class TestRobotFileParserScansItsRules:
         assert rate is not None
         assert (rate.requests, rate.seconds) == (1, 10)
 
-    def test_no_supported_version_matches_a_wildcard_or_anchor(self) -> None:
-        """The page says rules are literal prefixes; a hedge would say maybe."""
+    def test_wildcard_and_anchor_semantics_follow_the_patch_release(self) -> None:
         parser = self._parser(["User-agent: *", "Disallow: /a*/secret", "Disallow: /end$"])
 
-        # `*` is a character in the path, not a wildcard
-        assert parser.can_fetch("bot", "https://example.com/ax/secret") is True
+        assert parser.can_fetch("bot", "https://example.com/ax/secret") is not ROBOT_RFC_9309
         assert parser.can_fetch("bot", "https://example.com/a*/secret") is False
+        assert parser.can_fetch("bot", "https://example.com/end") is not ROBOT_RFC_9309
+        assert parser.can_fetch("bot", "https://example.com/end$") is ROBOT_RFC_9309
+        assert parser.can_fetch("bot", "https://example.com/end/more") is True
+        assert parser.can_fetch("bot", "https://example.com/other") is True
 
-        # `$` is a character too, so it anchors nothing
-        assert parser.can_fetch("bot", "https://example.com/end") is True
-        assert parser.can_fetch("bot", "https://example.com/end$") is False
-
-    def test_a_repeated_agent_group_is_never_consulted(self) -> None:
-        """`can_fetch` returns on the first entry that applies."""
+    @pytest.mark.parametrize("agent", ["bot", "*"])
+    def test_repeated_agent_groups_follow_the_patch_release(self, agent: str) -> None:
         parser = self._parser(
-            ["User-agent: bot", "Disallow: /one", "User-agent: bot", "Disallow: /two"]
+            [f"User-agent: {agent}", "Disallow: /one", f"User-agent: {agent}", "Disallow: /two"]
         )
 
         assert parser.can_fetch("bot", "https://example.com/one") is False
-        assert parser.can_fetch("bot", "https://example.com/two") is True
+        assert parser.can_fetch("bot", "https://example.com/two") is not ROBOT_RFC_9309
+        assert parser.can_fetch("bot", "https://example.com/other") is True
+
+    @pytest.mark.parametrize(
+        "rules",
+        [
+            ["Disallow: /", "Allow: /public"],
+            ["Disallow: /public", "Allow: /public"],
+        ],
+    )
+    def test_longest_match_and_allow_ties_follow_the_patch_release(self, rules: list[str]) -> None:
+        parser = self._parser(["User-agent: *", *rules])
+        assert parser.can_fetch("bot", "https://example.com/public") is ROBOT_RFC_9309
+
+    def test_repeated_groups_copy_quadratically_and_retain_linear_rules(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """One fixed-length agent and one rule per group isolate merge work.
+
+        The RFC implementation copies 2 + 3 + ... + g references. Original
+        entries and the merged group each retain g rule references; RuleLine
+        objects are shared. Older releases store entries without merging them.
+        Multiple agents per group and growing text lengths are not varied.
+        """
+        copied = 0
+        if ROBOT_RFC_9309:
+            original = urllib.robotparser.merge_entries  # type: ignore[attr-defined]
+
+            class CountingRules(list[Any]):
+                def __add__(self, other: list[Any]) -> list[Any]:
+                    nonlocal copied
+                    copied += len(self) + len(other)
+                    return super().__add__(other)
+
+            def merge(first: Any, second: Any) -> Any:
+                first.rulelines = CountingRules(first.rulelines)
+                return original(first, second)
+
+            monkeypatch.setattr(urllib.robotparser, "merge_entries", merge)
+
+        for size in (10, 1000):
+            copied = 0
+            parser = self._parser(["User-agent: bot", "Disallow: /blocked"] * size)
+            entries = parser.entries  # type: ignore[attr-defined]
+            assert len(entries) == size
+            assert sum(len(entry.rulelines) for entry in entries) == size
+            if ROBOT_RFC_9309:
+                assert copied == size * (size + 1) // 2 - 1
+                merged = parser.groups["bot"].rulelines  # type: ignore[attr-defined]
+                assert len(merged) == size
+                assert all(
+                    rule is entry.rulelines[0] for rule, entry in zip(merged, entries, strict=True)
+                )
+            else:
+                assert copied == 0
+                assert not hasattr(parser, "groups")
+
+            copied = 0
+            combined = self._parser(["User-agent: bot"] + ["Disallow: /blocked"] * size)
+            assert copied == 0
+            for path in ("/blocked", "/allowed"):
+                url = "https://example.com" + path
+                assert combined.can_fetch("bot", url) == parser.can_fetch("bot", url)
+
+    def test_wildcard_rules_use_matchers_on_rfc_releases(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        parser = self._parser(["User-agent: bot", "Disallow: /a*/secret"])
+        rule = parser.entries[0].rulelines[0]  # type: ignore[attr-defined]
+        if not ROBOT_RFC_9309:
+            assert not hasattr(rule, "matcher")
+            assert parser.can_fetch("bot", "https://example.com/ax/secret") is True
+            return
+        original = rule.matcher
+        assert callable(original)
+        checked = []
+
+        def match(path: str) -> Any:
+            checked.append(path)
+            return original(path)
+
+        monkeypatch.setattr(rule, "matcher", match)
+        assert parser.can_fetch("bot", "https://example.com/ax/secret") is False
+        assert checked == ["/ax/secret"]
 
     def test_parse_and_lookup_allocate_with_text_length_at_fixed_rule_count(self) -> None:
         parse_peaks, lookup_peaks = [], []

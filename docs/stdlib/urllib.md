@@ -66,16 +66,24 @@ The tables describe local processing and memory use. Network and filesystem wait
 
 ### urllib.robotparser
 
-`RobotFileParser` matches literal path prefixes: no supported version reads `*` or `$` in a rule,
-so a pattern is compared as the characters it is written with. A repeated `User-agent` group does
-not merge with the earlier one either — `can_fetch()` returns on the first entry that applies, and
-a second group for the same agent is never consulted.
+Python 3.13.14+ and 3.14.5+ support `*` wildcards and a trailing `$` anchor,
+merge repeated `User-agent` groups, and select the longest matching rule
+(`Allow` wins ties). Earlier patches and Python 3.10–3.12 compare literal
+prefixes and use the first matching group and rule.
+See the released [3.13.14 implementation](https://github.com/python/cpython/blob/v3.13.14/Lib/urllib/robotparser.py)
+and [3.14.5 implementation](https://github.com/python/cpython/blob/v3.14.5/Lib/urllib/robotparser.py).
+
+The file-processing bounds below cover literal rules and one distinct agent per
+group, except for the repeated-group row. Wildcard rules additionally incur
+[regular-expression matching costs](re.md). On the newer releases, combining
+rules for the same agent into one group avoids repeated merging during parsing.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `urllib.robotparser.RobotFileParser().read()` | O(n) + round trip | O(n) | n = `robots.txt` size |
-| `urllib.robotparser.RobotFileParser().parse(lines)` | O(l + t) | O(l + t) | l = lines, t = total input text; retained rules and directive values include their text, not just one record per line |
-| `urllib.robotparser.RobotFileParser().can_fetch(agent, url)` | O(e·a + r·n) | O(n + a) | e = entries scanned before one applies, a = agent-name length, r = that entry's rules, n = URL length; the URL is normalized once and each rule is a prefix comparison against it |
+| `urllib.robotparser.RobotFileParser().parse(lines)` | O(l + t) | O(l + t) | l = lines, t = total input text; distinct agent groups |
+| `urllib.robotparser.RobotFileParser().parse(lines)`, repeated groups | O(g²) | O(g) | 3.13.14+ and 3.14.5+; g groups for the same agent, one rule per group, fixed text lengths; earlier versions take O(g) time |
+| `urllib.robotparser.RobotFileParser().can_fetch(agent, url)` | O((e + 1)·a + (r + 1)·n) | O(n + a) | e = agent entries scanned, a = maximum caller/configured agent-name length, r = selected group's rules, n = URL length; literal rules |
 
 ## URL Parsing
 
