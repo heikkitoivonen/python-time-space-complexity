@@ -284,7 +284,10 @@ class TestHiddenNames:
 
     @pytest.mark.skipif(sys.version_info < (3, 11), reason="include_hidden is 3.11+")
     def test_include_hidden_turns_the_rule_off(self, folder: pathlib.Path) -> None:
-        found = glob.glob(str(folder / "*.py"), include_hidden=True)
+        found = glob.glob(
+            str(folder / "*.py"),
+            include_hidden=True,  # pyright: ignore[reportCallIssue]
+        )
 
         assert sorted(os.path.basename(path) for path in found) == [".hidden.py", "visible.py"]
 

@@ -70,5 +70,3 @@ htmlcov/
 # Amp orb runtime files
 .amp/portals/
 
-# Python version file (managed by pyenv/uv)
-.python-version

@@ -51,6 +51,8 @@ import pytest
 
 if sys.version_info >= (3, 11):
     import tomllib
+else:  # pyright targets the floor of the supported range, which predates it
+    tomllib: Any = None
 
 
 def best_time(func: Callable[[], Any], repeats: int = 5) -> float:

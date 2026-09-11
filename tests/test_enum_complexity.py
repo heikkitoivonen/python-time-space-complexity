@@ -374,15 +374,16 @@ class TestFlags:
     def test_a_combination_is_sized_and_iterable_from_311(self) -> None:
         combined = self.Permission.READ | self.Permission.WRITE
 
-        assert len(combined) == 2
-        assert {member.name for member in combined} == {"READ", "WRITE"}
+        assert len(combined) == 2  # pyright: ignore
+        assert {member.name for member in combined} == {"READ", "WRITE"}  # pyright: ignore
 
     @pytest.mark.skipif(sys.version_info >= (3, 11), reason="the change lands in 3.11")
     def test_a_combination_has_no_length_before_311(self) -> None:
         combined = self.Permission.READ | self.Permission.WRITE
 
         with pytest.raises(TypeError):
-            len(combined)
+            # Deliberately the unsupported call: that is the claim under test.
+            len(combined)  # pyright: ignore
 
 
 class TestBuildingCostsItsMembers:
