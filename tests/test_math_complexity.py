@@ -388,13 +388,24 @@ class TestIsqrtAndIntegerProd:
 
     @pytest.mark.timing
     def test_prod_over_ints_grows_faster_than_the_term_count(self) -> None:
-        small = [3] * 500
-        large = [3] * 4000
-        small_time = best_ns(lambda: math.prod(small), repeats=3)
-        large_time = best_ns(lambda: math.prod(large), repeats=3)
+        """Use 2,000 then 32,000 factors of 3 after warming both inputs.
 
-        assert large_time > 12 * small_time, (
-            f"8x the terms should cost more than linear growth: "
+        A 16x term-count step predicts 16x for linear work and 256x for
+        quadratic work. CPython 3.13.15 measures 275-283x and 3.14.7
+        255-266x. Only term count varies; factor value, sign, input type,
+        and start value are fixed. This asserts superlinear growth, not
+        a specific exponent for arbitrary integer factors.
+        """
+        small = [3] * 2_000
+        large = [3] * 32_000
+        assert math.prod(small) == 3**2_000
+        assert math.prod(large) == 3**32_000
+
+        small_time = best_ns(lambda: math.prod(small), repeats=5)
+        large_time = best_ns(lambda: math.prod(large), repeats=5)
+
+        assert large_time > 48 * small_time, (
+            f"16x the terms should cost more than linear growth: "
             f"{small_time:.0f} ns against {large_time:.0f} ns"
         )
 
