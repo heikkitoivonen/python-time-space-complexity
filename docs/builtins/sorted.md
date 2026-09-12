@@ -6,10 +6,12 @@ The `sorted()` function returns a new sorted list from the items in an iterable.
 
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
-| Basic sorting | O(n log n) | O(n) | Timsort/Powersort |
-| With key function | O(n log n + n*k) | O(n) | k = key function time; key computed once per element |
-| Reverse sorting | O(n log n) | O(n) | No extra overhead |
-| Already sorted | O(n) | O(n) | Best case |
+| Basic sorting | O(n log n) | O(n) | Copies the input into a new list, then sorts that in place |
+| With key function | O(n log n + n*k) | O(n) | k = key function time; key called once per element, comparisons use the stored keys |
+| Reverse sorting | O(n log n) | O(n) | Stable; the list is reversed before and after the sort, O(n) extra |
+| Already sorted | O(n) | O(n) | Best case: the input is one run; reverse-sorted input costs the same |
+
+n is the number of items; one comparison counts as O(1), and the size of a key is not counted in the space bound.
 
 ## Basic Usage
 
@@ -52,14 +54,14 @@ result = sorted(words, reverse=True)
 
 ```python
 # O(n log n + n*k) where k = key function time
-# Key is computed once per element, then comparisons use cached keys
+# Key is computed once per element, then comparisons use the stored keys
 words = ["apple", "pie", "cat", "banana"]
 result = sorted(words, key=len)  # Sort by length
 # ["pie", "cat", "apple", "banana"]
 
 # Sort by last character
 result = sorted(words, key=lambda x: x[-1])
-# ["apple", "banana", "pie", "cat"]
+# ["banana", "apple", "pie", "cat"]
 ```
 
 ### Sorting Objects
@@ -70,7 +72,7 @@ class Person:
     def __init__(self, name, age):
         self.name = name
         self.age = age
-    
+
     def __repr__(self):
         return f"Person({self.name}, {self.age})"
 
@@ -84,7 +86,7 @@ people = [
 result = sorted(people, key=lambda p: p.age)
 # [Person(Bob, 25), Person(Alice, 30), Person(Charlie, 35)]
 
-# Using operator module (more efficient)
+# The same key via the operator module
 from operator import attrgetter
 result = sorted(people, key=attrgetter('age'))  # Same O(n log n)
 ```
@@ -107,32 +109,31 @@ result = sorted(coords, key=lambda c: c[1])
 ### How It Works
 
 ```
-Python uses Timsort (Python 2.3-3.10) or Powersort (Python 3.11+).
-Both are hybrid algorithms combining merge sort and insertion sort:
-1. Divide array into small chunks (runs) - ~32-64 elements
-2. Sort each run with insertion sort - O(k²) per run
-3. Merge runs together - O(n log n) overall
-4. Already sorted data: O(n) - detects and uses it
+Python sorts with Timsort (through 3.10) or Powersort (3.11+): a merge sort
+that starts from the runs already present in the input.
+1. Scan for natural runs - ascending, or descending, which are reversed in place
+2. Extend short runs to 32-64 elements with binary insertion sort
+3. Merge runs - O(n log n) comparisons overall
+4. Input that is already one run: O(n) - nothing to merge
 
-Powersort uses an improved merge policy but has the same complexity.
+Powersort changes the order in which runs are merged, not the bound.
 ```
 
 ### Performance Characteristics
 
 ```python
-# Best case - O(n) - already sorted or reverse sorted
-numbers = list(range(1000000))
-result = sorted(numbers)  # Nearly O(n) for nearly sorted data
+# Best case - O(n): the input is already one run
+numbers = list(range(100000))
+result = sorted(numbers)  # n - 1 comparisons
 
-# Average case - O(n log n)
+numbers = list(range(100000, 0, -1))  # Reverse sorted
+result = sorted(numbers)  # One descending run, also O(n)
+
+# Average and worst case - O(n log n)
 import random
-numbers = list(range(1000))
+numbers = list(range(100000))
 random.shuffle(numbers)
 result = sorted(numbers)  # O(n log n)
-
-# Worst case - O(n log n) - still guaranteed
-numbers = [1000 - i for i in range(1000)]  # Reverse sorted
-result = sorted(numbers)  # O(n log n) - handles well
 ```
 
 ## Performance Patterns
@@ -156,37 +157,37 @@ original.sort()  # [1, 1, 3, 4, 5]
 ### Expensive Key Functions
 
 ```python
-# O(n*k + n log n) - key computed once per element, then cached
+# O(n*m + n log n) - n key calls of O(m) each, then O(n log n) comparisons on the stored keys
 def expensive_key(x):
-    # O(m) - expensive computation
+    # O(m) - expensive computation, m = x here
     return sum(range(x))
 
 numbers = list(range(1000))
 result = sorted(numbers, key=expensive_key)
-# Complexity: O(n*m + n log n) - key called n times, then n log n comparisons
 
-# Better: pre-compute keys
+# Storing the keys pays only when the same keys serve more than one sort
 from operator import itemgetter
-keys = [(x, expensive_key(x)) for x in numbers]  # O(n*m)
-result = sorted(keys, key=itemgetter(1))         # O(n log n)
-# Total: O(n*m + n log n)
+keyed = [(x, expensive_key(x)) for x in numbers]  # O(n*m), once
+ascending = sorted(keyed, key=itemgetter(1))                 # O(n log n)
+descending = sorted(keyed, key=itemgetter(1), reverse=True)  # O(n log n), expensive_key not called again
 ```
 
 ### Decorate-Sort-Undecorate (DSU)
 
 ```python
-# O(n log n) - when computing key is expensive
-def get_sort_key(item):
-    # Some expensive computation
-    return complex_calculation(item)
+# key= is decorate-sort-undecorate done for you: n key calls, then the
+# sort compares only the stored keys, never the items themselves
+items = [{"name": "b", "rank": 1}, {"name": "a", "rank": 1}]
+result = sorted(items, key=lambda d: d["rank"])  # O(n*k + n log n)
+# [{'name': 'b', 'rank': 1}, {'name': 'a', 'rank': 1}] - ties keep input order
 
-# With key: O(n*k + n log n) - key computed once per element
-result = sorted(items, key=get_sort_key)
-
-# Faster: O(n*k + n log n)
-decorated = [(get_sort_key(item), item) for item in items]  # O(n*k)
-sorted_decorated = sorted(decorated)                          # O(n log n)
-result = [item for _, item in sorted_decorated]              # O(n)
+# Building (key, item) tuples by hand costs the same n key calls, and on a
+# tied key the comparison falls through to the items
+decorated = [(d["rank"], d) for d in items]
+try:
+    sorted(decorated)
+except TypeError:
+    pass  # dicts do not order; key= never compared them
 ```
 
 ## Sorting Stability
@@ -219,7 +220,7 @@ result = sorted(students, key=lambda s: (-s[1], s[0]))
 ### Case-Insensitive Sorting
 
 ```python
-# O(n log n) - with case conversion
+# O(L + n log n) - str.lower() costs each word's length, L = total characters
 words = ["Apple", "banana", "Cherry", "date"]
 result = sorted(words, key=str.lower)
 # ["Apple", "banana", "Cherry", "date"]
@@ -260,13 +261,16 @@ original.sort()
 ### sorted() vs heapq.nsmallest()
 
 ```python
-# sorted() - O(n log n), entire list sorted
+import random
 numbers = list(range(1000000))
+random.shuffle(numbers)
+
+# sorted() - O(n log n), entire list sorted
 all_sorted = sorted(numbers)
 
 # heapq.nsmallest() - O(n log k) for k items
 import heapq
-k_smallest = heapq.nsmallest(10, numbers)  # Much faster if k << n
+k_smallest = heapq.nsmallest(10, numbers)  # Wins when k << n
 ```
 
 ## Edge Cases
@@ -290,17 +294,17 @@ result = sorted([42])
 ### Already Sorted
 
 ```python
-# O(n) - Timsort/Powersort detects and handles efficiently
+# O(n) - one ascending run, n - 1 comparisons
 numbers = list(range(1000000))
-result = sorted(numbers)  # Nearly O(n)
+result = sorted(numbers)
 ```
 
 ### Reverse Sorted
 
 ```python
-# O(n) - also handled efficiently
+# O(n) - one descending run, reversed in place
 numbers = list(range(1000000, 0, -1))
-result = sorted(numbers)  # Nearly O(n)
+result = sorted(numbers)
 ```
 
 ## Best Practices
@@ -309,14 +313,14 @@ result = sorted(numbers)  # Nearly O(n)
 
 - Use `sorted()` to create new sorted list
 - Use `key` parameter for custom sorting
-- Use `operator.attrgetter()` instead of lambda for attributes
-- Pre-compute expensive keys if sorting by them multiple times
+- Use `key=` rather than building `(key, item)` tuples by hand
+- Store expensive keys once when the same keys serve several sorts
 
 ❌ **Avoid**:
 
 - Calling `sorted()` multiple times (cache result)
-- Complex lambda functions (define function instead)
-- Sorting by expensive computation in key (pre-compute)
+- Sorting the whole input when only the k smallest are needed (use `heapq.nsmallest()`)
+- `functools.cmp_to_key()` when a key function will do (a Python call per comparison instead of per element)
 - Forgetting that `sorted()` creates a new list (uses memory)
 
 ## Related Functions

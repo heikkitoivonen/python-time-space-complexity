@@ -1,5 +1,5 @@
 ---
-source_sha: 5cc0baa48e47524cffa1ac98fc48d08ce288f6b12b9c606be0900034949724d0
+source_sha: ec504b5b92c746504f94fdd152feeacc24d552795359d63db896da03d453d2ff
 translated: machine
 ---
 
@@ -11,10 +11,12 @@ Funktio `sorted()` palauttaa uuden järjestetyn listan iteroituvan alkioista.
 
 | Tapaus | Aika | Tila | Huomiot |
 |------|------|-------|-------|
-| Perusjärjestäminen | O(n log n) | O(n) | Timsort/Powersort |
-| Avainfunktion kanssa | O(n log n + n*k) | O(n) | k = avainfunktion kesto; avain lasketaan kerran alkiota kohti |
-| Käänteinen järjestys | O(n log n) | O(n) | Ei lisäkustannusta |
-| Valmiiksi järjestetty | O(n) | O(n) | Paras tapaus |
+| Perusjärjestäminen | O(n log n) | O(n) | Kopioi syötteen uuteen listaan ja järjestää sen paikallaan |
+| Avainfunktion kanssa | O(n log n + n*k) | O(n) | k = avainfunktion kesto; avainfunktiota kutsutaan kerran alkiota kohti, vertailut käyttävät talletettuja avaimia |
+| Käänteinen järjestys | O(n log n) | O(n) | Vakaa; lista käännetään ennen järjestämistä ja sen jälkeen, O(n) lisää |
+| Valmiiksi järjestetty | O(n) | O(n) | Paras tapaus: syöte on yksi juoksu; käänteisesti järjestetty syöte maksaa saman |
+
+n on alkioiden määrä; yksi vertailu lasketaan O(1):ksi, eikä avaimen kokoa lasketa tilavaativuuteen.
 
 ## Peruskäyttö
 
@@ -57,14 +59,14 @@ result = sorted(words, reverse=True)
 
 ```python
 # O(n log n + n*k) where k = key function time
-# Key is computed once per element, then comparisons use cached keys
+# Key is computed once per element, then comparisons use the stored keys
 words = ["apple", "pie", "cat", "banana"]
 result = sorted(words, key=len)  # Sort by length
 # ["pie", "cat", "apple", "banana"]
 
 # Sort by last character
 result = sorted(words, key=lambda x: x[-1])
-# ["apple", "banana", "pie", "cat"]
+# ["banana", "apple", "pie", "cat"]
 ```
 
 ### Olioiden järjestäminen
@@ -75,7 +77,7 @@ class Person:
     def __init__(self, name, age):
         self.name = name
         self.age = age
-    
+
     def __repr__(self):
         return f"Person({self.name}, {self.age})"
 
@@ -89,7 +91,7 @@ people = [
 result = sorted(people, key=lambda p: p.age)
 # [Person(Bob, 25), Person(Alice, 30), Person(Charlie, 35)]
 
-# Using operator module (more efficient)
+# The same key via the operator module
 from operator import attrgetter
 result = sorted(people, key=attrgetter('age'))  # Same O(n log n)
 ```
@@ -112,32 +114,31 @@ result = sorted(coords, key=lambda c: c[1])
 ### Miten se toimii
 
 ```
-Python uses Timsort (Python 2.3-3.10) or Powersort (Python 3.11+).
-Both are hybrid algorithms combining merge sort and insertion sort:
-1. Divide array into small chunks (runs) - ~32-64 elements
-2. Sort each run with insertion sort - O(k²) per run
-3. Merge runs together - O(n log n) overall
-4. Already sorted data: O(n) - detects and uses it
+Python sorts with Timsort (through 3.10) or Powersort (3.11+): a merge sort
+that starts from the runs already present in the input.
+1. Scan for natural runs - ascending, or descending, which are reversed in place
+2. Extend short runs to 32-64 elements with binary insertion sort
+3. Merge runs - O(n log n) comparisons overall
+4. Input that is already one run: O(n) - nothing to merge
 
-Powersort uses an improved merge policy but has the same complexity.
+Powersort changes the order in which runs are merged, not the bound.
 ```
 
 ### Suorituskykyominaisuudet
 
 ```python
-# Best case - O(n) - already sorted or reverse sorted
-numbers = list(range(1000000))
-result = sorted(numbers)  # Nearly O(n) for nearly sorted data
+# Best case - O(n): the input is already one run
+numbers = list(range(100000))
+result = sorted(numbers)  # n - 1 comparisons
 
-# Average case - O(n log n)
+numbers = list(range(100000, 0, -1))  # Reverse sorted
+result = sorted(numbers)  # One descending run, also O(n)
+
+# Average and worst case - O(n log n)
 import random
-numbers = list(range(1000))
+numbers = list(range(100000))
 random.shuffle(numbers)
 result = sorted(numbers)  # O(n log n)
-
-# Worst case - O(n log n) - still guaranteed
-numbers = [1000 - i for i in range(1000)]  # Reverse sorted
-result = sorted(numbers)  # O(n log n) - handles well
 ```
 
 ## Suorituskykymalleja
@@ -161,37 +162,37 @@ original.sort()  # [1, 1, 3, 4, 5]
 ### Raskaat avainfunktiot
 
 ```python
-# O(n*k + n log n) - key computed once per element, then cached
+# O(n*m + n log n) - n key calls of O(m) each, then O(n log n) comparisons on the stored keys
 def expensive_key(x):
-    # O(m) - expensive computation
+    # O(m) - expensive computation, m = x here
     return sum(range(x))
 
 numbers = list(range(1000))
 result = sorted(numbers, key=expensive_key)
-# Complexity: O(n*m + n log n) - key called n times, then n log n comparisons
 
-# Better: pre-compute keys
+# Storing the keys pays only when the same keys serve more than one sort
 from operator import itemgetter
-keys = [(x, expensive_key(x)) for x in numbers]  # O(n*m)
-result = sorted(keys, key=itemgetter(1))         # O(n log n)
-# Total: O(n*m + n log n)
+keyed = [(x, expensive_key(x)) for x in numbers]  # O(n*m), once
+ascending = sorted(keyed, key=itemgetter(1))                 # O(n log n)
+descending = sorted(keyed, key=itemgetter(1), reverse=True)  # O(n log n), expensive_key not called again
 ```
 
 ### Decorate-Sort-Undecorate (DSU)
 
 ```python
-# O(n log n) - when computing key is expensive
-def get_sort_key(item):
-    # Some expensive computation
-    return complex_calculation(item)
+# key= is decorate-sort-undecorate done for you: n key calls, then the
+# sort compares only the stored keys, never the items themselves
+items = [{"name": "b", "rank": 1}, {"name": "a", "rank": 1}]
+result = sorted(items, key=lambda d: d["rank"])  # O(n*k + n log n)
+# [{'name': 'b', 'rank': 1}, {'name': 'a', 'rank': 1}] - ties keep input order
 
-# With key: O(n*k + n log n) - key computed once per element
-result = sorted(items, key=get_sort_key)
-
-# Faster: O(n*k + n log n)
-decorated = [(get_sort_key(item), item) for item in items]  # O(n*k)
-sorted_decorated = sorted(decorated)                          # O(n log n)
-result = [item for _, item in sorted_decorated]              # O(n)
+# Building (key, item) tuples by hand costs the same n key calls, and on a
+# tied key the comparison falls through to the items
+decorated = [(d["rank"], d) for d in items]
+try:
+    sorted(decorated)
+except TypeError:
+    pass  # dicts do not order; key= never compared them
 ```
 
 ## Järjestämisen vakaus
@@ -224,7 +225,7 @@ result = sorted(students, key=lambda s: (-s[1], s[0]))
 ### Kirjainkoosta riippumaton järjestäminen
 
 ```python
-# O(n log n) - with case conversion
+# O(L + n log n) - str.lower() costs each word's length, L = total characters
 words = ["Apple", "banana", "Cherry", "date"]
 result = sorted(words, key=str.lower)
 # ["Apple", "banana", "Cherry", "date"]
@@ -265,13 +266,16 @@ original.sort()
 ### sorted() vs heapq.nsmallest()
 
 ```python
-# sorted() - O(n log n), entire list sorted
+import random
 numbers = list(range(1000000))
+random.shuffle(numbers)
+
+# sorted() - O(n log n), entire list sorted
 all_sorted = sorted(numbers)
 
 # heapq.nsmallest() - O(n log k) for k items
 import heapq
-k_smallest = heapq.nsmallest(10, numbers)  # Much faster if k << n
+k_smallest = heapq.nsmallest(10, numbers)  # Wins when k << n
 ```
 
 ## Reunatapaukset
@@ -295,17 +299,17 @@ result = sorted([42])
 ### Valmiiksi järjestetty
 
 ```python
-# O(n) - Timsort/Powersort detects and handles efficiently
+# O(n) - one ascending run, n - 1 comparisons
 numbers = list(range(1000000))
-result = sorted(numbers)  # Nearly O(n)
+result = sorted(numbers)
 ```
 
 ### Käänteisesti järjestetty
 
 ```python
-# O(n) - also handled efficiently
+# O(n) - one descending run, reversed in place
 numbers = list(range(1000000, 0, -1))
-result = sorted(numbers)  # Nearly O(n)
+result = sorted(numbers)
 ```
 
 ## Parhaat käytännöt
@@ -314,14 +318,14 @@ result = sorted(numbers)  # Nearly O(n)
 
 - Käytä `sorted()`-funktiota uuden järjestetyn listan luomiseen
 - Käytä `key`-parametria omaan järjestyskriteeriin
-- Käytä `operator.attrgetter()`-funktiota lambdan sijaan attribuuteille
-- Laske raskaat avaimet etukäteen, jos järjestät niiden mukaan useasti
+- Käytä `key=`-parametria sen sijaan, että rakentaisit `(avain, alkio)`-monikot itse
+- Talleta raskaat avaimet kerran, kun samat avaimet palvelevat useaa järjestämistä
 
 ❌ **Vältä**:
 
 - `sorted()`-funktion kutsumista useasti (tallenna tulos muuttujaan)
-- Monimutkaisia lambda-funktioita (määrittele funktio sen sijaan)
-- Järjestämistä raskaalla laskennalla avaimessa (laske etukäteen)
+- Koko syötteen järjestämistä, kun tarvitaan vain k pienintä (käytä `heapq.nsmallest()`-funktiota)
+- `functools.cmp_to_key()`-funktiota, kun avainfunktio riittää (Python-kutsu jokaista vertailua kohti alkiokohtaisen sijaan)
 - Unohtamasta, että `sorted()` luo uuden listan (vie muistia)
 
 ## Liittyvät funktiot
