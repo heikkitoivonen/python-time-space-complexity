@@ -37,8 +37,9 @@ Measured on one aarch64 machine under CPython 3.14.7:
 * `a & b` with a 1,000-bit `b` and a 1M-then-4M-bit `a`: x1.0, and the
   result is the size of `b`; `a | b` and `a ^ b` with 250,000 then 4M bits,
   batched 100 calls per sample: x20-x27 for 16x the wider operand;
-* `~x`, `x << 100`, `x >> 100`: x3.7-x4.0; `1 << s` for 16x the shift: x15; `x >> (n - 100)`: x1.0
-  for a non-negative x and x4.0 for a negative one;
+* `~x`, `x << 100`, `x >> 100`: x3.7-x4.0; `1 << s` for 16x the shift: x15;
+  `x >> (n - 100)`: x1.0 for a non-negative x; for a negative x with 1M
+  then 16M bits, batched 20 calls per sample: x16 for 16x the width;
 * the constant-time claims - `bit_length`, `int(x)`, `bool(x)`, `abs` of a
   non-negative value, `a & b` with a narrow `b`, a comparison of different
   widths, a right shift that keeps 100 bits - are sub-microsecond calls, so
@@ -455,11 +456,25 @@ class TestBitwise:
 
     @pytest.mark.timing
     def test_a_negative_right_shift_is_linear_in_the_width(self) -> None:
-        small, large = -random_bits(1_000_000), -random_bits(4_000_000)
+        """Keep the result at 100 bits while the negative input grows 16x.
 
-        growth = ratio(lambda: small >> (1_000_000 - 100), lambda: large >> (4_000_000 - 100))
+        Batch 20 calls after warm-up: linear predicts 16x, constant work 1x,
+        and quadratic 256x. CPython 3.14.7 measures about 16x. Inputs use
+        one random seed; result width and input distribution are not varied.
+        """
+        small, large = -random_bits(1_000_000), -random_bits(16_000_000)
+        small_shift, large_shift = 1_000_000 - 100, 16_000_000 - 100
+        for value, shift in ((small, small_shift), (large, large_shift)):
+            result = value >> shift
+            assert result < 0 and result.bit_length() == 100
 
-        assert 2.5 < growth < 7, f"x{growth:.1f} for 4x the bits when 100 survive either way"
+        small_batch = batched(lambda: small >> small_shift, 20)
+        large_batch = batched(lambda: large >> large_shift, 20)
+        small_batch()
+        large_batch()
+        growth = ratio(small_batch, large_batch, repeats=7)
+
+        assert 6 < growth < 48, f"x{growth:.1f} for 16x the bits when 100 survive either way"
 
     def test_a_negative_right_shift_rounds_toward_minus_infinity(self) -> None:
         assert -7 >> 1 == -4

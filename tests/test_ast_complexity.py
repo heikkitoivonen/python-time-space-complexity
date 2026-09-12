@@ -49,7 +49,8 @@ CPython 3.14.7 with 1,000 then 4,000 assignment statements unless stated:
   the N * h² shape, and x49 for 250 then 1,000 deep, which is what the test
   measures;
 * `unparse`: x3.9 wide and x3.7 for the deep chain, so it is linear in both;
-* `get_source_segment` of the last statement: x4.3 on 3.14 for 4x the source;
+* `get_source_segment` of the last statement: x16-x17 on 3.11.14 and 3.14.7
+  for 16x the source (1,000 then 16,000 fixed-width lines), after warm-up;
   of the first statement: x1.3 on 3.14 and x4.2 on 3.10.21, which has no
   `maxlines` cut in `_splitlines_no_ff` (added by gh-103285 in 3.12);
 * `get_docstring` with 16x the statements after the docstring, `clean=False`:
@@ -564,15 +565,26 @@ class TestDocstring:
 class TestSourceSegment:
     @pytest.mark.timing
     def test_the_last_statement_costs_the_whole_source(self) -> None:
-        small, large = statements(1_000), statements(4_000)
+        """Hold line width and returned segment fixed while source grows 16x.
+
+        Warm both inputs before measuring so interpreter specialization and
+        lazy regex compilation are setup costs. Linear predicts 16x and
+        quadratic 256x; measured growth is 16-17x on 3.11.14 and 3.14.7.
+        Line width, newline style, and multi-line segments are not varied.
+        """
+        small, large = "x = 1\n" * 1_000, "x = 1\n" * 16_000
         small_node, large_node = ast.parse(small).body[-1], ast.parse(large).body[-1]
+
+        for source, node in ((small, small_node), (large, large_node)):
+            assert ast.get_source_segment(source, node) == "x = 1"
 
         growth = ratio(
             lambda: ast.get_source_segment(small, small_node),
             lambda: ast.get_source_segment(large, large_node),
+            repeats=7,
         )
 
-        assert 2.5 < growth < 7, f"x{growth:.1f} for 4x the source"
+        assert 6 < growth < 48, f"x{growth:.1f} for 16x the source; linear 16, quadratic 256"
 
     @pytest.mark.timing
     def test_the_first_statement_costs_only_its_prefix_from_312(self) -> None:
