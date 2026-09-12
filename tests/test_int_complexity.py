@@ -35,7 +35,8 @@ Measured on one aarch64 machine under CPython 3.14.7:
 * negation of a 1M-bit value allocates 133 KB at peak and 533 KB for 4M
   bits: a copy, so `-x` and `abs(-x)` are linear in the width;
 * `a & b` with a 1,000-bit `b` and a 1M-then-4M-bit `a`: x1.0, and the
-  result is the size of `b`; `a | b` and `a ^ b`: x4.7 and x4.5;
+  result is the size of `b`; `a | b` and `a ^ b` with 250,000 then 4M bits,
+  batched 100 calls per sample: x20-x27 for 16x the wider operand;
 * `~x`, `x << 100`, `x >> 100`: x3.7-x4.0; `1 << s` for 16x the shift: x15; `x >> (n - 100)`: x1.0
   for a non-negative x and x4.0 for a negative one;
 * the constant-time claims - `bit_length`, `int(x)`, `bool(x)`, `abs` of a
@@ -395,12 +396,21 @@ class TestBitwise:
         ],
     )
     def test_or_and_xor_cost_the_wider_operand(self, operation: Callable[[int, int], int]) -> None:
+        """Batch 100 calls at 250,000 then 4,000,000 bits, holding the
+        narrower operand at 1,000 bits. A 16x step separates constant (1x),
+        linear (16x) and quadratic (256x) work despite allocation/cache
+        effects: CPython 3.11.14 measures 17-25x. Signs and digit patterns
+        are not varied.
+        """
         narrow = random_bits(1_000)
-        small, large = random_bits(1_000_000), random_bits(4_000_000)
+        small, large = random_bits(250_000), random_bits(4_000_000)
 
-        growth = ratio(lambda: operation(small, narrow), lambda: operation(large, narrow))
+        growth = ratio(
+            batched(lambda: operation(small, narrow), 100),
+            batched(lambda: operation(large, narrow), 100),
+        )
 
-        assert 2.5 < growth < 7, f"x{growth:.1f} for 4x the wide operand"
+        assert 6 < growth < 48, f"x{growth:.1f} for 16x the wide operand"
 
     @pytest.mark.timing
     @pytest.mark.parametrize(

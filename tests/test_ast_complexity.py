@@ -55,8 +55,9 @@ CPython 3.14.7 with 1,000 then 4,000 assignment statements unless stated:
 * `get_docstring` with 16x the statements after the docstring, `clean=False`:
   x1.0; with a 1,000-then-4,000-line docstring: x4.1 under `clean=True` and
   x1.0 under `clean=False`; with leading blank lines, which `cleandoc` pops
-  from the front of its line list one at a time: x4.0 for 4x the blank lines
-  at 4,000 text lines, and x11 for 4x both, the k * l term.
+  from the front of its line list one at a time: x3.4-x3.8 for 4x the blank
+  lines at 4,000 text lines, and x55-x60 for 8x both (2,000 to 16,000),
+  the k * l term, with parsing outside the timer.
 
 Sub-microsecond calls - `get_source_segment` of the first line, the
 `get_docstring` constant-time cases - are run 200 times per sample. The deep
@@ -195,7 +196,7 @@ class TestParse:
     def test_linear_in_a_binary_chain(self) -> None:
         small, large = " + ".join(["a"] * 1_000), " + ".join(["a"] * 4_000)
 
-        growth = ratio(lambda: ast.parse(small), lambda: ast.parse(large))
+        growth = in_deep_stack(lambda: ratio(lambda: ast.parse(small), lambda: ast.parse(large)))
 
         assert 2.5 < growth < 8, f"x{growth:.1f} for 4x the terms"
 
@@ -530,20 +531,30 @@ class TestDocstring:
 
     @pytest.mark.timing
     def test_leading_blank_lines_cost_the_line_count_each(self) -> None:
+        """Time cleanup of prebuilt trees with fixed-width text lines.
+
+        For 2,000 then 16,000 blank and text lines, linear work predicts 8x
+        and k * l predicts 64x. CPython 3.11.14 measures about 55x. Parsing
+        is setup; text width and indentation are not varied.
+        """
+
         def docstring(blank: int, text: int) -> ast.Module:
             return ast.parse('"""' + "\n" * blank + "word\n" * text + '"""')
 
+        fewer_blanks, more_blanks = docstring(1_000, 4_000), docstring(4_000, 4_000)
+        small, large = docstring(2_000, 2_000), docstring(16_000, 16_000)
+
         blanks = ratio(
-            lambda: ast.get_docstring(docstring(1_000, 4_000)),
-            lambda: ast.get_docstring(docstring(4_000, 4_000)),
+            lambda: ast.get_docstring(fewer_blanks),
+            lambda: ast.get_docstring(more_blanks),
         )
         both = ratio(
-            lambda: ast.get_docstring(docstring(1_000, 1_000)),
-            lambda: ast.get_docstring(docstring(4_000, 4_000)),
+            lambda: ast.get_docstring(small),
+            lambda: ast.get_docstring(large),
         )
 
         assert 2.5 < blanks < 7, f"x{blanks:.1f} for 4x the leading blank lines"
-        assert both > 8, f"x{both:.1f} for 4x both; linear would be 4, k * l 16"
+        assert both > 24, f"x{both:.1f} for 8x both; linear would be 8, k * l 64"
 
     def test_reads_only_the_first_statement(self) -> None:
         assert ast.get_docstring(ast.parse('"""doc"""\n"""not doc"""')) == "doc"
