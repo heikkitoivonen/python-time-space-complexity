@@ -60,22 +60,96 @@ make serve
 
 ---
 
+## Install the Python Complexity Agent Skill
+
+`python-complexity` gives agents an offline reference for Python builtin and
+standard-library time and space complexity. It helps with code analysis,
+performance reviews, and operation comparisons, including version and
+implementation qualifications. It is independent of the skills used to maintain
+this repository.
+
+Download `python-complexity-<version>.zip` and `SHA256SUMS` from a
+[Python Complexity skill release](https://github.com/heikkitoivonen/python-time-space-complexity/releases).
+Choose a release tagged `python-complexity-v<version>`. Use the attached skill
+ZIP: GitHub's automatic **Source code** archives and the source directory
+`skills/python-complexity/` do not include generated references.
+
+Extract the ZIP and place the entire `python-complexity` directory in one of
+these locations. Create the parent directory if needed. Install in one scope
+per agent to avoid duplicate copies.
+
+| Agent | Personal installation | Project installation | Explicit use |
+|-------|-----------------------|----------------------|--------------|
+| [Codex](https://learn.chatgpt.com/docs/build-skills) | `~/.agents/skills/python-complexity/` | `.agents/skills/python-complexity/` | `$python-complexity` followed by your question |
+| [Claude Code](https://code.claude.com/docs/en/skills) | `~/.claude/skills/python-complexity/` | `.claude/skills/python-complexity/` | `/python-complexity` followed by your question |
+| [GitHub Copilot](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/add-skills) | `~/.copilot/skills/python-complexity/` | `.github/skills/python-complexity/` | Ask Copilot to use the `python-complexity` skill |
+
+`~` means your home directory; on Windows use the corresponding directory under
+your user profile. Project paths are relative to the project where you want to
+use the skill. Cloud agents need the project installation included in their
+checkout; a personal directory on your computer does not transfer to the cloud.
+The installed directory must contain `SKILL.md`, `manifest.json`, `LICENSE.txt`,
+and `references/` directly. Reading the skill requires no Python, `uv`, Node.js,
+or network access.
+
+For example, on Linux or macOS, install version 1.0.0 for Codex from your download
+directory:
+
+```bash
+mkdir -p ~/.agents/skills
+unzip python-complexity-1.0.0.zip -d ~/.agents/skills
+```
+
+Compare the ZIP's SHA-256 with its entry in `SHA256SUMS` using `sha256sum` on
+Linux, `shasum -a 256` on macOS, or `Get-FileHash -Algorithm SHA256` in PowerShell.
+Start a new agent session and ask, for example: "Use python-complexity to analyze
+the time and peak space complexity of this function, citing the reference."
+
+### Update or Pin a Version
+
+To update, replace the installed `python-complexity` directory with the complete
+directory from a newer release, rather than merging files. To pin a version,
+keep that release's ZIP and its checksum; the installed `manifest.json` records
+the skill version, source revision, and supported Python versions.
+
+### Uninstall
+
+1. Find the installation directory in the agent table above. For example, a
+   personal Codex installation is at `~/.agents/skills/python-complexity/`.
+2. Delete that entire `python-complexity` directory, including its bundled
+   references. Keep the parent `skills` directory and any other skills. If you
+   installed copies in both personal and project locations, remove both.
+3. Start a new agent session so it no longer uses the loaded skill instructions.
+
+For a project installation tracked by Git, commit the directory removal to
+propagate the uninstall to other checkouts. No package-manager uninstall command
+is needed for a skill installed by extracting the ZIP.
+
 ## Development Commands
 
 ### Using Make (Recommended)
 
 ```bash
-make help      # See all available commands
-make dev       # Install dev environment
-make serve     # Serve documentation locally
-make build     # Build static site
-make check     # Run lint + types + tests
-make lint      # Run linter
-make format    # Format code
-make types     # Run type checker
-make test      # Run tests
-make clean     # Clean build artifacts
-make update    # Update dependencies
+make help                # See all available commands
+make install             # Install production dependencies
+make dev                 # Install dev environment
+make serve               # Serve documentation locally, all locales
+make serve-en            # Serve English documentation only
+make serve-one LOCALE=ja  # Serve one locale as it ships
+make build               # Build all locales as separate sites
+make build-en            # Build English documentation only
+make check               # Run lint, types, skill validation, and tests
+make lint                # Check lint and formatting
+make format              # Format code and apply lint fixes
+make types               # Run type checker
+make test                # Run tests
+make audit               # Report live documentation coverage
+make skills-build        # Build offline skill in build/skills/
+make skills-check        # Validate generated skill content and links
+make skills-package      # Create release ZIPs and checksums in dist/skills/
+make skills-eval         # Build skill and display manual evaluation prompts
+make clean               # Remove site output and development caches
+make update              # Update dependencies
 ```
 
 ### Using uv Directly
@@ -118,10 +192,21 @@ Estimated Complexity: O(n) (Linear)
 │   ├── stdlib/                 # Standard library modules
 │   ├── implementations/        # CPython, PyPy, Jython, IronPython
 │   └── versions/               # Python version guides (3.10–3.14)
+├── skills/                     # Distributable agent skill sources and release guidance
+│   ├── python-complexity/
+│   │   ├── SKILL.md            # Agent instructions
+│   │   └── version.txt         # Independent skill release version
+│   ├── README.md               # Build and distribution guide
+│   └── evaluations.md          # Manual agent evaluation prompts and rubric
+├── .agents/skills/             # Repository-maintenance skills (not distributed)
 ├── scripts/                    # Utility scripts
-├── tests/                      # Test files
+│   └── build_skills.py         # Generate, validate, and package the offline skill
+├── tests/                      # Documentation, complexity, and packaging tests
+├── build/skills/               # Generated installable skill (Git-ignored)
+├── dist/skills/                # Generated release ZIPs and checksums (Git-ignored)
 ├── .github/workflows/          # GitHub Actions CI/CD
-│   └── deploy.yml
+│   ├── deploy.yml             # Documentation site checks and deployment
+│   └── skills.yml             # Skill checks, preview artifacts, and releases
 ├── pyproject.toml              # Project metadata and dependencies
 ├── mkdocs.yml                  # MkDocs configuration
 └── Makefile                    # Development commands

@@ -1,4 +1,5 @@
 .PHONY: help install dev serve serve-en serve-one build build-en lint format types check clean test audit
+.PHONY: skills-build skills-check skills-package skills-eval
 
 # Address for the dev server. Override for a non-default setup, e.g.
 #   make serve DEV_ADDR=0.0.0.0:5005
@@ -23,9 +24,13 @@ help:
 	@echo "  make lint        Run ruff linter"
 	@echo "  make format      Format code with ruff"
 	@echo "  make types       Run pyright type checker"
-	@echo "  make check       Run lint and type checks"
+	@echo "  make check       Run lint, types, skill checks, and tests"
 	@echo "  make test        Run tests with pytest"
 	@echo "  make audit       Print live documentation coverage (no files written)"
+	@echo "  make skills-build    Build the offline skill in build/skills/"
+	@echo "  make skills-check    Validate the generated skill"
+	@echo "  make skills-package  Create release ZIPs and checksums in dist/skills/"
+	@echo "  make skills-eval     Build the skill and show manual evaluation prompts"
 	@echo ""
 	@echo "Maintenance:"
 	@echo "  make clean       Remove build artifacts and cache"
@@ -71,7 +76,21 @@ format:
 types:
 	uv run pyright
 
-check: lint types test
+check: lint types skills-check test
+
+skills-build:
+	uv run python scripts/build_skills.py build
+
+skills-check:
+	uv run python scripts/build_skills.py check
+
+skills-package:
+	uv run python scripts/build_skills.py package
+
+# Behavioral evaluation runs in the agent being evaluated, independently of
+# deterministic package checks. This target prepares its input and rubric.
+skills-eval: skills-build
+	@cat skills/evaluations.md
 
 test:
 	uv run pytest

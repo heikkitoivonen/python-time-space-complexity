@@ -1,4 +1,4 @@
-<!-- source_sha: b2fed384cfaec96756e3e0c8c939935ab053d00a3c430193fa29d827fe718322 -->
+<!-- source_sha: a7a8a9a77a5a4e8b96f4d49647a1722bfcf72f75b21f985ceae3c723869ff076 -->
 <!-- translated: machine -->
 
 [English](README.md) | **简体中文**
@@ -63,22 +63,87 @@ make serve
 
 ---
 
+## 安装 Python Complexity 智能体技能
+
+`python-complexity` 为智能体提供 Python 内置函数和标准库时间与空间复杂度的离线参考。
+它可用于代码分析、性能审查和操作比较，并包含版本与实现相关的适用条件。
+它独立于用于维护本仓库的技能。
+
+从 [Python Complexity 技能发布页面](https://github.com/heikkitoivonen/python-time-space-complexity/releases)
+下载 `python-complexity-<version>.zip` 和 `SHA256SUMS`。
+选择标签为 `python-complexity-v<version>` 的发布版本。请使用发布附件中的技能 ZIP：
+GitHub 自动生成的 **Source code** 压缩包以及源码目录 `skills/python-complexity/`
+均不包含生成的参考文档。
+
+解压 ZIP，将整个 `python-complexity` 目录放入以下位置之一。如有需要，先创建父目录。
+每个智能体只选择一种安装范围，以免出现重复副本。
+
+| 智能体 | 个人安装 | 项目安装 | 显式使用 |
+|-------|-----------------------|----------------------|--------------|
+| [Codex](https://learn.chatgpt.com/docs/build-skills) | `~/.agents/skills/python-complexity/` | `.agents/skills/python-complexity/` | 输入 `$python-complexity`，后接问题 |
+| [Claude Code](https://code.claude.com/docs/en/skills) | `~/.claude/skills/python-complexity/` | `.claude/skills/python-complexity/` | 输入 `/python-complexity`，后接问题 |
+| [GitHub Copilot](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/add-skills) | `~/.copilot/skills/python-complexity/` | `.github/skills/python-complexity/` | 请 Copilot 使用 `python-complexity` 技能 |
+
+`~` 表示主目录；在 Windows 上，请使用用户配置文件目录下的对应目录。
+项目路径相对于要使用该技能的项目。云端智能体需要在其检出的项目中包含项目级安装；
+本机上的个人目录不会传到云端。安装后的目录必须直接包含 `SKILL.md`、
+`manifest.json`、`LICENSE.txt` 和 `references/`。
+读取该技能不需要 Python、`uv`、Node.js 或网络访问。
+
+例如，在 Linux 或 macOS 上，从下载目录为 Codex 安装 1.0.0 版本：
+
+```bash
+mkdir -p ~/.agents/skills
+unzip python-complexity-1.0.0.zip -d ~/.agents/skills
+```
+
+使用 Linux 上的 `sha256sum`、macOS 上的 `shasum -a 256`，或 PowerShell 中的
+`Get-FileHash -Algorithm SHA256`，将 ZIP 的 SHA-256 与 `SHA256SUMS` 中的对应条目比较。
+启动新的智能体会话，然后提问，例如：“使用 python-complexity 分析此函数的时间复杂度和
+峰值空间复杂度，并引用参考文档。”
+
+### 更新或固定版本
+
+更新时，请用新发布版本中的完整目录替换已安装的 `python-complexity` 目录，不要合并文件。
+要固定版本，请保留该版本的 ZIP 及其校验和；安装目录中的 `manifest.json` 记录了技能版本、
+源码修订版本和支持的 Python 版本。
+
+### 卸载
+
+1. 在上方的智能体表格中找到安装目录。例如，Codex 的个人安装目录为
+   `~/.agents/skills/python-complexity/`。
+2. 删除整个 `python-complexity` 目录，包括其中的参考文档。保留父级 `skills` 目录和
+   其他技能。如果在个人和项目位置都安装了副本，请将两处副本都删除。
+3. 启动新的智能体会话，以免继续使用已加载的技能指令。
+
+如果项目级安装由 Git 跟踪，请提交目录删除操作，将卸载同步到其他检出副本。
+通过解压 ZIP 安装的技能不需要使用包管理器的卸载命令。
+
 ## 开发命令
 
 ### 使用 Make（推荐）
 
 ```bash
-make help      # See all available commands
-make dev       # Install dev environment
-make serve     # Serve documentation locally
-make build     # Build static site
-make check     # Run lint + types + tests
-make lint      # Run linter
-make format    # Format code
-make types     # Run type checker
-make test      # Run tests
-make clean     # Clean build artifacts
-make update    # Update dependencies
+make help                # See all available commands
+make install             # Install production dependencies
+make dev                 # Install dev environment
+make serve               # Serve documentation locally, all locales
+make serve-en            # Serve English documentation only
+make serve-one LOCALE=ja  # Serve one locale as it ships
+make build               # Build all locales as separate sites
+make build-en            # Build English documentation only
+make check               # Run lint, types, skill validation, and tests
+make lint                # Check lint and formatting
+make format              # Format code and apply lint fixes
+make types               # Run type checker
+make test                # Run tests
+make audit               # Report live documentation coverage
+make skills-build        # Build offline skill in build/skills/
+make skills-check        # Validate generated skill content and links
+make skills-package      # Create release ZIPs and checksums in dist/skills/
+make skills-eval         # Build skill and display manual evaluation prompts
+make clean               # Remove site output and development caches
+make update              # Update dependencies
 ```
 
 ### 直接使用 uv
@@ -121,10 +186,21 @@ Estimated Complexity: O(n) (Linear)
 │   ├── stdlib/                 # Standard library modules
 │   ├── implementations/        # CPython, PyPy, Jython, IronPython
 │   └── versions/               # Python version guides (3.10–3.14)
+├── skills/                     # Distributable agent skill sources and release guidance
+│   ├── python-complexity/
+│   │   ├── SKILL.md            # Agent instructions
+│   │   └── version.txt         # Independent skill release version
+│   ├── README.md               # Build and distribution guide
+│   └── evaluations.md          # Manual agent evaluation prompts and rubric
+├── .agents/skills/             # Repository-maintenance skills (not distributed)
 ├── scripts/                    # Utility scripts
-├── tests/                      # Test files
+│   └── build_skills.py         # Generate, validate, and package the offline skill
+├── tests/                      # Documentation, complexity, and packaging tests
+├── build/skills/               # Generated installable skill (Git-ignored)
+├── dist/skills/                # Generated release ZIPs and checksums (Git-ignored)
 ├── .github/workflows/          # GitHub Actions CI/CD
-│   └── deploy.yml
+│   ├── deploy.yml             # Documentation site checks and deployment
+│   └── skills.yml             # Skill checks, preview artifacts, and releases
 ├── pyproject.toml              # Project metadata and dependencies
 ├── mkdocs.yml                  # MkDocs configuration
 └── Makefile                    # Development commands

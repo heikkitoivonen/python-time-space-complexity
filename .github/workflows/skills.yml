@@ -1,0 +1,89 @@
+name: Build and release Python Complexity skill
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    tags: ['python-complexity-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v4
+      - name: Install dependencies
+        run: uv sync --frozen
+      - name: Check repository and skill
+        run: |
+          make lint types skills-check
+          uv run pytest -m "not timing"
+      - name: Build preview packages
+        if: startsWith(github.ref, 'refs/tags/python-complexity-v') == false
+        run: make skills-package
+      - name: Build release packages
+        if: startsWith(github.ref, 'refs/tags/python-complexity-v')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: uv run python scripts/build_skills.py package --release-tag "$RELEASE_TAG"
+      - name: Upload skill packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-complexity-packages
+          path: dist/skills/
+          if-no-files-found: error
+
+  # Match the site workflow: stopwatch results are reported independently,
+  # because shared-runner timing noise must not prevent artifact publication.
+  timing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - name: Install dependencies
+        run: uv sync --frozen
+      - name: Run timing tests
+        run: uv run pytest -m timing
+
+  release:
+    needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/python-complexity-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: skill-release-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-complexity-packages
+          path: dist/skills/
+      - name: Verify release checksums
+        working-directory: dist/skills
+        run: sha256sum --check SHA256SUMS
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          cat > release-notes.md <<'EOF'
+          Offline Python builtin and standard-library time and space complexity reference.
+
+          - Install the standalone ZIP by extracting its python-complexity directory into your agent's skills directory.
+          - The marketplace ZIP includes the same skill with Codex and Claude Code marketplace manifests.
+          - SHA256SUMS verifies both downloads. Each skill includes its source revision, supported Python versions, and license.
+
+          See the README at this release's tag for installation, updates, and marketplace setup. Use the attached packages; GitHub's automatic source archives do not contain generated references.
+          EOF
+          gh release create "$RELEASE_TAG" dist/skills/*.zip dist/skills/SHA256SUMS \
+            --verify-tag --title "Python Complexity skill ${RELEASE_TAG#python-complexity-v}" \
+            --notes-file release-notes.md
