@@ -2,8 +2,17 @@
 
 A spot check of docs/stdlib/array.md against the interpreter: every row of
 its complexity table, plus the per-operation annotations in its code blocks.
-Inputs are large enough that the timed work dominates fixed overhead; raw byte
-copies use two sizes beyond the cache-sensitive small-copy regime.
+Inputs are large enough that the timed work dominates fixed overhead.
+For tobytes(), tests assert the exact output size, content, and independence
+from the source at two lengths and three item widths. These observations
+establish the copied output's O(n) space, not an upper bound on elapsed time.
+The O(n) time bound is source-backed: array_array_tobytes_impl passes
+length * itemsize to PyBytes_FromStringAndSize, which copies that buffer.
+See Modules/arraymodule.c and Objects/bytesobject.c on CPython's released
+3.10, 3.11, 3.12, 3.13 and 3.14 branches, for example:
+https://github.com/python/cpython/blob/3.12/Modules/arraymodule.c
+https://github.com/python/cpython/blob/3.12/Objects/bytesobject.c
+Allocator and memory-cache latency are not measured by the output checks.
 
 The memory section did not, and both tests for it were written against
 measurements rather than the page:
@@ -293,8 +302,6 @@ class TestConversions:
     SMALL_SIZE = 10_000
     LARGE_SIZE = 1_000_000
     SIZE_RATIO = LARGE_SIZE / SMALL_SIZE
-    TOBYTES_SMALL_SIZE = 1_000_000
-    TOBYTES_LARGE_SIZE = 8_000_000
 
     def _linear(self, small: Callable[[], Any], large: Callable[[], Any], label: str) -> None:
         small_time = measure_time(small, iterations=10)
@@ -312,20 +319,32 @@ class TestConversions:
         large = array.array("i", range(self.LARGE_SIZE))
         self._linear(small.tolist, large.tolist, "tolist()")
 
-    @pytest.mark.timing
-    def test_tobytes_is_on(self) -> None:
-        # A 40 KiB small input stays cache-hot while the old 4 MiB large input
-        # reaches main memory, making a 100x input appear to cost over 300x.
-        # Keep both copies beyond that cache-sensitive regime.
-        small = array.array("i", range(self.TOBYTES_SMALL_SIZE))
-        large = array.array("i", range(self.TOBYTES_LARGE_SIZE))
-        small_time = measure_time(small.tobytes, iterations=10)
-        large_time = measure_time(large.tobytes, iterations=10)
-        size_ratio = self.TOBYTES_LARGE_SIZE / self.TOBYTES_SMALL_SIZE
+    @pytest.mark.parametrize("typecode", ["B", "i", "d"])
+    @pytest.mark.parametrize("count", [1_024, 65_536])
+    def test_tobytes_copies_the_full_buffer(self, typecode: str, count: int) -> None:
+        """Output storage is length * itemsize plus a fixed bytes header.
 
-        assert scales_with_size(small_time, large_time, size_ratio), (
-            f"tobytes() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
-        )
+        Distinct calls produce distinct copies, and source mutation leaves
+        both copies intact. The values repeat 0..3; other value patterns
+        and allocator performance are not varied.
+        """
+        source = array.array(typecode, [0, 1, 2, 3]) * (count // 4)
+        expected = bytes(memoryview(source))
+
+        result = source.tobytes()
+        another = source.tobytes()
+
+        assert type(result) is bytes
+        assert result == another == expected
+        assert result is not another
+        assert len(result) == count * source.itemsize
+        assert sys.getsizeof(result) == sys.getsizeof(b"") + count * source.itemsize
+
+        source[0] = 7
+        source[count // 2] = 8
+        source[-1] = 9
+        assert bytes(memoryview(source)) != expected
+        assert result == another == expected
 
     @pytest.mark.timing
     def test_frombytes_is_on(self) -> None:

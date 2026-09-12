@@ -39,7 +39,7 @@ import tempfile
 import time
 import unicodedata
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from decimal import Decimal, getcontext
 from fractions import Fraction
 from functools import cmp_to_key
@@ -163,15 +163,30 @@ class TestFnmatchPatternCost:
             f"filter() is O(k) in names: {few_time:.2e}s vs {many_time:.2e}s"
         )
 
-    @pytest.mark.timing
     def test_two_patterns_means_two_passes(self) -> None:
-        names = [f"file{i}.py" for i in range(20_000)]
-        one = best_time(lambda: fnmatch.filter(names, "*.py"))
-        two = best_time(lambda: fnmatch.filter(names, "*.py") + fnmatch.filter(names, "*.js"))
+        """Each filter consumes every name, even when its pattern matches none.
 
-        assert two > one * 1.5, (
-            f"a second pattern is a second full pass: one={one:.2e}s two={two:.2e}s"
-        )
+        Count yielded names with real pattern matching; elapsed time also
+        depends on matching and output construction, not just pass count.
+        """
+        visits: list[str] = []
+
+        class RecordingNames(list[str]):
+            def __iter__(self) -> Iterator[str]:
+                for name in super().__iter__():
+                    visits.append(name)
+                    yield name
+
+        expected = [f"file{i}.py" for i in range(100)]
+        names = RecordingNames(expected)
+
+        matched = fnmatch.filter(names, "*.py")
+        assert matched == expected
+        assert visits == expected
+
+        unmatched = fnmatch.filter(names, "*.js")
+        assert unmatched == []
+        assert visits == expected + expected
 
 
 class TestCmpToKeyCallsPerComparison:
