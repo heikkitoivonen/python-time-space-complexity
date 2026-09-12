@@ -6,11 +6,16 @@ agent behavior. Manual agent evaluation is described in skills/evaluations.md.
 
 import hashlib
 import json
+import os
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import patch
 from zipfile import ZipFile
 
 import pytest
+import yaml
 
 from scripts.build_skills import (
     GROUPS,
@@ -132,7 +137,7 @@ def test_marketplaces_resolve_to_identical_portable_skill(
 @pytest.mark.parametrize(
     ("tag", "revision", "tagged_commit", "message"),
     [
-        ("python-complexity-v9.0.0", "a" * 40, "a" * 40, "matching version"),
+        ("python-complexity-v9.0.0", "a" * 40, "a" * 40, "match version.txt"),
         ("python-complexity-v1.0.0", "a" * 40 + "-dirty", "a" * 40, "clean checkout"),
         ("python-complexity-v1.0.0", "a" * 40, "b" * 40, "point to HEAD"),
     ],
@@ -149,3 +154,54 @@ def test_release_accepts_exact_clean_tag() -> None:
     with patch("scripts.build_skills.subprocess.check_output", return_value="a" * 40) as git:
         validate_release(ROOT, "python-complexity-v1.0.0", "1.0.0", "a" * 40)
     assert git.call_args.args[0][-1] == "refs/tags/python-complexity-v1.0.0^{commit}"
+
+
+def test_release_reports_dirty_paths() -> None:
+    with patch("scripts.build_skills.subprocess.check_output", return_value=" M uv.lock\n"):
+        with pytest.raises(ValueError, match=r"clean checkout; changed paths:\nM uv.lock"):
+            validate_release(ROOT, "python-complexity-v1.0.0", "1.0.0", "a" * 40 + "-dirty")
+
+
+def test_skill_workflow_preserves_lockfile_without_local_uv_config(tmp_path: Path) -> None:
+    """A lock created with exclude-newer must survive uv run in CI.
+
+    Use the workflow's environment with a dependency-free temporary project.
+    Removing the frozen setting must actually rewrite its lockfile, proving
+    that the fixture exercises configuration drift rather than a no-op run.
+    """
+    uv = shutil.which("uv")
+    if uv is None:
+        pytest.skip("uv not found")
+    workflow = yaml.load(
+        (ROOT / ".github/workflows/skills.yml").read_text(), Loader=yaml.BaseLoader
+    )
+    env = {**os.environ, **workflow.get("env", {})}
+    env.pop("UV_PROJECT_ENVIRONMENT", None)
+    env.pop("VIRTUAL_ENV", None)
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "release-lock-probe"\nversion = "0.0.0"\nrequires-python = ">=3.10"\n'
+    )
+
+    def run_uv(*args: str, environment: dict[str, str]) -> None:
+        command = [uv, "--no-config", "--offline", *args, "--python", sys.executable]
+        if args[0] == "run":
+            command.extend(["python", "-c", "pass"])
+        result = subprocess.run(
+            command,
+            cwd=tmp_path,
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+
+    run_uv("lock", "--exclude-newer", "2020-01-01", environment={**env, "UV_FROZEN": "false"})
+    lock = tmp_path / "uv.lock"
+    original = lock.read_bytes()
+    run_uv("run", environment=env)
+    assert lock.read_bytes() == original, "CI must not rewrite the release's uv.lock"
+
+    run_uv("run", environment={**env, "UV_FROZEN": "false"})
+    assert lock.read_bytes() != original, "unfrozen control must exercise lockfile rewriting"

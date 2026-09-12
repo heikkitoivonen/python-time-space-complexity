@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # Applies to make targets and subprocesses as well as the initial install.
+  UV_FROZEN: "true"
+
 jobs:
   build:
     runs-on: ubuntu-latest

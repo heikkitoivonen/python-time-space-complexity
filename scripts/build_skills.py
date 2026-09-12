@@ -37,8 +37,14 @@ def revision(root: Path) -> str:
 
 
 def validate_release(root: Path, tag: str, version: str, source_revision: str) -> None:
-    if tag != f"{NAME}-v{version}" or source_revision.endswith("-dirty"):
-        raise ValueError("Release requires a clean checkout and a tag matching version.txt")
+    expected = f"{NAME}-v{version}"
+    if tag != expected:
+        raise ValueError(f"Release tag must match version.txt: expected {expected!r}, got {tag!r}")
+    if source_revision.endswith("-dirty"):
+        changed = subprocess.check_output(
+            ["git", "status", "--porcelain", "--untracked-files=normal"], cwd=root, text=True
+        ).strip()
+        raise ValueError(f"Release requires a clean checkout; changed paths:\n{changed}")
     tagged = subprocess.check_output(
         ["git", "rev-parse", f"refs/tags/{tag}^{{commit}}"], cwd=root, text=True
     ).strip()
