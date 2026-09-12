@@ -43,10 +43,11 @@ CPython 3.14.7 with 1,000 then 4,000 assignment statements unless stated:
   `fix_missing_locations`: x4.3; `increment_lineno`: x4.3; `compare`: x4.4
   on 3.14; `literal_eval` of a 1,000-then-4,000-item list: x5.4;
 * `dump` of the wide tree: x4.3 (x4.2 with `indent=2`), but of a chain 1,000
-  then 4,000 deep: x13, the N * h shape, and a 4,000-deep chain against a
+  then 16,000 deep: x137-x151 (x133-x135 on 3.10.21), the N * h shape;
+  a 4,000-deep chain against a
   wide tree of the same node count costs x6.4 more; with `indent=2` the deep
   chain's output grows x16 in characters (2.0 MB to 32 MB) and the time x101,
-  the N * h² shape, and x49 for 250 then 1,000 deep, which is what the test
+  the N * h² shape, and x550 for 250 then 2,000 deep, which is what the test
   measures;
 * `unparse`: x3.9 wide and x3.7 for the deep chain, so it is linear in both;
 * `get_source_segment` of the last statement: x16-x17 on 3.11.14 and 3.14.7
@@ -158,7 +159,7 @@ def flat_tree(count: int) -> ast.Module:
 
 
 def in_deep_stack(func: Callable[[], Any]) -> Any:
-    """Run func in a thread whose stack fits a 4,000-deep recursion."""
+    """Run func in a thread whose stack fits a 16,000-deep recursion."""
     result: list[Any] = []
     error: list[BaseException] = []
 
@@ -352,29 +353,50 @@ class TestDump:
 
     @pytest.mark.timing
     def test_superlinear_in_a_deep_chain(self) -> None:
-        small, large = deep_chain(1_000), deep_chain(4_000)
+        """Depth grows 16x with fixed node kinds and short fields.
 
-        growth = in_deep_stack(
-            lambda: ratio(lambda: ast.dump(small), lambda: ast.dump(large), repeats=3)
-        )
+        Linear work predicts 16x, N * h predicts 256x. After warm-up,
+        1,000 then 16,000 levels measure 133-135x on CPython 3.10.21 and
+        137-151x on 3.14.7. The output itself grows only about 16x; this
+        distinguishes repeated copying from output size alone. Field
+        lengths, branching, and indentation are not varied.
+        """
+        small, large = deep_chain(1_000), deep_chain(16_000)
 
-        assert growth > 8, f"x{growth:.1f} for 4x the depth; linear would be 4, N * h 16"
+        def measure() -> float:
+            small_text, large_text = ast.dump(small), ast.dump(large)
+            assert small_text.count("UnaryOp(") == 1_000
+            assert large_text.count("UnaryOp(") == 16_000
+            assert 15 < len(large_text) / len(small_text) < 17
+            return ratio(lambda: ast.dump(small), lambda: ast.dump(large), repeats=5)
+
+        growth = in_deep_stack(measure)
+
+        assert growth > 48, f"x{growth:.1f} for 16x the depth; linear would be 16, N * h 256"
 
     @pytest.mark.timing
     def test_indent_makes_a_deep_chain_cubic(self) -> None:
-        small, large = deep_chain(250), deep_chain(1_000)
+        """At 8x depth, quadratic output predicts 64x and cubic work 512x.
 
-        growth = in_deep_stack(
-            lambda: ratio(
-                lambda: ast.dump(small, indent=2), lambda: ast.dump(large, indent=2), repeats=3
+        Warm both inputs before timing. CPython 3.14.7 measures about 550x
+        from 250 to 2,000 levels after the unindented deep-chain test.
+        Node kinds, field lengths, and indentation width remain fixed.
+        """
+        small, large = deep_chain(250), deep_chain(2_000)
+
+        def measure() -> float:
+            small_text, large_text = ast.dump(small, indent=2), ast.dump(large, indent=2)
+            characters = len(large_text) / len(small_text)
+            assert 48 < characters < 80, f"x{characters:.1f} characters for 8x the depth"
+            return ratio(
+                lambda: ast.dump(small, indent=2),
+                lambda: ast.dump(large, indent=2),
+                repeats=3,
             )
-        )
-        characters = in_deep_stack(
-            lambda: len(ast.dump(large, indent=2)) / len(ast.dump(small, indent=2))
-        )
 
-        assert growth > 20, f"x{growth:.1f} for 4x the depth; N * h would be 16, N * h² 64"
-        assert characters > 12, f"x{characters:.1f} characters for 4x the depth"
+        growth = in_deep_stack(measure)
+
+        assert growth > 128, f"x{growth:.1f} for 8x the depth; N * h would be 64, N * h² 512"
 
     def test_documented_output(self) -> None:
         text = ast.dump(ast.parse("x = 1 + 2"))
