@@ -4,13 +4,19 @@ The `int()` function converts objects to integers or creates integers from strin
 
 ## Complexity Analysis
 
+n is the length of a string argument.
+
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
-| Convert int | O(1) | O(1) | Already integer |
-| Convert float | O(1) | O(1) | Truncate decimal |
-| Convert string (base 10) | O(n²) | O(n) | n = string length; quadratic for very large numbers |
-| Convert string (other base) | O(n²) | O(n) | Parse digits; quadratic due to arbitrary precision |
+| No argument | O(1) | O(1) | Returns `0` |
+| Convert int | O(1) | O(1) | Returns the argument itself; an instance of a subclass that inherits the conversion is copied, linear in its bits |
+| Convert float | O(1) | O(1) | Truncates toward zero; the result is at most 1,024 bits |
 | Convert bool | O(1) | O(1) | True→1, False→0 |
+| Convert string, base 10 | O(n²) | O(n) | Each nine-digit group is folded into a growing value. Capped at `sys.get_int_max_str_digits()`, 4,300 digits by default, `ValueError` beyond. 3.12+: O(n^1.58) above 6,000 digits once the cap is raised |
+| Convert string, base 2, 4, 8, 16 or 32 | O(n) | O(n) | Each character is a fixed number of bits; no cap |
+| Convert string, any other base from 3 to 36 | O(n²) | O(n) | Same accumulation and cap as base 10, with no 3.12 fast path |
+| Convert string, base 0 | as the detected base | as the detected base | A `0x`, `0o` or `0b` prefix selects 16, 8 or 2, otherwise base 10, with that base's cost and cap |
+| Convert object with `__int__` or `__index__` | O(f) | O(f) | f = that method's cost, called once; the `__trunc__` fallback is removed in 3.14 |
 
 ## Basic Usage
 
@@ -28,17 +34,21 @@ int(False)      # 0
 ### From Strings
 
 ```python
-# O(n) - where n = string length
+# O(n²) in the digit count
 int("42")       # 42
 int("-123")     # -123
 int("0")        # 0
-int("")         # ValueError
+
+try:
+    int("")     # ValueError
+except ValueError:
+    pass
 ```
 
 ### From Different Bases
 
 ```python
-# O(n) - parse digits in specified base
+# O(n) - bases 2, 8 and 16 map each character straight to bits
 int("101", 2)     # 5 (binary)
 int("ff", 16)     # 255 (hex)
 int("77", 8)      # 63 (octal)
@@ -49,38 +59,39 @@ int("1A2B", 16)   # 6699 (hex)
 
 ### String Parsing
 
-!!! note "Complexity for Large Numbers"
-    For typical small numbers (< 1000 digits), parsing is effectively O(n). For very large numbers (thousands of digits), the complexity becomes O(n²) due to arbitrary precision arithmetic during accumulation.
+!!! note "Why base 10 is quadratic"
+    Each group of nine digits is folded in by multiplying the value accumulated so far by 10⁹, so the work is the sum of the growing widths: O(n²). Bases 2, 4, 8, 16 and 32 copy bits straight into the result, O(n). Since 3.12, base 10 switches to an O(n^1.58) divide-and-conquer above 6,000 digits, but the default 4,300-digit cap has to be raised before that path is reachable.
 
 ```python
-# O(n) for typical numbers, O(n²) for very large numbers
-short = int("42")      # O(2) - effectively linear
-long = int("1" * 1000) # O(1000²) for very large - quadratic
+# O(n²) - the accumulated value is multiplied at every step
+short = int("42")
+long = int("1" * 1000)
 
-# Each character must be parsed
+# The same accumulation, spelled out
 x = 0
 for char in "12345":
-    # Process each digit - O(n) total
     x = x * 10 + int(char)
 ```
 
 ### Base Conversion
 
 ```python
-# O(n) - different bases same complexity
-binary = int("1010101", 2)     # O(7)
-octal = int("1234567", 8)      # O(7)
-hex_val = int("ABCDEF", 16)    # O(6)
+# Power-of-two bases are linear: one character is a fixed number of bits
+binary = int("1010101", 2)
+octal = int("1234567", 8)
+hex_val = int("ABCDEF", 16)
 
-# Base doesn't affect complexity, just interpretation
+# Any other base accumulates like base 10 and is quadratic
+base3 = int("2101", 3)
+base36 = int("zz", 36)
 ```
 
 ### From Float
 
 ```python
 # O(1) - just truncate
-int(3.14)   # 3 - instant
-int(3.99)   # 3 - instant (not rounded!)
+int(3.14)   # 3 - O(1)
+int(3.99)   # 3 - O(1), not rounded
 int(-2.5)   # -2 (truncates toward zero)
 ```
 
@@ -89,38 +100,38 @@ int(-2.5)   # -2 (truncates toward zero)
 ### String to Integer Conversion
 
 ```python
-# O(n) - user input parsing
-user_input = input("Enter a number: ")  # "42"
-try:
-    number = int(user_input)  # O(n) - parse string
-    process(number)
-except ValueError:
-    print("Invalid integer")
+# One parse per attempt, quadratic in the digits
+for user_input in ["42", "forty-two"]:
+    try:
+        number = int(user_input)
+        print(number)
+    except ValueError:
+        print("Invalid integer")
 ```
 
 ### Base Conversion
 
 ```python
-# O(n) - convert from different bases
+# O(n) - power-of-two bases
 hex_string = "FF"
-value = int(hex_string, 16)  # O(2) - binary: 255
+value = int(hex_string, 16)  # 255
 
 # Useful for configuration
 config_bits = "11010110"
-flags = int(config_bits, 2)  # O(8) - binary flags
+flags = int(config_bits, 2)  # 214
 ```
 
 ### List Comprehension
 
 ```python
-# O(n * m) - n items, m = avg string length
+# n strings of m digits: O(n * m²), or O(n * m) for a power-of-two base
 strings = ["10", "20", "30", "40"]
-numbers = [int(s) for s in strings]  # O(n)
+numbers = [int(s) for s in strings]
 # [10, 20, 30, 40]
 
 # With base
 hex_strings = ["FF", "10", "20"]
-numbers = [int(s, 16) for s in hex_strings]  # O(n)
+numbers = [int(s, 16) for s in hex_strings]
 # [255, 16, 32]
 ```
 
@@ -132,45 +143,37 @@ numbers = [int(s, 16) for s in hex_strings]  # O(n)
 # O(1) - direct
 x = 42
 
-# O(n) - string parsing
-y = int("42")  # O(2)
+# Quadratic in the digits - string parsing
+y = int("42")
 
-# For performance, avoid string parsing if possible
-config = 42  # Direct
-value = int(config)  # O(1)
+# Keep values numeric where you can
+config = 42
+value = int(config)  # O(1): returns the same object
 
-# vs
-config = "42"  # String
-value = int(config)  # O(n)
+config = "42"
+value = int(config)  # parses again every time
 ```
 
 ### Batch Conversion
 
 ```python
-# O(n) - convert list of strings
+# One parse per item
 data = ["1", "2", "3", "100", "200"]
-numbers = [int(x) for x in data]  # O(n) total
+numbers = [int(x) for x in data]
 
-# Using map - same complexity
-numbers = list(map(int, data))  # O(n) total
+# Using map - same work
+numbers = list(map(int, data))
 ```
 
 ### Base Conversion Efficiency
 
 ```python
-# All O(n), no performance difference by base
-# Time is proportional to string length, not base
-
-# Short string, any base
-int("10", 2)      # O(2)
-int("10", 10)     # O(2)
-int("10", 16)     # O(2)
-
-# Long string
-long_val = "1" * 1000
-int(long_val, 2)  # O(1000)
-int(long_val, 10) # O(1000)
-int(long_val, 16) # O(1000)
+# The base decides the algorithm, not just the interpretation
+digits = "1" * 4000
+int(digits, 2)   # O(n): bits copied straight in
+int(digits, 16)  # O(n): four bits per character
+int(digits, 10)  # O(n²): every step multiplies the running value
+int(digits, 3)   # O(n²): the same accumulation as base 10
 ```
 
 ## Practical Examples
@@ -178,32 +181,33 @@ int(long_val, 16) # O(1000)
 ### Parsing User Input
 
 ```python
-# O(n) - parse and validate
-def get_positive_int(prompt):
-    while True:
+# One parse per candidate
+def get_positive_int(candidates):
+    for text in candidates:
         try:
-            value = int(input(prompt))  # O(n)
-            if value > 0:
-                return value
-            print("Must be positive")
+            value = int(text)
         except ValueError:
             print("Must be an integer")
+            continue
+        if value > 0:
+            return value
+        print("Must be positive")
+    return None
 
-# Usage
-count = get_positive_int("Enter count: ")
+count = get_positive_int(["abc", "-3", "7"])  # 7
 ```
 
 ### Configuration from Strings
 
 ```python
-# O(n) - parse config values
+# One parse per value
 config_str = "timeout:30,retries:3,port:8080"
 
 def parse_config(config_str):
     config = {}
     for item in config_str.split(","):
         key, value = item.split(":")
-        config[key] = int(value)  # O(m) per value
+        config[key] = int(value)
     return config
 
 config = parse_config(config_str)
@@ -213,7 +217,7 @@ config = parse_config(config_str)
 ### Bit Manipulation
 
 ```python
-# O(n) - parse binary for bit flags
+# The parse is O(n); the loop then builds one key per bit
 def parse_flags(binary_str):
     value = int(binary_str, 2)  # O(n)
     flags = {}
@@ -223,17 +227,17 @@ def parse_flags(binary_str):
 
 flags_str = "11010110"
 flags = parse_flags(flags_str)
-# {'flag_0': 0, 'flag_1': 1, 'flag_2': 1, ...}
+# {'flag_0': False, 'flag_1': True, 'flag_2': True, ...}
 ```
 
 ### Custom Number Base
 
 ```python
-# O(n) - support custom bases
+# Linear for a power-of-two base, quadratic otherwise
 def int_from_base(string, base):
     if base < 2 or base > 36:
         raise ValueError("Base must be 2-36")
-    return int(string, base)  # O(n)
+    return int(string, base)
 
 # Useful for specialized parsing
 value = int_from_base("Z", 36)  # 35 in base 36
@@ -263,20 +267,30 @@ int("\t10\n")     # 10 - tab and newline stripped
 ### Sign Handling
 
 ```python
-# O(n) - handle negative numbers
+# A leading sign is part of the literal
 int("-42")      # -42
 int("+42")      # 42 (plus sign OK)
-int("- 42")     # ValueError (space not allowed)
+
+try:
+    int("- 42")  # ValueError (space not allowed)
+except ValueError:
+    pass
 ```
 
 ### Large Numbers
 
 ```python
-# O(n) - Python handles arbitrary precision
+# O(n²) - and capped at 4,300 decimal digits by default
 big = int("999999999999999999999999999999")
-huge = int("1" * 10000)  # O(10000)
+huge = int("1" * 4000)
 
-# No overflow, just slower with more digits
+try:
+    int("1" * 5000)
+except ValueError:
+    pass  # raise the cap with sys.set_int_max_str_digits() for trusted input
+
+# Power-of-two bases have no cap
+wide = int("f" * 5000, 16)
 ```
 
 ### Invalid Bases
@@ -284,8 +298,8 @@ huge = int("1" * 10000)  # O(10000)
 ```python
 # O(1) - check base
 try:
-    int("10", 1)   # ValueError: base must be >= 2
-    int("10", 37)  # ValueError: base must be <= 36
+    int("10", 1)   # ValueError: base must be >= 2 and <= 36, or 0
+    int("10", 37)  # ValueError: same check
 except ValueError:
     pass
 ```
@@ -293,12 +307,12 @@ except ValueError:
 ## Comparison with float()
 
 ```python
-# int() - O(n) from string, O(1) from float
-int("42")    # O(2)
-int(3.14)    # O(1) - truncate
+# int() - quadratic in the digits from a string, O(1) from a float
+int("42")    # 42
+int(3.14)    # 3 - truncate
 
-# float() - similar but handles decimals
-float("3.14")  # O(4)
+# float() - a linear scan into a fixed-width result, with no digit cap
+float("3.14")  # 3.14
 
 # int() truncates, float() keeps precision
 int(3.99)   # 3
@@ -319,7 +333,7 @@ float(3.99) # 3.99
 - Assuming int() won't fail on user input
 - Using int() repeatedly on same string (cache it)
 - Expecting int() to round (it truncates)
-- Forgetting that int() parses, doesn't evaluate
+- Parsing thousands of decimal digits in a hot path (quadratic, and capped)
 
 ## Related Functions
 
@@ -333,3 +347,6 @@ float(3.99) # 3.99
 - **Python 2.x**: Long integers separate (long type)
 - **Python 3.x**: Single int type with arbitrary precision
 - **All versions**: Truncates toward zero when converting float
+- **Python 3.11** (backported to 3.10.7): decimal digit cap, adjustable with `sys.set_int_max_str_digits()`
+- **Python 3.12**: O(n^1.58) base-10 parsing above 6,000 digits
+- **Python 3.14**: the `__trunc__` fallback is removed; objects need `__int__` or `__index__`
