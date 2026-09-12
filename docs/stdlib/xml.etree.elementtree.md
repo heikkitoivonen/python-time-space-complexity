@@ -46,6 +46,11 @@ ET.SubElement(root, 'item', id='2').text = 'B'
 
 # Serialize - O(n)
 xml_bytes = ET.tostring(root)
+
+# Update attributes and save the tree
+root.set('updated', 'True')
+tree = ET.ElementTree(root)
+tree.write('output.xml')  # O(n) serialization
 ```
 
 ## Related Modules

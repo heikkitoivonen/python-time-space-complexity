@@ -11,6 +11,7 @@ The `defaultdict` class from `collections` provides a dictionary that returns a 
 | Lookup missing key | O(1) avg | O(1) | Creates default; O(n) worst case |
 | Insert | O(1) avg | O(1) | O(n) worst case due to hash collisions |
 | Delete | O(1) avg | O(1) | O(n) worst case due to hash collisions |
+| `copy()` | O(n) | O(n) | n = stored keys; shallow copy retaining the factory |
 
 ## Basic Usage
 
@@ -32,6 +33,25 @@ print(dd['missing'])  # []
 ```
 
 ## Default Factories
+
+`default_factory` holds the callable supplying missing values, or `None` to
+raise `KeyError` on a missing key. Existing keys do not call the factory.
+An increment such as `d[key] += 1` performs a get and a set; on a missing key,
+the factory supplies and stores the initial value as well.
+
+```python
+from collections import defaultdict
+
+original = defaultdict(list, items=[1])
+copied = original.copy()  # O(n) time and space
+assert copied.default_factory is list
+assert copied['items'] is original['items']  # Shallow copy
+copied.default_factory = None
+try:
+    copied['missing']
+except KeyError:
+    print('No default factory')
+```
 
 ### Common Factories
 

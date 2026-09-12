@@ -6,11 +6,29 @@ The `Counter` class from `collections` provides a convenient way to count occurr
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `Counter()` | O(n) | O(n) | Create from iterable |
+| `Counter(iterable)` | O(n) | O(k) | n = items consumed, k = distinct keys |
 | `update()` | O(n) | O(n) | Add counts |
-| `most_common(k)` | O(n log k) | O(k) | n = `len(c)`. `k=1` uses `max()`; `k >= len(c)` falls back to `sorted()`; a heap in between. Whether that beats sorting everything depends on the counts - see [collections](collections.md) |
+| `most_common(k)` | O(n log k) | O(k) | n = `len(c)`. `k=1` uses `max()`; `k >= len(c)` falls back to `sorted()`; a heap in between. Whether that beats sorting everything depends on the counts |
 | `subtract()` | O(n) | O(k) | Subtracting a key the counter does not have creates it with a negative count, so it is not O(1) space |
 | Lookup | O(1) avg | O(1) | O(n) worst case due to hash collisions |
+| `total()` | O(n) | O(1) | n = distinct keys; sum all counts (Python 3.10+) |
+| `elements()` | O(1) to create, O(n + t) to exhaust | O(1) | n = distinct keys, t = items yielded; ignores zero and negative counts |
+| `copy()` | O(n) | O(n) | n = distinct keys; shallow copy |
+
+`fromkeys()` is unsupported and raises `NotImplementedError`; see the
+[Counter reference](https://docs.python.org/3/library/collections.html#collections.Counter.fromkeys).
+
+## Totals, Elements and Copies
+
+```python
+from collections import Counter
+
+c = Counter(a=3, b=0, c=-1)
+print(c.total())  # 2; O(n) in distinct keys
+print(list(c.elements()))  # ['a', 'a', 'a']; O(n + t) time, O(t) output space
+copied = c.copy()  # O(n) time and space
+assert copied == c and copied is not c
+```
 
 ## Basic Usage
 

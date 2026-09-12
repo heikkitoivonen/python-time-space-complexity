@@ -4,197 +4,23 @@ The `collections` module provides specialized data structures optimized for spec
 
 ## deque
 
-### Time Complexity
-
-| Operation | Time | Space | Notes |
-|-----------|------|-------|-------|
-| `append(x)` | O(1) | O(1) | Add to right end |
-| `appendleft(x)` | O(1) | O(1) | Add to left end |
-| `pop()` | O(1) | O(1) | Remove from right end |
-| `popleft()` | O(1) | O(1) | Remove from left end |
-| `access[i]` | O(1) ends, O(n) middle | O(1) | Ends (d[0], d[-1]) are O(1); middle elements O(n) due to block structure |
-| `extend(iterable)` | O(k) | O(k) | k = iterable length |
-| `extendleft(iterable)` | O(k) | O(k) | k = iterable length; note: reverses order |
-| `rotate(n)` | O(k) | O(1) | k = min(n mod len(d), len(d) - n mod len(d)) |
-| `clear()` | O(n) | O(1) | Remove all elements |
-| `copy()` | O(n) | O(n) | Shallow copy |
-| `count(x)` | O(n) | O(1) | Count occurrences of x |
-| `index(x)` | O(n) | O(1) | Find first occurrence of x |
-| `insert(i, x)` | O(n) | O(1) | Insert x at position i; raises IndexError on a full bounded deque |
-| `remove(x)` | O(n) | O(1) | Remove first occurrence of x |
-| `reverse()` | O(n) | O(1) | Reverse in place |
-| `in` (membership) | O(n) | O(1) | Linear search |
-
-### Attributes
-
-| Attribute | Notes |
-|-----------|-------|
-| `maxlen` | Maximum size (None if unbounded); read-only |
-
-### Space Complexity
-
-- Storage: O(n) for n items
-- Operations: O(1) for append/pop operations
-
-### Use Cases
-
-```python
-from collections import deque
-
-# Process items from both ends - very efficient
-queue = deque([1, 2, 3])
-queue.appendleft(0)  # O(1) - add to front
-queue.pop()  # O(1) - remove from back
-
-# Much faster than list for this pattern:
-# list.insert(0, x) is O(n)
-# list.pop(0) is O(n)
-```
+See [deque](deque.md) for operations, complexity and examples.
 
 ## DefaultDict
 
-### Time Complexity
-
-Same as `dict`:
-
-| Operation | Time | Space | Notes |
-|-----------|------|-------|-------|
-| `d[key]` | O(1) avg | O(1) | Returns default if missing; O(n) worst case due to hash collisions |
-| `d[key] = value` | O(1) avg | O(1) | O(n) worst case due to hash collisions |
-| `del d[key]` | O(1) avg | O(1) | O(n) worst case due to hash collisions |
-| `copy()` | O(n) | O(n) | Shallow copy |
-| Other dict ops | Same as dict | - | |
-
-### Attributes
-
-| Attribute | Notes |
-|-----------|-------|
-| `default_factory` | Callable that provides default values; can be None |
-
-### Space Complexity
-
-- O(n) for n key-value pairs
-- Default factory called only when key accessed
-
-### Use Cases
-
-```python
-from collections import defaultdict
-
-# Avoid: manual checking - a membership test, then a store, then the append
-groups = {}
-if 'key' not in groups:
-    groups['key'] = []
-groups['key'].append('value')
-
-# Better: the factory supplies the list - O(1) avg, one lookup
-data = defaultdict(list)
-data['key'].append('value')
-
-# Avoid: clunky dict.get()
-counts = {}
-counts['key'] = counts.get('key', 0) + 1  # O(1) avg, a get and a set spelled out
-
-# Better: defaultdict with int
-tally = defaultdict(int)
-tally['key'] += 1  # O(1) avg - still a get plus a set, but one statement
-                   # and no default to pass in
-```
+See [defaultdict](defaultdict.md) for operations, complexity and examples.
 
 ## Counter
 
-### Time Complexity
-
-| Operation | Time | Space | Notes |
-|-----------|------|-------|-------|
-| `Counter(iterable)` | O(n) | O(k) | n = iterable length, k = unique items |
-| `c[item]` | O(1) avg | O(1) | Returns 0 if missing; O(n) worst case due to hash collisions |
-| `c.most_common(k)` | O(n log k) | O(k) | n = `len(c)`, the distinct keys. Passing k keeps a heap of size k rather than sorting every key, usually the faster choice |
-| `c.update(iterable)` | O(n) | O(k) | n = iterable length |
-| `c.subtract(iterable)` | O(n) | O(1) | Subtract counts; keeps negative values |
-| `c.total()` | O(n) | O(1) | Sum of all counts (Python 3.10+) |
-| `c.elements()` | O(1) init, O(total) iter | O(1) | Iterator over elements repeating each count times |
-| `c.copy()` | O(n) | O(n) | Shallow copy |
-| `c.fromkeys(iterable)` | N/A | - | Not useful for Counter; inherited from dict |
-| `c + c2` | O(n) | O(n) | Combines counters; keeps positive counts |
-| `c - c2` | O(n) | O(n) | Subtracts; keeps positive counts |
-
-### Use Cases
-
-```python
-from collections import Counter
-
-# Count items - O(n) for n items
-words = ['apple', 'banana', 'apple', 'cherry', 'apple']
-c = Counter(words)
-# Counter({'apple': 3, 'banana': 1, 'cherry': 1})
-
-# Most common items - O(n log k) for k items, n = len(c). Whether that beats
-# sorting everything depends on the counts; see the note in the table above
-top_3 = c.most_common(3)  # [('apple', 3), ('banana', 1), ('cherry', 1)]
-
-# Arithmetic - O(n) over the combined keys
-c1 = Counter('aab')
-c2 = Counter('abc')
-c1 + c2  # Counter({'a': 3, 'b': 2, 'c': 1})
-```
+See [Counter](counter.md) for operations, complexity and examples.
 
 ## NamedTuple
 
-### Time Complexity
-
-Same as tuple for all operations:
-
-| Operation | Time | Space | Notes |
-|-----------|------|-------|-------|
-| Creation | O(1) | O(1) | Fixed number of fields |
-| Access by index | O(1) | O(1) | Same as tuple |
-| Access by name | O(1) | O(1) | Same as tuple |
-| Iteration | O(n) | O(1) | n = number of fields |
-
-### Use Cases
-
-```python
-from collections import namedtuple
-
-Point = namedtuple('Point', ['x', 'y'])
-p = Point(11, y=22)
-
-# Better than plain tuple
-print(p.x)  # More readable than p[0]
-
-# Create from dict
-d = {'x': 1, 'y': 2}
-p = Point(**d)
-
-# Replace values
-p2 = p._replace(x=5)
-```
+See [namedtuple](namedtuple.md) for operations, complexity and examples.
 
 ## OrderedDict
 
-### Time Complexity
-
-| Operation | Time | Space | Notes |
-|-----------|------|-------|-------|
-| Same as dict | O(1) | O(1) | All dict operations |
-| `move_to_end(key)` | O(1) | O(1) | Move key to end |
-
-### Notes
-
-- **Python 3.6+**: Regular `dict` preserves order, so `OrderedDict` mainly useful for:
-
-  - Compatibility with older code
-  - `move_to_end()` method for reordering
-  - Explicit intent in code
-
-```python
-from collections import OrderedDict
-
-# Useful method: move_to_end()
-od = OrderedDict([('a', 1), ('b', 2), ('c', 3)])
-od.move_to_end('a')  # O(1) - moves 'a' to end
-```
+See [OrderedDict](ordereddict.md) for operations, complexity and examples.
 
 ## ChainMap
 
@@ -223,15 +49,6 @@ print(config['retries'])  # 3 (from defaults)
 
 # View layered configuration without merging
 ```
-
-## Performance Comparison
-
-| Operation | dict | defaultdict | Counter | OrderedDict |
-|-----------|------|-------------|---------|------------|
-| `d[key]` | O(1) | O(1) | O(1) | O(1) |
-| `d[key] = value` | O(1) | O(1) | O(1) | O(1) |
-| Special methods | - | `__missing__` | `most_common()` | `move_to_end()` |
-| Memory | Baseline | +small | +counter storage | +order tracking |
 
 ## UserDict
 

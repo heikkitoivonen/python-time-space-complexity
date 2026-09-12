@@ -1,5 +1,5 @@
 ---
-source_sha: 6e689f21a764b260fea46048a7c982179b8f44b6aed15cbe7972f4e7b497985b
+source_sha: 45e6ee6587007e1eab2d114700afa7e63063edb6439cf6702f07a5f279051faf
 translated: machine
 ---
 
@@ -9,197 +9,23 @@ translated: machine
 
 ## deque
 
-### 时间复杂度
-
-| 操作 | 时间 | 空间 | 备注 |
-|-----------|------|-------|-------|
-| `append(x)` | O(1) | O(1) | 从右端添加 |
-| `appendleft(x)` | O(1) | O(1) | 从左端添加 |
-| `pop()` | O(1) | O(1) | 从右端移除 |
-| `popleft()` | O(1) | O(1) | 从左端移除 |
-| `access[i]` | O(1) ends, O(n) middle | O(1) | 两端（d[0]、d[-1]）为 O(1)；受分块结构影响，中间元素为 O(n) |
-| `extend(iterable)` | O(k) | O(k) | k = 可迭代对象长度 |
-| `extendleft(iterable)` | O(k) | O(k) | k = 可迭代对象长度；注意：会反转顺序 |
-| `rotate(n)` | O(k) | O(1) | k = min(n mod len(d), len(d) - n mod len(d)) |
-| `clear()` | O(n) | O(1) | 移除所有元素 |
-| `copy()` | O(n) | O(n) | 浅拷贝 |
-| `count(x)` | O(n) | O(1) | 统计 x 出现的次数 |
-| `index(x)` | O(n) | O(1) | 查找 x 第一次出现的位置 |
-| `insert(i, x)` | O(n) | O(1) | 在位置 i 插入 x；有界 deque 已满时抛出 IndexError |
-| `remove(x)` | O(n) | O(1) | 移除 x 第一次出现的位置 |
-| `reverse()` | O(n) | O(1) | 原地反转 |
-| `in` (membership) | O(n) | O(1) | 线性查找 |
-
-### 属性
-
-| 属性 | 说明 |
-|-----------|-------|
-| `maxlen` | 最大容量（无限制时为 None）；只读 |
-
-### 空间复杂度
-
-- 存储：n 个元素占 O(n)
-- 操作：追加与弹出操作为 O(1)
-
-### 使用场景
-
-```python
-from collections import deque
-
-# Process items from both ends - very efficient
-queue = deque([1, 2, 3])
-queue.appendleft(0)  # O(1) - add to front
-queue.pop()  # O(1) - remove from back
-
-# Much faster than list for this pattern:
-# list.insert(0, x) is O(n)
-# list.pop(0) is O(n)
-```
+操作、复杂度和示例请参阅 [deque](deque.md)。
 
 ## DefaultDict
 
-### 时间复杂度
-
-与 `dict` 相同：
-
-| 操作 | 时间 | 空间 | 备注 |
-|-----------|------|-------|-------|
-| `d[key]` | 平均 O(1) | O(1) | 缺失时返回默认值；哈希冲突下最坏为 O(n) |
-| `d[key] = value` | 平均 O(1) | O(1) | 哈希冲突下最坏为 O(n) |
-| `del d[key]` | 平均 O(1) | O(1) | 哈希冲突下最坏为 O(n) |
-| `copy()` | O(n) | O(n) | 浅拷贝 |
-| 其他字典操作 | 与 dict 相同 | - | |
-
-### 属性
-
-| 属性 | 说明 |
-|-----------|-------|
-| `default_factory` | 提供默认值的可调用对象；可以为 None |
-
-### 空间复杂度
-
-- n 个键值对占 O(n)
-- 只有在访问缺失键时才调用默认工厂
-
-### 使用场景
-
-```python
-from collections import defaultdict
-
-# Avoid: manual checking - a membership test, then a store, then the append
-groups = {}
-if 'key' not in groups:
-    groups['key'] = []
-groups['key'].append('value')
-
-# Better: the factory supplies the list - O(1) avg, one lookup
-data = defaultdict(list)
-data['key'].append('value')
-
-# Avoid: clunky dict.get()
-counts = {}
-counts['key'] = counts.get('key', 0) + 1  # O(1) avg, a get and a set spelled out
-
-# Better: defaultdict with int
-tally = defaultdict(int)
-tally['key'] += 1  # O(1) avg - still a get plus a set, but one statement
-                   # and no default to pass in
-```
+操作、复杂度和示例请参阅 [defaultdict](defaultdict.md)。
 
 ## Counter
 
-### 时间复杂度
-
-| 操作 | 时间 | 空间 | 备注 |
-|-----------|------|-------|-------|
-| `Counter(iterable)` | O(n) | O(k) | n = 可迭代对象长度，k = 唯一元素个数 |
-| `c[item]` | 平均 O(1) | O(1) | 缺失时返回 0；哈希冲突下最坏为 O(n) |
-| `c.most_common(k)` | O(n log k) | O(k) | n 为 `len(c)`，即不同键的数量。传入 k 会维护大小为 k 的堆而非排序全部键，通常更快 |
-| `c.update(iterable)` | O(n) | O(k) | n = 可迭代对象长度 |
-| `c.subtract(iterable)` | O(n) | O(1) | 减去计数；保留负值 |
-| `c.total()` | O(n) | O(1) | 所有计数之和（Python 3.10+） |
-| `c.elements()` | O(1) init, O(total) iter | O(1) | 迭代元素，每个按其计数重复 |
-| `c.copy()` | O(n) | O(n) | 浅拷贝 |
-| `c.fromkeys(iterable)` | N/A | - | 对 Counter 无用；继承自 dict |
-| `c + c2` | O(n) | O(n) | 合并计数器；保留正计数 |
-| `c - c2` | O(n) | O(n) | 相减；保留正计数 |
-
-### 使用场景
-
-```python
-from collections import Counter
-
-# Count items - O(n) for n items
-words = ['apple', 'banana', 'apple', 'cherry', 'apple']
-c = Counter(words)
-# Counter({'apple': 3, 'banana': 1, 'cherry': 1})
-
-# Most common items - O(n log k) for k items, n = len(c). Whether that beats
-# sorting everything depends on the counts; see the note in the table above
-top_3 = c.most_common(3)  # [('apple', 3), ('banana', 1), ('cherry', 1)]
-
-# Arithmetic - O(n) over the combined keys
-c1 = Counter('aab')
-c2 = Counter('abc')
-c1 + c2  # Counter({'a': 3, 'b': 2, 'c': 1})
-```
+操作、复杂度和示例请参阅 [Counter](counter.md)。
 
 ## NamedTuple
 
-### 时间复杂度
-
-所有操作与元组相同：
-
-| 操作 | 时间 | 空间 | 备注 |
-|-----------|------|-------|-------|
-| 创建 | O(1) | O(1) | 字段数量固定 |
-| 按索引访问 | O(1) | O(1) | 与元组相同 |
-| 按名称访问 | O(1) | O(1) | 与元组相同 |
-| 迭代 | O(n) | O(1) | n = 字段数量 |
-
-### 使用场景
-
-```python
-from collections import namedtuple
-
-Point = namedtuple('Point', ['x', 'y'])
-p = Point(11, y=22)
-
-# Better than plain tuple
-print(p.x)  # More readable than p[0]
-
-# Create from dict
-d = {'x': 1, 'y': 2}
-p = Point(**d)
-
-# Replace values
-p2 = p._replace(x=5)
-```
+操作、复杂度和示例请参阅 [namedtuple](namedtuple.md)。
 
 ## OrderedDict
 
-### 时间复杂度
-
-| 操作 | 时间 | 空间 | 备注 |
-|-----------|------|-------|-------|
-| 与 dict 相同 | O(1) | O(1) | 所有字典操作 |
-| `move_to_end(key)` | O(1) | O(1) | 将键移到末尾 |
-
-### 说明
-
-- **Python 3.6+**：普通 `dict` 已保留顺序，因此 `OrderedDict` 主要用于：
-
-  - 与旧代码保持兼容
-  - 使用 `move_to_end()` 方法重新排序
-  - 在代码中明确表达意图
-
-```python
-from collections import OrderedDict
-
-# Useful method: move_to_end()
-od = OrderedDict([('a', 1), ('b', 2), ('c', 3)])
-od.move_to_end('a')  # O(1) - moves 'a' to end
-```
+操作、复杂度和示例请参阅 [OrderedDict](ordereddict.md)。
 
 ## ChainMap
 
@@ -228,15 +54,6 @@ print(config['retries'])  # 3 (from defaults)
 
 # View layered configuration without merging
 ```
-
-## 性能对比
-
-| 操作 | dict | defaultdict | Counter | OrderedDict |
-|-----------|------|-------------|---------|------------|
-| `d[key]` | O(1) | O(1) | O(1) | O(1) |
-| `d[key] = value` | O(1) | O(1) | O(1) | O(1) |
-| 特有方法 | - | `__missing__` | `most_common()` | `move_to_end()` |
-| 内存 | 基准 | +少量 | +计数存储 | +顺序跟踪 |
 
 ## UserDict
 
