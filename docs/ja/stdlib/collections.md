@@ -1,5 +1,5 @@
 ---
-source_sha: c74648e14db9f85efaec25d010dfdc906afae07865b969011ddae0774144a100
+source_sha: 6e689f21a764b260fea46048a7c982179b8f44b6aed15cbe7972f4e7b497985b
 translated: machine
 ---
 
@@ -20,12 +20,12 @@ translated: machine
 | `access[i]` | 両端は O(1)、中央は O(n) | O(1) | 両端（d[0]、d[-1]）は O(1)。ブロック構造のため中央の要素は O(n) |
 | `extend(iterable)` | O(k) | O(k) | k はイテラブルの長さ |
 | `extendleft(iterable)` | O(k) | O(k) | k はイテラブルの長さ。注意: 順序が反転する |
-| `rotate(n)` | O(k) | O(1) | k = min(n, len(d) - n) |
+| `rotate(n)` | O(k) | O(1) | k = min(n mod len(d), len(d) - n mod len(d)) |
 | `clear()` | O(n) | O(1) | すべての要素を取り除く |
 | `copy()` | O(n) | O(n) | 浅いコピー |
 | `count(x)` | O(n) | O(1) | x の出現回数を数える |
 | `index(x)` | O(n) | O(1) | x が最初に現れる位置を求める |
-| `insert(i, x)` | O(n) | O(1) | 位置 i に x を挿入する |
+| `insert(i, x)` | O(n) | O(1) | 位置 i に x を挿入する。上限に達した deque では IndexError を送出する |
 | `remove(x)` | O(n) | O(1) | 最初に現れる x を取り除く |
 | `reverse()` | O(n) | O(1) | その場で反転する |
 | `in`（メンバーシップ） | O(n) | O(1) | 線形探索 |

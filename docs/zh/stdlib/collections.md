@@ -1,5 +1,5 @@
 ---
-source_sha: c74648e14db9f85efaec25d010dfdc906afae07865b969011ddae0774144a100
+source_sha: 6e689f21a764b260fea46048a7c982179b8f44b6aed15cbe7972f4e7b497985b
 translated: machine
 ---
 
@@ -20,12 +20,12 @@ translated: machine
 | `access[i]` | O(1) ends, O(n) middle | O(1) | 两端（d[0]、d[-1]）为 O(1)；受分块结构影响，中间元素为 O(n) |
 | `extend(iterable)` | O(k) | O(k) | k = 可迭代对象长度 |
 | `extendleft(iterable)` | O(k) | O(k) | k = 可迭代对象长度；注意：会反转顺序 |
-| `rotate(n)` | O(k) | O(1) | k = min(n, len(d) - n) |
+| `rotate(n)` | O(k) | O(1) | k = min(n mod len(d), len(d) - n mod len(d)) |
 | `clear()` | O(n) | O(1) | 移除所有元素 |
 | `copy()` | O(n) | O(n) | 浅拷贝 |
 | `count(x)` | O(n) | O(1) | 统计 x 出现的次数 |
 | `index(x)` | O(n) | O(1) | 查找 x 第一次出现的位置 |
-| `insert(i, x)` | O(n) | O(1) | 在位置 i 插入 x |
+| `insert(i, x)` | O(n) | O(1) | 在位置 i 插入 x；有界 deque 已满时抛出 IndexError |
 | `remove(x)` | O(n) | O(1) | 移除 x 第一次出现的位置 |
 | `reverse()` | O(n) | O(1) | 原地反转 |
 | `in` (membership) | O(n) | O(1) | 线性查找 |

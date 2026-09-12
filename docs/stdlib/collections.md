@@ -15,12 +15,12 @@ The `collections` module provides specialized data structures optimized for spec
 | `access[i]` | O(1) ends, O(n) middle | O(1) | Ends (d[0], d[-1]) are O(1); middle elements O(n) due to block structure |
 | `extend(iterable)` | O(k) | O(k) | k = iterable length |
 | `extendleft(iterable)` | O(k) | O(k) | k = iterable length; note: reverses order |
-| `rotate(n)` | O(k) | O(1) | k = min(n, len(d) - n) |
+| `rotate(n)` | O(k) | O(1) | k = min(n mod len(d), len(d) - n mod len(d)) |
 | `clear()` | O(n) | O(1) | Remove all elements |
 | `copy()` | O(n) | O(n) | Shallow copy |
 | `count(x)` | O(n) | O(1) | Count occurrences of x |
 | `index(x)` | O(n) | O(1) | Find first occurrence of x |
-| `insert(i, x)` | O(n) | O(1) | Insert x at position i |
+| `insert(i, x)` | O(n) | O(1) | Insert x at position i; raises IndexError on a full bounded deque |
 | `remove(x)` | O(n) | O(1) | Remove first occurrence of x |
 | `reverse()` | O(n) | O(1) | Reverse in place |
 | `in` (membership) | O(n) | O(1) | Linear search |

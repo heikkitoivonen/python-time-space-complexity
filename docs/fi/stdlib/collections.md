@@ -1,5 +1,5 @@
 ---
-source_sha: c74648e14db9f85efaec25d010dfdc906afae07865b969011ddae0774144a100
+source_sha: 6e689f21a764b260fea46048a7c982179b8f44b6aed15cbe7972f4e7b497985b
 translated: machine
 ---
 
@@ -20,12 +20,12 @@ Moduuli `collections` tarjoaa erikoistuneita tietorakenteita, jotka on optimoitu
 | `access[i]` | O(1) ends, O(n) middle | O(1) | Päät (d[0], d[-1]) ovat O(1); keskellä olevat alkiot O(n) lohkorakenteen vuoksi |
 | `extend(iterable)` | O(k) | O(k) | k = iteroituvan pituus |
 | `extendleft(iterable)` | O(k) | O(k) | k = iteroituvan pituus; huom. kääntää järjestyksen |
-| `rotate(n)` | O(k) | O(1) | k = min(n, len(d) - n) |
+| `rotate(n)` | O(k) | O(1) | k = min(n mod len(d), len(d) - n mod len(d)) |
 | `clear()` | O(n) | O(1) | Poistaa kaikki alkiot |
 | `copy()` | O(n) | O(n) | Pinnallinen kopio |
 | `count(x)` | O(n) | O(1) | Laskee x:n esiintymät |
 | `index(x)` | O(n) | O(1) | Etsii x:n ensimmäisen esiintymän |
-| `insert(i, x)` | O(n) | O(1) | Lisää x:n kohtaan i |
+| `insert(i, x)` | O(n) | O(1) | Lisää x:n kohtaan i; nostaa IndexError-poikkeuksen, jos rajattu deque on täynnä |
 | `remove(x)` | O(n) | O(1) | Poistaa x:n ensimmäisen esiintymän |
 | `reverse()` | O(n) | O(1) | Kääntää paikallaan |
 | `in` (membership) | O(n) | O(1) | Lineaarinen haku |
