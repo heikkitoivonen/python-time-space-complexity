@@ -24,6 +24,7 @@ Deliberately not covered, because a unit test cannot settle them:
 """
 
 import bisect
+import contextlib
 import filecmp
 import fnmatch
 import importlib
@@ -32,13 +33,15 @@ import logging
 import numbers
 import posixpath
 import pprint
+import queue
 import sqlite3
 import struct
 import sys
 import tempfile
+import threading
 import time
 import unicodedata
-from collections import defaultdict
+from collections import defaultdict, deque
 from collections.abc import Callable, Iterator
 from decimal import Decimal, getcontext
 from fractions import Fraction
@@ -813,3 +816,133 @@ class TestFractionLoopDoesNotReduce:
         total = Fraction(1, 6) + Fraction(1, 3)
         assert total == Fraction(1, 2)
         assert total.denominator == 2, "6 and 3 were reduced away"
+
+
+class TestQueueVersusDeque:
+    """docs/stdlib/queue.md: each deque append or pop is atomic on its own;
+    what queue.Queue adds is waiting.
+
+    Eight threads appending 5,000 items each never lose or duplicate one, and
+    eight threads draining with popleft() hand every item to exactly one of
+    them. A Queue's get() waits for an item and a bounded put() waits for
+    room, each observed as a thread still blocked a tenth of a second later
+    and released by the other side, where popleft() on an empty deque raises
+    at once. The page's
+    check-then-pop race (`if d: d.popleft()`) is shown with a worker paused
+    between the two steps while another thread drains the deque.
+    """
+
+    THREADS = 8
+    PER_THREAD = 5_000
+
+    def _run(self, target: Callable[[int], None]) -> None:
+        threads = [threading.Thread(target=target, args=(tag,)) for tag in range(self.THREADS)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+    def test_concurrent_appends_lose_nothing(self) -> None:
+        d: deque[tuple[int, int]] = deque()
+
+        def produce(tag: int) -> None:
+            for index in range(self.PER_THREAD):
+                d.append((tag, index))
+
+        self._run(produce)
+
+        assert len(d) == self.THREADS * self.PER_THREAD
+        assert len(set(d)) == len(d), "no item was appended twice"
+
+    def test_concurrent_pops_hand_each_item_to_one_thread(self) -> None:
+        total = self.THREADS * self.PER_THREAD
+        d: deque[int] = deque(range(total))
+        taken: list[list[int]] = [[] for _ in range(self.THREADS)]
+
+        def consume(tag: int) -> None:
+            bucket = taken[tag]
+            while True:
+                try:
+                    bucket.append(d.popleft())
+                except IndexError:
+                    return
+
+        self._run(consume)
+
+        assert not d
+        assert sorted(item for bucket in taken for item in bucket) == list(range(total))
+
+    def test_a_check_then_pop_can_race(self) -> None:
+        d: deque[int] = deque([1])
+        checked = threading.Event()
+        drained = threading.Event()
+        outcome: list[object] = []
+
+        def check_then_pop() -> None:
+            if d:
+                checked.set()
+                drained.wait(5)
+                try:
+                    outcome.append(d.popleft())
+                except IndexError as error:
+                    outcome.append(error)
+
+        worker = threading.Thread(target=check_then_pop, daemon=True)
+        worker.start()
+        try:
+            assert checked.wait(5)
+            d.popleft()
+        finally:
+            drained.set()
+            worker.join(5)
+
+        assert len(outcome) == 1 and isinstance(outcome[0], IndexError)
+
+    def test_get_and_a_bounded_put_wait_where_popleft_raises(self) -> None:
+        d: deque[str] = deque()
+        with pytest.raises(IndexError):
+            d.popleft()
+
+        q: queue.Queue[str] = queue.Queue(maxsize=1)
+        received: list[str] = []
+        entered = threading.Event()
+        got = threading.Event()
+
+        def consume() -> None:
+            entered.set()
+            received.append(q.get())
+            got.set()
+
+        consumer = threading.Thread(target=consume, daemon=True)
+        consumer.start()
+        try:
+            assert entered.wait(5)
+            assert not got.wait(0.1), "get() on an empty queue is still waiting"
+            q.put("late")
+            assert got.wait(5) and received == ["late"], "and returns once an item arrives"
+        finally:
+            with contextlib.suppress(queue.Full):
+                q.put_nowait("late")
+            consumer.join(5)
+
+        q = queue.Queue(maxsize=1)
+        q.put("full")
+        entered.clear()
+        stored = threading.Event()
+
+        def produce() -> None:
+            entered.set()
+            q.put("no room")
+            stored.set()
+
+        producer = threading.Thread(target=produce, daemon=True)
+        producer.start()
+        try:
+            assert entered.wait(5)
+            assert not stored.wait(0.1), "put() on a full bounded queue is still waiting"
+            assert q.get() == "full"
+            assert stored.wait(5) and q.get() == "no room", "and stores once there is room"
+        finally:
+            with contextlib.suppress(queue.Empty):
+                q.get_nowait()
+            producer.join(5)

@@ -316,16 +316,18 @@ for i in range(5):  # O(5)
 from queue import Queue
 from collections import deque
 
-# Queue (thread-safe) - O(1) operations
+# Queue - O(1) operations under one lock; get() waits for an item
 q = Queue()
-q.put('item')  # O(1), thread-safe
+q.put('item')  # O(1), and put() waits for room when maxsize is set
 
-# deque (not thread-safe) - O(1) operations
+# deque - O(1) appends and pops, each atomic on its own
 d = deque()
-d.append('item')  # O(1), NOT thread-safe
+d.append('item')  # O(1), safe from several threads
+# but a check-then-pop such as `if d: d.popleft()` can race between
+# the two steps: another thread can empty the deque in between
 
-# Use Queue for multi-threaded applications
-# Use deque for single-threaded applications
+# Use Queue when a consumer must wait for work
+# Use deque when nothing needs to block
 ```
 
 ## Version Notes
@@ -337,7 +339,7 @@ d.append('item')  # O(1), NOT thread-safe
 
 ## Related Modules
 
-- **[deque](deque.md)** - Fast double-ended queue (not thread-safe)
+- **[deque](deque.md)** - Fast double-ended queue; each append or pop is atomic and never waits for an item or for room
 - **[collections](collections.md)** - Container data types
 - **[threading](threading.md)** - Thread-based parallelism
 - **[multiprocessing](../stdlib/multiprocessing.md)** - Process-based parallelism
