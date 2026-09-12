@@ -15,12 +15,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v10.1.0
         with:
           version: "latest"
+          enable-cache: false
 
       - name: Install dependencies
         run: uv sync
@@ -57,9 +58,10 @@ jobs:
         run: uv run python scripts/build_site.py
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: 'site'
+          include-hidden-files: true
 
   # Reports, but deliberately does not gate: `deploy` needs `build` only.
   # A red run here means a complexity claim needs looking at -- check whether
@@ -79,14 +81,15 @@ jobs:
       # Local runs still skip, and `make check` stays green off a patch.
       COMPLEXITY_REQUIRE_PATCHED_PYTHON: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v10.1.0
         with:
           # An older pinned uv resolves against a build index predating the
           # fix releases and cannot fetch the matrix entries.
           version: "latest"
+          enable-cache: false
 
       - name: Install Python ${{ matrix.python }}
         run: uv python install ${{ matrix.python }}
@@ -112,4 +115,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
