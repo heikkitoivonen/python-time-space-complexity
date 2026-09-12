@@ -1,5 +1,5 @@
 ---
-source_sha: bb38834457467fdb8f60ee91c273a2f3708dd3a94689cb64a15c697ed6fa9099
+source_sha: a1e1ce0938f3988636fa2ffc6fe0d31de197bb24b8182b4919610b9bcd1b718e
 translated: machine
 ---
 
@@ -78,7 +78,7 @@ mainittu kustannus on se, minkä maksat iteraattorin läpikäynnistä.
 
 | Funktio | Aika | Tila | Huomiot |
 |----------|------|-------|-------|
-| [`abs()`](abs.md) | O(1) | O(1) | O(k) omalle `__abs__()`-toteutukselle |
+| [`abs()`](abs.md) | O(1) | O(1) | O(n) negatiiviselle n numeron `int`-arvolle; oma `__abs__()` määrää kustannuksensa itse |
 | [`divmod()`](divmod.md) | O(1) | O(1) | O(n²) mielivaltaisen tarkkuuden kokonaisluvuille |
 | [`pow()`](pow.md) | O(r²) | Θ(r) | r = tuloksen bittimäärä; kolmen argumentin muoto O(log y * m²) tilassa Θ(m) |
 | [`round()`](round.md) | O(1) | O(1) | Pankkiirin pyöristys tasan puolikkailla |

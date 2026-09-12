@@ -73,7 +73,7 @@ under Notes is what you pay to consume it.
 
 | Function | Time | Space | Notes |
 |----------|------|-------|-------|
-| [`abs()`](abs.md) | O(1) | O(1) | O(k) for a custom `__abs__()` |
+| [`abs()`](abs.md) | O(1) | O(1) | O(n) for a negative `int` of n digits; a custom `__abs__()` sets its own cost |
 | [`divmod()`](divmod.md) | O(1) | O(1) | O(n²) for arbitrary-precision integers |
 | [`pow()`](pow.md) | O(r²) | Θ(r) | r = bits of the result; the 3-argument form is O(log y * m²) in Θ(m) |
 | [`round()`](round.md) | O(1) | O(1) | Banker's rounding on exact halves |

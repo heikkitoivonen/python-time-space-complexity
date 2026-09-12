@@ -1,27 +1,31 @@
 ---
-source_sha: e370d4e9ed3bb1f46d4111acfc8084cd2aa8a3c647c5c5a3d1c13b5627850c5d
+source_sha: c418fa09ab8f6b63a6787718bcf0d678e3e9360b15bd8666421a91b2daf2aec5
 translated: machine
 ---
 
 # abs() 函数的复杂度
 
-`abs()` 函数返回数字的绝对值。
+`abs()` 函数返回数字的绝对值。它调用操作数的 `__abs__()`，因此成本取决于操作数的类型：
+`float` 或 `complex` 为常数时间，负 `int` 则与其位宽成线性关系。
 
 ## 复杂度分析
 
+对于整数操作数，设 `d` 为其数字位数，与 `x.bit_length()` 成正比。空间不包括操作数本身。
+
 | 情况 | 时间 | 空间 | 备注 |
 |------|------|-------|-------|
-| 整数 | O(1) | O(1) | 简单的符号判断 |
-| 浮点数 | O(1) | O(1) | IEEE 754 符号位操作 |
-| 复数 | O(1) | O(1) | 返回复数的模：sqrt(real² + imag²) |
-| 自定义类 | O(k) | O(m) | 取决于 `__abs__()` 的实现 |
+| 非负 `int` | O(1) | O(1) | 返回 `x` 本身；继承 `__abs__` 的 `int` 子类会被复制为普通 `int`，O(d) |
+| 负 `int` | O(d) | O(d) | 逐位复制并翻转符号 |
+| `float` | O(1) | O(1) | 清除符号位并生成新的 `float`，与数值大小无关 |
+| `complex` | O(1) | O(1) | 以 `float` 返回模；有限的实部和虚部得到的模超出浮点范围时抛出 `OverflowError` |
+| 其他任意类型 | `type(x).__abs__` | — | `Fraction`、`Decimal` 等均委托给该类型；没有 `__abs__` 的类型抛出 `TypeError` |
 
 ## 基本用法
 
 ### 绝对值
 
 ```python
-# O(1) - simple arithmetic
+# O(1) - a machine-word int or a float
 abs(-5)        # 5
 abs(5)         # 5
 abs(0)         # 0
@@ -32,22 +36,42 @@ abs(3.14)      # 3.14
 ### 复数
 
 ```python
-# O(1) - magnitude calculation
-abs(3 + 4j)    # 5.0 (sqrt(3^2 + 4^2))
+# O(1) - the magnitude, computed as hypot(real, imag)
+abs(3 + 4j)    # 5.0
 abs(-3 + 4j)   # 5.0
 abs(0j)        # 0.0
+
+# hypot() does not square the parts first, so this stays finite
+abs(1e200 + 1e200j)   # 1.414213562373095e+200
+
+# Only the magnitude itself can overflow
+try:
+    abs(1.5e308 + 1.5e308j)
+except OverflowError:
+    pass       # absolute value too large
+```
+
+### 大整数
+
+```python
+# O(1) - a non-negative int comes back as the same object
+big = 10**100
+abs(big) is big        # True
+
+# O(d) - a negative int is copied, digit by digit
+abs(-big)              # 10**100, a new object
 ```
 
 ## 自定义 __abs__ 方法
 
 ```python
-# O(k) where k = __abs__ time
+# The cost is whatever __abs__ costs; abs() adds one call
 class Distance:
     def __init__(self, value):
         self.value = value
-    
+
     def __abs__(self):
-        # O(1) - simple operation
+        # O(1) for a machine-word value
         return abs(self.value)
 
 d = Distance(-10)
@@ -56,12 +80,12 @@ result = abs(d)  # 10
 
 ## 性能模式
 
-### 条件绝对值
+### 批量绝对值
 
 ```python
-# O(1) - all constant time
+# O(n) - n items, each O(1) for a machine-word int
 numbers = [-5, 3, -2, 8, -1]
-absolute = [abs(x) for x in numbers]  # O(n) - n simple O(1) operations
+absolute = [abs(x) for x in numbers]
 
 # Same with any numeric type
 floats = [-1.5, 2.5, -3.5]
@@ -71,7 +95,7 @@ absolute = [abs(x) for x in floats]  # O(n)
 ### 距离计算
 
 ```python
-# O(1) - simple absolute value
+# O(1) for machine-word coordinates - two subtractions and two absolute values
 def manhattan_distance(x1, y1, x2, y2):
     return abs(x1 - x2) + abs(y1 - y2)
 
@@ -88,26 +112,15 @@ distances = [abs(p[0]) + abs(p[1]) for p in points]  # O(n)
 ### abs() vs 手动检查
 
 ```python
-# abs() - O(1), clear, idiomatic
+# abs() - clear, idiomatic
 x = -5
 result = abs(x)  # 5
 
-# Manual - O(1), but unnecessary
+# Manual - the same work: -x copies a negative int exactly as abs() does
 result = x if x >= 0 else -x  # 5
-
-# abs() is preferred for clarity
 ```
 
-### abs() vs max()
-
-```python
-# Both O(1) for single value
-abs(-5)      # 5
-max(-5, 5)   # 5
-
-# abs() is more direct for absolute value
-# max() is for finding maximum of multiple items
-```
+两种写法的复杂度界相同：对负 `int`，`-x` 与 `abs()` 做的是同一次复制。`abs()` 更清晰，也适用于任何实现了 `__abs__()` 的类型，因此更推荐使用。
 
 ## 使用场景
 
@@ -149,7 +162,7 @@ if abs(a) > abs(b):
 ### 零
 
 ```python
-# O(1)
+# O(1) - a negative zero float loses its sign
 abs(0)      # 0
 abs(-0)     # 0
 abs(0.0)    # 0.0
@@ -159,35 +172,29 @@ abs(-0.0)   # 0.0
 ### 极值
 
 ```python
-# O(1) - handles large numbers
-abs(-10**100)  # Very large positive
-abs(-sys.maxsize)  # Minimum integer
+import sys
+
+# O(d) - the negative value is copied; ints do not overflow
+abs(-10**100)          # 10**100
+abs(-sys.maxsize - 1)  # sys.maxsize + 1
+
+# O(1) - a float's magnitude does not change the cost
+abs(-1.7e308)          # 1.7e308
 ```
 
 ### 类型转换
 
 ```python
-# O(1) - works with numeric types
+# int and float keep their type; complex gives a float
 abs(-5)          # int
 abs(-5.0)        # float
-abs(-5j)         # complex (returns float)
+abs(-5j)         # 5.0, a float
 
-# Not with strings
+# A str has no __abs__
 try:
-    abs("-5")  # TypeError
+    abs("-5")
 except TypeError:
-    pass
-```
-
-## 性能说明
-
-```python
-# abs() is extremely fast - built-in C function
-import timeit
-
-# Timing shows abs() is optimized
-t = timeit.timeit(lambda: abs(-5), number=10**7)
-# Much faster than manual if/else due to C implementation
+    pass         # bad operand type for abs(): 'str'
 ```
 
 ## 最佳实践
@@ -201,19 +208,13 @@ t = timeit.timeit(lambda: abs(-5), number=10**7)
 
 ❌ **避免**：
 
-- 手动 if/else 检查（可读性差）
-- 在 `abs()` 更清晰时使用 `max()`
+- 手动 if/else 检查（可读性差，复杂度界也相同）
 - 假设类型兼容性
 
 ## 相关函数
 
+- **[int](int.md)** - 任意精度整数运算，包括 `-x`
 - **[max()](max.md)** - 查找最大值
 - **[min()](min.md)** - 查找最小值
 - **[pow()](pow.md)** - 幂函数
 - **[math.fabs()](../stdlib/math.md)** - 浮点绝对值
-
-## 版本说明
-
-- **Python 2.x**：基本功能可用
-- **Python 3.x**：行为相同
-- **Python 3.8+**：性能稳定

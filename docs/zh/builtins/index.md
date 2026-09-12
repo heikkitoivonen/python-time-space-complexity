@@ -1,5 +1,5 @@
 ---
-source_sha: bb38834457467fdb8f60ee91c273a2f3708dd3a94689cb64a15c697ed6fa9099
+source_sha: a1e1ce0938f3988636fa2ffc6fe0d31de197bb24b8182b4919610b9bcd1b718e
 translated: machine
 ---
 
@@ -75,7 +75,7 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 
 | 函数 | 时间 | 空间 | 备注 |
 |----------|------|-------|-------|
-| [`abs()`](abs.md) | O(1) | O(1) | 自定义 `__abs__()` 为 O(k) |
+| [`abs()`](abs.md) | O(1) | O(1) | n 位负 `int` 为 O(n)；自定义 `__abs__()` 的成本由其实现决定 |
 | [`divmod()`](divmod.md) | O(1) | O(1) | 任意精度整数为 O(n²) |
 | [`pow()`](pow.md) | O(r²) | Θ(r) | r 为结果的位数；三参数形式为 O(log y * m²)，空间 Θ(m) |
 | [`round()`](round.md) | O(1) | O(1) | 恰为一半时采用银行家舍入 |

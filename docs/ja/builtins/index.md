@@ -1,5 +1,5 @@
 ---
-source_sha: bb38834457467fdb8f60ee91c273a2f3708dd3a94689cb64a15c697ed6fa9099
+source_sha: a1e1ce0938f3988636fa2ffc6fe0d31de197bb24b8182b4919610b9bcd1b718e
 translated: machine
 ---
 
@@ -74,7 +74,7 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 
 | 関数 | 時間 | 空間 | 備考 |
 |----------|------|-------|-------|
-| [`abs()`](abs.md) | O(1) | O(1) | 独自の `__abs__()` では O(k) |
+| [`abs()`](abs.md) | O(1) | O(1) | n 桁の負の `int` では O(n)；独自の `__abs__()` はその実装のコスト |
 | [`divmod()`](divmod.md) | O(1) | O(1) | 任意精度整数では O(n²) |
 | [`pow()`](pow.md) | O(r²) | Θ(r) | r は結果のビット数、3 引数形式は Θ(m) 空間で O(log y * m²) |
 | [`round()`](round.md) | O(1) | O(1) | ちょうど半分のときは銀行家の丸め |
