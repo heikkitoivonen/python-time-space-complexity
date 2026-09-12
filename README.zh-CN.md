@@ -1,4 +1,4 @@
-<!-- source_sha: 433f7c6e2b7024533bc8f22fd348b3641287ebb76730bba7f3d1e8b86ff20699 -->
+<!-- source_sha: b2fed384cfaec96756e3e0c8c939935ab053d00a3c430193fa29d827fe718322 -->
 <!-- translated: machine -->
 
 [English](README.md) | **简体中文**
@@ -332,3 +332,7 @@ MIT 许可证 - 详见 [LICENSE.txt](LICENSE.txt)
 ## 免责声明
 
 虽然我们力求准确，但复杂度信息可能因具体实现和版本而异。对于性能关键代码，请务必参考官方文档和基准测试进行验证。
+
+---
+
+⭐ 如果你觉得本仓库有用，**请给它点个 Star**——这能帮助更多人发现它。
