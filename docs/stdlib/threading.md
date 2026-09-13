@@ -6,6 +6,8 @@ The `threading` module runs Python code in operating-system threads and provides
 
 Size variables: t = operating-system thread start latency, w = time spent blocked, W = threads waiting on the primitive, T = live threads, p = barrier parties, s = thread stack size, f = the caller's own function, whose time and space are its own. A wait given a timeout that expires also removes itself from the primitive's waiter queue, which is the O(W) term in the wait rows.
 
+### Thread
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `Thread()` | O(1) | O(1) | Builds the object; nothing runs, and `enumerate()` does not list it, until `start()` |
@@ -15,9 +17,19 @@ Size variables: t = operating-system thread start latency, w = time spent blocke
 | `Thread.is_alive()` | O(1) | O(1) | |
 | `Thread.name/ident/native_id/daemon` | O(1) | O(1) | `ident` and `native_id` are None until started |
 | `Thread.getName()/setName()/isDaemon()/setDaemon()` | O(1) | O(1) | Deprecated aliases; each call also emits a DeprecationWarning |
+
+### Timer
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `Timer()` | O(1) | O(1) | A `Thread` subclass; `start()` spawns the thread |
 | `Timer.run()` | O(w + f) | O(f) | Waits the interval, then calls the function once |
 | `Timer.cancel()` | O(1) | O(1) | Sets an event; a timer still waiting ends at once instead of after the interval, one already in its function finishes it |
+
+### Lock and RLock
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `Lock()` / `RLock()` | O(1) | O(1) | |
 | `Lock.acquire()` | O(w) | O(1) | Immediate when free; w = wait for the holder or the timeout |
 | `Lock.release()` | O(1) | O(1) | Raises RuntimeError when the lock is not held |
@@ -25,6 +37,11 @@ Size variables: t = operating-system thread start latency, w = time spent blocke
 | `RLock.acquire()` | O(w) | O(1) | Immediate for the owner, which only increments a count |
 | `RLock.release()` | O(1) | O(1) | Frees the lock only when the count returns to zero |
 | `RLock.locked()` | O(1) | O(1) | Python 3.14+ |
+
+### Condition
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `Condition()` | O(1) | O(1) | Wraps the lock given, or a new `RLock` |
 | `Condition.acquire()` / `Condition.release()` | O(w) | O(1) | The underlying lock's own methods |
 | `Condition.locked()` | O(1) | O(1) | Python 3.14+; the underlying lock's |
@@ -33,22 +50,47 @@ Size variables: t = operating-system thread start latency, w = time spent blocke
 | `Condition.notify()` | O(n) | O(1) | Wakes the n oldest waiters, n = 1 by default |
 | `Condition.notify_all()` | O(W) | O(1) | |
 | `Condition.notifyAll()` | O(W) | O(1) | Deprecated alias, plus a DeprecationWarning |
+
+### Semaphore and BoundedSemaphore
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `Semaphore()` / `BoundedSemaphore()` | O(1) | O(1) | |
 | `Semaphore.acquire()` | O(w + W) | O(1) | Immediate while the counter is positive |
 | `Semaphore.release()` | O(n) | O(1) | Adds n to the counter and wakes up to n waiters |
 | `BoundedSemaphore.release()` | O(n) | O(1) | As `Semaphore.release()`, but raises ValueError past the initial value |
+
+### Event
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `Event()` | O(1) | O(1) | |
 | `Event.set()` | O(W) | O(1) | Wakes every waiter |
 | `Event.clear()` | O(1) | O(1) | |
 | `Event.is_set()` | O(1) | O(1) | |
 | `Event.isSet()` | O(1) | O(1) | Deprecated alias, plus a DeprecationWarning |
 | `Event.wait()` | O(w + W) | O(1) | Immediate once set |
+
+### Barrier
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `Barrier()` | O(1) | O(1) | |
 | `Barrier.wait()` | O(w + W + p + f) | O(f) | The last of p parties runs the action, f, and wakes the others; a timeout that expires breaks the barrier |
 | `Barrier.reset()` / `Barrier.abort()` | O(w + W) | O(1) | Wake every waiter; a party still waiting for the barrier to fill raises BrokenBarrierError. w = a running action, which holds the barrier's lock |
 | `Barrier.parties/n_waiting/broken` | O(1) | O(1) | |
+
+### local
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `local()` | O(1) | O(1) | |
 | `local` attribute access | O(1) | O(a) per thread | Each thread that touches the object gets its own dict of a attributes; the first access in a thread also re-runs a subclass's `__init__` with the original arguments, at that `__init__`'s own cost |
+
+### Module functions
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `current_thread()` | O(1) | O(1) | One dict lookup |
 | `main_thread()` | O(1) | O(1) | |
 | `active_count()` | O(1) | O(1) | Two dict lengths |
@@ -60,7 +102,17 @@ Size variables: t = operating-system thread start latency, w = time spent blocke
 | `gettrace()` / `getprofile()` | O(1) | O(1) | |
 | `stack_size()` | O(1) | O(1) | Returns the previous size and sets the one for threads started afterwards; no argument means the platform default, and 1 to 32 KiB raises ValueError |
 | `excepthook()` | O(b) | O(b) | Called once per unhandled exception in a thread; b = the size of the traceback it prints |
+
+### ExceptHookArgs
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `ExceptHookArgs()` | O(1) | O(1) | Four-field record |
+
+### Constants and exceptions
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `TIMEOUT_MAX` | O(1) | O(1) | The largest timeout a wait that blocks accepts; larger values raise OverflowError |
 | `ThreadError` / `BrokenBarrierError` | O(1) | O(1) | `ThreadError` is `RuntimeError`; `BrokenBarrierError` subclasses it |
 

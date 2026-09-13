@@ -4,6 +4,8 @@ The `configparser` module provides facilities for reading and writing configurat
 
 ## Complexity Reference
 
+### ConfigParser and RawConfigParser
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `ConfigParser()` | O(1) | O(1) | Create parser |
@@ -15,9 +17,6 @@ The `configparser` module provides facilities for reading and writing configurat
 | `sections()` | O(n) | O(n) | n = section count |
 | `options(section)` | O(n) | O(n) | n = option count |
 | `RawConfigParser()` | O(1) | O(1) | No interpolation |
-| `BasicInterpolation()` | O(1) | O(1) | Strategy instance |
-| `ExtendedInterpolation()` | O(1) | O(1) | Strategy instance |
-| Interpolation resolution | O(k) | O(k) | k = referenced keys |
 | `read_dict()` | O(n) | O(n) | n = total options |
 | `read_file()` | O(n) | O(n) | n = file size |
 | `readfp()` | O(n) | O(n) | Alias for read_file (deprecated) |
@@ -32,6 +31,19 @@ The `configparser` module provides facilities for reading and writing configurat
 | `items()` | O(n) | O(n) | n = options returned |
 | `write()` | O(n) | O(n) | n = config size |
 | `default_section` access | O(1) | O(1) | `DEFAULTSECT` constant |
+
+### Interpolation
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `BasicInterpolation()` | O(1) | O(1) | Strategy instance |
+| `ExtendedInterpolation()` | O(1) | O(1) | Strategy instance |
+| Interpolation resolution | O(k) | O(k) | k = referenced keys |
+
+### Constants
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `MAX_INTERPOLATION_DEPTH` | O(1) | O(1) | Constant limit |
 | `UNNAMED_SECTION` | O(1) | O(1) | Constant name for unnamed section |
 

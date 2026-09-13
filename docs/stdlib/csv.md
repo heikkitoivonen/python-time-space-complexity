@@ -11,28 +11,60 @@ also retains its O(m + h) header separately from the per-row storage.
 
 ## Complexity Reference
 
+### reader
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `csv.reader(csvfile, dialect, **fmtparams)` | O(1) | O(1) | Wraps any iterable of strings; nothing is read yet |
 | `next(reader)`, iterating a reader | O(k) | O(k) | k = row length; the parsed row is the only thing held |
+
+### writer
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `csv.writer(csvfile, dialect, **fmtparams)` | O(1) | O(1) | Needs only a `write()` method |
 | `writer.writerow(row)` | O(k) | O(k) | The whole line is built as one string before it is written |
 | `writer.writerows(rows)` | O(n·k) | O(k) | One `writerow` per row, so the peak is the widest row, not the batch |
+
+### DictReader
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `csv.DictReader(f, fieldnames=None, restkey=None, restval=None)` | O(1) | O(1) | The header is not read until `.fieldnames` is touched or iteration starts |
 | `DictReader.fieldnames` | O(m + h) | O(m + h) | Reads and keeps the header on first access when fieldnames are omitted; subsequent access is O(1) |
 | Iterating a `DictReader` | O(k + m) per row | O(k + m) per row | After one-time header processing; missing fields use `restval`, and `restkey` collects surplus fields |
+
+### DictWriter
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `csv.DictWriter(f, fieldnames, restval='', extrasaction='raise')` | O(m) | O(m) | Keeps the field order it was given |
 | `DictWriter.writeheader()` | O(m + h) | O(m + h) | Builds a header dictionary and renders all header characters |
 | `DictWriter.writerow(rowdict)` | O(m + k) | O(m + k) | Successful rows without surplus keys: projects the field order, validates keys by default, and renders all row characters |
+
+### Dialects and field limits
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `csv.field_size_limit([new_limit])` | O(1) | O(1) | Returns the previous limit; a field longer than it raises `csv.Error` mid-parse |
 | `csv.register_dialect(name, dialect, **fmtparams)` | O(1) | O(1) | One dict entry |
 | `csv.unregister_dialect(name)` | O(1) | O(1) | Raises `csv.Error` if the name is unknown |
 | `csv.get_dialect(name)` | O(1) | O(1) | Dict lookup |
 | `csv.list_dialects()` | O(d) | O(d) | d = registered dialects |
+| `csv.Dialect`, `csv.excel`, `csv.excel_tab`, `csv.unix_dialect` | O(1) | O(1) | Attribute holders; validated once when a reader or writer is built |
+
+### Sniffer
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `csv.Sniffer()` | O(1) | O(1) | Holds no state between calls |
 | `Sniffer.sniff(sample, delimiters=None)` | O(s) | O(s) | s = sample length; several regex passes plus per-character frequency tables |
 | `Sniffer.has_header(sample)` | O(s) | O(s) | Calls `sniff()` first, which is what dominates; only the first 20 rows are then typed |
-| `csv.Dialect`, `csv.excel`, `csv.excel_tab`, `csv.unix_dialect` | O(1) | O(1) | Attribute holders; validated once when a reader or writer is built |
+
+### Constants and exceptions
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `csv.QUOTE_ALL`, `csv.QUOTE_MINIMAL`, `csv.QUOTE_NONE`, `csv.QUOTE_NONNUMERIC` | O(1) | O(1) | Integer flags; they change what gets quoted, not the bound |
 | `csv.QUOTE_NOTNULL`, `csv.QUOTE_STRINGS` | O(1) | O(1) | Python 3.12+ |
 | `csv.Error` | O(1) | O(1) | Raised for a bad dialect, an unknown dialect name, or an oversized field |

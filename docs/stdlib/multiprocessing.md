@@ -6,6 +6,8 @@ The `multiprocessing` module runs Python code in separate operating-system proce
 
 Size variables: a = arguments given to `Process()`, s = the time to start one process (a fork of the caller, for `forkserver` a fork of the warm server, for `spawn` a fresh interpreter; the last two also unpickle what they are sent), w = time spent blocked, b = pickled size of the objects an operation sends and receives, at pickle's cost per byte - a `__getstate__` or `__reduce__` of the caller's own is the caller's, like f - n = items, p = worker processes in a pool, k = child processes started and not yet joined, m = one round trip to a manager's server process, f = the caller's own function, whose time and space are its own, e = elements in a shared array, d = how many times the caller holds a recursive lock, W = processes or threads waiting on a primitive. Under the `spawn` and `forkserver` start methods the first synchronization primitive or queue created, which a `Value()`, `Array()` or `Pool()` includes, also starts the resource tracker process, once, at O(s).
 
+### Process
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `Process()` | O(a) | O(a) | Copies the a arguments; nothing runs, and `active_children()` does not list it, until `start()` |
@@ -16,8 +18,23 @@ Size variables: a = arguments given to `Process()`, s = the time to start one pr
 | `Process.terminate()` / `Process.kill()` / `Process.interrupt()` | O(1) | O(1) | Send SIGTERM, SIGKILL or SIGINT and return at once; `join()` waits for the exit. `interrupt()` is Python 3.14+ |
 | `Process.close()` | O(1) | O(1) | Raises ValueError while the process is alive; afterwards `is_alive()`, `join()`, `exitcode` and `pid` raise ValueError |
 | `Process.name/daemon/authkey/pid/ident/exitcode/sentinel` | O(1) | O(1) | `pid`, `ident` and `exitcode` are None and `sentinel` raises ValueError until `start()`; `exitcode` polls |
+
+### Module functions
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `current_process()` / `parent_process()` | O(1) | O(1) | `parent_process()` is None in the main process |
 | `active_children()` | O(k) | O(k) | Polls every child and returns a new list of the ones still alive |
+| `cpu_count()` | O(1) | O(1) | `os.cpu_count()`, raising NotImplementedError where it is None |
+| `get_context()` / `get_start_method()` / `set_start_method()` / `get_all_start_methods()` | O(1) | O(1) | A second `set_start_method()` raises RuntimeError unless `force=True`; `get_all_start_methods()` is a new list each call |
+| `get_logger()` / `log_to_stderr()` | O(1) | O(1) | One logger, created on first use; every `log_to_stderr()` call adds another handler |
+| `freeze_support()` / `set_executable()` / `allow_connection_pickling()` | O(1) | O(1) | Store a setting, or do nothing outside a frozen executable |
+| `set_forkserver_preload()` | O(r) | O(1) | Checks that each of the r names is a str and keeps the list; the forkserver imports them when it starts |
+
+### Pool operations
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `Pool()` | O(p·(s + k)) | O(p) | Starts p workers, each start polling the children so far, default `os.process_cpu_count()` (`os.cpu_count()` before Python 3.13), and three handler threads |
 | `Pool.map()` / `Pool.starmap()` | O(n + b + w) | O(n + b) | Blocks for every result; an iterable without `len()` is first copied to a list. The items go out in chunks of c, default ⌈n / 4p⌉, and f is pickled once per chunk, so `chunksize=1` pickles it n times |
 | `Pool.map_async()` / `Pool.starmap_async()` | O(n) | O(n) | Returns once the input is listed and a result slot per item allocated; the chunking, pickling and sending happen in a handler thread |
@@ -25,11 +42,21 @@ Size variables: a = arguments given to `Process()`, s = the time to start one pr
 | `Pool.apply_async()` | O(1) | O(1) | Queues one task for the handler thread |
 | `Pool.imap()` / `Pool.imap_unordered()` | O(1) | O(1) | Consumes the input lazily, chunked by c, default 1, so f is pickled n times unless `chunksize` is passed; each `next()` is O(w + b) for its item |
 | `Pool.imap()` iteration | O(n + b + w) | O(n + b) | Results are buffered as they arrive whether or not they are consumed, and `imap()` also holds any that arrive ahead of their turn, so a slow consumer costs O(n) space |
-| `AsyncResult.get()` / `AsyncResult.wait()` | O(w) | O(1) | The result was unpickled by the handler thread on arrival; `get(timeout)` raises `multiprocessing.TimeoutError`, which is not the builtin. A callback runs in that handler thread, before `ready()` turns true, so keep it O(1) |
-| `AsyncResult.ready()` / `AsyncResult.successful()` | O(1) | O(1) | `successful()` raises ValueError until ready |
 | `Pool.close()` | O(1) | O(1) | Refuses new tasks; queued ones still run |
 | `Pool.join()` | O(w + p) | O(1) | Raises ValueError unless `close()` or `terminate()` came first |
 | `Pool.terminate()` | O(w + p + q + b) | O(b) | Drains and unpickles the q tasks still queued, kills every worker and joins it and the handler threads, w = a callback or input generator one of them is still in. `with Pool() as pool:` calls this on exit, so work still running is lost, not waited for |
+
+### AsyncResult
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `AsyncResult.get()` / `AsyncResult.wait()` | O(w) | O(1) | The result was unpickled by the handler thread on arrival; `get(timeout)` raises `multiprocessing.TimeoutError`, which is not the builtin. A callback runs in that handler thread, before `ready()` turns true, so keep it O(1) |
+| `AsyncResult.ready()` / `AsyncResult.successful()` | O(1) | O(1) | `successful()` raises ValueError until ready |
+
+### Queue, JoinableQueue and SimpleQueue
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `Queue()` / `JoinableQueue()` / `SimpleQueue()` | O(1) | O(1) | A pipe and its locks; `maxsize` defaults to the largest semaphore value |
 | `Queue.put()` / `Queue.put_nowait()` | O(w) | O(1) | Waits for a slot when full, appends to a buffer and returns; a feeder thread pickles and writes it, concurrently with the caller, so the object is pickled as it is when the feeder reaches it, and an unpicklable one fails in that thread, not in `put()` |
 | `Queue.get()` / `Queue.get_nowait()` | O(w + b) | O(b) | Reads one message under the reader lock and unpickles it after releasing the lock |
@@ -41,32 +68,62 @@ Size variables: a = arguments given to `Process()`, s = the time to start one pr
 | `SimpleQueue.put()` | O(b + w) | O(b) | Pickles in the caller and writes under the writer lock; w = the wait for pipe space |
 | `SimpleQueue.get()` | O(w + b) | O(b) | |
 | `SimpleQueue.empty()` / `SimpleQueue.close()` | O(1) | O(1) | |
+
+### Pipe and Connection
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `Pipe()` | O(1) | O(1) | A socket pair, or a one-way pipe with `duplex=False` |
 | `Connection.send()` / `Connection.send_bytes()` | O(b + w) | O(b) | `send()` pickles in the caller; w = the wait for the reader once the operating-system buffer is full |
 | `Connection.recv()` / `Connection.recv_bytes()` | O(w + b) | O(b) | One whole message; `recv_bytes(maxlength)` raises OSError past the limit |
 | `Connection.recv_bytes_into()` | O(w + b) | O(b) | Copied into the caller's buffer from a temporary one; too small a buffer raises BufferTooShort carrying the message |
 | `Connection.poll()` | O(w) | O(1) | Immediate by default; a timeout is honoured |
 | `Connection.fileno()` / `Connection.close()` / `Connection.closed/readable/writable` | O(1) | O(1) | |
+
+### Lock, RLock, Semaphore and BoundedSemaphore
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `Lock()` / `RLock()` / `Semaphore()` / `BoundedSemaphore()` | O(1) | O(1) | One named semaphore each |
 | `Lock.acquire()` / `RLock.acquire()` | O(w) | O(1) | Immediate when free, and for an `RLock` owner |
 | `Lock.release()` / `RLock.release()` | O(1) | O(1) | `Lock` raises ValueError when not held, `RLock` AssertionError |
 | `Lock.locked()` / `RLock.locked()` / `Semaphore.locked()` | O(1) | O(1) | Python 3.14+; true while the count is zero |
 | `Semaphore.acquire()` / `Semaphore.release()` | O(w) | O(1) | `release()` is immediate; `BoundedSemaphore` raises ValueError past its initial value |
 | `Semaphore.get_value()` | O(1) | O(1) | NotImplementedError on macOS |
+
+### Condition
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `Condition()` | O(1) | O(1) | An `RLock`, or the lock given, plus three semaphores |
 | `Condition.acquire()` / `Condition.release()` | O(w) | O(1) | The underlying lock's |
 | `Condition.wait()` | O(w + d) | O(1) | Releases the lock d times, waits, re-acquires it d times |
 | `Condition.wait_for()` | O(w + c·(f + d)) | O(f) | c = predicate calls, one before waiting and one per wakeup |
 | `Condition.notify()` | O(n + t + w) | O(1) | Wakes up to n sleepers, one by default, and waits for each to acknowledge, so a sleeper killed mid-wait blocks it for good; first clears the bookkeeping of the t waits that timed out since the last notify |
 | `Condition.notify_all()` | O(W + t + w) | O(1) | `notify()` for every sleeper, bookkeeping included |
+
+### Event
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `Event()` | O(1) | O(1) | |
 | `Event.set()` | O(W + t + w) | O(1) | Wakes every waiter, as `notify_all()` |
 | `Event.clear()` / `Event.is_set()` | O(w) | O(1) | Both take the event's lock |
 | `Event.wait()` | O(w) | O(1) | Immediate once set |
+
+### Barrier
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `Barrier()` | O(1) | O(1) | Two shared integers and a `Condition` |
 | `Barrier.wait()` | O(w + W + f) | O(f) | The last of the parties runs the action, f, and wakes the others; a timeout that expires breaks the barrier |
 | `Barrier.reset()` / `Barrier.abort()` | O(W + w) | O(1) | Wake every waiter with BrokenBarrierError |
 | `Barrier.parties/n_waiting/broken` | O(1) | O(1) | |
+
+### Shared values and arrays
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `RawValue()` / `Value()` | O(z) | O(z) | One block of shared memory, z = the type's size in bytes, zeroed; `Value()` adds an `RLock` unless `lock=False`, which returns the raw ctypes object |
 | `RawArray()` / `Array()` | O(e·z) | O(e·z) | e elements of z bytes of shared memory, zeroed or copied from the sequence; the memory is shared with children, not copied to them |
 | `Value.value` | O(w) | O(1) | Under the wrapper's lock, w = the wait for it; a `c_char` array's `value` copies its bytes, O(z) |
@@ -74,6 +131,11 @@ Size variables: a = arguments given to `Process()`, s = the time to start one pr
 | `len(Array)` | O(1) | O(1) | Takes no lock |
 | `Array[i:j]` | O(w + j − i) | O(j − i) | A new list, or bytes for a `c` array and str for a `u` array, under the lock |
 | `Value.get_lock()/get_obj()/acquire()/release()` | O(w) | O(1) | The wrapper's `RLock` and raw object; only `acquire()` waits, and `with value:` holds the lock |
+
+### Manager and proxies
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `Manager()` | O(k + s + m) | O(k) | `Process.start()` for a server process, then waits for its address |
 | `Manager.list()/dict()/set()/Namespace()/Value()/Array()/Queue()/JoinableQueue()/Lock()/RLock()/Semaphore()/BoundedSemaphore()/Condition()/Event()/Barrier()/Pool()` | O(m + b + f) | O(b) | Creates the object in the server, at its constructor's own cost f - `Pool()` there starts its workers - and returns a proxy; the initial value crosses as b bytes. `set()` is Python 3.14+ |
 | Proxy method call | O(m + b + f) | O(b) | Every call is a round trip, and a thread's first call opens its connection with another: the arguments are pickled, the server runs the method, f, and the result is pickled back, a result that is itself a proxy costing further trips. Iterating a list or dict proxy is at least a round trip per element; `proxy[:]` on a list and `copy()`, `keys()`, `values()` or `items()` on a dict copy it in one |
@@ -82,11 +144,11 @@ Size variables: a = arguments given to `Process()`, s = the time to start one pr
 | `Manager.shutdown()` / `Manager.join()` | O(w) | O(1) | `shutdown()` exists only once started; `with manager:` calls it on exit |
 | `Manager.register()` | O(R) | O(R) | A classmethod adding a type to the manager class; the first call on a subclass first copies the R types it inherits |
 | `Manager.get_server()` / `Manager.address` | O(1) | O(1) | |
-| `cpu_count()` | O(1) | O(1) | `os.cpu_count()`, raising NotImplementedError where it is None |
-| `get_context()` / `get_start_method()` / `set_start_method()` / `get_all_start_methods()` | O(1) | O(1) | A second `set_start_method()` raises RuntimeError unless `force=True`; `get_all_start_methods()` is a new list each call |
-| `get_logger()` / `log_to_stderr()` | O(1) | O(1) | One logger, created on first use; every `log_to_stderr()` call adds another handler |
-| `freeze_support()` / `set_executable()` / `allow_connection_pickling()` | O(1) | O(1) | Store a setting, or do nothing outside a frozen executable |
-| `set_forkserver_preload()` | O(r) | O(1) | Checks that each of the r names is a str and keeps the list; the forkserver imports them when it starts |
+
+### Constants, exceptions and attributes
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `ProcessError` / `BufferTooShort` / `TimeoutError` / `AuthenticationError` | O(1) | O(1) | The last three subclass `ProcessError` |
 | `SUBDEBUG` / `SUBWARNING` | O(1) | O(1) | Logging levels 5 and 25 |
 | `reducer` | O(1) | O(1) | The `reduction` module, whose `ForkingPickler` every object transfer uses |

@@ -4,6 +4,8 @@ The `calendar` module provides calendar-related functions and classes for workin
 
 ## Complexity Reference
 
+### Module functions and helpers
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `calendar()` | O(n) | O(n) | n = days in period |
@@ -27,6 +29,11 @@ The `calendar` module provides calendar-related functions and classes for workin
 | `formatstring()` | O(n) | O(n) | Format calendar with string |
 | `different_locale` | O(1) | O(1) | Context manager for locale switching |
 | `global_enum` | O(k) | O(k) | k = enum members exported |
+
+### Calendar
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `Calendar.iterweekdays()` | O(1) | O(1) | Iterator over 7 weekdays |
 | `Calendar.itermonthdays()` | O(n) | O(1) | n = days in month |
 | `Calendar.itermonthdays2/3/4()` | O(n) | O(1) | n = days in month |
@@ -37,6 +44,11 @@ The `calendar` module provides calendar-related functions and classes for workin
 | `Calendar.yeardayscalendar()` | O(n) | O(n) | n = days in year |
 | `Calendar.yeardays2calendar()` | O(n) | O(n) | n = days in year |
 | `Calendar.yeardatescalendar()` | O(n) | O(n) | n = days in year |
+
+### TextCalendar
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `TextCalendar.formatday()` | O(k) | O(k) | k = output width |
 | `TextCalendar.formatweek()` | O(k) | O(k) | k = output width |
 | `TextCalendar.formatweekday()` | O(k) | O(k) | k = output width |
@@ -44,6 +56,14 @@ The `calendar` module provides calendar-related functions and classes for workin
 | `TextCalendar.formatmonth()` | O(n) | O(n) | n = output size |
 | `TextCalendar.formatmonthname()` | O(k) | O(k) | k = output width |
 | `TextCalendar.formatyear()` | O(n) | O(n) | n = output size |
+| `TextCalendar.prweek()` | O(n) | O(n) | n = output size |
+| `TextCalendar.prmonth()` | O(n) | O(n) | n = output size |
+| `TextCalendar.pryear()` | O(n) | O(n) | n = output size |
+
+### HTMLCalendar
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
 | `HTMLCalendar.formatday()` | O(k) | O(k) | k = output width |
 | `HTMLCalendar.formatweek()` | O(k) | O(k) | k = output width |
 | `HTMLCalendar.formatweekday()` | O(k) | O(k) | k = output width |
@@ -52,9 +72,6 @@ The `calendar` module provides calendar-related functions and classes for workin
 | `HTMLCalendar.formatmonthname()` | O(k) | O(k) | k = output width |
 | `HTMLCalendar.formatyear()` | O(n) | O(n) | n = output size |
 | `HTMLCalendar.formatyearpage()` | O(n) | O(n) | n = output size |
-| `TextCalendar.prweek()` | O(n) | O(n) | n = output size |
-| `TextCalendar.prmonth()` | O(n) | O(n) | n = output size |
-| `TextCalendar.pryear()` | O(n) | O(n) | n = output size |
 
 ## Common Operations
 
