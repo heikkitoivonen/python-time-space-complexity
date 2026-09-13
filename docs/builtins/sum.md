@@ -1,15 +1,24 @@
 # sum() Function Complexity
 
-The `sum()` function returns the sum of all items in an iterable, optionally adding a start value.
+The `sum()` function adds the items of an iterable to a start value, which
+defaults to `0`. It makes one pass and one `+` per item, so the cost is the
+number of items times the cost of one addition. That addition is constant for
+machine-word integers and floats, linear in the width for wider integers, and
+a copy of the whole running total for lists and tuples.
 
 ## Complexity Analysis
 
+Let `n` be the number of items. Space excludes the iterable itself and
+`start`.
+
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
-| Summing integers | O(n) | O(1) | Single pass, accumulation |
-| Summing floats | O(n) | O(1) | Same as integers |
-| Summing strings (concatenation) | O(n²) | O(n) | Avoid! Each concatenation copies; use ''.join() |
-| With custom objects | O(n*k) | O(1) | k = __add__ time |
+| Exact `int` and `bool` items, running total within a machine word | O(n) | O(1) | Accumulated in a C integer |
+| Wider `int` items | O(n·(w + log n)) | O(w + log n) | `w` = bits of the widest item or `start`; each `+` copies the running total, which is at most `log n` bits wider |
+| `float` and `complex` items | O(n) | O(1) | `float` is accumulated in a C double, compensated from Python 3.12 |
+| `list` or `tuple` items with a matching `start` | O(n·N) | O(N) | `N` = total elements, `start` included; each `+` copies the whole running total. Use `itertools.chain` |
+| `str`, `bytes`, `bytearray` | — | — | Such a `start` raises `TypeError`; without one, `0 + "a"` raises. Use `''.join()` |
+| Any other type | O(n·a) | O(1) auxiliary | `a` = cost of one `+`, done once per item; `sum()` holds only the running total |
 
 ## Basic Usage
 
@@ -58,72 +67,79 @@ count = sum(x % 2 == 0 for x in range(100))  # 50 even numbers
 ### Computing Statistics
 
 ```python
-# O(n) - single pass
+# O(n) - one pass for the sum, len() is O(1)
 numbers = [1, 2, 3, 4, 5]
-total = sum(numbers)
-average = total / len(numbers)
+average = sum(numbers) / len(numbers)  # 3.0
 
-# Don't do this - O(2n)
-average = sum(numbers) / len(numbers)  # Iterate twice
+# Two passes - counting by iterating again
+average = sum(numbers) / sum(1 for _ in numbers)  # 3.0
 ```
 
 ### Flattening Lists
 
 ```python
-# O(n*k) - inefficient! n=number of lists, k=items per list
-# Each + creates a new list and copies all accumulated items
+# O(n*N) - n = number of lists, N = total items
+# Each + copies every item accumulated so far
 nested = [[1, 2], [3, 4], [5, 6]]
-flat = sum(nested, [])  # O(n*k) - avoid this!
+flat = sum(nested, [])  # [1, 2, 3, 4, 5, 6] - avoid this!
 
 # Better approaches:
-# O(n*k) total items, but no repeated copying
+# O(N) - each item copied once
 from itertools import chain
-flat = list(chain(*nested))
+flat = list(chain.from_iterable(nested))
 
-# O(n*k) - single pass, no repeated copying
+# O(N) - single pass, no repeated copying
 flat = [item for sublist in nested for item in sublist]
 ```
 
 ## Performance Considerations
 
-### Integer vs Float Arithmetic
+### Wide Integers
 
 ```python
-# Both O(n) but integers are slightly faster
-sum([1, 2, 3, 4, 5])           # O(n) - integers
-sum([1.0, 2.0, 3.0, 4.0, 5.0])  # O(n) - floats (slightly slower)
+# O(n) - machine-word ints are accumulated in C
+total = sum(range(1000))  # 499500
+
+# O(n*(w + log n)) - each + copies the running total, w = bits per item
+wide = [10**300] * 1000
+total = sum(wide)  # 1000 * 10**300
 ```
 
 ### Why Not for Strings
 
 ```python
-# ❌ O(n²) - avoid!
-# Each + creates new string and copies all data
-text = ""
-for word in ["a", "b", "c", "d", "e"]:
-    text = text + word  # Creates new string each time
+# ❌ sum() refuses a str start outright
+try:
+    text = sum(["a", "b", "c"], "")
+except TypeError:
+    pass  # sum() can't sum strings [use ''.join(seq) instead]
 
-# ❌ Still O(n²) - sum with strings is also quadratic!
-# text = sum(["a", "b", "c", "d", "e"], "")  # Don't use
+# ❌ And without a start, the first + is 0 + "a"
+try:
+    text = sum(["a", "b", "c"])
+except TypeError:
+    pass  # unsupported operand type(s) for +: 'int' and 'str'
 
-# ✅ Best: O(n) with join
-text = "".join(["a", "b", "c", "d", "e"])
+# ✅ O(total length) with join
+text = "".join(["a", "b", "c", "d", "e"])  # "abcde"
 ```
+
+The same applies to `bytes` and `bytearray`: use `b"".join()`.
 
 ## Working with Custom Objects
 
 ### Custom __add__ Method
 
 ```python
-# O(n*k) where k = time for __add__
+# O(n*m) where m = time for __add__
 class Vector:
     def __init__(self, *components):
         self.components = components
-    
+
     def __add__(self, other):
         # O(m) where m = number of components
         return Vector(*(a + b for a, b in zip(self.components, other.components)))
-    
+
     def __repr__(self):
         return f"Vector{self.components}"
 
@@ -135,13 +151,22 @@ result = sum(vectors, Vector(0, 0))  # Vector(9, 12)
 ### Default Start Value
 
 ```python
-# Important: start value type must support __add__
-result = sum([1, 2, 3], start=0)      # 6
-result = sum([1, 2, 3], start=10)     # 16
+# The first + is start + item, and start defaults to 0
+result = sum([1, 2, 3])            # 6
+result = sum([1, 2, 3], start=10)  # 16
 
-# Start value is crucial for types
-result = sum(["a", "b", "c"], start="")  # "abc" - O(n²)
-result = sum(["a", "b", "c"])  # TypeError - can't add str + int
+# Without a start, the first item is added to 0, so the type needs __radd__
+class Vector:
+    def __init__(self, *components):
+        self.components = components
+
+    def __add__(self, other):
+        return Vector(*(a + b for a, b in zip(self.components, other.components)))
+
+    def __radd__(self, other):
+        return self if other == 0 else NotImplemented
+
+result = sum([Vector(1, 2), Vector(3, 4)])  # Vector(4, 6), no start needed
 ```
 
 ## Comparison with Alternatives
@@ -149,11 +174,11 @@ result = sum(["a", "b", "c"])  # TypeError - can't add str + int
 ### vs Loop
 
 ```python
-# sum() - O(n), clean, optimized
+# sum() - O(n)
 numbers = list(range(10000))
 total = sum(numbers)
 
-# Manual loop - O(n), same but more verbose
+# Manual loop - O(n), same bound
 total = 0
 for num in numbers:
     total += num
@@ -174,23 +199,16 @@ total = sum(numbers)  # 15
 totals = list(accumulate(numbers))  # [1, 3, 6, 10, 15]
 ```
 
-## Performance Notes
+### vs math.fsum
 
 ```python
-# Timing comparison: sum vs alternatives
-
-# O(n) - optimal for summing numbers
-sum(range(1000000))
-
-# O(n) but requires list creation first
-__builtins__.sum(list(range(1000000)))
-
-# O(n*log(n)) - much slower
-sorted([1,2,3])[0] + sorted([1,2,3])[1]  # Don't do this
-
-# O(n) - alternative using math.fsum for precision
 from math import fsum
-fsum([0.1] * 10)  # More precise for floats
+
+# Both O(n). fsum() keeps every partial sum exactly; sum() carries
+# one compensation term from Python 3.12, and none before it.
+values = [0.1] * 10
+fsum(values)  # 1.0 on every version
+sum(values)   # 1.0 from 3.12; 0.9999999999999999 before
 ```
 
 ## Best Practices
@@ -199,11 +217,12 @@ fsum([0.1] * 10)  # More precise for floats
 
 - Use `sum()` for numeric aggregation
 - Use generator expressions with `sum()` for memory efficiency
+- Use `math.fsum()` when float rounding matters
 
 ❌ **Avoid**:
 
-- `sum(nested_lists, [])` - O(n²) concatenation
-- `sum(strings, "")` - inefficient string concatenation
+- `sum(nested_lists, [])` - copies the whole running total at every step
+- `sum(strings, "")` - raises `TypeError`; use `"".join()`
 
 ## Related Functions
 
@@ -215,6 +234,6 @@ fsum([0.1] * 10)  # More precise for floats
 
 ## Version Notes
 
-- **Python 2.x**: Basic functionality available
-- **Python 3.x**: Same behavior, more consistent
-- **Python 3.8+**: No changes to complexity
+- **Python 3.8+**: `start` can be passed as a keyword argument
+- **Python 3.12+**: `float` items are summed with Neumaier compensation, so
+  `sum([0.1] * 10) == 1.0`
