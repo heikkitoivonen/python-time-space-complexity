@@ -9,16 +9,15 @@ Several are settled by observation rather than timing, which is the better
 kind of test: `filecmp.dircmp` accepting a directory that does not exist
 proves it reads nothing at construction, and no tolerance is involved.
 
-docs/stdlib/array.md's claims live in tests/test_array_complexity.py, which
-covers that module's table as well.
+docs/stdlib/array.md's claims live in tests/test_array_complexity.py and
+docs/stdlib/multiprocessing.md's in tests/test_multiprocessing_complexity.py,
+which cover those modules' tables as well.
 
 Deliberately not covered, because a unit test cannot settle them:
 
 * docs/stdlib/pwd.md - lookup cost is decided by the NSS backend, which may
   be a local file or a network directory
 * docs/stdlib/smtplib.md - round trip counts need a real SMTP conversation
-* docs/stdlib/multiprocessing.md - the IPC claims need spawned processes;
-  only the chunking, which is ordinary list work, is tested here
 * docs/stdlib/cgi.md, docs/stdlib/cgitb.md - removed in Python 3.13, so a
   test would have to be skipped on any current interpreter
 """
@@ -319,24 +318,6 @@ class TestLoggingArgumentsAreBuiltEagerly:
         logger.debug("discarded: %s", Counted())
 
         assert formatted["n"] == 0, "%-style formatting only happens if it is emitted"
-
-
-class TestMultiprocessingChunkingCopies:
-    """docs/stdlib/multiprocessing.md: chunking the data holds a second copy.
-
-    Only the chunking is tested; the pickling and IPC claims need spawned
-    processes and are out of scope for a unit test.
-    """
-
-    def test_chunks_are_new_lists(self) -> None:
-        data = list(range(1_000))
-        chunk_size = len(data) // 4
-        chunks = [data[i : i + chunk_size] for i in range(0, len(data), chunk_size)]
-
-        assert sum(len(chunk) for chunk in chunks) == len(data)
-        assert all(chunk is not data for chunk in chunks)
-        chunks[0][0] = -1
-        assert data[0] == 0, "the chunk is a copy, so the original is untouched"
 
 
 class TestNumbersAbcCaching:
