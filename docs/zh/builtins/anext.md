@@ -1,5 +1,5 @@
 ---
-source_sha: 682f753d52a44f1d1bbc5e4beb31681206169e63d2e64f3a7148bee1a7a2e8a9
+source_sha: 5887991529740bb5adcce25dab9f9ae4d8131508c4c2034aa2cec0283c2507ae
 translated: machine
 ---
 
@@ -11,11 +11,14 @@ translated: machine
 
 | 操作 | 时间 | 空间 | 备注 |
 |------|------|-------|-------|
-| `anext()` 调用 | O(1) | O(1) | 迭代器协议调用 |
-| 等待结果 | O(k) | O(1) | k = 异步生成器的计算耗时 |
-| 带默认值 | O(k) | O(1) | 迭代耗尽时返回默认值 |
+| `anext()` 调用 | O(1) | O(1) | 外加一次 `__anext__()` 调用本身；对于 `async def` 或异步生成器，它只会构建可等待对象 |
+| 等待结果 | O(k) | O(1) | k = 一次 `__anext__()` 步骤的工作量，包括其中的 await；空间不含该步骤自身的分配 |
+| 带默认值 | O(k) | O(1) | 迭代耗尽时返回默认值；每次挂起额外 O(1) |
 
 <!-- 注意：复杂度取决于异步生成器内部执行的操作，而不是 anext() 本身 -->
+
+!!! warning "手写的可等待对象与默认值"
+    传入默认值时，`anext()` 会包装 `__anext__()` 返回的可等待对象，并在这次 await 的每一步都调用它的 `__await__()`，而不是只调用一次。`async def __anext__()` 或异步生成器会从上次停下的地方继续并正常完成。而 `__await__()` 是生成器函数的类每次调用都会从头开始；如果每次调用都挂起，这个 await 就永远不会完成。对于这样的迭代器，请不要传入默认值，而是自行捕获 `StopAsyncIteration`。
 
 ## 基本用法
 
@@ -119,7 +122,7 @@ asyncio.run(main())
 ```python
 import asyncio
 
-# next() - synchronous - O(1)
+# next() - synchronous - O(1) call, the generator's step runs inside it
 def sync_gen():
     yield 1
     yield 2

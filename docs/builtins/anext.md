@@ -6,11 +6,14 @@ The `anext()` function returns the next item from an asynchronous iterator.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `anext()` call | O(1) | O(1) | Iterator protocol call |
-| Awaiting result | O(k) | O(1) | k = async generator's computation time |
-| With default | O(k) | O(1) | Returns default if exhausted |
+| `anext()` call | O(1) | O(1) | Plus the `__anext__()` call itself, which for an `async def` or async generator only builds the awaitable |
+| Awaiting result | O(k) | O(1) | k = work of one `__anext__()` step, including its awaits; space excludes the step's own allocations |
+| With default | O(k) | O(1) | Returns default if exhausted; O(1) extra per suspension |
 
 <!-- Note: The complexity depends on what the async generator does internally, not anext() itself -->
+
+!!! warning "Hand-written awaitables and the default"
+    With a default, `anext()` wraps the awaitable that `__anext__()` returns and calls its `__await__()` on every step of the await, not once. An `async def __anext__()` or an async generator resumes where it left off and completes normally. A class whose `__await__()` is a generator function starts over on each call; if every call suspends, the await never completes. For such an iterator, leave the default out and catch `StopAsyncIteration` yourself.
 
 ## Basic Usage
 
@@ -114,7 +117,7 @@ asyncio.run(main())
 ```python
 import asyncio
 
-# next() - synchronous - O(1)
+# next() - synchronous - O(1) call, the generator's step runs inside it
 def sync_gen():
     yield 1
     yield 2
