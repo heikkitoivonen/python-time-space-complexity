@@ -1,31 +1,39 @@
 # hasattr() Function Complexity
 
-The `hasattr()` function checks whether an object has a named attribute. It's the standard way to safely test for attribute existence before accessing.
+The `hasattr()` function checks whether an object has a named attribute. It is
+one `getattr()` whose `AttributeError` becomes `False`, so it costs exactly
+what the attribute lookup costs: a cached class-level lookup plus an instance
+dict probe, or whatever a user-defined hook does.
 
-## Complexity Analysis
+## Complexity Reference
+
+Let `d` be the length of the object's class MRO and `g` the cost, in time and
+space, of a user-defined hook: `__getattr__`, `__getattribute__`, or a
+descriptor such as a property getter.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| Attribute lookup | O(d=depth) | O(1) | d = MRO depth; typically small (<10) |
-| Catch AttributeError | O(1) | O(1) | Exception handling overhead |
-| Total operation | O(d) | O(1) | d = inheritance depth; effectively O(1) for flat hierarchies |
+| `hasattr(obj, name)` | O(1) avg | O(1) | The class-level lookup of a plain `str` name is cached per class and name, for misses as well as hits, so `d` does not matter once the cache is warm |
+| `hasattr(obj, name)`, first lookup after the class or a base changed | O(d) | O(1) | Walks the MRO once and caches the result. From Python 3.13, once a class has been changed and looked up again more than 1,000 times it is never cached again, and every lookup on it pays O(d) |
+| `hasattr(obj, name)` through a hook | O(g) | O(g) | On top of the lookup above. A property getter runs, and `__getattr__` runs on every miss. Only `AttributeError` becomes `False`; any other exception propagates |
+| `hasattr(obj, name)` with a non-`str` name | O(1) | O(1) | Raises `TypeError` before any lookup |
 
 ## Basic Usage
 
 ### Check Attribute Existence
 
 ```python
-# O(d) - where d = MRO depth
+# O(1) avg - one cached lookup
 class MyClass:
     attr = 42
 
 obj = MyClass()
 
-# Safe check - O(d)
+# Safe check - O(1) avg
 if hasattr(obj, 'attr'):
     print(obj.attr)  # 42
 
-# Check non-existent attribute - O(d)
+# A miss is cached too - O(1) avg
 if hasattr(obj, 'missing'):
     print("Has missing")
 else:
@@ -35,25 +43,25 @@ else:
 ### Avoid AttributeError
 
 ```python
-# O(d) - safe attribute access pattern
+# All three forms do the same lookup; they differ in how many times they do it
 class User:
     name = "Alice"
 
 user = User()
 
-# Bad - O(1) but risky
+# try/except - one lookup
 try:
     email = user.email
 except AttributeError:
     email = "no@email.com"
 
-# Better - O(d) and clearer
+# hasattr() then access - two lookups when the attribute exists
 if hasattr(user, 'email'):
     email = user.email
 else:
     email = "no@email.com"
 
-# Best - use getattr with default O(d)
+# getattr() with a default - one lookup either way, and the clearest
 email = getattr(user, 'email', "no@email.com")
 ```
 
@@ -62,7 +70,8 @@ email = getattr(user, 'email', "no@email.com")
 ### Inheritance Chain Traversal
 
 ```python
-# O(d) - traverses MRO for each check
+# The first lookup of a name on a class walks the MRO - O(d)
+# Later lookups of that name on that class are cached - O(1) avg
 class A:
     a_attr = 1
 
@@ -77,78 +86,73 @@ class D(C):
 
 obj = D()
 
-# Lookup in own class - O(1)
-has_d = hasattr(obj, 'd_attr')  # True, O(1)
-
-# Lookup in parent chain - O(d)
-has_a = hasattr(obj, 'a_attr')  # True, O(4) - traverse MRO
-
 # MRO: [D, C, B, A, object]
-# Lookup traces: D.__dict__ -> C.__dict__ -> B.__dict__ -> A.__dict__ -> found
+has_a = hasattr(obj, 'a_attr')  # O(d) once: D, C, B, then found in A
+has_a = hasattr(obj, 'a_attr')  # O(1) avg: cached for (D, 'a_attr')
+has_x = hasattr(obj, 'x_attr')  # O(d) once, then the miss is cached too
+
+# Assigning to a class, or to any of its bases, invalidates its cache
+C.c_attr = 30
+has_a = hasattr(obj, 'a_attr')  # O(d) again, once
 ```
 
-### Exception Handling
+### What hasattr() Catches
 
 ```python
-# O(d) - hasattr() implements like this internally
+# hasattr() is one getattr() call; only AttributeError means False
 def hasattr_simulation(obj, name):
-    """How hasattr() works - O(d)"""
+    """What hasattr() does - the cost is the lookup's"""
+    if not isinstance(name, str):
+        raise TypeError("attribute name must be string")
     try:
-        getattr(obj, name)  # O(d) - traverse MRO
-        return True  # O(1)
+        getattr(obj, name)
     except AttributeError:
-        return False  # O(1)
+        return False
+    return True
 
-# Each check involves getattr() which is O(d)
-class Data:
-    value = 42
+class Strict:
+    @property
+    def broken(self):
+        raise KeyError("not an AttributeError")
 
-obj = Data()
-result = hasattr_simulation(obj, 'value')  # O(d)
+obj = Strict()
+print(hasattr(obj, 'missing'))  # False
+
+try:
+    hasattr(obj, 'broken')  # the KeyError propagates
+except KeyError:
+    print("only AttributeError means False")
+
+try:
+    hasattr(obj, 42)
+except TypeError:
+    print("the name must be a str")
 ```
 
 ## Performance Patterns
 
-### Multiple Checks
-
-```python
-# O(n * d) - multiple hasattr() calls
-class Config:
-    host = "localhost"
-    port = 8000
-    debug = True
-
-config = Config()
-
-# Multiple hasattr() calls - O(3 * d)
-if hasattr(config, 'host') and hasattr(config, 'port'):  # O(2d)
-    print("Ready")
-
-if hasattr(config, 'debug'):  # O(d)
-    print("Debug mode")
-
-# Total: O(3d) - multiple MRO traversals
-```
-
 ### hasattr vs getattr with Default
 
 ```python
-# hasattr + getattr - O(2d)
-if hasattr(obj, 'attr'):  # O(d)
-    value = getattr(obj, 'attr')  # O(d)
+# hasattr() then getattr() - two lookups
+class Config:
+    host = "localhost"
+
+obj = Config()
+
+if hasattr(obj, 'host'):  # lookup one
+    value = getattr(obj, 'host')  # lookup two
 else:
-    value = None  # O(2d) - total
+    value = None
 
-# vs getattr alone - O(d)
-value = getattr(obj, 'attr', None)  # O(d) - single lookup
-
-# Better: use getattr with default (half the lookups)
+# getattr() with a default - one lookup
+value = getattr(obj, 'host', None)
 ```
 
 ### Checking Multiple Attributes
 
 ```python
-# O(n * d) - inefficient for many checks
+# O(n) - one cached lookup per name checked
 class Message:
     to = "user@example.com"
     subject = "Hello"
@@ -156,13 +160,13 @@ class Message:
 
 msg = Message()
 
-# Multiple checks - O(3d)
 required = ['to', 'subject', 'body']
-valid = all(hasattr(msg, attr) for attr in required)  # O(n * d)
+valid = all(hasattr(msg, attr) for attr in required)  # O(n) - n names
 
-# Better - use getattr
-attrs = {attr: getattr(msg, attr, None) for attr in required}
-valid = all(v is not None for v in attrs.values())
+# dir() is not a shortcut: it collects and sorts every attribute of the
+# object and its whole MRO, so it grows with that attribute count where a
+# few hasattr() calls do not
+valid = {'to', 'subject', 'body'} <= set(dir(msg))  # at least O(a) in the a names listed
 ```
 
 ## Common Use Cases
@@ -170,11 +174,11 @@ valid = all(v is not None for v in attrs.values())
 ### Optional Feature Detection
 
 ```python
-# O(d) - check if feature is available
+# O(1) avg - check if feature is available
 class DataStore:
     def load(self):
         pass
-    
+
     def save(self):
         pass
     # backup() is optional
@@ -186,7 +190,7 @@ class DatabaseStore(DataStore):
 
 store = DatabaseStore()
 
-# O(d) - check for optional method
+# O(1) avg - check for optional method
 if hasattr(store, 'backup'):
     store.backup()  # Call if available
 ```
@@ -194,35 +198,39 @@ if hasattr(store, 'backup'):
 ### Protocol Checking
 
 ```python
-# O(n * d) - check if object implements protocol
+# One cached lookup per protocol method
 def is_iterable(obj):
-    """Check for iterator protocol - O(d)"""
-    return hasattr(obj, '__iter__')  # O(d)
+    """Check for the iterator protocol - one lookup"""
+    return hasattr(obj, '__iter__')
 
 def is_context_manager(obj):
-    """Check for context manager protocol - O(2d)"""
-    return (hasattr(obj, '__enter__') and  # O(d)
-            hasattr(obj, '__exit__'))  # O(d)
+    """Check for the context manager protocol - one or two lookups"""
+    return hasattr(obj, '__enter__') and hasattr(obj, '__exit__')
 
-class MyIterator:
+class Countdown:
+    def __init__(self, start):
+        self.current = start
+
     def __iter__(self):
-        pass
-    
+        return self
+
     def __next__(self):
-        pass
+        if self.current <= 0:
+            raise StopIteration
+        self.current -= 1
+        return self.current + 1
 
-obj = MyIterator()
+obj = Countdown(3)
 
-# O(d) - check protocol
 if is_iterable(obj):
     for item in obj:
-        print(item)
+        print(item)  # 3, 2, 1
 ```
 
 ### Safe Method Invocation
 
 ```python
-# O(d) - call method if exists
+# hasattr() then the call - two lookups when the method exists
 class Handler:
     def process(self, data):
         return f"Processed: {data}"
@@ -231,9 +239,9 @@ class MinimalHandler:
     pass
 
 def safe_process(obj, data):
-    """Call method if exists - O(d)"""
-    if hasattr(obj, 'process'):  # O(d)
-        return obj.process(data)  # O(1)
+    """Call method if it exists"""
+    if hasattr(obj, 'process'):  # O(1) avg
+        return obj.process(data)
     return None
 
 handler = Handler()
@@ -243,40 +251,16 @@ result1 = safe_process(handler, "data")    # Processed: data
 result2 = safe_process(minimal, "data")    # None
 ```
 
-### Attribute Filtering
-
-```python
-# O(n * d) - find attributes by predicate
-class Settings:
-    timeout = 30
-    retries = 3
-    debug = False
-    _internal = "hidden"
-
-settings = Settings()
-
-# O(n * d) - filter using hasattr
-public_attrs = []
-for attr in dir(settings):  # O(n log n)
-    if not attr.startswith('_'):  # O(1)
-        if hasattr(settings, attr):  # O(d) - redundant!
-            public_attrs.append(attr)
-
-# Better approach - avoid hasattr in loop
-public_attrs = [attr for attr in dir(settings)  # O(n log n)
-                if not attr.startswith('_')]  # O(1) - no hasattr needed
-```
-
 ## Advanced Usage
 
 ### Dynamic Behavior Routing
 
 ```python
-# O(n * d) - route to correct handler
+# Route to a handler by name
 class Plugin:
     def on_start(self):
         pass
-    
+
     def on_stop(self):
         pass
 
@@ -285,13 +269,13 @@ class AdvancedPlugin(Plugin):
         pass
 
 def trigger_event(obj, event_name):
-    """Safely trigger event - O(d)"""
-    if hasattr(obj, event_name):  # O(d)
-        getattr(obj, event_name)()  # O(d)
+    """Safely trigger an event - one lookup"""
+    handler = getattr(obj, event_name, None)
+    if handler is not None:
+        handler()
 
 plugin = AdvancedPlugin()
 
-# O(d) - check and invoke
 trigger_event(plugin, 'on_start')   # Works
 trigger_event(plugin, 'on_update')  # Works
 trigger_event(plugin, 'missing')    # No error
@@ -300,21 +284,21 @@ trigger_event(plugin, 'missing')    # No error
 ### Attribute Validation
 
 ```python
-# O(n * d) - validate object structure
+# O(n) - one lookup per required name
 def validate_object(obj, required_attrs):
-    """Check object has all required attributes - O(n * d)"""
+    """Return the required names the object lacks - O(n)"""
     missing = []
-    
-    for attr in required_attrs:  # O(n) iterations
-        if not hasattr(obj, attr):  # O(d) per iteration
+
+    for attr in required_attrs:  # n iterations
+        if not hasattr(obj, attr):  # O(1) avg each
             missing.append(attr)
-    
+
     return missing if missing else None
 
 class FileWriter:
     def write(self):
         pass
-    
+
     def close(self):
         pass
 
@@ -326,28 +310,28 @@ missing = validate_object(FileWriter(), required)
 ### Duck Typing Implementation
 
 ```python
-# O(n * d) - implement duck typing
+# Two lookups per capability used: the check and the call
+def transform(data):
+    return data.upper()
+
 def process_data(obj):
-    """Work with any object that has required methods - O(n * d)"""
-    
-    # O(d) - check read capability
+    """Work with any object that has the required methods"""
     if hasattr(obj, 'read'):
         data = obj.read()
     else:
         raise TypeError("Object doesn't support read")
-    
-    # O(d) - check write capability
+
     if hasattr(obj, 'write'):
-        obj.write(process(data))
+        obj.write(transform(data))
     else:
         raise TypeError("Object doesn't support write")
 
 # Works with file-like objects
 import io
-buffer = io.StringIO()
+buffer = io.StringIO("content")
 
-# O(n * d) - checks satisfied
 process_data(buffer)
+print(buffer.getvalue())  # contentCONTENT
 ```
 
 ## Practical Examples
@@ -355,21 +339,20 @@ process_data(buffer)
 ### Conditional Initialization
 
 ```python
-# O(d) - conditional attribute setup
+# Up to three lookups: two checks and one read
 class FlexibleConfig:
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
-    
+
     def get_port(self):
-        """Get port with fallback - O(d)"""
-        if hasattr(self, 'port'):  # O(d)
+        """Get port with fallback"""
+        if hasattr(self, 'port'):  # O(1) avg
             return self.port
-        elif hasattr(self, 'default_port'):  # O(d)
+        elif hasattr(self, 'default_port'):  # O(1) avg
             return self.default_port
         else:
             return 8000
 
-# O(2d) - checks in sequence
 config = FlexibleConfig(default_port=9000)
 port = config.get_port()  # 9000
 ```
@@ -377,24 +360,24 @@ port = config.get_port()  # 9000
 ### Plugin System
 
 ```python
-# O(n * d) - discover available features
+# O(n) - one lookup per feature name
 class PluginManager:
     def get_capabilities(self, plugin):
-        """List plugin capabilities - O(n * d)"""
+        """List plugin capabilities - O(n)"""
         capabilities = []
-        
+
         features = ['process', 'validate', 'transform', 'cache']
-        
-        for feature in features:  # O(n)
-            if hasattr(plugin, feature):  # O(d)
+
+        for feature in features:  # n iterations
+            if hasattr(plugin, feature):  # O(1) avg each
                 capabilities.append(feature)
-        
+
         return capabilities
 
 class SimplePlugin:
     def process(self):
         pass
-    
+
     def validate(self):
         pass
 
@@ -403,57 +386,34 @@ caps = manager.get_capabilities(SimplePlugin())
 # Returns: ['process', 'validate']
 ```
 
-### Backward Compatibility
-
-```python
-# O(d) - handle old API
-class Service:
-    """New API with old method support"""
-    
-    def fetch_data(self):
-        return "data"
-    
-    def fetch(self):
-        """Old API - calls new"""
-        if hasattr(self, 'fetch_data'):  # O(d)
-            return self.fetch_data()
-        else:
-            raise NotImplementedError()
-
-service = Service()
-
-# O(d) - check for new method
-data = service.fetch()  # Uses fetch_data internally
-```
-
 ## Edge Cases
 
-### Callable vs Attribute
+### Descriptors Run Inside hasattr()
 
 ```python
-# O(d) - hasattr finds both properties and methods
+# hasattr() finds attributes, methods and properties alike - and runs getters
 class Example:
     value = 42  # Attribute
-    
+
     def method(self):  # Callable
         pass
-    
+
     @property
-    def computed(self):  # Property
+    def computed(self):  # Property - its getter runs on every hasattr()
+        print("computing")
         return 100
 
 obj = Example()
 
-# All return True - hasattr doesn't distinguish types
 print(hasattr(obj, 'value'))      # True - attribute
 print(hasattr(obj, 'method'))     # True - callable
-print(hasattr(obj, 'computed'))   # True - property
+print(hasattr(obj, 'computed'))   # prints "computing", then True
 ```
 
 ### Side Effects of __getattr__
 
 ```python
-# O(d) - may trigger __getattr__ side effects
+# __getattr__ runs on every miss - its cost and side effects are hasattr()'s
 class WithSideEffect:
     def __getattr__(self, name):
         print(f"Looking up: {name}")
@@ -461,95 +421,31 @@ class WithSideEffect:
 
 obj = WithSideEffect()
 
-# O(d) - prints side effect
-result = hasattr(obj, 'missing')  # Prints "Looking up: missing"
-# hasattr returns False but side effect occurred!
+result = hasattr(obj, 'missing')  # Prints "Looking up: missing"; result is False
 
-# Note: hasattr() can have unexpected side effects
-```
-
-### Performance Impact of __getattr__
-
-```python
-# O(d) - slow if __getattr__ is expensive
-class ExpensiveGetattr:
+# A __getattr__ that returns instead of raising makes every name exist
+class Permissive:
     def __getattr__(self, name):
-        # Simulate expensive operation
-        import time
-        time.sleep(0.1)  # Slow!
         return None
 
-obj = ExpensiveGetattr()
-
-# O(d) + expensive operation
-has = hasattr(obj, 'anything')  # Takes ~0.1 seconds!
-
-# Better to use getattr with cached result
-```
-
-## Performance Considerations
-
-### Avoiding Repeated Checks
-
-```python
-# Bad - O(n * d) - multiple hasattr calls
-class BadExample:
-    def check_all(self, obj):
-        return (hasattr(obj, 'x') and      # O(d)
-                hasattr(obj, 'y') and      # O(d)
-                hasattr(obj, 'z'))         # O(d)
-                # Total: O(3d)
-
-# Good - single pass with dir()
-class GoodExample:
-    def check_all(self, obj):
-        attrs = set(dir(obj))  # O(n log n) - single pass
-        return {'x', 'y', 'z'}.issubset(attrs)  # O(1)
-
-# Better for single check - use getattr
-value = getattr(obj, 'x', None)  # O(d) - single lookup
-```
-
-### Caching hasattr Results
-
-```python
-# O(d) + O(1) cache lookups
-class CachedAttributeChecker:
-    def __init__(self, obj):
-        self.obj = obj
-        self._cache = {}
-    
-    def has_attr(self, name):
-        """Check with caching - O(d) or O(1)"""
-        if name not in self._cache:
-            self._cache[name] = hasattr(self.obj, name)  # O(d)
-        
-        return self._cache[name]  # O(1) from cache
-
-obj = type('Obj', (), {'x': 1})()
-checker = CachedAttributeChecker(obj)
-
-result1 = checker.has_attr('x')  # O(d) - first check
-result2 = checker.has_attr('x')  # O(1) - cached
+print(hasattr(Permissive(), 'anything'))  # True
 ```
 
 ## Best Practices
 
 ✅ **Do**:
 
-- Use `hasattr()` to safely check before accessing
-- Use `getattr()` with default instead of hasattr + getattr
-- Cache results if checking many attributes
-- Use `dir()` if checking multiple attributes at once
-- Use for duck typing and protocol checking
+- Use `hasattr()` to test for an attribute before acting on it
+- Use `getattr()` with a default when the value is needed - it is one lookup, not two
+- Use it for duck typing and protocol checking
+- Expect property getters and `__getattr__` to run inside it
 
 ❌ **Avoid**:
 
-- Using hasattr() repeatedly on same attribute (cache instead)
-- hasattr() + getattr() together (use getattr with default)
-- Checking many attributes with multiple hasattr() calls
-- Calling hasattr() on objects with expensive __getattr__
-- Assuming hasattr() won't trigger side effects
+- `hasattr()` followed by `getattr()` on the same name
+- `dir()` as a way to check for a few names - it builds and sorts the whole attribute list
+- Relying on `hasattr()` to swallow anything but `AttributeError`
+- Reassigning a class's attributes in a hot loop on Python 3.13 or later - after more than 1,000 rounds of change and lookup the class is never cached again
 
 ## Related Functions
 
@@ -562,6 +458,7 @@ result2 = checker.has_attr('x')  # O(1) - cached
 
 ## Version Notes
 
-- **Python 2.x**: `hasattr()` available, uses getattr internally
-- **Python 3.x**: Same behavior, optimized in CPython
-- **All versions**: Returns True/False, no exceptions raised
+- **Python 2.x**: Any exception raised by the lookup, not only `AttributeError`, is swallowed and reported as `False`
+- **Python 3.2+**: Only `AttributeError` becomes `False`; every other exception propagates
+- **Python 3.13+**: A class that has been changed and looked up again more than 1,000 times stops being cached, so lookups on it are O(d) from then on
+- **All versions**: A non-`str` name raises `TypeError`
