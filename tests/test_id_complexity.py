@@ -2,9 +2,9 @@
 
 `id(obj)` is `builtin_id` in `Python/bltinmodule.c`, which calls `PyLong_FromVoidPtr(obj)`.
 It reads the pointer address of `obj` and constructs a Python `int` representing
-`(uintptr_t)obj`. Because pointer access and fixed-width integer creation are constant-time
-operations, `id()` is O(1) time and O(1) auxiliary space (allocating a single Python `int`
-object of 28 to 36 bytes on 64-bit systems).
+`(uintptr_t)obj`. Pointer width bounds the number of Python integer digits needed,
+so `id()` is O(1) time and O(1) auxiliary space. The integer's exact size can vary
+with the address value, independently of the referenced object's size.
 
 Direct observation settles the behavioral and space claims without a stopwatch:
 
@@ -81,11 +81,23 @@ class TestIdComplexity:
         assert identity > 0
 
     def test_id_allocates_constant_space_regardless_of_object_size(self) -> None:
-        small_obj = ()
-        large_obj = list(range(100_000))
+        """Static and heap addresses may use different numbers of integer digits.
 
-        # The integer returned by id() has fixed size (single machine word representation)
-        assert sys.getsizeof(id(small_obj)) == sys.getsizeof(id(large_obj))
+        Every returned integer fits the platform's pointer width, regardless of
+        container size. Address placement is allocator-dependent, so equal byte
+        counts are not required.
+        """
+        pointer_bits = ctypes.sizeof(ctypes.c_void_p) * 8
+        max_address = (1 << pointer_bits) - 1
+        max_size = sys.getsizeof(max_address)
+        objects = [(), None, object(), [], list(range(100)), list(range(100_000))]
+
+        for obj in objects:
+            identity = id(obj)
+            assert 0 < identity <= max_address
+            assert sys.getsizeof(identity) <= max_size, (
+                f"id() uses {sys.getsizeof(identity)} bytes; pointer-sized limit is {max_size}"
+            )
 
     @pytest.mark.timing
     def test_id_time_does_not_scale_with_object_size(self) -> None:
