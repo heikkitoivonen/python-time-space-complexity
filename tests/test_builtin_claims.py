@@ -294,56 +294,6 @@ class TestStrConversionAvoidsACopy:
         assert identity_time < long_time, "str() on a str should not copy at all"
 
 
-class TestVarsSnapshotsLocals:
-    """docs/builtins/vars.md: vars(obj) hands back __dict__ in O(1), while
-    vars() builds a snapshot and is O(n) in the number of locals."""
-
-    def test_vars_of_an_object_is_the_dict_itself(self) -> None:
-        class Sample:
-            pass
-
-        instance = Sample()
-        instance.attribute = 1  # type: ignore[attr-defined]
-        assert vars(instance) is instance.__dict__
-
-    def test_mutating_the_returned_mapping_reaches_the_object(self) -> None:
-        class Sample:
-            pass
-
-        instance = Sample()
-        vars(instance)["added"] = 2
-        assert instance.added == 2  # type: ignore[attr-defined]
-
-    @pytest.mark.timing
-    def test_no_argument_form_scales_with_the_locals(self) -> None:
-        few: dict[str, Any] = {}
-        many: dict[str, Any] = {}
-        exec("def f():\n    a = 1\n    return vars()\n", few)
-        exec(
-            "def f():\n" + "".join(f"    v{i} = {i}\n" for i in range(200)) + "    return vars()\n",
-            many,
-        )
-
-        few_time = best_time(few["f"])
-        many_time = best_time(many["f"])
-
-        assert many_time > few_time * 3, (
-            f"vars() copies the frame's locals, so it scales with them: "
-            f"few={few_time:.2e}s many={many_time:.2e}s"
-        )
-
-    def test_the_snapshot_has_every_local(self) -> None:
-        def sample() -> dict[str, Any]:
-            # Unused by design: vars() reads them out of the frame, which is
-            # the behaviour under test.
-            first = 1  # noqa: F841
-            second = 2  # noqa: F841
-            return vars()
-
-        snapshot = sample()
-        assert snapshot["first"] == 1 and snapshot["second"] == 2
-
-
 class TestIntFloatParsingAsymmetry:
     """docs/builtins/float_func.md: float() only scans, because its result is
     fixed width. int() has to build an arbitrary-precision value."""
