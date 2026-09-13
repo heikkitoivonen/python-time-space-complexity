@@ -1,4 +1,4 @@
-<!-- source_sha: a7a8a9a77a5a4e8b96f4d49647a1722bfcf72f75b21f985ceae3c723869ff076 -->
+<!-- source_sha: c4853848b6c975c183fef3f253d94fab1a663a2abb7aa24448944cdb1cc61d7f -->
 <!-- translated: machine -->
 
 [English](README.md) | **简体中文**
@@ -199,8 +199,8 @@ Estimated Complexity: O(n) (Linear)
 ├── build/skills/               # Generated installable skill (Git-ignored)
 ├── dist/skills/                # Generated release ZIPs and checksums (Git-ignored)
 ├── .github/workflows/          # GitHub Actions CI/CD
-│   ├── deploy.yml             # Documentation site checks and deployment
-│   └── skills.yml             # Skill checks, preview artifacts, and releases
+│   ├── deploy.yml              # Documentation site checks and deployment
+│   └── skills.yml              # Skill checks, preview artifacts, and releases
 ├── pyproject.toml              # Project metadata and dependencies
 ├── mkdocs.yml                  # MkDocs configuration
 └── Makefile                    # Development commands
@@ -212,7 +212,7 @@ Estimated Complexity: O(n) (Linear)
 
 ### 1. 创建特性分支
 ```bash
-git checkout -b feature/add-numpy-complexity
+git checkout -b feature/add-missing-complexity
 ```
 
 ### 2. 修改并在本地测试
@@ -233,8 +233,8 @@ make check   # All checks (required before commit)
 ### 4. 提交并推送
 ```bash
 git add .
-git commit -m "Add: NumPy array complexity documentation"
-git push origin feature/add-numpy-complexity
+git commit -m "Add: Missing complexity documentation"
+git push origin feature/add-missing-complexity
 ```
 
 ### 添加文档

@@ -205,8 +205,8 @@ Estimated Complexity: O(n) (Linear)
 ├── build/skills/               # Generated installable skill (Git-ignored)
 ├── dist/skills/                # Generated release ZIPs and checksums (Git-ignored)
 ├── .github/workflows/          # GitHub Actions CI/CD
-│   ├── deploy.yml             # Documentation site checks and deployment
-│   └── skills.yml             # Skill checks, preview artifacts, and releases
+│   ├── deploy.yml              # Documentation site checks and deployment
+│   └── skills.yml              # Skill checks, preview artifacts, and releases
 ├── pyproject.toml              # Project metadata and dependencies
 ├── mkdocs.yml                  # MkDocs configuration
 └── Makefile                    # Development commands
@@ -218,7 +218,7 @@ Estimated Complexity: O(n) (Linear)
 
 ### 1. Create Feature Branch
 ```bash
-git checkout -b feature/add-numpy-complexity
+git checkout -b feature/add-missing-complexity
 ```
 
 ### 2. Make Changes & Test Locally
@@ -239,8 +239,8 @@ make check   # All checks (required before commit)
 ### 4. Commit & Push
 ```bash
 git add .
-git commit -m "Add: NumPy array complexity documentation"
-git push origin feature/add-numpy-complexity
+git commit -m "Add: Missing complexity documentation"
+git push origin feature/add-missing-complexity
 ```
 
 ### Adding Documentation
