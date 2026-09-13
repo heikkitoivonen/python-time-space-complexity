@@ -1,226 +1,101 @@
-# imp Module
+# imp Module Complexity
 
-⚠️ **REMOVED IN PYTHON 3.12**: The `imp` module was deprecated since Python 3.4 and removed in Python 3.12.
-
-The `imp` module provided functions for importing modules.
-
-## Removal Notice
-
-```python
-# ❌ DON'T: Use imp module (deprecated, removed in 3.12)
-import imp
-module = imp.load_source('name', 'path.py')
-
-# ✅ DO: Use importlib (modern replacement)
-import importlib.util
-spec = importlib.util.spec_from_file_location('name', 'path.py')
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
-```
+`imp` is the pre-`importlib` API for finding and loading modules by hand.
 
 ## Complexity Reference
 
+Here, p is the number of directories searched, s the number of recognised
+suffixes (the length of `get_suffixes()`), n the size in bytes of the file or
+frozen code being loaded, L the length of a path string, b the number of
+modules compiled into the interpreter, and f the number of frozen modules.
+Loading a module also executes its body; that cost belongs to the module and is
+not counted below. Space is auxiliary memory, excluding the module created.
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `load_source()` | O(n) | O(n) | n = file size |
-| `load_compiled()` | O(n) | O(n) | Load .pyc |
-| `find_module()` | O(1) | O(1) | Find module file |
+| `find_module(name, path=None)` | O(p × s) | O(s) | Probes directories in order until one matches; `path=None` adds the O(b + f) table checks and searches all of `sys.path`; returns an open file after reading only its encoding lines |
+| `load_source(name, pathname, file=None)` | O(n) | O(n) | Reads the whole file; a valid `__pycache__` entry skips compilation |
+| `load_compiled(name, pathname, file=None)` | O(n) | O(n) | Reads and unmarshals the whole `.pyc` |
+| `load_package(name, path)` | O(n) | O(n) | Executes `__init__` only; n is its size |
+| `load_module(name, file, filename, details)` | O(1) | O(1) | Dispatches on the type code in `details`, then costs what that loader costs |
+| `load_dynamic(name, path, file=None)` | O(1) | O(1) | Python-side work; `dlopen` and the extension's init function are the real cost |
+| `reload(module)` | O(n) | O(n) | Plus the finders' cost: it re-finds the module through the import system, so one loaded from a directory it cannot see raises `ModuleNotFoundError` |
+| `new_module(name)` | O(1) | O(1) | An empty module, not entered into `sys.modules` |
+| `init_builtin(name)` | O(b) | O(1) | Scans the built-in table, then runs the module's init function |
+| `init_frozen(name)` | O(f + n) | O(n) | Scans the frozen tables, then unmarshals the frozen code |
+| `is_builtin(name)` | O(b) | O(1) | Scans the built-in table |
+| `is_frozen(name)` | O(f) | O(1) | Scans the frozen tables |
+| `get_magic()` / `get_tag()` | O(1) | O(1) | Return existing objects |
+| `get_suffixes()` | O(s) | O(s) | Builds a fresh list on every call |
+| `cache_from_source(path)` / `source_from_cache(path)` | O(L) | O(L) | String work only; the files need not exist |
+| `lock_held()` / `acquire_lock()` / `release_lock()` | O(1) | O(1) | The global import lock; `acquire_lock()` blocks while another thread holds it |
+| `NullImporter(path)` | O(1) | O(1) | One `isdir` check; its `find_module()` always returns `None` |
+| `SEARCH_ERROR`, `PY_SOURCE`, `PY_COMPILED`, `C_EXTENSION`, `PY_RESOURCE`, `PKG_DIRECTORY`, `C_BUILTIN`, `PY_FROZEN`, `PY_CODERESOURCE`, `IMP_HOOK` | O(1) | O(1) | Module type codes 0 to 9 |
 
-## Legacy Functions (Deprecated)
+!!! warning "Removed in Python 3.12"
+    Deprecated in Python 3.4 and removed in Python 3.12. This page covers the
+    API documented for Python 3.11 plus the undocumented `load_source()`,
+    `load_compiled()` and `load_package()` loaders. The `_imp` re-exports
+    `create_dynamic`, `get_frozen_object` and `is_frozen_package`, the
+    re-exported `SourcelessFileLoader`, and the modules `imp` imports are
+    outside its scope.
 
-### load_source
+## Finding a Module
+
+`find_module()` stats each directory for a package and for every suffix
+before moving to the next, so its cost is set by the search path rather than
+by the module. Pass the package's `__path__` or a short list as `path` instead
+of letting it walk all of `sys.path`. Without `path`, the built-in and frozen
+tables are consulted first and a hit there probes no directories.
+
+## Loading Source
+
+`load_source()` runs the same `SourceFileLoader` code path as a normal import:
+the first load compiles the source and, unless bytecode writing is disabled,
+writes a `.pyc` under `__pycache__`; a later load whose cache is still valid
+reads the bytecode instead of compiling. `load_compiled()` starts from the
+`.pyc` directly and never compiles.
+
+Run this example on Python 3.10 or 3.11.
 
 ```python
-# ❌ DEPRECATED: Use importlib instead
 import imp
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
-# Load module from source file - O(n)
-module = imp.load_source('mymodule', '/path/to/mymodule.py')
+with TemporaryDirectory() as directory:
+    Path(directory, "greeting.py").write_text("MESSAGE = 'hello'\n")
+    file, pathname, details = imp.find_module("greeting", [directory])  # O(p * s)
+    with file:
+        module = imp.load_module("greeting", file, pathname, details)  # O(n)
+    assert module.MESSAGE == "hello"
+    again = imp.load_source("greeting", pathname)  # O(n), from the .pyc
+    assert again is module
 ```
 
-### load_compiled
+## Modern Replacement
 
-```python
-# ❌ DEPRECATED: Use importlib instead
-import imp
-
-# Load compiled module from .pyc - O(n)
-module = imp.load_compiled('mymodule', '/path/to/mymodule.pyc')
-```
-
-### find_module
-
-```python
-# ❌ DEPRECATED: Use importlib instead
-import imp
-
-# Find module location - O(1)
-file, pathname, description = imp.find_module('mymodule')
-if file:
-    file.close()
-```
-
-## Modern Alternatives
-
-### Using importlib.util
-
-```python
-# ✅ RECOMMENDED: Modern approach
-import importlib.util
-
-# Load module from file - O(n)
-spec = importlib.util.spec_from_file_location('mymodule', '/path/to/mymodule.py')
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
-
-# Use module
-result = module.my_function()
-```
-
-### Using importlib.import_module
-
-```python
-# ✅ RECOMMENDED: For standard library modules
-import importlib
-
-# Import module by name - O(n)
-module = importlib.import_module('json')
-
-# Works with nested modules
-module = importlib.import_module('xml.etree.ElementTree')
-```
-
-### Complete Example
+`importlib.util` does the same linear work without the deprecated API and runs
+on every supported version.
 
 ```python
 import importlib.util
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
-def load_module_from_file(module_name, file_path):
-    """
-    Load a Python module from a file path.
-    Modern replacement for imp.load_source()
-    
-    Time: O(n) where n = file size
-    Space: O(n)
-    """
-    file_path = Path(file_path)
-    
-    if not file_path.exists():
-        raise FileNotFoundError(f"{file_path} not found")
-    
-    # Create spec - O(1)
-    spec = importlib.util.spec_from_file_location(module_name, file_path)
-    
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Cannot load {file_path}")
-    
-    # Create module - O(1)
+with TemporaryDirectory() as directory:
+    path = Path(directory, "greeting.py")
+    path.write_text("MESSAGE = 'hello'\n")
+    spec = importlib.util.spec_from_file_location("greeting", path)
     module = importlib.util.module_from_spec(spec)
-    
-    # Execute module - O(n)
-    spec.loader.exec_module(module)
-    
-    return module
-
-# Usage
-mymodule = load_module_from_file('custom', '/path/to/custom.py')
-print(mymodule.some_function())
+    spec.loader.exec_module(module)  # O(n)
+    assert module.MESSAGE == "hello"
 ```
 
-## Dynamic Import Pattern
+## Related Documentation
 
-### Conditional Module Loading
-
-```python
-import importlib
-from importlib import util
-
-def try_import(module_name, fallback=None):
-    """
-    Try to import a module, with optional fallback.
-    
-    Time: O(n) where n = module size
-    Space: O(n)
-    """
-    try:
-        return importlib.import_module(module_name)
-    except ImportError:
-        if fallback:
-            print(f"Falling back to {fallback}")
-            return importlib.import_module(fallback)
-        raise
-
-# Try a platform-specific module, fall back to os
-platform_module = try_import('posix', 'os')
-```
-
-## Finding Modules
-
-### Using importlib.machinery
-
-```python
-# ✅ RECOMMENDED: Modern module finding
-import importlib.machinery
-import importlib.util
-import sys
-
-def find_module(module_name):
-    """
-    Find module location (modern replacement for imp.find_module()).
-    
-    Time: O(1) per path in sys.path
-    Space: O(1)
-    """
-    # Search sys.path - O(p) where p = path count
-    finder = importlib.machinery.PathFinder()
-    spec = finder.find_spec(module_name)
-    
-    if spec and spec.origin:
-        return spec.origin
-    
-    return None
-
-# Usage
-location = find_module('json')
-print(f"json module at: {location}")
-```
-
-## Complete Migration Example
-
-### Before (imp - Deprecated)
-
-```python
-import imp
-
-# ❌ DEPRECATED
-def load_config(config_file):
-    module = imp.load_source('config', config_file)
-    return module
-
-config = load_config('/etc/app/config.py')
-print(config.DATABASE_URL)
-```
-
-### After (importlib - Modern)
-
-```python
-import importlib.util
-
-# ✅ RECOMMENDED
-def load_config(config_file):
-    spec = importlib.util.spec_from_file_location('config', config_file)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-config = load_config('/etc/app/config.py')
-print(config.DATABASE_URL)
-```
-
-## Related Modules
-
-- [importlib Module](importlib.md) - Modern import machinery
-- [sys Module](sys.md) - System module list
-- [importlib Module](importlib.md) - Utility functions (`importlib.util`)
-- [pathlib Module](pathlib.md) - File path handling
+- [importlib](importlib.md)
+- [sys](sys.md)
+- [Python 3.11 imp documentation](https://docs.python.org/3.11/library/imp.html)
+- [CPython 3.11 implementation](https://github.com/python/cpython/blob/3.11/Lib/imp.py)
+- [Python 3.12 removal notice](https://docs.python.org/3.12/whatsnew/3.12.html#imp)
