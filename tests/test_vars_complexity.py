@@ -44,9 +44,9 @@ attributes still live inline (3.11 and later) materialises the dict on first
 access, but inline storage holds at most SHARED_KEYS_MAX_SIZE = 30 attributes,
 so that first call is bounded and the row stays O(1).
 
-Elapsed time settles the function-scope row: x8 in bound locals (1,000 to
-8,000) costs x9.3 on 3.10, x9.6 on 3.11, x10.4 on 3.12, x50.7 on 3.13 and
-x51.6 on 3.14, where linear predicts x8 and quadratic x64. The assignments
+Elapsed time settles the function-scope row: x16 in bound locals (1,000 to
+16,000) costs x21.1 on 3.10, x16.6 on 3.11, x22.5 on 3.12, x211.5 on 3.13 and
+x211.6 on 3.14, where linear predicts x16 and quadratic x256. The assignments
 that bind the locals are included in the timed call; a control function with
 the same assignments and no vars() shows they are about 1% of it at 8,000.
 The getattr-loop comparison is timed at three attributes, in batches of 1,000
@@ -259,15 +259,17 @@ class TestNoArgumentInAFunction:
             exec(f"def f():\n{body}    return vars()\n", namespace)
             return namespace["f"]
 
-        few, many = with_locals(1_000), with_locals(8_000)
-        assert len(few()) == 1_000 and len(many()) == 8_000
+        few, many = with_locals(1_000), with_locals(16_000)
+        assert len(few()) == 1_000 and len(many()) == 16_000
 
         ratio = best_time(many) / best_time(few)
 
         if sys.version_info >= (3, 13):
-            assert 25 < ratio < 160, f"x8 locals should cost near x64 from 3.13, got x{ratio:.1f}"
+            assert 60 < ratio < 1000, (
+                f"x16 locals should cost near x256 from 3.13, got x{ratio:.1f}"
+            )
         else:
-            assert 4 < ratio < 25, f"x8 locals should cost near x8 before 3.13, got x{ratio:.1f}"
+            assert 8 < ratio < 60, f"x16 locals should cost near x16 before 3.13, got x{ratio:.1f}"
 
 
 class TestCopyRow:

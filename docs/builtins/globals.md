@@ -1,13 +1,21 @@
 # globals() and locals() Functions Complexity
 
-The `globals()` and `locals()` functions return dictionary representations of the current global and local namespaces, providing access to all defined variables in those scopes.
+The `globals()` and `locals()` functions return the current global and local
+namespaces. `globals()` is the frame's own globals dict: the module's, or the
+mapping handed to `exec()`. `locals()` is the namespace itself at module or
+class scope, and a snapshot of the frame inside a function, built on every
+call.
 
 ## Complexity Reference
 
+Let `m` be the number of local variables in the calling function.
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `globals()` | O(1) | O(1) | Returns reference to existing global dict |
-| `locals()` | O(1) or O(m) | O(1) or O(m) | Module/class scope is O(1); optimized function scopes materialize locals mapping |
+| `globals()` | O(1) | O(1) | Returns the frame's globals dict itself; writes reach that namespace |
+| `locals()` at module or class scope | O(1) | O(1) | The namespace itself; writes reach it |
+| `locals()` in a function | O(m²) from Python 3.13, O(m) before | O(m) | A snapshot; writes do not reach the function. From 3.13 each of the `m` names is found by a linear scan of the frame |
+| `frame.f_locals` of a function frame | O(1) from Python 3.13, O(m) before | O(1) from 3.13, O(m) before | A live write-through proxy from 3.13; a snapshot dict before. Copying the proxy with `dict()` costs O(m²) |
 | Accessing dict value | O(1) avg | O(1) | Dict key lookup; O(n) worst case with collisions |
 
 ## Understanding Namespaces
@@ -23,25 +31,26 @@ global_vars = globals()  # O(1) - returns reference to existing dict
 print(global_vars['x'])  # O(1) - access value
 print(global_vars['y'])  # O(1)
 
-# globals() includes built-ins and module vars
-print('print' in globals())  # Usually True (if imported)
+# Built-in names are not module globals
+print('print' in globals())  # False
+print('__builtins__' in globals())  # True - how the module reaches the builtins
 ```
 
 ### Local Namespace
 
 ```python
-# Access local namespace - O(m)
+# Access local namespace - a snapshot per call
 def my_func():
     a = 1
     b = 2
     
-    local_vars = locals()  # O(m) - creates dict
+    local_vars = locals()  # O(m²) from Python 3.13, O(m) before - builds a dict
     print(local_vars['a'])  # O(1)
     print(local_vars['b'])  # O(1)
     
     return local_vars
 
-result = my_func()  # O(m)
+result = my_func()
 ```
 
 ## Common Patterns
@@ -54,10 +63,8 @@ x = 10
 y = 20
 z = 30
 
-all_vars = globals()  # O(1)
-
-# Filter variables (not functions/modules) - O(n)
-my_vars = {k: v for k, v in all_vars.items() 
+# Filter out dunder names - O(n); globals() itself is O(1)
+my_vars = {k: v for k, v in globals().items()
            if not k.startswith('_')}
 
 print(my_vars)  # {'x': 10, 'y': 20, 'z': 30}
@@ -93,8 +100,9 @@ def get_caller_locals():
     # Get calling frame
     frame = inspect.currentframe().f_back  # O(1)
     
-    # Access local variables - O(m)
-    caller_locals = frame.f_locals  # O(m)
+    # From Python 3.13 f_locals is a live proxy, O(1) to obtain and
+    # O(m²) to copy; before 3.13 it is a snapshot dict, O(m)
+    caller_locals = dict(frame.f_locals)
     
     return caller_locals
 
@@ -102,7 +110,7 @@ def caller():
     x = 10
     y = 20
     
-    caller_vars = get_caller_locals()  # O(m)
+    caller_vars = get_caller_locals()
     print(caller_vars)  # {'x': 10, 'y': 20}
 
 caller()
@@ -123,16 +131,16 @@ print(locals()['X'])  # O(1)
 ### Inside Functions
 
 ```python
-# Inside function, locals() is different - O(m)
+# Inside function, locals() is different
 global_x = 10
 
 def func():
     local_y = 20
     
-    # Different namespaces
-    print('local_y' in locals())   # True - O(1)
+    # Different namespaces; each locals() call builds its snapshot first
+    print('local_y' in locals())   # True - O(1) lookup
     print('local_y' in globals())  # False - O(1)
-    print('global_x' in locals())  # False - O(1)
+    print('global_x' in locals())  # False - O(1) lookup
     print('global_x' in globals()) # True - O(1)
 
 func()
@@ -158,7 +166,7 @@ new_var2 = 200
 ```python
 # Modifying locals() has limited effect
 def func():
-    locals()['x'] = 10  # O(1) - sets in dict
+    locals()['x'] = 10  # O(1) - sets a key in the snapshot only
     
     try:
         print(x)  # NameError! - x not actually in local scope
@@ -192,7 +200,7 @@ def example_func():
     s = "hello"
     lst = [1, 2, 3]
     
-    debug_state(locals())  # O(m)
+    debug_state(locals())  # O(m²) from Python 3.13, O(m) before
 
 example_func()
 ```
@@ -202,10 +210,8 @@ example_func()
 ```python
 import json
 
-def save_state():
-    """Save local variables to JSON"""
-    local_data = locals()  # O(m)
-    
+def save_state(local_data):
+    """Save a function's locals() snapshot to JSON"""
     # Filter serializable objects - O(m)
     serializable = {}
     for k, v in local_data.items():
@@ -219,10 +225,11 @@ def task():
     name = "task"
     items = [1, 2, 3]
     
-    state = save_state()  # O(m)
+    # locals() is this frame's snapshot: O(m²) from Python 3.13, O(m) before
+    state = save_state(locals())
     return state
 
-print(task())
+print(task())  # {"count": 10, "name": "task", "items": [1, 2, 3]}
 ```
 
 ### Configuration Registry
@@ -252,6 +259,8 @@ timeout = get_config('timeout')  # O(1)
 
 ```python
 # globals() returns same dict object - O(1) each call
+x = 42
+
 for i in range(1000):
     d = globals()  # O(1) - returns same dict reference
     value = d['x']
@@ -284,9 +293,8 @@ for i in range(10000):
 
 ## Version Notes
 
-- **Python 2.x**: Same behavior
-- **Python 3.x**: Same behavior
-- **All versions**: `globals()` is O(1); `locals()` semantics are scope- and implementation-dependent
+- **Python 3.13**: PEP 667: `locals()` in a function builds a fresh snapshot dict on every call, in O(m²) because each name is looked up in the frame. Earlier versions fill the frame's one dict in O(m) and return it, so two snapshots taken in the same call are the same object. `frame.f_locals` becomes a live proxy: O(1) to obtain, and writes through it reach the function's variables
+- **All versions**: `globals()` is the frame's globals dict itself, and `locals()` at module or class scope is the namespace itself
 
 ## Related Functions
 
