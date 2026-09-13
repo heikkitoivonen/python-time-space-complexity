@@ -361,24 +361,6 @@ restored = json.loads(json_str)
 # - Limited types (no custom classes)
 ```
 
-### Dill (Extended Pickling)
-
-```python
-# pip install dill
-
-import dill
-
-# Dill extends pickle to handle more types
-def my_function(x):
-    return x ** 2
-
-# Can pickle functions - O(n)
-pickled = dill.dumps(my_function)
-restored = dill.loads(pickled)
-
-# Standard pickle cannot pickle functions
-```
-
 ## Performance Notes
 
 ### Time Complexity
@@ -403,7 +385,7 @@ restored = dill.loads(pickled)
 - Use protocol 4+ for new code (Python 3.4+)
 - Implement __getstate__ for security/control
 - Use file I/O for large objects
-- Use json/yaml for inter-language data
+- Use json for inter-language data
 
 ### Avoid's
 - Never unpickle untrusted data

@@ -317,11 +317,6 @@ dt = datetime(2024, 1, 31)
 
 # Add days - works fine, O(1)
 new_dt = dt + timedelta(days=1)
-
-# For month arithmetic, use dateutil.relativedelta
-from dateutil.relativedelta import relativedelta
-new_dt = dt + relativedelta(months=1)  # O(1) too - 2024-02-29
-# The limitation is calendar semantics, not cost: both are constant time
 ```
 
 ## Version Notes

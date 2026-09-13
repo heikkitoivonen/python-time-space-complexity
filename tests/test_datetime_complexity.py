@@ -45,16 +45,11 @@ Not settled by execution:
   Time/Space columns beside them describe reading a name.
 * "Python 3.2+" and "Python 3.6+" in the Version Notes: nothing in the
   supported range can show either boundary.
-* "For month arithmetic, use dateutil.relativedelta". `dateutil` reaches this
-  environment as a transitive dependency of the docs toolchain rather than a
-  declared one, so the block that imports it is run only when it is present
-  and reported as unaccounted for when it is not.
 """
 
 from __future__ import annotations
 
 import _strptime
-import importlib.util
 import pathlib
 import re
 import subprocess
@@ -70,8 +65,6 @@ import pytest
 
 PAGE = pathlib.Path(__file__).resolve().parent.parent / "docs" / "stdlib" / "datetime.md"
 EXPECTED_BLOCKS = 10
-DATEUTIL_MARKER = "dateutil"
-HAS_DATEUTIL = importlib.util.find_spec("dateutil") is not None
 
 # Distinct formats and a string each matches, for filling the strptime cache.
 # Numeric directives only: `%b` and friends compile to the locale's month
@@ -522,7 +515,7 @@ def _run(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
 
 
 class TestDocumentedExamples:
-    """Every block runs, save one that needs a package this repo never declares."""
+    """Every block runs using the standard library."""
 
     def test_the_page_has_the_expected_blocks(self) -> None:
         blocks = _blocks()
@@ -530,27 +523,19 @@ class TestDocumentedExamples:
         assert len(blocks) == EXPECTED_BLOCKS, (
             f"expected {EXPECTED_BLOCKS} python blocks, found {len(blocks)}"
         )
-        needing_dateutil = [line for line, source in blocks if DATEUTIL_MARKER in source]
-        assert len(needing_dateutil) == 1, (
-            f"exactly one block should reach outside the standard library, found {needing_dateutil}"
-        )
 
     def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
         ran = 0
 
         for line, source in _blocks():
-            if DATEUTIL_MARKER in source and not HAS_DATEUTIL:
-                continue
             ran += 1
             result = _run(source, tmp_path)
             if result.returncode != 0:
                 failures.append(f"{PAGE.name}:{line} raised: {result.stderr.strip()}")
 
         assert not failures, "\n".join(failures)
-        assert ran == EXPECTED_BLOCKS - (0 if HAS_DATEUTIL else 1), (
-            f"ran {ran} of {EXPECTED_BLOCKS} blocks"
-        )
+        assert ran == EXPECTED_BLOCKS, f"ran {ran} of {EXPECTED_BLOCKS} blocks"
 
     def test_the_runner_catches_a_broken_block(self, tmp_path: pathlib.Path) -> None:
         """A runner that cannot fail proves nothing about the blocks it ran."""

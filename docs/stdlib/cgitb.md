@@ -155,29 +155,6 @@ def safe_handler():
         print("<p>An error occurred. Please contact support.</p>")
 ```
 
-### Using Framework Error Handling
-
-```python
-# ✅ Using Flask (recommended)
-from flask import Flask
-from werkzeug.exceptions import HTTPException
-
-app = Flask(__name__)
-
-@app.errorhandler(Exception)
-def handle_error(error):
-    # Automatic HTML error page
-    return f"<h1>Error</h1><p>{escape(str(error))}</p>", 500
-
-@app.route('/')
-def index():
-    # If error occurs, it's handled automatically
-    return undefined_var  # Error caught and displayed
-
-if __name__ == '__main__':
-    app.run()
-```
-
 ### Using WSGI Middleware
 
 ```python
@@ -223,7 +200,6 @@ cgitb.enable()
 
 # ✅ DO: Use modern alternatives
 # - logging module for production
-# - Framework error handling (Flask, Django, FastAPI)
 # - Custom WSGI middleware
 # - Proper monitoring/alerting tools
 ```

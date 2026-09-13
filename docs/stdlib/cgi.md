@@ -166,25 +166,6 @@ def application(environ, start_response):
     return [response]
 ```
 
-### Using Modern Framework
-
-```python
-# Using Flask (recommended for CGI-like functionality)
-from flask import Flask, request
-
-app = Flask(__name__)
-
-@app.route('/submit', methods=['GET', 'POST'])
-def submit():
-    name = request.args.get('name', 'Guest')
-    age = request.form.get('age', 'Unknown')
-    
-    return f"<h1>Hello {name}, age {age}</h1>"
-
-if __name__ == '__main__':
-    app.run()
-```
-
 ## Removal Notice
 
 ```python
@@ -195,8 +176,6 @@ form = cgi.FieldStorage()
 # ✅ DO: Use modern alternatives
 # - urllib.parse for query strings
 # - wsgiref for WSGI applications
-# - Flask/Django for web applications
-# - FastAPI for modern async applications
 ```
 
 ## Related Modules

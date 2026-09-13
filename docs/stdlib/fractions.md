@@ -387,7 +387,6 @@ total = price1 + price2     # O(log n) - exact $10, reduced on construction
 
 ### Avoid When
 - Performance-critical numerical code (use float)
-- Large-scale scientific computing (use NumPy)
 - Simple integer arithmetic
 - When floating-point precision is acceptable
 

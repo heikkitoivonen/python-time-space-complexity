@@ -361,12 +361,12 @@ class DependencyResolver:
 # Usage
 resolver = DependencyResolver()
 
-# Typical dependency graph
-resolver.add_package('flask', '2.0')
-resolver.add_package('werkzeug', '2.0', ('flask', '2.0'))
-resolver.add_package('jinja2', '3.0', ('flask', '2.0'))
-resolver.add_package('itsdangerous', '2.0')
-resolver.add_package('click', '8.0', ('flask', '2.0'))
+# Illustrative dependency graph
+resolver.add_package('application', '2.0')
+resolver.add_package('transport', '2.0', ('application', '2.0'))
+resolver.add_package('templates', '3.0', ('application', '2.0'))
+resolver.add_package('authentication', '2.0')
+resolver.add_package('command_line', '8.0', ('application', '2.0'))
 
 order = resolver.get_install_order()
 print("Install order:")
@@ -433,24 +433,6 @@ for size in [100, 1000, 10000]:
 - No weights on edges
 - No path finding between nodes
 - Cannot represent "soft" dependencies
-
-## Alternatives
-
-### For Complex Graph Processing
-
-```python
-# networkx - full graph library
-# pip install networkx
-
-import networkx as nx
-
-G = nx.DiGraph()
-G.add_edges_from([('A', 'B'), ('B', 'C')])
-order = list(nx.topological_sort(G))
-
-# For constraint solving
-# Use PuLP, OR-Tools, or similar for optimization
-```
 
 ## Related Documentation
 

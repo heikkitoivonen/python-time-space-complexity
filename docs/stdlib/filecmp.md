@@ -424,7 +424,6 @@ def safe_compare(dir1, dir2):
 ```python
 # For more advanced comparison:
 # - Use external tools: diff, rsync
-# - Use third-party libraries: deepdiff
 
 # For efficient large file comparison:
 import hashlib

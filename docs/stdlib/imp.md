@@ -151,11 +151,8 @@ def try_import(module_name, fallback=None):
             return importlib.import_module(fallback)
         raise
 
-# Try to import numpy, fall back to array
-try:
-    np = try_import('numpy', 'array')
-except ImportError:
-    print("Neither numpy nor array available")
+# Try a platform-specific module, fall back to os
+platform_module = try_import('posix', 'os')
 ```
 
 ## Finding Modules

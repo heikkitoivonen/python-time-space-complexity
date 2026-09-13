@@ -81,8 +81,8 @@ import sys
 loaded_modules = sys.modules  # {'os': <module>, 'sys': <module>, ...}
 
 # O(1) lookup - fast dict access
-if 'numpy' in sys.modules:
-    numpy = sys.modules['numpy']
+if 'math' in sys.modules:
+    math = sys.modules['math']
 
 # O(m) to iterate all modules where m = module count
 module_count = len(sys.modules)

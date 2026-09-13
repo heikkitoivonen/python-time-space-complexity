@@ -152,15 +152,11 @@ except ZeroDivisionError:
 ```
 
 #### `FloatingPointError` - Float Operation Error
-CPython itself no longer raises this — invalid float operations return `inf`/`nan` instead. Mainly seen with NumPy configured to raise:
+An exception type for floating-point errors. This example raises it explicitly:
 
 ```python
-import numpy as np
-
-np.seterr(all='raise')
-
 try:
-    result = np.float64(1.0) / np.float64(0.0)
+    raise FloatingPointError("Invalid float operation")
 except FloatingPointError:
     print("Invalid float operation")
 ```
@@ -516,7 +512,7 @@ Subclass of ImportError. More specific error.
 
 ```python
 try:
-    import pandas
+    import nonexistent_module
 except ModuleNotFoundError:
     print("Module not installed")
 ```

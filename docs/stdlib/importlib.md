@@ -99,9 +99,9 @@ def try_import(module_name, default=None):
         return default
 
 # Usage
-numpy = try_import('numpy')
-if numpy:
-    # Use numpy
+math = try_import('math')
+if math:
+    # Use math
     pass
 else:
     # Use fallback
@@ -206,9 +206,9 @@ def process():
 import importlib.util
 
 # Efficient existence check when cached or path-based
-if importlib.util.find_spec('numpy'):
-    import numpy
-    # Use numpy
+if importlib.util.find_spec('math'):
+    import math
+    print(math.sqrt(4))
 ```
 
 ### Batch Import Strategy

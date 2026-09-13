@@ -334,12 +334,7 @@ class TestGraphlibComplexity:
 
 
 class TestDocumentedExamplesRun:
-    """Every Python block on the page must execute.
-
-    This is the test that would have caught the bug this spot check found.
-    The complexity table was correct throughout; the examples were not, and
-    nothing on the page or in the suite ran them.
-    """
+    """Every Python block on the page must execute using the standard library."""
 
     def _blocks(self) -> list[tuple[int, str]]:
         blocks: list[tuple[int, str]] = []
@@ -371,11 +366,6 @@ class TestDocumentedExamplesRun:
                     compile(source, f"graphlib.md:{line_number}", "exec"),
                     {"__name__": "__main__"},
                 )
-            except ModuleNotFoundError as error:
-                # Blocks illustrating third-party alternatives, e.g. networkx.
-                if error.name in {"networkx"}:
-                    continue
-                failures.append(f"line {line_number}: {error!r}")
             except Exception as error:  # noqa: BLE001 - report, do not raise
                 failures.append(f"line {line_number}: {type(error).__name__}: {error}")
             finally:

@@ -22,7 +22,7 @@ but excludes the input integers.
 | Integer base with `abs(x) >= 2`, `y > 0` | O(r²) | Θ(r) | The result grows with both base width and exponent |
 | `pow(x, y, z)`, `y >= 0` | O(b * m + e * m²) | O(b + m) | Includes initial reduction of a wide base; subsequent modular arithmetic uses O(m)-bit values |
 | `pow(x, y, z)`, `y < 0` | O(b * m + e * m²) | O(b + m + e) | 3.8+. Includes base inversion and an allocated copy of the exponent |
-| Any other type | `type(x).__pow__` | — | `Decimal`, `Fraction`, `complex`, NumPy scalars and the rest delegate; cost is the operand type's |
+| Any other type | `type(x).__pow__` | — | `Decimal`, `Fraction`, `complex` and other types delegate; cost is the operand type's |
 
 The modular bounds are worst-case upper bounds. With an already-reduced base
 (`0 <= x < abs(z)`), they simplify to O(e * m²) time and O(m) space for

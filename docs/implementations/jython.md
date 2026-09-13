@@ -180,16 +180,6 @@ frame.setSize(400, 300)
 frame.setVisible(True)
 ```
 
-### Enterprise Integration
-
-```python
-# Use Spring, Hibernate, etc. from Python
-from org.springframework.context import ApplicationContext
-from org.springframework.context.support import ClassPathXmlApplicationContext
-
-context = ApplicationContext(ClassPathXmlApplicationContext("beans.xml"))
-```
-
 ### True Parallelism
 
 ```python
@@ -209,13 +199,6 @@ import threading
 ```python
 # Fast startup important
 # CPython better due to lower startup overhead
-```
-
-### C Extension Libraries
-
-```python
-# NumPy, pandas, etc. require CPython
-# Jython doesn't have efficient C extension support
 ```
 
 ### Standard Environment

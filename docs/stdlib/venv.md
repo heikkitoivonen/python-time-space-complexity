@@ -28,7 +28,7 @@ venv.create('myenv')
 # myenv\\Scripts\\activate     # Windows
 
 # Install packages in venv
-# pip install requests
+# pip install ./my_project
 ```
 
 ### Programmatic Creation

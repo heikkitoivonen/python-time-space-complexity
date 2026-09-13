@@ -120,10 +120,10 @@ PyPy excellent for servers:
 
 ### Scientific Computing
 
-For pure Python algorithms without NumPy:
+For pure Python algorithms:
 
 ```python
-# Pure Python algorithm (no NumPy)
+# Pure Python algorithm
 # PyPy: 10-100x faster
 # CPython: Slower
 
@@ -147,16 +147,6 @@ def matrix_multiply(a, b):
 # CPython: 50-100ms startup
 
 # For quick scripts, CPython preferred
-```
-
-### C Extension Compatibility
-
-```python
-# NumPy, pandas, etc. use C extensions
-import numpy as np
-
-# NumPy: Requires CPython (no PyPy support)
-# PyPy: Limited C extension support
 ```
 
 ### Mixed Workloads
@@ -200,9 +190,7 @@ for i in range(1000000):
 - ✅ Performance critical
 
 ### Use CPython When:
-- ✅ Needs C extension libraries (NumPy, pandas, etc.)
 - ✅ Quick startup important
-- ✅ Third-party packages have poor PyPy support
 - ✅ Standard approach expected in team
 
 ## Migration from CPython to PyPy
@@ -211,14 +199,11 @@ for i in range(1000000):
 # Usually just works!
 # PyPy aims for 99% compatibility
 
-# Check compatibility
-pip install pypy3
+# Check the installed interpreter
+pypy3 --version
 
 # Run code
 pypy3 your_script.py
-
-# Some packages may not support PyPy:
-pip install package-name  # May fail on PyPy
 ```
 
 ## Version Information

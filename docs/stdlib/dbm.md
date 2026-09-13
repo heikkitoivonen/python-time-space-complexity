@@ -434,7 +434,6 @@ db = dbm.open('simple_store')
 
 # Better alternatives:
 # - For structured data: sqlite3
-# - For web applications: redis
 # - For documents: MongoDB
 # - For complex queries: PostgreSQL
 ```

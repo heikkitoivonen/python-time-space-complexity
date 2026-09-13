@@ -408,18 +408,6 @@ print(f"Without spaces: {matcher2.ratio():.2%}")  # O(n*m) worst case
 # For version control quality diffs:
 # - Use git diff, mercurial
 # - Use external tools like 'diff', 'patch'
-
-# For fuzzy matching:
-# - Use fuzzywuzzy library (pip install fuzzywuzzy)
-# - Use rapidfuzz for faster matching
-
-# For language-aware diffs:
-# - Use Pygments for syntax highlighting
-# - Use specialized diff tools for code
-
-# For ML-based similarity:
-# - Use scikit-learn for text similarity
-# - Use sentence-transformers for semantic similarity
 ```
 
 ## Related Documentation

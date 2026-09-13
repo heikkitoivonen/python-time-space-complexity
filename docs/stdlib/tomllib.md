@@ -98,16 +98,9 @@ name = "myapp"
 version = "1.0.0"
 description = "My application"
 
-[project.optional-dependencies]
-dev = ["pytest", "black"]
-test = ["coverage"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = "test_*.py"
-
-[build-system]
-requires = ["setuptools>=45"]
+[tool.myapp]
+include = ["src", "tests"]
+verbose = false
 ```
 
 ### Parse Configuration
@@ -121,8 +114,8 @@ with open("pyproject.toml", "rb") as f:
 
 # Access nested data
 project_name = pyproject['project']['name']
-dev_deps = pyproject['project']['optional-dependencies']['dev']
-test_paths = pyproject['tool']['pytest']['ini_options']['testpaths']
+include_paths = pyproject['tool']['myapp']['include']
+verbose = pyproject['tool']['myapp']['verbose']
 ```
 
 ## Common Patterns
@@ -211,25 +204,11 @@ import tomllib
 
 # ❌ Cannot write TOML with tomllib
 # tomllib only reads - it's not designed for writing
-
-# ✅ For writing, use third-party libraries:
-# import tomli_w
-# with open("config.toml", "wb") as f:
-#     tomli_w.dump(config, f)
 ```
 
 ### Python Version
 
-```python
-import sys
-
-# tomllib available in Python 3.11+
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    # Fallback for older versions
-    import tomli as tomllib
-```
+`tomllib` is available in Python 3.11 and later.
 
 ## Related Modules
 

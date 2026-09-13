@@ -302,7 +302,6 @@ match = pattern.search(text)  # O(m)
 
 ## Version Notes
 
-- **Third-party**: The `regex` package provides additional features
 - **Python 3.x**: `re` module is standard
 - **Python 2.x**: Similar but with different Unicode handling
 - **Python 3.11+**: atomic groups `(?>...)` and possessive quantifiers `*+`,

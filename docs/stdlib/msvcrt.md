@@ -70,7 +70,7 @@ finally:
 ```
 
 !!! warning "Windows only"
-    For portable console input use `input()`, or a cross-platform library. For
+    For portable console input use `input()`. For
     portable file locking, see `fcntl.flock()` on Unix and select the
     implementation at runtime.
 

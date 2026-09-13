@@ -455,14 +455,6 @@ with open('data.pkl', 'wb') as f:
 import sqlite3
 conn = sqlite3.connect('data.db')
 cursor = conn.cursor()
-
-# For web applications: Redis
-import redis
-client = redis.Redis()
-client.set('key', 'value')
-
-# For complex queries: PostgreSQL/MySQL
-# Use SQLAlchemy or psycopg2
 ```
 
 ## Best Practices

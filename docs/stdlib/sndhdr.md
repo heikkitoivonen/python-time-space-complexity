@@ -12,7 +12,6 @@ import sndhdr
 info = sndhdr.what('sound.au')
 
 # ✅ DO: Use modern alternatives
-# - scipy.io.wavfile
 # - soundfile library
 # - audioread library
 # - wave module (for WAV files)
@@ -47,6 +46,9 @@ except Exception as e:
 
 ## Modern Alternatives
 
+Use `wave` for WAV files. For other audio formats without a standard-library
+reader, a third-party package such as `soundfile` can provide a replacement.
+
 ### Using wave Module (Built-in)
 
 ```python
@@ -75,40 +77,6 @@ def inspect_wav(filepath):
 info = inspect_wav('audio.wav')
 print(f"Duration: {info['duration']:.2f} seconds")
 print(f"Sample rate: {info['sample_rate']} Hz")
-```
-
-### Using scipy (Third-party)
-
-```python
-# ✅ RECOMMENDED: scipy for detailed analysis
-from scipy.io import wavfile
-import numpy as np
-
-def inspect_audio_scipy(filepath):
-    """
-    Inspect audio file with scipy.
-    
-    Time: O(n) where n = file size
-    Space: O(n)
-    """
-    sample_rate, data = wavfile.read(filepath)
-    
-    if len(data.shape) == 1:
-        channels = 1
-    else:
-        channels = data.shape[1]
-    
-    return {
-        'sample_rate': sample_rate,
-        'channels': channels,
-        'frames': len(data),
-        'duration': len(data) / sample_rate,
-        'data': data
-    }
-
-info = inspect_audio_scipy('audio.wav')
-print(f"Sample rate: {info['sample_rate']} Hz")
-print(f"Channels: {info['channels']}")
 ```
 
 ### Using soundfile (Third-party)

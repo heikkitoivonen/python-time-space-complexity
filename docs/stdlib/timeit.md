@@ -241,7 +241,7 @@ time = timeit('x = []; x.append(1)', number=1000000)
 setup = 'x = []'  # Just what's needed
 
 # Note: setup runs once and is not included in the measured time
-setup = 'import numpy as np; x = np.array([...])'
+setup = 'from array import array; x = array("d", [1.0, 2.0, 3.0])'
 ```
 
 ## Comparison with cProfile

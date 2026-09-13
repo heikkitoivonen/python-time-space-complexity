@@ -181,13 +181,6 @@ result = obj.SomeMethod()
 # IronPython requires .NET (Windows, or .NET Core)
 ```
 
-### Data Science
-
-```python
-# NumPy, pandas, scikit-learn, etc. require CPython
-# No viable alternatives on .NET platform
-```
-
 ### Standard Environment
 
 ```python

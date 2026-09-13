@@ -66,9 +66,7 @@ winsound.PlaySound(data, winsound.SND_MEMORY)
 ```
 
 !!! warning "Windows only"
-    There is no cross-platform sound module in the standard library. For
-    portable audio, use a third-party library and select the backend at
-    runtime.
+    There is no cross-platform sound playback module in the standard library.
 
 !!! tip "Do not block a UI thread"
     The default is `SND_SYNC`, which blocks for the length of the sound. In an

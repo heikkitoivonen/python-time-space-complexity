@@ -192,7 +192,7 @@ Python 3.13 → Python 3.14  Better GC pauses, new heapq functions
 ```bash
 # Test with newer version
 uv python install 3.12
-uv run --python 3.12 pytest  # Run tests
+uv run --python 3.12 python -m unittest discover  # Run tests
 
 # Check for deprecations
 uv run --python 3.12 python -W all your_script.py
