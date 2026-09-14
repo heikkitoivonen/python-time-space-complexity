@@ -232,22 +232,32 @@ class TestMatchObjectsHoldPositions:
         assert found.expand(r"<\g<word>!>") == "<hello!>"
 
     @pytest.mark.timing
-    def test_expand_follows_the_template_length(self) -> None:
+    def test_expand_follows_the_template_length(self, clean_pattern_cache: None) -> None:
         """The t in the expand row's O(t + g).
 
-        The g side is the same group slicing the tests above pin; what varies
-        here is the literal template text the expansion copies out. Both
-        sizes are far above the fixed call overhead, because 3.12 rewrote
-        template expansion and left the shorter end of an earlier framing
-        indistinguishable from noise: at 100,000 characters 3.11 takes
-        1.31e-02s and 3.14 takes 2.12e-06s. The bound is unchanged - both
-        rise tenfold for a tenfold template - and only the constant moved.
+        Vary ASCII literal text from 10,000 to 10,000,000 characters while
+        holding the captured group at 1,000 characters and one backreference.
+        On CPython 3.14.7, warmed calls take about 0.38 us and 244 us: a
+        roughly 640x gap leaves room for a 20x threshold even when fixed call
+        overhead dominates the small input. This rejects flat cost; it does
+        not distinguish linear from superlinear growth.
+
+        Expand both templates before timing so cache hits are measured on
+        interpreters that cache templates. Group size, backreference count,
+        Unicode width, and cold-cache parsing cost are not varied here.
         """
         found = re.compile(r"(a+)").fullmatch("a" * 1_000)
         assert found is not None
 
         brief = r"\1" + "x" * 10_000
-        lengthy = r"\1" + "x" * 1_000_000
+        lengthy = r"\1" + "x" * 10_000_000
+
+        for template in (brief, lengthy):
+            result = found.expand(template)
+            assert len(result) == 1_000 + len(template) - 2
+            assert result.startswith("a" * 1_000)
+            assert result[1_000:] == template[2:]
+        del result
 
         short = per_call(lambda: found.expand(brief), 200, repeat=3)
         long = per_call(lambda: found.expand(lengthy), 1, repeat=3)
