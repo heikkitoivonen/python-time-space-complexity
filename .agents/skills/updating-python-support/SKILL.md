@@ -1,6 +1,6 @@
 ---
 name: updating-python-support
-description: Updates this repository's supported Python range when an old version reaches EOL or a new final version is released. Covers package metadata, CI pins, version references, documentation, translations, tests, and lockfile verification.
+description: Updates this repository's supported Python range when an old version reaches EOL or a new final version is released. Covers package metadata, CI pins, version references, documentation, translations, public API manifests, tests, and lockfile verification.
 ---
 
 # Updating Python Support
@@ -39,6 +39,26 @@ Search for other tool-specific minimum or target versions before assuming these
 are the only settings. Regenerate `uv.lock` with `uv lock`; never hand-edit its
 `requires-python` value or dependency markers. Review dependency resolution and
 conditional markers introduced or removed by the new range.
+
+## Update Public API Manifests
+
+Keep `scripts/api_manifests/python-<major>.<minor>.json` aligned with the supported
+minor versions:
+
+- Delete the corresponding manifest when dropping a version.
+- Add a manifest when adding a version. Follow the inventory download and
+  generation workflow in [scripts/api_manifests/README.md](../../../scripts/api_manifests/README.md),
+  using the matching interpreter and the official documentation for the final
+  release. Generate the file with `scripts/build_api_manifest.py`; do not copy
+  another version's manifest or invent entries manually.
+- Update the supported-version list in that README and any manifest tests that
+  enumerate the supported versions.
+
+Review the generated diff and run `tests/test_api_manifest.py` and
+`tests/test_audit_public_api.py`. Confirm the audit loads the matching manifest
+on both new support boundaries; a missing manifest leaves classification pending
+and does not establish zero API gaps. Keep historical documentation pages even
+when their version's audit manifest is removed.
 
 ## Update CI Boundary Versions
 
@@ -186,6 +206,8 @@ Finish with `make check`. Then inspect the final diff and repeat the version
 searches to confirm that:
 
 - metadata, lockfile, CI, tests, site text, and navigation agree;
+- API manifests exist for exactly the supported minor versions, with dropped
+  versions removed and newly supported versions generated from official inventories;
 - no current support statement still names the old range;
 - no historical fact or documentation page was removed merely because a
   version reached EOL;
