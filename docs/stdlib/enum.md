@@ -26,6 +26,7 @@ Construction bounds below cover ordinary hashable values.
 | `enum.member(obj)`, `enum.nonmember(obj)` | O(1) | O(1) | Python 3.11+; force a class-body name to be, or not be, a member |
 | `enum.property` | O(1) | O(1) | Python 3.11+; the descriptor behind `.name` and `.value`, which shadows a member of the same name |
 | `enum.EnumDict` | O(1) | O(1) | Python 3.13+; the mapping the class body is executed in |
+| `enum.EnumDict.member_names` | O(n) | O(n) | Python 3.13+; a fresh list of the namespace's member names, including aliases, on each access |
 
 ### Looking members up
 

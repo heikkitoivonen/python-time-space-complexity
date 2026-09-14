@@ -12,6 +12,11 @@ integer operations; no timing exponent is inferred from output allocation.
 The bin helper checks padded output length, signs, and allocation growth. Its
 integer exponentiation cost is left separate, as seen in released CPython
 3.11 and 3.14 Lib/enum.py; output allocation alone does not bound that work.
+EnumDict.member_names checks fresh snapshots including alias names, counts
+iteration at 0, 10 and 1,000 names, and measures list storage at 100 and 10,000
+names. Released CPython 3.13 and 3.14 Lib/enum.py builds a list from the backing
+name dictionary. The counting probe substitutes that dictionary; snapshot and
+storage tests use ordinary namespaces. Custom class-building hooks are not varied.
 
 Coverage includes enum.__all__ and the documented non-exported APIs listed at
 https://docs.python.org/3/library/enum.html#module-contents.
@@ -161,6 +166,60 @@ class TestEveryPublicNameIsDocumented:
         assert _public_names() - thinned == {"IntFlag"}, (
             "dropping one row from the extracted set should surface it as missing"
         )
+
+
+@pytest.mark.skipif(sys.version_info < (3, 13), reason="EnumDict is public from 3.13")
+class TestEnumDictMemberNames:
+    def test_each_access_returns_an_independent_snapshot(self) -> None:
+        namespace: Any = Enum.__prepare__("Colors", (Enum,))
+        namespace["RED"] = 1
+        namespace["CRIMSON"] = 1
+        namespace["__doc__"] = "Color names"
+
+        names = namespace.member_names
+        other = namespace.member_names
+        assert isinstance(names, list)
+        assert names == other == ["RED", "CRIMSON"]
+        assert names is not other
+
+        names.clear()
+        assert namespace.member_names == ["RED", "CRIMSON"]
+        namespace["BLUE"] = 2
+        assert other == ["RED", "CRIMSON"]
+        assert namespace.member_names == ["RED", "CRIMSON", "BLUE"]
+
+    @pytest.mark.parametrize("count", [0, 10, 1_000])
+    def test_access_visits_each_member_name_once(self, count: int) -> None:
+        visits = 0
+
+        class CountingNames(dict[str, None]):
+            def __iter__(self):
+                nonlocal visits
+                for name in super().__iter__():
+                    visits += 1
+                    yield name
+
+        namespace: Any = Enum.__prepare__("Names", (Enum,))
+        expected = [f"M{i}" for i in range(count)]
+        backing = CountingNames.fromkeys(expected)
+        namespace._member_names = backing
+        assert namespace._member_names is backing
+
+        assert namespace.member_names == expected
+        assert visits == count
+
+    def test_result_storage_grows_with_member_count(self) -> None:
+        sizes = []
+        for count in (100, 10_000):
+            namespace: Any = Enum.__prepare__("Names", (Enum,))
+            for index in range(count):
+                namespace[f"M{index}"] = index
+            names = namespace.member_names
+            assert isinstance(names, list)
+            assert len(names) == count
+            sizes.append(sys.getsizeof(names))
+
+        assert 50 < sizes[1] / sizes[0] < 150, sizes
 
 
 class TestLookupByValueIsADict:
