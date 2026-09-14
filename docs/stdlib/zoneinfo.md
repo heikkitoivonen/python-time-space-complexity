@@ -25,7 +25,7 @@ entries.
 | `utcoffset(dt)`, `dst(dt)`, `tzname(dt)` | O(log t) | O(1) | Binary search over the transitions in local time. O(1) before the first transition and after the last, where the zone's footer rule is evaluated for the year of `dt` |
 | `fromutc(dt)` | O(log t) | O(1) | The same search over the UTC transitions, plus the fold check. O(1) before the first transition, and after the last only when the footer rule has seasonal transitions; a fixed-offset footer still searches |
 | `dt.astimezone(zone)` | O(log s + log t) | O(1) | The source zone's `utcoffset()`, then `zone.fromutc()` |
-| `key` | O(1) | O(1) | `None` for a `from_file()` zone unless one was passed |
+| `ZoneInfo.key` | O(1) | O(1) | `None` for a `from_file()` zone unless one was passed |
 | `available_timezones()` | O(p + f + z) | O(z + f) | Reads the packaged zone list if one is installed, then walks the `TZPATH` trees, skipping `right` and `posix`, and opens each file whose key is not yet a known zone to check for the TZif magic; the walk's listings are the `f` term. Nothing is cached: every call walks again and returns a new set |
 | `reset_tzpath(to=None)` | O(p) | O(p) | `to`'s entries, or with `None` those of `PYTHONTZPATH` or the build's default. An entry of `to` must be absolute, `ValueError` otherwise; a relative `PYTHONTZPATH` entry is dropped with `InvalidTZPathWarning`. Zones already cached stay usable |
 | `TZPATH` | O(1) | — | The tuple of search directories |
