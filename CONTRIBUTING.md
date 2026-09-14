@@ -41,6 +41,32 @@ below and the full guide in [TRANSLATING.md](TRANSLATING.md).
 4. **Test locally**: `mkdocs serve`
 5. **Submit PR** with clear description
 
+## Running Tests
+
+`make test` runs tests without the `timing` or `serial` markers with four pytest
+workers, then runs the marked tests serially after all workers finish.
+`make check` uses the same sequence, together
+with lint, formatting, type, and skill checks. Every test remains included.
+
+Tests from the same file stay in one worker. Set `TEST_WORKERS` to choose the
+worker count, for example `make test TEST_WORKERS=2`, or use `TEST_WORKERS=0` to
+run both phases serially. Timing tests always run without parallel workers so
+their elapsed-time assertions do not compete with other tests.
+
+The `serial` marker isolates exact allocation assertions: xdist communication
+threads can allocate while `tracemalloc` is measuring. CI runs these tests serially
+in the required build job; timing tests remain in their separate reporting job.
+
+For a focused change, run the relevant test file directly:
+
+```sh
+uv run pytest tests/test_audit_public_api.py
+```
+
+To identify slow tests, use `uv run pytest --durations=20`. Test counts include
+parameterized cases, such as checks repeated for individual documentation pages;
+a large case count does not necessarily imply a long runtime.
+
 ## Documentation Coverage
 
 Run `make audit` to print coverage for the current interpreter and English

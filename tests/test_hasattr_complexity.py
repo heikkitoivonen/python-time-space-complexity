@@ -220,6 +220,7 @@ class TestColdLookupRow:
 class TestSpaceColumn:
     """A lookup allocates nothing on any path; a hook's allocation is the call's."""
 
+    @pytest.mark.serial
     def test_no_lookup_path_allocates(self) -> None:
         cls = chain(1_024)
         obj = cls()

@@ -31,7 +31,8 @@ jobs:
       - name: Check repository and skill
         run: |
           make lint types skills-check
-          uv run pytest -m "not timing"
+          uv run pytest -m "not timing and not serial" -n 4 --dist=loadfile
+          uv run pytest -m "serial and not timing" -n 0
       - name: Build preview packages
         if: startsWith(github.ref, 'refs/tags/python-complexity-v') == false
         run: make skills-package
@@ -60,7 +61,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
       - name: Run timing tests
-        run: uv run pytest -m timing
+        run: uv run pytest -m timing -n 0
 
   release:
     needs: build

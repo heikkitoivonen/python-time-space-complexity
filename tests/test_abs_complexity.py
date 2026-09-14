@@ -108,6 +108,7 @@ class TestNonNegativeInt:
     def test_zero_is_returned_as_itself(self) -> None:
         assert abs(0) is 0  # noqa: F632 - identity of the small-int singleton is the claim
 
+    @pytest.mark.serial
     def test_allocates_nothing_at_any_width(self) -> None:
         for bits in (SMALL_BITS, LARGE_BITS):
             x = wide(bits, negative=False)
@@ -294,10 +295,12 @@ class TestManualCheck:
         for x in (wide(bits, negative=True), wide(bits, negative=False), 0):
             assert abs(x) == (x if x >= 0 else -x)
 
+    @pytest.mark.serial
     def test_negation_allocates_what_abs_allocates(self) -> None:
         x = wide(SMALL_BITS, negative=True)
         assert traced_peak(lambda: -x) == traced_peak(lambda: abs(x))
 
+    @pytest.mark.serial
     def test_the_manual_spelling_copies_nothing_for_a_non_negative_int(self) -> None:
         x = wide(SMALL_BITS, negative=False)
         assert traced_peak(lambda: x if x >= 0 else -x) == 0

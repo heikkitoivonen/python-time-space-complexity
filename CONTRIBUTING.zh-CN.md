@@ -1,4 +1,4 @@
-<!-- source_sha: 8e6ed3c22fa6839fc28dd8a90fb67f3caa0d49160c2409cf519e323f06e3b42d -->
+<!-- source_sha: d204e14b21e795f0d6fa8244dd8f2d792a10137a03ad1e9b39996721abcb5b9e -->
 <!-- translated: machine -->
 
 [English](CONTRIBUTING.md) | **简体中文**
@@ -38,6 +38,28 @@
 3. **修改代码**，遵循下方指南
 4. **本地测试**:`mkdocs serve`
 5. **提交 PR**，附上清晰描述
+
+## 运行测试
+
+`make test` 使用四个 pytest 工作进程运行没有 `timing` 或 `serial` 标记的测试，
+等所有工作进程都结束后，再串行运行带有这些标记的测试。
+`make check` 使用相同的顺序，并另外检查 lint、格式、类型和技能。所有测试都会运行。
+
+同一文件中的测试会在同一个工作进程中运行。设置 `TEST_WORKERS` 可以选择工作进程数，
+例如 `make test TEST_WORKERS=2`；使用 `TEST_WORKERS=0` 则会让两个阶段都串行运行。
+计时测试始终不使用并行工作进程，以免其耗时断言受到其他测试争用资源的影响。
+
+`serial` 标记用于隔离精确的内存分配断言：xdist 的通信线程可能在 `tracemalloc`
+测量期间分配内存。CI 在必须通过的构建任务中串行运行这些测试；计时测试仍在独立的结果报告任务中运行。
+
+对于范围较小的修改，可以直接运行相关测试文件：
+
+```sh
+uv run pytest tests/test_audit_public_api.py
+```
+
+要找出耗时较长的测试，请使用 `uv run pytest --durations=20`。测试数量包含参数化用例，
+例如针对各个文档页面重复执行的检查；用例数量多并不一定意味着运行时间长。
 
 ## 文档覆盖率
 

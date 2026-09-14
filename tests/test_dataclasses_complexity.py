@@ -282,6 +282,7 @@ class TestGeneratedEqualityComparesTuples:
         )
 
     @pytest.mark.skipif(sys.version_info < (3, 13), reason="the tuples are built before 3.13")
+    @pytest.mark.serial
     def test_the_peak_is_flat_from_313(self) -> None:
         broad_type = wide(2_000)
         left, right = broad_type(*range(2_000)), broad_type(*range(2_000))

@@ -42,7 +42,9 @@ jobs:
       # that way. They run in the `timing` job below, which does not gate
       # the deploy. `make check` still runs the whole suite before a commit.
       - name: Run tests
-        run: uv run pytest -m "not timing"
+        run: |
+          uv run pytest -m "not timing and not serial" -n 4 --dist=loadfile
+          uv run pytest -m "serial and not timing" -n 0
 
       - name: Check documentation coverage on newest supported Python
         # Its own environment: `uv run --python` replaces `.venv`, which would
@@ -98,7 +100,7 @@ jobs:
         run: uv sync
 
       - name: Run timing tests
-        run: uv run pytest -m timing
+        run: uv run pytest -m timing -n 0
 
   deploy:
     # Serialize publication without allowing a stuck deploy to suppress the

@@ -161,6 +161,7 @@ class TestLifetimeAndReuse:
 class TestIsOperatorComparison:
     """The `is` operator compares pointers directly without id() integer allocation."""
 
+    @pytest.mark.serial
     def test_is_allocates_zero_bytes(self) -> None:
         a = [1, 2, 3]
         b = [1, 2, 3]
