@@ -118,7 +118,7 @@ def test_audit_command_prints_without_writing_files(documentation_tree: Path) ->
     shutil.copyfile(ROOT / "scripts" / script.name, script)
     before = set(documentation_tree.rglob("*"))
     result = subprocess.run(
-        [sys.executable, str(script)],
+        [sys.executable, str(script), "--pages-only"],
         cwd=documentation_tree,
         capture_output=True,
         text=True,
