@@ -4,10 +4,38 @@ The `type()` function returns the type of an object or creates a new type (class
 
 ## Complexity Reference
 
+Let `n` be the class namespace size, `h` the number of classes in the resulting
+method resolution order (MRO), and `b` the number of direct bases. Bounds use
+the built-in `type` implementation; custom metaclass and class-creation hooks
+can add arbitrary work.
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `type(obj)` | O(1) | O(1) | Get object type |
-| `type(name, bases, dict)` | O(n) | O(n) | Create class, n = dict size |
+| `type(name, bases, dict)` | O(n) | O(n) | Create class with fixed bases and ordinary attributes; changing the hierarchy also changes MRO computation costs |
+| `type.mro(C)` / `C.mro()`, single inheritance | O(h) | O(h) | Computes the order and returns a fresh list |
+| `type.mro(C)` / `C.mro()`, multiple inheritance | O(b²h²) worst case | O(h) | C3 merge; cost depends on the hierarchy's shape |
+| `C.__mro__` | O(1) | O(1) | Returns the stored tuple |
+
+## Method Resolution Order
+
+Use `C.__mro__` to read the stored order. Calling `type.mro(C)` computes a new
+list from the bases without replacing that tuple. A metaclass can override
+`C.mro()`; the bounds above apply to `type.mro(C)` itself.
+
+```python
+class Base:
+    pass
+
+class Child(Base):
+    pass
+
+stored = Child.__mro__             # O(1)
+order = type.mro(Child)             # O(h), single inheritance
+assert order == [Child, Base, object]
+assert Child.mro() == order
+assert Child.__mro__ is stored
+```
 
 ## Getting Object Type
 
@@ -120,6 +148,8 @@ print(obj.derived_method())  # from derived
 ## type() vs isinstance()
 
 ```python
+value = 42
+
 # type() - exact type match - O(1)
 if type(value) is int:
     print("Exact integer")
@@ -157,6 +187,9 @@ MyClass = MyMeta('MyClass', (), {})
 ## Best Practices
 
 ```python
+value = 42
+obj = value
+
 # type() is O(1) - it reads a pointer on the object. isinstance() is O(k*d)
 # in the number of candidate types and the MRO length, and an ABC or a custom
 # __instancecheck__ can do arbitrary work
