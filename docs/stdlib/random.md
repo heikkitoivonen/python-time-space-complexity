@@ -16,7 +16,7 @@ constant.
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `random.random()` | O(1) | O(1) | Uniform [0.0, 1.0) |
-| `random.getrandbits(w)` | O(w) | O(w) | Returns a w-bit integer |
+| `random.getrandbits(w)` / `Random.getrandbits(w)` | O(w) | O(w) | Returns a w-bit integer |
 | `random.randbytes(count)` | O(count) | O(count) | One `getrandbits(8 * count)` |
 | `random.randrange([start,] stop)` | O(w) expected | O(w) | One word for ordinary bounds. `stop` is excluded |
 | `random.randrange(start, stop, step)` | O(w) expected, plus one [`//`](../builtins/int.md) and one [`*`](../builtins/int.md) on w-bit operands | O(w) | Superlinear in w once those operands are big integers |
