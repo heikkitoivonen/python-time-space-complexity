@@ -19,8 +19,8 @@ the repository's highest-risk content.
    should cover. Use official Python documentation plus runtime inspection such
    as `dir(module)` and `dir(class)`. Filter private names, then distinguish
    callables from data attributes. Record intentional omissions in the page or
-   test rationale; do not silently omit APIs. Then pin the result with a
-   coverage test - see *Coverage Is a Claim* below.
+   test rationale; do not silently omit APIs. Reconcile the result with
+   the shared audit gate - see *Coverage Is a Claim* below.
 3. Define every size variable before using it. Avoid an ambiguous `n` when an
    operation depends on several dimensions; use terms such as input length,
    output length, fields, vertices, edges, matches, or returned items.
@@ -110,49 +110,40 @@ no reader can use.
 
 ## Coverage Is a Claim
 
-The set of APIs a page documents is a claim about the module, and it is the one
-claim a reader of the page cannot check. A table covering a fifth of its module
-reads exactly like one covering all of it, and the toolchain agrees: lint,
-types and the whole suite pass either way.
+Use the shared public API audit as the completeness gate for the page being
+written or reviewed. Run it before the claim review and again on the final page:
 
-So test it. Enumerate the module's public names before writing, and pin the
-result when the page is done:
-
-```python
-def test_no_public_name_is_missing_from_the_table(self) -> None:
-    public = {name for name in dir(module) if not name.startswith("_")}
-    missing = sorted(public - _documented_names())
-    assert not missing, f"{len(missing)} public names absent: {missing}"
+```bash
+uv run python scripts/audit_documentation.py --page docs/stdlib/os.md --check --include-review
 ```
 
-`_documented_names()` parses the page's own Complexity Reference table, so it
-has to match how that table writes names. Assert both directions - a name the
-table invents is as wrong as one it omits - and allow, explicitly and by name,
-only those documented APIs that a supported version lacks, checking that each
-such row carries its version marker.
+Replace the path with the actual English page. Scope by page, including submodule
+APIs assigned to it (such as `os.path` in `os.md`), rather than filtering output
+by a module-name prefix. The audit uses the current interpreter's versioned
+Python API inventory and deduplicates aliases across the full audit. Use that
+shared inventory instead of writing another `dir(module)` completeness test.
+Runtime inspection and official documentation still supplement inventory gaps.
 
-Confirm the extractor is not vacuous before trusting it. One that matches
-nothing reports perfect coverage: drop a known row from the set it returns and
-assert that the check would have failed.
+Resolve every reported miss with substantive documentation or correct an audit
+classification/matching defect with a regression test. Group related APIs when
+they share a bound. Do not add token mentions to obtain a pass, silently suppress
+names, or treat an inspection failure or empty inventory as zero misses.
 
-Re-run that check whenever the allowlist widens. Platform- and version-gated
-names need an exemption, but exempt them **by name**: excluding a pattern such
-as `CLOCK_*` also exempts `CLOCK_NONSENSE`, and the "the table names nothing
-that does not exist" half of the coverage test quietly stops working. An
-explicit list keeps the typo check alive and says which absences were reviewed.
+The gate checks name coverage, not complexity correctness. Review the scoped
+unresolved/unavailable and unclassified diagnostics too; record explicit names
+and reasons for intentional exclusions or platform/version limitations in the
+module test rationale. A successful exit does not discharge those diagnostics.
+Inspect the official inventory for relevant supported-version APIs absent from
+the running interpreter; run another version only when resolving a claim about
+that version. One platform's successful audit does not establish all-platform
+coverage.
 
-Two things make this affordable on a wide module:
-
-- **Group families into one row.** `module.sin/cos/tan(x)` names three
-  functions in one line, and a slash-separated run parses back to three names.
-  Twenty-odd rows can cover sixty-odd names without a wall of table.
-- **Cover first, then look for content.** Most of a wide module is one bound
-  repeated. Give those a row and move on; the reading is only worth doing where
-  the row would otherwise be a guess.
-
-Expect the coverage pass to produce claims, not just rows. The APIs a page
-skipped are where its remaining defects sit, and the rows added arrive with
-none of the scrutiny the existing ones have had - inventory them the same way.
+A full review is complete only when the scoped gate passes, every remaining
+coverage diagnostic is accounted for, and every documented claim has evidence.
+Report API completeness and claim correctness separately. If the work is an
+explicitly scoped correction, report remaining API gaps rather than describing
+the whole page as reviewed. Newly documented APIs need the same claim inventory,
+behavioral tests, and example verification as the existing rows.
 
 ## Test Every Claim
 
@@ -236,8 +227,8 @@ make check
 
 Also inspect the final diff for:
 
-- complete public API coverage or explained omissions, pinned by a coverage
-  test rather than by having looked once;
+- a passing scoped public API audit and explicit accounting for remaining
+  coverage diagnostics;
 - defined size variables and bounds qualified only where the qualification
   changes a decision;
 - notes that survive the removal test, carrying no measured constants,

@@ -48,14 +48,20 @@ Map every inventory item to one test or to an explicit untestable rationale.
 Test names and docstrings are labels, not evidence: confirm each assertion
 actually distinguishes the documented behavior from a plausible wrong one.
 
-An inventory lists what the page says, so it can never surface what the page
-leaves out: a missing API is not a claim to inventory, and a claim-by-claim
-review passes a page that documents a fifth of its module. Coverage is the
-other axis and needs its own check - compare the documented names against
-`dir(module)` before starting, and pin the result with a test. See *Coverage Is
-a Claim* in `documenting-complexity-modules`. Filling a gap is itself claim
-work: the rows added arrive untested, and the reading behind them turns up
-defects in the rows that were already there.
+An inventory of existing claims cannot reveal omitted APIs. Use the shared
+page-scoped audit gate in *Coverage Is a Claim* in
+`documenting-complexity-modules` before reviewing and on the final page:
+
+```bash
+uv run python scripts/audit_documentation.py --page docs/stdlib/os.md --check --include-review
+```
+
+Use the actual English page path. Resolve reported misses and account explicitly
+for unresolved/unavailable and unclassified APIs. Do not duplicate the audit
+with module-specific `dir()` coverage extractors. Zero misses establishes name
+coverage only: each added API still needs a justified bound and claim evidence.
+Report API completeness separately from correctness; passing claim tests alone
+does not establish a complete module review.
 
 ## Classify Each Claim
 

@@ -50,3 +50,22 @@ Review the generated diff and run the focused audit tests. Do not infer a public
 API solely from a runtime discovery or silently exempt a newly discovered name.
 Python's object index does not capture every prose-only API contract or parameter;
 those remain review work rather than presumed defects.
+
+## Page review gate
+
+Run the full inventory with results scoped to the English page being reviewed:
+
+```sh
+uv run python scripts/audit_documentation.py --page docs/stdlib/os.md --check --include-review
+```
+
+Page scope includes submodules assigned to that page and preserves cross-module
+alias deduplication. `--check` exits with status 1 for missing APIs, an empty
+scope, an unavailable manifest, or inspection errors in scope. Without `--check`,
+the audit remains informational. `--json` works with both options.
+
+A passing gate establishes name coverage only. Review the remaining unresolved
+and unclassified diagnostics explicitly, including version/platform limitations;
+then verify bounds and examples with the module's claim tests. Documented fields
+of struct-sequence results are actionable only when their class descriptors are
+available; absent platform fields remain in unresolved diagnostics.

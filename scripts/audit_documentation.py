@@ -15,6 +15,7 @@ import subprocess
 import sys
 import sysconfig
 import tempfile
+import textwrap
 import warnings
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
@@ -346,6 +347,10 @@ def attribute_hints(apis: dict[str, Any]) -> dict[str, dict[str, set[str]]]:
 
 def documented_fields(cls: type, hints: dict[str, dict[str, set[str]]]) -> set[str]:
     """Supply documented fields that appear only on instances, without constructing one."""
+    # Struct-sequence fields have class descriptors when available. Inventory-only
+    # fields on these types belong in unresolved diagnostics on this platform.
+    if issubclass(cls, tuple) and hasattr(cls, "n_fields"):
+        return set()
     names: set[str] = set()
     for base in cls.__mro__:
         for owner, members in hints.get(base.__name__, {}).items():
@@ -729,6 +734,79 @@ def mentions(text: str, name: str) -> bool:
     return re.search(r"(?<![\w])" + re.escape(name) + r"(?![\w])", text) is not None
 
 
+def is_scandir_call(node: ast.AST) -> bool:
+    """Recognize the qualified factory without executing documentation code."""
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "os"
+        and node.func.attr == "scandir"
+    )
+
+
+def assigned_names(statement: ast.AST) -> set[str]:
+    """Conservatively invalidate bindings on assignment or deletion."""
+    return {
+        node.id
+        for node in ast.walk(statement)
+        if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del))
+    }
+
+
+def loop_mentions_member(loop: ast.For, member: str) -> bool:
+    """Find a direct member use before the loop variable is rebound."""
+    if not isinstance(loop.target, ast.Name):
+        return False
+    for statement in loop.body:
+        if loop.target.id in assigned_names(statement):
+            break
+        if not isinstance(statement, (ast.Expr, ast.Assign, ast.AnnAssign)):
+            continue
+        if any(
+            isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == loop.target.id
+            and node.attr == member
+            for node in ast.walk(statement)
+        ):
+            return True
+    return False
+
+
+def scandir_body_mentions(statements: list[ast.stmt], iterators: set[str], member: str) -> bool:
+    """Track context-managed scandir iterators within their lexical body."""
+    for statement in statements:
+        if isinstance(statement, ast.With):
+            local = iterators | {
+                item.optional_vars.id
+                for item in statement.items
+                if is_scandir_call(item.context_expr) and isinstance(item.optional_vars, ast.Name)
+            }
+            if scandir_body_mentions(statement.body, local, member):
+                return True
+        if isinstance(statement, ast.For):
+            known = is_scandir_call(statement.iter) or (
+                isinstance(statement.iter, ast.Name) and statement.iter.id in iterators
+            )
+            if known and loop_mentions_member(statement, member):
+                return True
+        iterators.difference_update(assigned_names(statement))
+    return False
+
+
+def documents_direntry_member(text: str, member: str) -> bool:
+    """Recognize member uses inside loops over explicitly qualified os.scandir calls."""
+    for block in re.findall(r"```python[^\n]*\n(.*?)```", text, re.DOTALL):
+        try:
+            tree = ast.parse(textwrap.dedent(block))
+        except SyntaxError:
+            continue
+        if scandir_body_mentions(tree.body, set(), member):
+            return True
+    return False
+
+
 def documents_name(text: str, module: str, name: str, dedicated: bool = False) -> bool:
     """Check explicit name evidence, scoped to a class for class members.
 
@@ -741,7 +819,9 @@ def documents_name(text: str, module: str, name: str, dedicated: bool = False) -
     if len(parts) == 1:
         return mentions(text, parts[0])
     owner, member = parts[-2:]
-    if mentions(text, ".".join(parts[-2:])):
+    if mentions(text, ".".join(parts[-2:])) or (
+        name.startswith("os.DirEntry.") and documents_direntry_member(text, member)
+    ):
         return True
     aliases = re.findall(r"\b(\w+)\s*=\s*(?:[\w.]+\.)?" + re.escape(owner) + r"\s*\(", text)
     if any(mentions(text, f"{alias}.{member}") for alias in aliases):
@@ -1003,6 +1083,48 @@ def print_classification_report(report: dict[str, Any]) -> None:
         print(f"  - {item['name']} — {item['reason']}")
 
 
+def page_api_report(root: Path, report: dict[str, Any], page: str) -> dict[str, Any]:
+    """Scope a complete audit to a page, retaining uncertainty and alias deduplication."""
+    selected = dict(report)
+    modules = {
+        name for name, entry in load_public_manifest()["apis"].items() if entry["kind"] == "module"
+    }
+
+    def target_page(name: str) -> str:
+        prefixes = [prefix for prefix in modules if name == prefix or name.startswith(prefix + ".")]
+        module = max(prefixes, key=len) if prefixes else name.split(".")[0]
+        return documentation_page(root, module, name).relative_to(root).as_posix()
+
+    selected["inspection_errors"] = [
+        error
+        for error in report["inspection_errors"]
+        if target_page(error.split(":", 1)[0]) == page
+    ]
+    selected["pages"] = [item for item in report["pages"] if item["file"] == page]
+    for key in ("needs_classification", "unresolved_documented"):
+        selected[key] = []
+        for item in report[key]:
+            if item.get("file", target_page(item["name"])) == page:
+                selected[key].append(item)
+    selected["total_names"] = sum(len(item["items"]) for item in selected["pages"])
+    selected["missing_names"] = sum(item["defects"] for item in selected["pages"])
+    selected["alias_paths"] = sum(
+        len(item["aliases"]) for p in selected["pages"] for item in p["items"]
+    )
+    selected["unclassified_names"] = len(selected["needs_classification"])
+    return selected
+
+
+def api_gate_passes(report: dict[str, Any]) -> bool:
+    """Zero misses is meaningful only with an inventory and successful inspection."""
+    return bool(
+        report["manifest"].get("available")
+        and report["total_names"]
+        and not report["missing_names"]
+        and not report["inspection_errors"]
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--inspect", help=argparse.SUPPRESS)
@@ -1013,7 +1135,13 @@ def main() -> None:
     parser.add_argument(
         "--json", action="store_true", help="Emit the complete machine-readable inventory"
     )
+    parser.add_argument("--page", help="Scope API results to a repository-relative Markdown page")
+    parser.add_argument(
+        "--check", action="store_true", help="Fail on API misses or unknown coverage"
+    )
     args = parser.parse_args()
+    if args.pages_only and (args.page or args.check):
+        parser.error("--page and --check require the public API audit")
     if args.inspect:
         print(json.dumps(inspect_module_worker(args.inspect)))
         return
@@ -1021,12 +1149,24 @@ def main() -> None:
     report = generate_audit_report(root)
     if not args.pages_only:
         report["api"] = generate_api_report(root)
+        if args.page:
+            page = Path(args.page)
+            if page.is_absolute() or ".." in page.parts or page.suffix != ".md":
+                parser.error("--page must be a repository-relative Markdown path")
+            report["api"] = page_api_report(root, report["api"], page.as_posix())
     if args.json:
         print(json.dumps(report, indent=2))
     else:
         print_report(report)
         if "api" in report:
             print_api_report(report["api"], include_review=args.include_review)
+    if args.check:
+        passed = api_gate_passes(report["api"])
+        if not args.json:
+            print(
+                "API gate: PASS" if passed else "API gate: FAIL (misses or unknown/empty coverage)"
+            )
+        raise SystemExit(0 if passed else 1)
 
 
 if __name__ == "__main__":

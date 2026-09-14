@@ -575,3 +575,122 @@ def test_inspection_uses_stdlib_distutils() -> None:
     assert result["available"]
     assert not result["errors"]
     assert "distutils.bcppcompiler.BCPPCompiler" in {item["name"] for item in result["items"]}
+
+
+@pytest.mark.parametrize(
+    ("source", "covered"),
+    [
+        (
+            'with os.scandir(".") as entries:\n    for entry in entries:\n        print(entry.is_file())',
+            True,
+        ),
+        ('for entry in os.scandir("."):\n    print(entry.name)', True),
+        ("for entry in other_entries:\n    print(entry.name)", False),
+        ('for entry in os.scandir("."):\n    entry = other\n    print(entry.name)', False),
+        (
+            'with os.scandir(".") as entries:\n    pass\nfor entry in entries:\n    print(entry.name)',
+            False,
+        ),
+        (
+            'with os.scandir(".") as entries:\n    entries = other\n    for entry in entries:\n        print(entry.name)',
+            False,
+        ),
+    ],
+)
+def test_scandir_examples_identify_only_bound_direntry_members(source: str, covered: bool) -> None:
+    text = f"```python\n{source}\n```"
+    member = "is_file" if "is_file" in source else "name"
+    assert audit.documents_name(text, "os", f"os.DirEntry.{member}") is covered
+    assert not audit.documents_name(text, "os", "os.DirEntry.inode")
+    assert not audit.documents_name(text, "probe", f"probe.Other.{member}")
+
+
+def test_absent_struct_sequence_fields_remain_unresolved() -> None:
+    import os
+
+    manifest = public_manifest(
+        {"os.stat_result.st_mode": "attribute", "os.stat_result.unavailable_field": "attribute"}
+    )
+    result = audit.inspect_public_api(os, manifest["apis"])
+    names = {item["name"] for item in result["items"]}
+    assert "os.stat_result.st_mode" in names
+    assert "os.stat_result.unavailable_field" not in names
+    unresolved = audit.unresolved_documented(manifest["apis"], names, {"os"})
+    assert [item["name"] for item in unresolved] == ["os.stat_result.unavailable_field"]
+
+
+def test_page_gate_includes_submodules_and_preserves_review_diagnostics(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    docs = tmp_path / "docs" / "stdlib"
+    docs.mkdir(parents=True)
+    page = docs / "probe.md"
+    page.write_text("probe probe.child present")
+    manifest = public_manifest(
+        {
+            "probe": "module",
+            "probe.child": "module",
+            "probe.child.present": "function",
+            "probe.child.absent": "function",
+            "probe.child.unavailable": "function",
+            "other": "module",
+        }
+    )
+    monkeypatch.setattr(audit, "load_public_manifest", lambda: manifest)
+
+    def inspect(name: str) -> tuple[str, dict]:
+        if name == "other":
+            return name, {"items": [], "errors": ["other: ImportError: unavailable"]}
+        names = ["present", "absent", "unclassified"] if name == "probe.child" else []
+        return name, {
+            "items": [{"name": f"{name}.{member}", "kind": "function"} for member in names],
+            "errors": [],
+        }
+
+    monkeypatch.setattr(audit, "inspect_module", inspect)
+
+    def scoped() -> dict:
+        report = audit.generate_api_report(tmp_path, ["probe", "probe.child", "other"], manifest)
+        return audit.page_api_report(tmp_path, report, "docs/stdlib/probe.md")
+
+    report = scoped()
+    assert report["missing_names"] == 1
+    assert not audit.api_gate_passes(report)
+    assert not report["inspection_errors"]
+    assert [item["name"] for item in report["unresolved_documented"]] == ["probe.child.unavailable"]
+    assert [item["name"] for item in report["needs_classification"]] == ["probe.child.unclassified"]
+    page.write_text(page.read_text() + " absent")
+    report = scoped()
+    assert audit.api_gate_passes(report)
+    assert report["unresolved_documented"]  # Passing name coverage still needs human review.
+    assert not audit.api_gate_passes(audit.page_api_report(tmp_path, report, "docs/stdlib/typo.md"))
+    report["inspection_errors"] = ["probe.child: TimeoutExpired"]
+    assert not audit.api_gate_passes(report)
+    report["inspection_errors"] = []
+    report["manifest"] = {"available": False}
+    assert not audit.api_gate_passes(report)
+
+
+@pytest.mark.parametrize(("missing", "expected"), [(0, 0), (1, 1)])
+def test_check_exit_status_and_json_output(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], missing: int, expected: int
+) -> None:
+    import json
+    import sys
+
+    monkeypatch.setattr(sys, "argv", ["audit", "--check", "--json"])
+    monkeypatch.setattr(audit, "generate_audit_report", lambda root: {})
+    monkeypatch.setattr(
+        audit,
+        "generate_api_report",
+        lambda root: {
+            "manifest": {"available": True},
+            "total_names": 1,
+            "missing_names": missing,
+            "inspection_errors": [],
+        },
+    )
+    with pytest.raises(SystemExit) as exc:
+        audit.main()
+    assert exc.value.code == expected
+    assert json.loads(capsys.readouterr().out)["api"]["missing_names"] == missing
