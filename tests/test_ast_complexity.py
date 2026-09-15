@@ -56,10 +56,9 @@ CPython 3.14.7 with 1,000 then 4,000 assignment statements unless stated:
   `maxlines` cut in `_splitlines_no_ff` (added by gh-103285 in 3.12);
 * `get_docstring` with 16x the statements after the docstring, `clean=False`:
   x1.0; with a 1,000-then-4,000-line docstring: x4.1 under `clean=True` and
-  x1.0 under `clean=False`; with leading blank lines, which `cleandoc` pops
-  from the front of its line list one at a time: x3.4-x3.8 for 4x the blank
-  lines at 4,000 text lines, and x55-x60 for 8x both (2,000 to 16,000),
-  the k * l term, with parsing outside the timer.
+  x1.0 under `clean=False`. Leading blank lines are checked by counting the
+  entries shifted by each front pop in `cleandoc`, varying the blank-line
+  count alone and then both blank and text line counts for the k * l term.
 
 Sub-microsecond calls - `get_source_segment` of the first line, the
 `get_docstring` constant-time cases - are run 200 times per sample. The deep
@@ -94,7 +93,7 @@ import time
 import timeit
 import warnings
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any, SupportsIndex, cast
 
 import pytest
 
@@ -562,32 +561,47 @@ class TestDocstring:
         assert 2.5 < cleaned < 7, f"clean=True x{cleaned:.1f} for 4x the lines"
         assert raw < 2.5, f"clean=False x{raw:.1f} for 4x the lines"
 
-    @pytest.mark.timing
     def test_leading_blank_lines_cost_the_line_count_each(self) -> None:
-        """Time cleanup of prebuilt trees with fixed-width text lines.
+        """Count list entries shifted while cleaning fixed-width text lines.
 
-        For 2,000 then 16,000 blank and text lines, linear work predicts 8x
-        and k * l predicts 64x. CPython 3.11.14 measures about 55x. Parsing
-        is setup; text width and indentation are not varied.
+        A str subclass supplies a list subclass from expandtabs().split().
+        Each pop performs the normal list operation and records how many
+        entries it shifts. The result must match cleanup of an ordinary str.
+        Text width and indentation are not varied; other cleanup work is
+        not counted.
         """
+        shifted: list[int] = []
 
-        def docstring(blank: int, text: int) -> ast.Module:
-            return ast.parse('"""' + "\n" * blank + "word\n" * text + '"""')
+        class Lines(list[str]):
+            def pop(self, index: SupportsIndex = -1) -> str:
+                position = index.__index__()
+                if position < 0:
+                    position += len(self)
+                moved = len(self) - position - 1
+                result = super().pop(index)
+                shifted.append(moved)
+                return result
 
-        fewer_blanks, more_blanks = docstring(1_000, 4_000), docstring(4_000, 4_000)
-        small, large = docstring(2_000, 2_000), docstring(16_000, 16_000)
+        class Docstring(str):
+            def expandtabs(self, tabsize: SupportsIndex = 8) -> "Docstring":
+                return Docstring(super().expandtabs(tabsize))
 
-        blanks = ratio(
-            lambda: ast.get_docstring(fewer_blanks),
-            lambda: ast.get_docstring(more_blanks),
-        )
-        both = ratio(
-            lambda: ast.get_docstring(small),
-            lambda: ast.get_docstring(large),
-        )
+            def split(self, sep: str | None = None, maxsplit: SupportsIndex = -1) -> list[str]:
+                return Lines(super().split(sep, maxsplit))
 
-        assert 2.5 < blanks < 7, f"x{blanks:.1f} for 4x the leading blank lines"
-        assert both > 24, f"x{both:.1f} for 8x both; linear would be 8, k * l 64"
+        for blank, text in ((100, 400), (400, 400), (100, 100), (800, 800)):
+            raw = "\n" * blank + "\n".join(["word"] * text)
+            tree = ast.parse('"""' + raw + '"""')
+            expected = ast.get_docstring(tree)
+            statement = tree.body[0]
+            assert isinstance(statement, ast.Expr)
+            assert isinstance(statement.value, ast.Constant)
+            statement.value.value = Docstring(raw)
+            shifted.clear()
+
+            assert ast.get_docstring(tree) == expected == "\n".join(["word"] * text)
+            assert len(shifted) == blank
+            assert sum(shifted) == blank * text + blank * (blank - 1) // 2
 
     def test_reads_only_the_first_statement(self) -> None:
         assert ast.get_docstring(ast.parse('"""doc"""\n"""not doc"""')) == "doc"
