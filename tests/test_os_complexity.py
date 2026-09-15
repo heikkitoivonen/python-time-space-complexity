@@ -135,6 +135,7 @@ import pathlib
 import re
 import shutil
 import stat as stat_module
+import struct
 import subprocess
 import sys
 import textwrap
@@ -2203,8 +2204,11 @@ class TestProcessAndEnvironment:
 
         Nothing is collected here - the loop discards each pair - yet the peak
         rises with the variable count, because _Environ.__iter__ lists its keys
-        before yielding any. Measured 1,084 B against 25,084 B for 3,000 more
-        variables.
+        before yielding any. For 3,000 more variables, the added allocation
+        is 24,000 B on a 64-bit build. Compare the increase with the storage
+        for one pointer per added key, allowing a factor of two for overhead;
+        the runner's initial environment size is not a controlled input.
+        Key and value lengths are bounded here, not varied independently.
         """
 
         def consume() -> None:
@@ -2221,9 +2225,11 @@ class TestProcessAndEnvironment:
             for key in added:
                 del os.environ[key]
 
-        assert after > 5 * before, (
+        growth = after - before
+        key_storage = len(added) * struct.calcsize("P")
+        assert key_storage / 2 < growth < 2 * key_storage, (
             f"iterating allocates per variable even when nothing is kept: "
-            f"{before} B against {after} B"
+            f"{before} B against {after} B; added {growth} B, expected about {key_storage} B"
         )
 
     def test_environ_items_is_a_view_not_a_copy(self) -> None:
