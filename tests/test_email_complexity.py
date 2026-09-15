@@ -50,9 +50,8 @@ The stopwatch tests, on one interpreter each, best of five: parsing 50k and
 200k body lines, near 4 for the linear row; the same 100k-line leaf at
 nesting depth 0 and 16, 5.2 where a bound without the L·d term predicts 1;
 fetching a 32,000-character Subject of 100 and 6,400 words under
-``policy.default``, 18 where O(v) predicts 1; a To header of 2,000 and 8,000
-addresses through ``AddressHeader`` (8.2) against ``getaddresses()`` on the
-same text (4.3); folding a parsed 2,000- and 8,000-word Subject (10.7);
+``policy.default``, 18 where O(v) predicts 1; folding a parsed 2,000- and
+8,000-word Subject (10.7);
 ``decode_header`` on 1,000 and 4,000 encoded words (12);
 ``Header.encode`` on 4,000 and 16,000 characters and ``as_bytes()`` on 1 MiB
 and 4 MiB bodies, both near 4; ``get_payload()`` on 2 MiB and 16 MiB
@@ -64,6 +63,11 @@ under ``policy.HTTP`` a non-ASCII Subject stored parsed (18) against an
 ASCII one read from source (3.5). ``Address(addr_spec=)`` shares the header parser's
 slicing and is not timed on its own. None of them vary the token length, the
 charset, the line length or the parameter length.
+
+Address-list parsing is checked by counting characters in the suffix slices
+between addresses. Fixed-width addresses make their total quadratic in the
+address count; this observes one source of copying, not all parser work.
+``TestUtils.test_getaddresses_is_linear`` separately times the utility parser.
 
 Not settled by execution:
 
@@ -107,6 +111,7 @@ import textwrap
 import timeit
 import weakref
 from collections.abc import Callable
+from email import _header_value_parser as header_parser
 from email import encoders, iterators, message_from_bytes, message_from_string, policy, utils
 from email.charset import SHORTEST, Charset, add_alias, add_charset
 from email.contentmanager import ContentManager
@@ -131,7 +136,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.nonmultipart import MIMENonMultipart
 from email.mime.text import MIMEText
 from email.parser import BytesFeedParser, BytesHeaderParser, HeaderParser, Parser
-from typing import Any
+from typing import Any, SupportsIndex
 
 import pytest
 
@@ -486,22 +491,49 @@ class TestHeaderAccess:
         ratio = many_time / few_time
         assert ratio > 6, f"64x the words at one length cost x{ratio:.1f}"
 
-    @pytest.mark.timing
-    def test_getaddresses_is_linear_where_address_header_is_not(self) -> None:
-        def addresses(count: int) -> str:
-            return ", ".join(f"user{i}@example.com" for i in range(count))
+    def test_address_header_copies_quadratic_suffix_text(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Count actual separator slices through the public header-fetch path.
 
-        small, large = addresses(2_000), addresses(8_000)
-        small_msg = message_from_string(f"To: {small}\n\nb\n", policy=policy.default)
-        large_msg = message_from_string(f"To: {large}\n\nb\n", policy=policy.default)
+        Only the remainder returned by get_address is instrumented. Slicing
+        returns an ordinary str, so parsing inside each address is unchanged.
+        Address width is fixed; display names, groups and defects are not varied.
+        """
+        copied: list[int] = []
+        original = header_parser.get_address
 
-        header_ratio = per_call(lambda: large_msg["To"]) / per_call(lambda: small_msg["To"])
-        utils_ratio = per_call(lambda: utils.getaddresses([large])) / per_call(
-            lambda: utils.getaddresses([small])
-        )
+        class Remainder(str):
+            def __getitem__(self, key: SupportsIndex | slice) -> str:
+                result = super().__getitem__(key)
+                if isinstance(key, slice):
+                    copied.append(len(result))
+                return result
 
-        assert header_ratio > 6, f"AddressHeader: 4x the addresses cost x{header_ratio:.1f}"
-        assert utils_ratio < 6, f"getaddresses: 4x the addresses cost x{utils_ratio:.1f}"
+        def get_address(value: str) -> Any:
+            address, remainder = original(value)
+            return address, Remainder(remainder)
+
+        monkeypatch.setattr(header_parser, "get_address", get_address)
+        totals: list[int] = []
+        width = len("user0000@example.com")
+        for count in (100, 400):
+            addresses = [f"user{i:04d}@example.com" for i in range(count)]
+            message = message_from_string(
+                f"To: {','.join(addresses)}\n\nb\n", policy=policy.default
+            )
+            copied.clear()
+
+            header = message["To"]
+
+            assert [address.addr_spec for address in header.addresses] == addresses
+            assert not header.defects
+            assert len(copied) == count - 1
+            expected = (width + 1) * count * (count - 1) // 2 - (count - 1)
+            assert sum(copied) == expected
+            totals.append(sum(copied))
+
+        assert 15 < totals[1] / totals[0] < 17, totals
 
 
 class TestPayload:

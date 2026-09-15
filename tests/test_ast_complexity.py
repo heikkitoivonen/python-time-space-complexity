@@ -91,6 +91,7 @@ import sys
 import textwrap
 import threading
 import time
+import timeit
 import warnings
 from collections.abc import Callable
 from typing import Any, cast
@@ -188,11 +189,20 @@ def in_deep_stack(func: Callable[[], Any]) -> Any:
 class TestParse:
     @pytest.mark.timing
     def test_linear_in_the_statements(self) -> None:
-        small, large = statements(1_000), statements(4_000)
+        """Fixed-width statements vary source length and node count by 16x.
 
-        growth = ratio(lambda: ast.parse(small), lambda: ast.parse(large))
+        timeit excludes cyclic GC and restores its enabled state afterwards.
+        The bounds separate linear growth (16x) from quadratic growth (256x);
+        identifier length, expression shape and nesting depth stay fixed.
+        """
+        small, large = "x = 1 + 1\n" * 1_000, "x = 1 + 1\n" * 16_000
+        ast.parse(small)
+        ast.parse(large)
+        small_time = min(timeit.repeat(lambda: ast.parse(small), number=1, repeat=5))
+        large_time = min(timeit.repeat(lambda: ast.parse(large), number=1, repeat=5))
+        growth = large_time / small_time
 
-        assert 2.5 < growth < 8, f"x{growth:.1f} for 4x the source"
+        assert 6 < growth < 64, f"x{growth:.1f} for 16x the source"
 
     @pytest.mark.timing
     def test_linear_in_a_binary_chain(self) -> None:
