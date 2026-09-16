@@ -1461,9 +1461,14 @@ class TestTheUpdatePath:
         def measure(stdscr: Any) -> dict[str, float]:
             import curses
 
+            # Keep every ancestor alive until all sync calls have finished.
+            # A derived window shares its parents' native storage.
+            ancestors: list[Any] = []
+
             def chain(depth: int, rows: int) -> Any:
                 window = curses.newpad(rows + depth, 512)
                 for _ in range(depth):
+                    ancestors.append(window)
                     window = window.derwin(rows, 8, 0, 0)
                 return window
 

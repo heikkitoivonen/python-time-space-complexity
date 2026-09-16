@@ -18,8 +18,8 @@ except ImportError:
 
 
 def constant_time(n: int):
-    """O(1) operation taking an int."""
-    return 42
+    """Fixed work independent of n, long enough to exceed timer overhead."""
+    return sum(range(10_000))
 
 
 def linear_time_list(data: list[int]):
@@ -44,6 +44,19 @@ class TestComplexityEstimator:
 
         complexity, score = estimate_complexity.detect_complexity(n_values, times)
         assert complexity == "O(1) (Constant)"
+
+    @pytest.mark.parametrize("scale", [1e-9, 1.0])
+    def test_small_monotonic_noise_is_constant(self, scale):
+        """A growth model must not win by fitting a 2% timing drift."""
+        times = [scale, 1.01 * scale, 1.02 * scale]
+        complexity, score = estimate_complexity.detect_complexity([10, 50, 100], times)
+        assert complexity == "O(1) (Constant)"
+        assert score > 0
+
+    def test_growth_above_noise_floor_is_not_constant(self):
+        """Linear growth with fixed overhead remains detectable."""
+        complexity, _ = estimate_complexity.detect_complexity([10, 50, 100], [1.1e-6, 1.5e-6, 2e-6])
+        assert complexity == "O(n) (Linear)"
 
     def test_detect_linear_time(self):
         """Verify O(n) detection (pure logic)."""
@@ -124,16 +137,23 @@ class TestComplexityEstimator:
 
     @pytest.mark.timing
     def test_integration_constant(self):
-        """Run measurement on constant function (int hint)."""
-        n_values = [10, 50, 100]
+        """Measure fixed work over a 10,000x input range.
+
+        Each call sums the same 10,000 integers regardless of n. The fastest
+        of five batches reduces interruption noise; batching keeps clock and
+        call overhead small compared with the measured work.
+        """
+        n_values = [10, 100, 1000, 10_000, 100_000]
         times = []
         for n in n_values:
-            t = estimate_complexity.measure_execution_time(constant_time, n, iterations=20)
+            t = min(
+                estimate_complexity.measure_execution_time(constant_time, n, iterations=50)
+                for _ in range(5)
+            )
             times.append(t)
 
         complexity, _ = estimate_complexity.detect_complexity(n_values, times)
-        # Constant time is hard to fail unless system is super noisy
-        assert complexity == "O(1) (Constant)"
+        assert complexity == "O(1) (Constant)", f"{complexity=}, {times=}"
 
     @pytest.mark.timing
     def test_integration_linear_list(self):

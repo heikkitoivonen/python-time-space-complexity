@@ -224,6 +224,8 @@ def detect_complexity(n_values, times):
     Uses least-squares linear regression (with intercept) to fit each model
     curve to the timing data, then selects the model with lowest RMSE.
     Prefers simpler models when RMSE values are within 5% of each other.
+    Treats RMS timing variation within 5% of the mean as constant: growth below
+    this noise floor cannot be distinguished reliably by this heuristic.
 
     Returns:
         tuple: (complexity_name, rmse) or (None, None) if insufficient data.
@@ -236,6 +238,11 @@ def detect_complexity(n_values, times):
     if min_time <= 0:
         min_time = 1e-9
     normalized_times = [t / min_time for t in times]
+
+    mean_time = statistics.fmean(normalized_times)
+    constant_rmse = math.sqrt(statistics.fmean((t - mean_time) ** 2 for t in normalized_times))
+    if constant_rmse <= 0.05 * mean_time:
+        return "O(1) (Constant)", constant_rmse
 
     models = [
         ("O(1) (Constant)", [1 for _ in n_values]),
