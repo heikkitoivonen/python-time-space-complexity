@@ -61,7 +61,11 @@ for unresolved/unavailable and unclassified APIs. Do not duplicate the audit
 with module-specific `dir()` coverage extractors. Zero misses establishes name
 coverage only: each added API still needs a justified bound and claim evidence.
 Report API completeness separately from correctness; passing claim tests alone
-does not establish a complete module review.
+does not establish a complete module review. A module belonging exclusively to
+another platform is not a coverage defect; an import that fails for any other
+reason still is. See *A Foreign Platform's Gap Is Not This Platform's Blocker*
+in `documenting-complexity-modules` for the three classes and what each one
+still has to report.
 
 ## Classify Each Claim
 
@@ -114,6 +118,28 @@ CPython source or official docs in the documentation where appropriate.
 
 Do not disguise category C as a skipped test, and never mark a wrong translation
 or unverified claim current merely to make checks pass.
+
+### D. Claim only another platform can settle
+
+A row about `winreg`, `msvcrt`, `os.startfile` or a Unix-only signal call is
+testable - somewhere else. Guard it with a platform condition, in the same way
+a version-specific claim is guarded by `sys.version_info`:
+
+```python
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows-only API")
+```
+
+The guard is the point. A test that fails because it asserts another platform's
+behavior is a defect in the test, not evidence about the module, and leaving it
+red trains the next reader to ignore a red suite. A test whose claim your
+platform can reach must not be skipped to make the suite green.
+
+Two things follow for reporting. A skip here is not coverage: the claim is
+unverified on every run this project actually performs, so say so in the module
+docstring next to the category C entries rather than counting it as tested. And
+a suite that is green on Linux says nothing about the Windows-only rows in it -
+never describe such a page as fully verified without naming which rows only CI
+on another platform, or a reader on one, could confirm.
 
 ## Corrections Are New Claims
 
@@ -221,5 +247,13 @@ make check
 ```
 
 Before declaring coverage complete, reconcile the claim inventory against the
-final page line by line. Report any category C claims and their source evidence;
-do not say "all claims tested" when some are only sourced or remain uncertain.
+final page line by line. Report any category C claims and their source evidence,
+and any category D claims the running platform skipped; do not say "all claims
+tested" when some are only sourced, skipped elsewhere, or remain uncertain.
+
+This licenses nothing about `make check`, which does not run the API audit.
+Lint, types and tests must all pass before a commit, on every platform and
+without exception. A foreign-platform claim reaches a green suite by being
+guarded so it *skips*; an unguarded `import winreg` that breaks collection is a
+defect in the test to fix, never a failure to explain away. The only thing a
+foreign platform excuses is an inspection diagnostic in the audit's own output.

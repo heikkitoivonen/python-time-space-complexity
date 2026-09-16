@@ -237,6 +237,15 @@ report; it prints results without writing files. Keep every navigation target,
 including pages for removed modules and EOL Python versions. CI also checks
 coverage on the pinned newest supported Python patch.
 
+Local work and CI both run on Linux, so a module that only exists on another
+platform - `winreg`, `msvcrt`, `asyncio.windows_events` - is reported as an
+inspection error on every run and fails the audit's exit status even when no
+name is missing. That is a platform limit, not a coverage gap: read the
+missing-name count, name those modules in the module's test rationale, and do
+not chase a green exit that cannot happen here. A module that imports on Linux
+is the opposite - a miss or failure there is a blocker. This applies to the
+audit only; `make check` must still pass.
+
 ### Editing an English Page That Has Translations
 
 English is the source of truth. Every translated page records the SHA-256 of
@@ -289,7 +298,7 @@ Every page here is a complexity claim, so a wrong one is the worst defect
 this repo can ship - and `make check` cannot see it. A page can be green,
 lint-clean and confidently wrong.
 
-Before writing a claim, decide which of three kinds it is.
+Before writing a claim, decide which of four kinds it is.
 
 **A. It says something the page's complexity table does not.** These are the
 explanatory clauses - "costs no more than a str key", "one lookup",
@@ -312,6 +321,13 @@ backend, a module removed in a later Python, or a definitional choice such
 as which unit a bound is expressed in. Say so in the test file's docstring,
 next to the ones you did cover, and do not write a test that pretends
 otherwise.
+
+**D. Only another platform can settle it.** A `winreg`, `msvcrt` or
+`os.startfile` row. Guard the test with `sys.platform`, the way a
+version-specific claim is guarded with `sys.version_info`. A test left failing
+because it asserts another platform's behaviour is a broken test, not a
+finding. The skip is not coverage either: record it in the docstring beside
+the C entries, because no run this project performs verifies it.
 
 Claims are not the only thing that breaks. Two of the three pages spot-checked
 so far shipped examples that raised on the first line - one of them a

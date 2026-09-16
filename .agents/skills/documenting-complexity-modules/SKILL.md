@@ -138,8 +138,48 @@ the running interpreter; run another version only when resolving a claim about
 that version. One platform's successful audit does not establish all-platform
 coverage.
 
-A full review is complete only when the scoped gate passes, every remaining
-coverage diagnostic is accounted for, and every documented claim has evidence.
+### A Foreign Platform's Gap Is Not This Platform's Blocker
+
+Some modules cannot be imported where the work is happening: `winreg`, `msvcrt`
+and `asyncio.windows_events` on Linux, and their equivalents elsewhere. The
+audit reports each as an inspection error, and its exit status counts every
+inspection error as a failure. That conflates two different things, and only
+one of them is yours to fix.
+
+Sort each inspection error into one of three classes:
+
+- **Imports here.** The ordinary case, including your own platform's APIs. A
+  miss or a failing test is a blocker.
+- **Belongs to another platform.** `winreg` on Linux. Nothing you write makes
+  it inspectable, and no build of this interpreter would, so it is not a
+  coverage defect. Name it and its reason in the module test rationale, and
+  move on.
+- **Belongs to this platform but is missing from this build.** `dbm.gnu`
+  without `_gdbm`. You cannot inspect it here either, so it does not block
+  finishing - but it is *not* discharged, because an interpreter built with it
+  would surface real misses. Record it as unresolved, under that name, and do
+  not report the module's coverage as established.
+
+So a `--check` run reporting **zero missing names** whose only inspection
+errors are foreign-platform modules has met the coverage bar, whatever its exit
+status says. Report it that way - "0 missing; the gate cannot exit clean on
+Linux because these two modules are Windows-only" - rather than presenting a
+red gate as an open coverage gap, or implying a green one the tool cannot
+produce. Never quote the exit status alone as evidence in either direction:
+read the missing-name count and the error list. Where a missing-build module is
+among the errors, say that the count is provisional on that build.
+
+What this does not license: a reachable module that fails to import is a real
+failure, and an inspection error is never a reason to skip reading the official
+inventory for that module's APIs. A page still documents the APIs its module
+exposes on platforms you are not running, sourced from the official docs, with
+the platform named in the row.
+
+A full review is complete only when the scoped gate reports no missing names,
+every remaining coverage diagnostic is accounted for - fixed if it imports
+here, discharged if it belongs to another platform, carried as an explicit
+unresolved item if this build simply lacks it - and every documented claim has
+evidence.
 Report API completeness and claim correctness separately. If the work is an
 explicitly scoped correction, report remaining API gaps rather than describing
 the whole page as reviewed. Newly documented APIs need the same claim inventory,
@@ -227,8 +267,9 @@ make check
 
 Also inspect the final diff for:
 
-- a passing scoped public API audit and explicit accounting for remaining
-  coverage diagnostics;
+- a scoped public API audit reporting no missing names, with every remaining
+  coverage diagnostic accounted for and any unreachable-platform module named
+  as such rather than left looking like a gap;
 - defined size variables and bounds qualified only where the qualification
   changes a decision;
 - notes that survive the removal test, carrying no measured constants,
