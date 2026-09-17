@@ -9,9 +9,10 @@ Several are settled by observation rather than timing, which is the better
 kind of test: `filecmp.dircmp` accepting a directory that does not exist
 proves it reads nothing at construction, and no tolerance is involved.
 
-docs/stdlib/array.md's claims live in tests/test_array_complexity.py and
-docs/stdlib/multiprocessing.md's in tests/test_multiprocessing_complexity.py,
-which cover those modules' tables as well.
+docs/stdlib/array.md's claims live in tests/test_array_complexity.py,
+docs/stdlib/multiprocessing.md's in tests/test_multiprocessing_complexity.py
+and docs/stdlib/secrets.md's in tests/test_secrets_complexity.py, which cover
+those modules' tables as well.
 
 Deliberately not covered, because a unit test cannot settle them:
 
@@ -429,26 +430,6 @@ class TestPyexpatStreams:
         large = best_time(lambda: parse(20_000))
 
         assert large > small * 5, f"O(n) in input size: {small:.2e}s vs {large:.2e}s"
-
-
-class TestSecretsLengthIsTheOnlyLever:
-    """docs/stdlib/secrets.md: token generation is linear in the bytes asked
-    for, and that is the only thing that moves the cost."""
-
-    @pytest.mark.timing
-    def test_cost_follows_the_requested_size(self) -> None:
-        import secrets
-
-        small = best_time(lambda: secrets.token_hex(16))
-        large = best_time(lambda: secrets.token_hex(16_384))
-
-        assert large > small * 5, f"linear in bytes requested: {small:.2e}s vs {large:.2e}s"
-
-    def test_output_length_is_what_was_asked_for(self) -> None:
-        import secrets
-
-        assert len(secrets.token_bytes(32)) == 32
-        assert len(secrets.token_hex(32)) == 64
 
 
 class TestSqliteCommitBatching:
