@@ -8,6 +8,48 @@ description: Designs and reviews tests for every complexity, behavioral, and per
 Turn each documentation claim into executable evidence when execution can
 settle it, and explicitly account for the claims it cannot settle.
 
+## Model the File on the csv Tests
+
+`tests/test_csv_complexity.py`, paired with `docs/stdlib/csv.md`, is the
+reference test file. Read it in full before writing or reviewing a module's
+tests, and shape the new file after it rather than after whichever test files
+were touched most recently: a file modelled on its neighbours inherits their
+departures from the reference and adds its own. The parts to reproduce:
+
+- **A module docstring that carries the evidence.** It names the page, then
+  summarises the evidence for the page's claims: for a timing or allocation
+  measurement, the sizes used, the ratio or traced peak observed, and the
+  versions it was observed on; for a direct behavioural check, what was
+  observed; for a source-only bound, the released CPython file it follows
+  from. It ends with a "Not settled here" list for the category C and D
+  claims, with the reason for each, and an "Axes not varied" list naming the
+  dimensions the measurements held fixed. Everything a later reader needs to
+  re-run or extend a measurement is there; nothing about what the page used
+  to say is.
+- **Module constants that pin the page.** A `PAGE` path and an
+  `EXPECTED_BLOCKS` count.
+- **Small named helpers** for the measurements the file repeats: a fastest-of-
+  N timer in nanoseconds, a traced-peak-allocation probe, a block extractor
+  and a subprocess runner.
+- **One test class per table section or claim**, named for the behaviour it
+  establishes (`TestReadingIsLazy`, `TestWritingHoldsOneRow`,
+  `TestSnifferWalksTheWholeSample`), with a docstring that quotes or
+  paraphrases the row it covers and says how the test separates the documented
+  behaviour from the plausible wrong one. Test method names read as sentences:
+  `test_building_a_reader_reads_nothing`.
+- **A `TestDocumentedExamples` class** that asserts the block count, runs each
+  block that can be executed safely in its own subprocess and working
+  directory, records the concrete reason for any block it excludes, reports
+  failures by page and line, and mutation-tests its own runner, asserting
+  first that the mutation changed the source.
+
+The one class not to copy is `TestEveryPublicNameIsDocumented`, together with
+the constants and helpers only it uses (`ADDED_IN_312`, `REEXPORTS`,
+`_public_names()`, `_documented_names()`). It extracts names with `dir()` and
+compares them with the page's table, which is the job of the page-scoped audit
+gate in *Inventory Before Testing*. Run the audit instead of writing another
+extractor.
+
 ## Choose a Durable Level of Abstraction
 
 Concentrate reviews and tests on Big-O characteristics that matter to a
@@ -103,8 +145,9 @@ has a cohesive test file, keep its claims there.
 
 ### B. Restatement of the page's table
 
-Cover it in `tests/test_<module>_complexity.py`. Test all meaningful terms and
-cases in the row—not merely the happy path. For `O(k + B)`, vary `k` while
+Cover it in `tests/test_<module>_complexity.py`, shaped as *Model the File on
+the csv Tests* describes. Test all meaningful terms and cases in the row - not
+merely the happy path. For `O(k + B)`, vary `k` while
 holding `B` stable and vary `B` while holding `k` stable when practical. Check
 space claims with identity, mutation, output size, or allocation measurement as
 appropriate.

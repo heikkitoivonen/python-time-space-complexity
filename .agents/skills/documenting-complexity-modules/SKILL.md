@@ -11,10 +11,15 @@ the repository's highest-risk content.
 
 ## Establish Scope and Evidence
 
-1. Read `AGENTS.md`, `CONTRIBUTING.md`, and representative nearby pages and
-   tests. Prefer recent page/test pairs such as:
-   - `docs/stdlib/graphlib.md` and `tests/test_graphlib_complexity.py`
-   - `docs/stdlib/struct.md` and `tests/test_struct_complexity.py`
+1. Read `AGENTS.md`, `CONTRIBUTING.md`, and the reference pair:
+   - `docs/stdlib/csv.md`
+   - `tests/test_csv_complexity.py`
+
+   That pair is the style anchor for every page and test file in this
+   repository. The most recently modified pages are not a substitute: a page
+   modelled on its neighbours inherits their departures from the reference
+   and adds its own. Read the reference pair in full before writing, and
+   compare the finished page against it, not against its neighbours.
 2. Identify every public class, function, constant, and public method the page
    should cover. Use official Python documentation plus runtime inspection such
    as `dir(module)` and `dir(class)`. Filter private names, then distinguish
@@ -37,11 +42,20 @@ complexity rule without checking the operation's actual code path.
 
 ## Write the Page
 
-Follow the local style of adjacent pages:
+Use `docs/stdlib/csv.md` as the structural reference. The rules below
+describe its shape; where a rule allows a choice, choose what the csv page
+did:
 
 1. Title: `# <name> Module Complexity` or the established builtin equivalent.
-2. Give a short performance-focused introduction.
-3. Put `## Complexity Reference` first and include a table with exactly these
+2. Give a short performance-focused introduction: what the module does, what
+   its unit of work is, and what it does or does not hold in memory. Two
+   paragraphs at most.
+3. Define every size variable in prose right after the introduction, before
+   the table, in one place: "`n` is rows, `k` is the characters in one row".
+   State any cost-model assumption there too, such as treating key hashing as
+   O(1). A variable used by a single subsection's table may instead be defined
+   in that table's Notes, as `s = sample length` is in the Sniffer rows.
+4. Put `## Complexity Reference` next and include a table with exactly these
    semantic columns:
 
    ```markdown
@@ -49,20 +63,54 @@ Follow the local style of adjacent pages:
    |-----------|------|-------|-------|
    ```
 
-4. Cover all scoped operations at the altitude set by *Document the Common
+   Split the reference into `###` subsections, one per class or natural group
+   (`### reader`, `### DictReader`, `### Dialects and field limits`,
+   `### Constants and exceptions`), each with its own table. Head a subsection
+   with the class name where there is one. Write the Operation cell as the
+   qualified call with its signature (`csv.DictReader(f, fieldnames=None, ...)`,
+   `DictWriter.writerow(rowdict)`), the qualified name for an attribute or
+   constant (`DictReader.fieldnames`, `csv.QUOTE_ALL`), and a short label for
+   a protocol such as iteration ("Iterating a `DictReader`"), so the audit can
+   match the name. Price every row, including constants and exception
+   classes: reading a constant is O(1) attribute access, so say O(1) rather
+   than leaving a dash, and a class whose construction does work gets that
+   cost instead.
+5. Follow the reference with topic sections whose headings name the subject in
+   Title Case (`## Reading CSV Files`, `### Lazy vs Eager Reading`,
+   `## Sniffing an Unknown Format`), not a sentence stating the claim. Each
+   opens with one or two sentences saying what the cost is and why, then a
+   runnable example; where the sentences would only restate the table, go
+   straight to the example. Nest `###` under a `##` topic where a topic has
+   several facets.
+6. Close with, in this order: `## Common Patterns` where a realistic
+   read-transform-write or aggregation example helps; `## Version Notes` as a
+   bulleted list of `**Python 3.x+**: ...` entries for changes on supported
+   versions and `**All Python 3**: ...` for a caveat that holds on every one;
+   `## Related Modules` as `**[name](name.md)** - why a reader would go there`;
+   and `## Performance Best Practices` as a ✅ **Do** list and a ❌ **Avoid**
+   list, each item tied to a cost on this page. Omit a closing section only
+   when the module has nothing to put in it.
+7. Cover all scoped operations at the altitude set by *Document the Common
    Case* below: one bound per operation, with its size variables defined.
    Distinguish best, average, amortized and worst only where they differ
    asymptotically and ordinary use can reach the difference; state eager versus
    lazy work, cache effects, output-sensitive terms, and version boundaries
    where they change the result on a version this project supports.
-5. Add concise sections only where a non-obvious cost changes a practical
+8. Add topic sections only where a non-obvious cost changes a practical
    choice. Exclude generic usage advice unrelated to complexity, and prefer no
    section to one that restates the table in sentences.
-6. Include runnable examples that demonstrate the documented operation or a
-   performance consequence. Annotate relevant operations with their complexity.
-   Avoid huge allocations or slow benchmark-style examples in docs.
-7. Link related operations when the comparison helps readers choose between
-   different costs.
+9. Include runnable examples that demonstrate the documented operation or a
+   performance consequence. Write them the way the csv page does: `import` at
+   the top, self-contained inputs (in memory, such as `io.StringIO` or a
+   literal, where the API allows; a temporary resource the block creates and
+   removes where it does not), a trailing `# O(...)` comment on the
+   operations whose cost the example demonstrates (repeated calls and
+   incidental setup need not each carry one), and `assert` statements that
+   pin the result so the block proves something when the test suite runs it.
+   No `print()` output to read by eye. Avoid huge allocations or slow
+   benchmark-style examples in docs.
+10. Link related operations when the comparison helps readers choose between
+    different costs.
 
 Every table row, annotation, caption, example comment, explanatory sentence,
 warning, and recommendation that describes cost or behavior is a claim. Make a
@@ -274,6 +322,9 @@ Also inspect the final diff for:
   changes a decision;
 - notes that survive the removal test, carrying no measured constants,
   pathological-input pricing, or restated mechanism;
+- the same section order, heading style, table layout and example shape as
+  `docs/stdlib/csv.md`, checked against that page rather than against the
+  pages edited most recently;
 - every claim mapped to evidence;
 - every fenced code section tested or explicitly accounted for, with semantic
   assertions where execution alone is insufficient;
