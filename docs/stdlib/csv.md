@@ -379,16 +379,6 @@ for row in csv.DictReader(io.StringIO(data)):  # O(k + m) per row
 assert dict(counts) == {'NYC': 2, 'LA': 1}  # O(unique cities)
 ```
 
-## Version Notes
-
-- **Python 3.12+**: Added `QUOTE_STRINGS` and `QUOTE_NOTNULL`
-- **All Python 3**: Open files with `newline=''`, or embedded newlines in quoted fields break
-
-## Related Modules
-
-- **[json](json.md)** - O(n) parsing; use for hierarchical data
-- **[io](io.md)** - `StringIO` for in-memory CSV processing
-
 ## Performance Best Practices
 
 ✅ **Do**:
@@ -403,3 +393,13 @@ assert dict(counts) == {'NYC': 2, 'LA': 1}  # O(unique cities)
 - `list(reader)` on a large file - that is the one thing here that costs O(n·k) memory
 - Splitting on `,` by hand - same O(k), but wrong for quoted fields and embedded newlines
 - Sniffing the whole file when a few kilobytes decide it
+
+## Version Notes
+
+- **Python 3.12+**: Added `QUOTE_STRINGS` and `QUOTE_NOTNULL`
+- **All Python 3**: Open files with `newline=''`, or embedded newlines in quoted fields break
+
+## Related Modules
+
+- **[json](json.md)** - O(n) parsing; use for hierarchical data
+- **[io](io.md)** - `StringIO` for in-memory CSV processing

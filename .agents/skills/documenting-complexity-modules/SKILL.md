@@ -83,13 +83,13 @@ did:
    straight to the example. Nest `###` under a `##` topic where a topic has
    several facets.
 6. Close with, in this order: `## Common Patterns` where a realistic
-   read-transform-write or aggregation example helps; `## Version Notes` as a
-   bulleted list of `**Python 3.x+**: ...` entries for changes on supported
-   versions and `**All Python 3**: ...` for a caveat that holds on every one;
-   `## Related Modules` as `**[name](name.md)** - why a reader would go there`;
-   and `## Performance Best Practices` as a ✅ **Do** list and a ❌ **Avoid**
-   list, each item tied to a cost on this page. Omit a closing section only
-   when the module has nothing to put in it.
+   read-transform-write or aggregation example helps; `## Performance Best
+   Practices` as a ✅ **Do** list and a ❌ **Avoid** list, each item tied to a
+   cost on this page; `## Version Notes` as a bulleted list of
+   `**Python 3.x+**: ...` entries for changes on supported versions and
+   `**All Python 3**: ...` for a caveat that holds on every one; and
+   `## Related Modules` as `**[name](name.md)** - why a reader would go there`.
+   Omit a closing section only when the module has nothing to put in it.
 7. Cover all scoped operations at the altitude set by *Document the Common
    Case* below: one bound per operation, with its size variables defined.
    Distinguish best, average, amortized and worst only where they differ
