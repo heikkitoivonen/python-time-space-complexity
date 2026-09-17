@@ -17,6 +17,8 @@ also retains its O(m + h) header separately from the per-row storage.
 |-----------|------|-------|-------|
 | `csv.reader(csvfile, dialect, **fmtparams)` | O(1) | O(1) | Wraps any iterable of strings; nothing is read yet |
 | `next(reader)`, iterating a reader | O(k) | O(k) | k = row length; the parsed row is the only thing held |
+| `reader.line_num` | O(1) | O(1) | Strings taken from the input so far, not rows: from a file, a quoted field spanning two lines advances it by two |
+| `reader.dialect` | O(1) | O(1) | The validated dialect object, built once with the reader |
 
 ### writer
 
@@ -25,6 +27,7 @@ also retains its O(m + h) header separately from the per-row storage.
 | `csv.writer(csvfile, dialect, **fmtparams)` | O(1) | O(1) | Needs only a `write()` method |
 | `writer.writerow(row)` | O(k) | O(k) | The whole line is built as one string before it is written |
 | `writer.writerows(rows)` | O(n·k) | O(k) | One `writerow` per row, so the peak is the widest row, not the batch |
+| `writer.dialect` | O(1) | O(1) | The validated dialect object, built once with the writer |
 
 ### DictReader
 
@@ -41,6 +44,7 @@ also retains its O(m + h) header separately from the per-row storage.
 | `csv.DictWriter(f, fieldnames, restval='', extrasaction='raise')` | O(m) | O(m) | Keeps the field order it was given |
 | `DictWriter.writeheader()` | O(m + h) | O(m + h) | Builds a header dictionary and renders all header characters |
 | `DictWriter.writerow(rowdict)` | O(m + k) | O(m + k) | Successful rows without surplus keys: projects the field order, validates keys by default, and renders all row characters |
+| `DictWriter.writerows(rowdicts)` | O(n·(m + k)) | O(m + k) | Rows without surplus keys: one `writerow` per dictionary through a lazy `map`, so the peak is the widest row, not the batch |
 
 ### Dialects and field limits
 
@@ -52,14 +56,16 @@ also retains its O(m + h) header separately from the per-row storage.
 | `csv.get_dialect(name)` | O(1) | O(1) | Dict lookup |
 | `csv.list_dialects()` | O(d) | O(d) | d = registered dialects |
 | `csv.Dialect`, `csv.excel`, `csv.excel_tab`, `csv.unix_dialect` | O(1) | O(1) | Attribute holders; validated once when a reader or writer is built |
+| `Dialect.delimiter`, `Dialect.quotechar`, `Dialect.escapechar`, `Dialect.doublequote`, `Dialect.skipinitialspace`, `Dialect.lineterminator`, `Dialect.quoting`, `Dialect.strict` | O(1) | O(1) | Format parameters, supplied by a `Dialect` subclass or as keyword arguments and copied into a reader or writer when it is built; changing them afterwards does not reach anything already built |
 
 ### Sniffer
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `csv.Sniffer()` | O(1) | O(1) | Holds no state between calls |
+| `csv.Sniffer()` | O(1) | O(1) | Holds nothing between calls but `preferred` |
 | `Sniffer.sniff(sample, delimiters=None)` | O(s) | O(s) | s = sample length; several regex passes plus per-character frequency tables |
-| `Sniffer.has_header(sample)` | O(s) | O(s) | Calls `sniff()` first, which is what dominates; only the first 20 rows are then typed |
+| `Sniffer.has_header(sample)` | O(s) | O(s) | Calls `sniff()` first, which is what dominates; only the first 21 rows are then typed |
+| `Sniffer.preferred` | O(1) | O(1) | The delimiters tried in order when the sample supports more than one; reassign it on an instance to change the tie-break |
 
 ### Constants and exceptions
 
@@ -73,7 +79,7 @@ also retains its O(m + h) header separately from the per-row storage.
 
 ### Lazy vs Eager Reading
 
-A reader holds one row. Building it reads nothing, and each step parses exactly one line, so
+A reader holds one row. Building it reads nothing, and each step parses one record, so
 memory follows the widest row rather than the file.
 
 ```python
@@ -88,6 +94,7 @@ header = next(reader)                   # O(k)
 assert header == ['name', 'age']
 for row in reader:                      # O(k) per row
     assert len(row) == 2
+assert reader.line_num == 3             # O(1) - lines taken from the file, not rows
 
 # EAGER: O(n·k) memory - the whole file becomes a list of lists
 all_rows = list(csv.reader(io.StringIO(data)))  # O(n·k) time and memory
@@ -109,6 +116,8 @@ try:
     list(csv.reader([oversized]))
 except csv.Error as error:
     assert 'field limit' in str(error)
+else:
+    raise AssertionError('a field over the limit was parsed')
 
 # Setting it returns the previous value, so it can be restored
 previous = csv.field_size_limit(limit * 4)  # O(1)
@@ -213,14 +222,17 @@ writer = csv.DictWriter(buffer, fieldnames=['Name', 'Age'])  # O(m)
 
 writer.writeheader()  # O(m + h)
 writer.writerow({'Name': 'Alice', 'Age': 30})  # O(m + k) to project and render
+writer.writerows([{'Name': 'Bob', 'Age': 25}])  # O(n·(m + k)) time, O(m + k) memory
 
-assert buffer.getvalue() == 'Name,Age\r\nAlice,30\r\n'
+assert buffer.getvalue() == 'Name,Age\r\nAlice,30\r\nBob,25\r\n'
 
 # A key outside fieldnames is an error unless extrasaction says otherwise
 try:
     writer.writerow({'Name': 'Bob', 'Nickname': 'B'})
 except ValueError as error:
     assert 'not in fieldnames' in str(error)
+else:
+    raise AssertionError('a surplus key was written')
 ```
 
 ## Dialects
@@ -245,12 +257,51 @@ try:
     csv.get_dialect('pipes')
 except csv.Error as error:
     assert 'unknown dialect' in str(error)
+else:
+    raise AssertionError('an unregistered dialect was found')
 
 # The three built-in dialects are always registered
 assert set(csv.list_dialects()) == {'excel', 'excel-tab', 'unix'}
 assert csv.excel.delimiter == ',' and csv.excel_tab.delimiter == '\t'
 assert csv.unix_dialect.quoting == csv.QUOTE_ALL
 assert issubclass(csv.excel, csv.Dialect)
+```
+
+### Subclassing Dialect
+
+A `Dialect` subclass is the same bundle as a set of keyword arguments. Passed as a class, its
+attributes are read once, when the reader or writer is built: that is where a bad value is
+rejected, and a change to the class afterwards reaches only readers and writers built later.
+Instantiating the subclass validates the same attributes, raising `csv.Error` instead.
+
+```python
+import csv
+import io
+
+class Pipes(csv.Dialect):
+    delimiter = '|'
+    quotechar = '"'
+    doublequote = True
+    skipinitialspace = False
+    lineterminator = '\n'
+    quoting = csv.QUOTE_MINIMAL
+
+reader = csv.reader(io.StringIO("a|b\n"), dialect=Pipes)  # O(1) - copies the attributes
+assert reader.dialect.delimiter == '|'  # O(1)
+
+Pipes.delimiter = ';'
+assert next(reader) == ['a', 'b']  # the reader already built keeps '|'
+assert next(csv.reader(io.StringIO("a;b\n"), dialect=Pipes)) == ['a', 'b']
+
+class Broken(Pipes):
+    delimiter = 'ab'
+
+try:
+    csv.reader(io.StringIO(), dialect=Broken)  # rejected here, not on the first row
+except TypeError as error:
+    assert 'delimiter' in str(error)
+else:
+    raise AssertionError('a two-character delimiter was accepted')
 ```
 
 ### Custom Delimiters Without Registering
@@ -282,6 +333,13 @@ dialect = csv.Sniffer().sniff(sample)  # O(s), s = sample length
 assert dialect.delimiter == ';'
 
 assert csv.Sniffer().has_header(sample) is True  # O(s), sniff dominates
+
+# When two delimiters fit the sample equally, `preferred` decides in its order
+ambiguous = "a;b,c\nd;e,f\ng;h,i\n"
+sniffer = csv.Sniffer()
+assert sniffer.sniff(ambiguous).delimiter == ','  # ',' precedes ';' by default
+sniffer.preferred = [';', ',']  # O(1)
+assert sniffer.sniff(ambiguous).delimiter == ';'
 ```
 
 ## Common Patterns

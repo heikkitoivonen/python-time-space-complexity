@@ -107,7 +107,9 @@ did:
    operations whose cost the example demonstrates (repeated calls and
    incidental setup need not each carry one), and `assert` statements that
    pin the result so the block proves something when the test suite runs it.
-   No `print()` output to read by eye. Avoid huge allocations or slow
+   Where the result is an exception, catch it, assert on its message, and
+   add an `else` that raises, so a block that stops raising fails. No
+   `print()` output to read by eye. Avoid huge allocations or slow
    benchmark-style examples in docs.
 10. Link related operations when the comparison helps readers choose between
     different costs.

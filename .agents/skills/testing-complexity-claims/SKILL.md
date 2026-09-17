@@ -16,18 +16,18 @@ tests, and shape the new file after it rather than after whichever test files
 were touched most recently: a file modelled on its neighbours inherits their
 departures from the reference and adds its own. The parts to reproduce:
 
-- **A module docstring that carries the evidence.** It names the page, then
-  summarises the evidence for the page's claims: for a timing or allocation
-  measurement, the sizes used, the ratio or traced peak observed, and the
-  versions it was observed on; for a direct behavioural check, what was
-  observed; for a source-only bound, the released CPython file it follows
-  from. It ends with a "Not settled here" list for the category C and D
-  claims, with the reason for each, and an "Axes not varied" list naming the
-  dimensions the measurements held fixed. Everything a later reader needs to
-  re-run or extend a measurement is there; nothing about what the page used
-  to say is.
-- **Module constants that pin the page.** A `PAGE` path and an
-  `EXPECTED_BLOCKS` count.
+- **A module docstring that carries the evidence.** It opens "Tests for
+  docs/stdlib/<module>.md." and says in a paragraph how the page's claims are
+  settled. A "Measurement scope:" list then gives the evidence per claim:
+  for a timing or allocation measurement, the sizes used, the ratio or traced
+  peak asserted, and where it matters the versions; for a direct behavioural
+  check, what was observed; for a source-only bound, the released CPython
+  file it follows from. A "Not settled here:" list closes it with the
+  category C and D claims and the reason for each, and the dimensions the
+  measurements held fixed. Everything a later reader needs to re-run or
+  extend a measurement is there; nothing about what the page used to say is.
+- **`from __future__ import annotations`**, then a `PAGE` path and an
+  `EXPECTED_BLOCKS` count as module constants.
 - **Small named helpers** for the measurements the file repeats: a fastest-of-
   N timer in nanoseconds, a traced-peak-allocation probe, a block extractor
   and a subprocess runner.
@@ -40,15 +40,13 @@ departures from the reference and adds its own. The parts to reproduce:
 - **A `TestDocumentedExamples` class** that asserts the block count, runs each
   block that can be executed safely in its own subprocess and working
   directory, records the concrete reason for any block it excludes, reports
-  failures by page and line, and mutation-tests its own runner, asserting
-  first that the mutation changed the source.
+  failures by page and line, and mutation-tests its own runner by flipping
+  one assertion in a block, asserting first that the mutation changed the
+  source.
 
-The one class not to copy is `TestEveryPublicNameIsDocumented`, together with
-the constants and helpers only it uses (`ADDED_IN_312`, `REEXPORTS`,
-`_public_names()`, `_documented_names()`). It extracts names with `dir()` and
-compares them with the page's table, which is the job of the page-scoped audit
-gate in *Inventory Before Testing*. Run the audit instead of writing another
-extractor.
+The file carries no API coverage test of its own. Name coverage is the job of
+the page-scoped audit gate in *Inventory Before Testing*; run that, and do
+not add a `dir()`-based extractor to the test file.
 
 ## Choose a Durable Level of Abstraction
 
