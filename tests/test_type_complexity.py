@@ -75,11 +75,19 @@ def test_class_creation_copies_the_namespace() -> None:
 
 @pytest.mark.timing
 def test_class_creation_scales_with_namespace_size() -> None:
+    """A 64x namespace step separates linear work from constant or quadratic.
+
+    At 1,024 and 65,536 ordinary integer-valued attributes, linear predicts
+    64x and quadratic 4,096x; the accepted range is 8x--512x. CPython 3.14
+    measurements give 70x--87x. Namespace construction is outside the timer;
+    bases, attribute values and class name stay fixed, with no custom hooks.
+    """
     times = []
-    for count in (32, 4_096):
+    for count in (1_024, 65_536):
         namespace = dict.fromkeys((f"a{i}" for i in range(count)), 0)
         times.append(fastest(partial(type, "Sized", (), namespace)))
-    assert times[1] / times[0] > 8, times
+    ratio = times[1] / times[0]
+    assert 8 < ratio < 512, f"64x namespace size: {times} seconds per class, ratio={ratio:.2f}"
 
 
 @pytest.mark.parametrize("cls", [object, chain(20), merging_class(4, 8)])
