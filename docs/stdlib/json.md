@@ -116,22 +116,15 @@ assert ''.join(chunks) == text                # O(n·d) to exhaust
 
 ### Nesting Depth
 
-Both directions recurse once per level, so a document nested deeper than the interpreter allows
-raises `RecursionError` rather than running out of memory. `dump()` and `iterencode()` hold one
-Python frame per level, so `sys.getrecursionlimit()` bounds the depth they can write.
+Both directions use recursion guards, but there is no portable maximum JSON nesting depth.
+The C encoder and decoder's limits depend on the Python version, build and available stack.
+`dump()` and `iterencode()` hold one Python frame per level, so `sys.getrecursionlimit()`
+bounds the depth they can write.
 
 ```python
 import io
 import json
 import sys
-
-deep = '[' * 100_000 + ']' * 100_000
-try:
-    json.loads(deep)  # O(n) until the recursion limit stops it
-except RecursionError:
-    pass
-else:
-    raise AssertionError('a 100,000-deep document was parsed')
 
 root = node = {}
 for _ in range(sys.getrecursionlimit() * 2):
@@ -139,8 +132,8 @@ for _ in range(sys.getrecursionlimit() * 2):
     node = node['child']
 try:
     json.dump(root, io.StringIO())  # one Python frame per level
-except RecursionError:
-    pass
+except RecursionError as error:
+    assert 'recursion' in str(error).lower()
 else:
     raise AssertionError('dump() serialized past the recursion limit')
 ```
@@ -371,9 +364,8 @@ assert json.load(buffer) == data  # O(n): reads it all, then parses it all
 - **Python 3.10.7+**: unless the limit is disabled, an integer longer than
   `sys.get_int_max_str_digits()` digits raises `ValueError` when parsed or written; `parse_int`
   can read one as something other than `int`
-- **All Python 3**: nesting deeper than the interpreter allows raises `RecursionError` in both
-  directions; `dump()` and `iterencode()` hold one Python frame per level, so
-  `sys.getrecursionlimit()` bounds them
+- **All Python 3**: `dump()` and `iterencode()` are bounded by `sys.getrecursionlimit()`;
+  the C encoder and decoder have no portable maximum nesting depth
 
 ## Related Modules
 

@@ -84,11 +84,11 @@ Measurement scope:
   by identity, and carries the five attributes; a direct construction
   agrees, and one with a 100,000-character `msg` carries all of it in
   `str(error)`.
-* `loads()` on 100,000 nested arrays, `dumps()` on 100,000 nested lists and
-  `dump()` on twice `sys.getrecursionlimit()` nested dictionaries raise
-  `RecursionError`; `dump()` on 100 levels does not. The exact depth at
-  which `dump()` fails depends on the frames already active, so only the
-  bound is asserted.
+* `dump()` and exhausted `iterencode()` on twice `sys.getrecursionlimit()`
+  nested dictionaries raise `RecursionError`; both accept 100 levels.
+  The exact failure depth depends on the frames already active, so only
+  the bound is asserted. `loads()` and `dumps()` round-trip 100 nested
+  arrays, with the decoded depth checked iteratively.
 * `python -m json.tool` is run in a subprocess: a second document after the
   first prints nothing and exits 1 by default, and with `--json-lines` it
   prints the first line before failing on a malformed second. Whether it
@@ -103,6 +103,11 @@ Measurement scope:
 
 Not settled here:
 
+* The C encoder and decoder's recursion guards follow
+  `scan_once_unicode` and `encoder_listencode_obj` in CPython 3.10-3.14's
+  Modules/_json.c. Their failure depth depends on the version, build and
+  available stack; a fixed input depth cannot establish a portable limit.
+  These tests do not exhaust the C stack to measure that environment's limit.
 * That the remaining `dump()` term is exactly one generator frame per open
   container plus the marker dict is read from Lib/json/encoder.py; the
   tests show the peak follows depth and the largest scalar and not the
@@ -213,16 +218,6 @@ def at_depth(n: int, d: int) -> dict[str, Any]:
     for _ in range(d):
         node = node["child"]
     node["rows"] = wide(n)["rows"]
-    return root
-
-
-def nested_lists(d: int) -> list[Any]:
-    """An empty list nested d levels."""
-    root: list[Any] = []
-    node = root
-    for _ in range(d):
-        node.append([])
-        node = node[0]
     return root
 
 
@@ -960,22 +955,32 @@ class TestDecodeErrorCostsItsPosition:
 
 
 class TestNestingIsBoundedByRecursion:
-    """Nesting past the interpreter's limit raises `RecursionError` in both
-    directions; `dump()` is bounded by `sys.getrecursionlimit()`."""
+    """Python encoders obey `sys.getrecursionlimit()`; the C paths round-trip
+    moderate nesting without asserting a platform-specific failure depth."""
 
-    def test_loads_raises_on_deep_arrays(self) -> None:
-        with pytest.raises(RecursionError):
-            json.loads("[" * 100_000 + "]" * 100_000)
+    def test_c_paths_preserve_nested_arrays(self) -> None:
+        text = "[" * 100 + "]" * 100
+        value = json.loads(text)
 
-    def test_dumps_raises_on_deep_lists(self) -> None:
-        with pytest.raises(RecursionError):
-            json.dumps(nested_lists(100_000))
+        assert json.dumps(value) == text
+        for _ in range(99):
+            assert isinstance(value, list) and len(value) == 1
+            value = value[0]
+        assert value == []
 
-    def test_dump_raises_within_twice_the_python_recursion_limit(self) -> None:
-        json.dump(deep(100), CountingSink())
+    @pytest.mark.parametrize("operation", ["dump", "iterencode"])
+    def test_python_encoder_raises_within_twice_the_recursion_limit(self, operation: str) -> None:
+        def encode(value: Any) -> None:
+            if operation == "dump":
+                json.dump(value, CountingSink())
+            else:
+                for _ in json.JSONEncoder().iterencode(value):
+                    pass
 
-        with pytest.raises(RecursionError):
-            json.dump(deep(sys.getrecursionlimit() * 2), CountingSink())
+        encode(deep(100))
+
+        with pytest.raises(RecursionError, match="recursion"):
+            encode(deep(sys.getrecursionlimit() * 2))
 
 
 READS_ALL_LINES_FIRST = sys.version_info >= (3, 14, 5) or (3, 13, 14) <= sys.version_info < (3, 14)
