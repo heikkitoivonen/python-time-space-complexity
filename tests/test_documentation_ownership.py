@@ -5,6 +5,7 @@ collections and XML files in the subprocess's temporary working directory.
 The ElementTree file-reading example receives a small XML fixture.
 These checks cover example execution and page ownership, not every complexity
 claim on the destination pages; those belong to the type-specific tests.
+The collections page's own examples run in tests/test_collections_complexity.py.
 """
 
 import collections
@@ -19,26 +20,33 @@ import pytest
 DOCS = Path(__file__).parent.parent / "docs" / "stdlib"
 DEDICATED = {
     "deque": "deque.md",
-    "DefaultDict": "defaultdict.md",
+    "defaultdict": "defaultdict.md",
     "Counter": "counter.md",
-    "NamedTuple": "namedtuple.md",
+    "namedtuple": "namedtuple.md",
     "OrderedDict": "ordereddict.md",
 }
 
 
 def test_collections_types_have_one_documentation_owner() -> None:
+    """collections.md links each type with its own page from a section of its
+    own, with no table there, and prices ChainMap and the User* wrappers in
+    its own Complexity Reference."""
     text = (DOCS / "collections.md").read_text()
     sections = dict(re.findall(r"^## ([^\n]+)\n(.*?)(?=^## |\Z)", text, re.M | re.S))
+    subsections = dict(re.findall(r"^### ([^\n]+)\n(.*?)(?=^#{2,3} |\Z)", text, re.M | re.S))
     local = {"ChainMap", "UserDict", "UserList", "UserString"}
     exported = {name.lower() for name in collections.__all__}
     assert {name.lower() for name in DEDICATED.keys() | local} == exported
-    for heading, target in DEDICATED.items():
-        section = sections[heading]
+    for name, target in DEDICATED.items():
+        section = sections[name]
         assert f"]({target})" in section
         assert "```" not in section and "|" not in section
+        assert name not in subsections
         assert (DOCS / target).is_file()
-    for heading in local:
-        assert "|" in sections[heading]
+    for name in local:
+        assert "| Operation | Time | Space | Notes |" in subsections[name]
+    assert "](collections.abc.md)" in sections["collections.abc"]
+    assert (DOCS / "collections.abc.md").is_file()
 
 
 @pytest.mark.parametrize(
@@ -79,7 +87,6 @@ def _run(source: str, cwd: Path) -> subprocess.CompletedProcess[str]:
 @pytest.mark.parametrize(
     ("page", "count"),
     [
-        ("collections.md", 1),
         ("counter.md", 11),
         ("defaultdict.md", 11),
         ("xml.etree.elementtree.md", 3),
@@ -94,8 +101,6 @@ def test_owned_examples_run(page: str, count: int, tmp_path: Path) -> None:
         (cwd / "data.xml").write_text('<root><item id="1">A</item></root>')
         result = _run(source, cwd)
         assert result.returncode == 0, f"{page}:{line}\n{result.stdout}\n{result.stderr}"
-        if page == "collections.md":
-            assert result.stdout.splitlines() == ["60", "3"]
         if page == "xml.etree.elementtree.md" and "output.xml" in source:
             import xml.etree.ElementTree as ET
 
@@ -105,8 +110,8 @@ def test_owned_examples_run(page: str, count: int, tmp_path: Path) -> None:
 
 
 def test_example_runner_reports_broken_code(tmp_path: Path) -> None:
-    source = _blocks("collections.md")[0][1]
-    broken = source.replace("config = ChainMap", "other = ChainMap", 1)
+    source = _blocks("counter.md")[0][1]
+    broken = source.replace("c = Counter(", "other = Counter(", 1)
     assert broken != source
     result = _run(broken, tmp_path)
     assert result.returncode != 0 and "NameError" in result.stderr

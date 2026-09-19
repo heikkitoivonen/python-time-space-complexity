@@ -164,6 +164,7 @@ nav:
     - Codecs: stdlib/codecs.md
     - Codeop: stdlib/codeop.md
     - Collections: stdlib/collections.md
+    - Collections.abc: stdlib/collections.abc.md
     - Colorsys: stdlib/colorsys.md
     - Compileall: stdlib/compileall.md
     - Compression: stdlib/compression.md
