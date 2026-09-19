@@ -2,17 +2,19 @@
 
 The table, counting patterns, selection and arithmetic are covered here.
 
-Two claims the table has to be careful about:
+Measurement scope:
 
-* `subtract()` is not O(1) in space. Subtracting a key the counter does not
-  have creates it with a negative count.
-* Whether Counter beats a counting loop depends on which Counter usage is
-  meant. `Counter(iterable)` counts in C through `_count_elements` and beats a
-  `defaultdict(int)` loop; incrementing one key at a time does not use that
-  path and is slower than the same loop.
+* Subtracting absent keys creates negative counts, growing the stored key set.
+* Constructor and update calls with lists and iterators delegate once to the
+  same CPython counting helper and produce the same counts as a Python loop.
+  Per-key increments do not call that helper.
+* Timing tests vary input size with fixed-cost keys and counts.
 
-Timing tests vary input size with fixed-cost keys and counts.
+Not settled here: relative speed of bulk counting and Python counting loops
+across workloads and interpreters; neither method has a universal speed ranking.
 """
+
+from __future__ import annotations
 
 import heapq
 import importlib
@@ -71,113 +73,46 @@ class TestSubtractAllocates:
         assert "absent" not in counter
 
 
-class TestCountingSpeedDependsOnHowYouFeedIt:
-    """The page's "slightly slower" claim, in both directions.
+class TestCountingPaths:
+    """Observe bulk helper dispatch and counts without a wall-clock ranking."""
 
-    Counter.update() dispatches to _count_elements, which has a C
-    implementation, but only when handed an iterable - that half has a known
-    cause. The per-key half is a measurement without one: __missing__ is not
-    the explanation, as test_missing_is_not_the_explanation below shows.
-    """
-
-    @pytest.mark.timing
-    def test_counting_a_whole_iterable_beats_a_python_loop(self) -> None:
-        def manual() -> defaultdict[int, int]:
-            counts: defaultdict[int, int] = defaultdict(int)
-            for value in SAMPLE:
-                counts[value] += 1
-            return counts
-
-        bulk_time = best_time(lambda: Counter(SAMPLE), repeats=3)
-        loop_time = best_time(manual, repeats=3)
-
-        assert bulk_time < loop_time, (
-            f"Counter(iterable) counts in C: {bulk_time:.2e}s vs loop {loop_time:.2e}s"
-        )
-
-    @pytest.mark.timing
-    def test_counting_one_key_at_a_time_loses_to_defaultdict(self) -> None:
-        def with_counter() -> Counter:
-            counts: Counter = Counter()
-            for value in SAMPLE:
-                counts[value] += 1
-            return counts
-
-        def with_defaultdict() -> defaultdict[int, int]:
-            counts: defaultdict[int, int] = defaultdict(int)
-            for value in SAMPLE:
-                counts[value] += 1
-            return counts
-
-        counter_time = best_time(with_counter, repeats=3)
-        default_time = best_time(with_defaultdict, repeats=3)
-
-        assert counter_time > default_time, (
-            f"per-key increments miss the C path: Counter {counter_time:.2e}s "
-            f"defaultdict {default_time:.2e}s"
-        )
-
-    @pytest.mark.timing
-    def test_missing_is_not_the_explanation(self) -> None:
-        """__missing__ fires once per distinct key, not once per increment.
-
-        Counter.__missing__ being written in Python does not explain the
-        gap: over 200,000 increments of 1,000 keys it runs 1,000 times, and a
-        Counter that never misses at all is still the slower one.
-        """
-        calls = {"n": 0}
-
-        class Counted(Counter):
-            def __missing__(self, key: Any) -> int:
-                calls["n"] += 1
-                return 0
-
-        counted: Counted = Counted()
-        for value in SAMPLE:
-            counted[value] += 1
-
-        assert calls["n"] == 1_000, f"once per distinct key, got {calls['n']}"
-
-        seeded = dict.fromkeys(range(1000), 0)
-        warm_counter = Counter(seeded)
-        warm_default = defaultdict(int, seeded)
-
-        def loop(mapping: Any) -> None:
-            for value in SAMPLE:
-                mapping[value] += 1
-
-        counter_time = best_time(lambda: loop(warm_counter), repeats=3)
-        default_time = best_time(lambda: loop(warm_default), repeats=3)
-
-        assert counter_time > default_time, (
-            f"with zero misses the gap remains, so __missing__ is not it: "
-            f"Counter {counter_time:.2e}s defaultdict {default_time:.2e}s"
-        )
-
-    @pytest.mark.timing
-    def test_update_uses_the_same_fast_path_as_the_constructor(self) -> None:
-        construct_time = best_time(lambda: Counter(SAMPLE), repeats=3)
-
-        def via_update() -> Counter:
-            counts: Counter = Counter()
-            counts.update(SAMPLE)
-            return counts
-
-        update_time = best_time(via_update, repeats=3)
-
-        assert update_time < construct_time * 3, (
-            f"update(iterable) should be about as fast as Counter(iterable): "
-            f"{update_time:.2e}s vs {construct_time:.2e}s"
-        )
-
-    def test_the_c_helper_is_what_makes_the_difference(self) -> None:
-        """Named in the page's explanation, so worth pinning."""
-        # Imported dynamically: _collections is a built-in extension module
-        # with no stub, so a plain import fails the type check.
+    @pytest.mark.parametrize("via_update", [False, True])
+    @pytest.mark.parametrize("iterator", [False, True])
+    def test_bulk_counting_delegates_once_and_matches_a_loop(
+        self, monkeypatch: pytest.MonkeyPatch, via_update: bool, iterator: bool
+    ) -> None:
         helpers = importlib.import_module("_collections")
+        collections_module = importlib.import_module("collections")
+        original = collections_module._count_elements
+        assert original is helpers._count_elements
+        calls = []
 
-        assert hasattr(helpers, "_count_elements")
-        assert "_count_elements" in Counter.update.__code__.co_names
+        def record(mapping: Any, items: Any) -> None:
+            calls.append((mapping, items))
+            original(mapping, items)
+
+        monkeypatch.setattr(collections_module, "_count_elements", record)
+        data = [1, 2, 2, 3, 3, 3]
+        source = iter(data) if iterator else data
+        if via_update:
+            result = Counter()
+            result.update(source)
+        else:
+            result = Counter(source)
+
+        assert len(calls) == 1
+        assert calls[0][0] is result
+        assert calls[0][1] is source
+        assert result == {1: 1, 2: 2, 3: 3}
+
+        calls.clear()
+        incremental: Counter[int] = Counter()
+        manual: defaultdict[int, int] = defaultdict(int)
+        for value in data:
+            incremental[value] += 1
+            manual[value] += 1
+        assert calls == []
+        assert incremental == manual == result
 
 
 class TestCounterIsADictSubclass:

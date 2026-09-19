@@ -223,25 +223,11 @@ for x in data:  # O(n)
 # Use defaultdict(int) for general counting
 ```
 
-Which is faster depends on how you feed it, and the two directions are
-opposite. Counting 200,000 items, on CPython 3.11 on one Linux machine -
-illustrative, not portable:
-
-| | Counter | `defaultdict(int)` loop |
-|---|---|---|
-| Whole iterable at once | 5.0 ms | 8.7 ms |
-| One key at a time (`c[x] += 1`) | 16.5 ms | 8.7 ms |
-
-`Counter(iterable)` and `update(iterable)` count in C, through
-`_count_elements`, which is why they beat a Python loop.
-
-The second row is a workload-specific measurement, not a rule with a known
-cause. `Counter.__missing__` is not the explanation: over 200,000 increments
-of 1,000 distinct keys it runs 1,000 times, and a pre-populated `Counter`
-that never misses is still about twice as slow as `defaultdict`. A plain
-`dict` subclass defining `__missing__` sits between them, so it is not simply
-subclass overhead either. Measure your own workload before rewriting one into
-the other.
+Both approaches take O(n) time under the fixed-cost key assumption.
+In CPython, `Counter(iterable)` and `update(iterable)` use the C helper
+`_count_elements`; per-key increments (`c[x] += 1`) do not. This does not
+guarantee a speed advantage over a Python counting loop. Benchmark your own
+workload when choosing between them.
 
 ## When to Use Counter
 
@@ -253,7 +239,6 @@ the other.
 - Element counting with analysis
 
 ### Not Good For:
-- Counting one key at a time in a Python loop, on the workload measured in the comparison above - benchmark your own before rewriting
 - Non-hashable items
 - When you don't need frequency methods
 
