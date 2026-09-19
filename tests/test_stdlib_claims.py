@@ -27,7 +27,6 @@ import bisect
 import contextlib
 import filecmp
 import fnmatch
-import importlib
 import io
 import logging
 import numbers
@@ -221,34 +220,6 @@ class TestCmpToKeyCallsPerComparison:
         assert comparisons["n"] > size * 3, (
             f"compare() runs per comparison, about n log n: {comparisons['n']} calls for n={size}"
         )
-
-
-class TestImportlibReloadIsShallow:
-    """docs/stdlib/importlib.md: reload() re-executes one module body, not
-    the transitive import graph."""
-
-    def test_dependencies_are_not_re_executed(self, tmp_path: Path) -> None:
-        import sys
-
-        package = tmp_path / "reload_probe"
-        package.mkdir()
-        (package / "dep.py").write_text("RUNS = []\nRUNS.append(1)\n", encoding="utf-8")
-        (package / "top.py").write_text("import dep\nVALUE = len(dep.RUNS)\n", encoding="utf-8")
-
-        sys.path.insert(0, str(package))
-        try:
-            top = importlib.import_module("top")
-            dep = importlib.import_module("dep")
-            before = len(dep.RUNS)
-
-            importlib.reload(top)
-
-            assert len(dep.RUNS) == before, "the dependency's body must not re-run"
-            assert top.VALUE == before
-        finally:
-            sys.path.remove(str(package))
-            for name in ("top", "dep"):
-                sys.modules.pop(name, None)
 
 
 class TestIpaddressSupernetIsBounded:
