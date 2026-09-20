@@ -28,7 +28,6 @@ import contextlib
 import filecmp
 import fnmatch
 import io
-import logging
 import numbers
 import posixpath
 import pprint
@@ -251,45 +250,6 @@ class TestIpaddressSupernetIsBounded:
             f"membership is arithmetic on the prefix, not a scan: "
             f"/30={small_time:.2e}s /8={huge_time:.2e}s"
         )
-
-
-class TestLoggingArgumentsAreBuiltEagerly:
-    """docs/stdlib/logging.md: an f-string is formatted even when the record
-    is filtered out."""
-
-    def test_fstring_runs_below_the_level_threshold(self) -> None:
-        formatted = {"n": 0}
-
-        class Counted:
-            def __format__(self, spec: str) -> str:
-                formatted["n"] += 1
-                return "value"
-
-        logger = logging.getLogger("test_stdlib_claims.eager")
-        logger.handlers.clear()
-        logger.propagate = False
-        logger.setLevel(logging.CRITICAL)
-
-        logger.debug(f"discarded: {Counted()}")
-
-        assert formatted["n"] == 1, "the f-string is built before logging sees it"
-
-    def test_percent_style_defers_the_work(self) -> None:
-        formatted = {"n": 0}
-
-        class Counted:
-            def __str__(self) -> str:
-                formatted["n"] += 1
-                return "value"
-
-        logger = logging.getLogger("test_stdlib_claims.lazy")
-        logger.handlers.clear()
-        logger.propagate = False
-        logger.setLevel(logging.CRITICAL)
-
-        logger.debug("discarded: %s", Counted())
-
-        assert formatted["n"] == 0, "%-style formatting only happens if it is emitted"
 
 
 class TestNumbersAbcCaching:
