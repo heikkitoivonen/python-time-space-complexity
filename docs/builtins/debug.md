@@ -303,3 +303,9 @@ else:
 - **[compile()](compile.md)** - Where `optimize=` picks the level for one compilation
 - **[ast](../stdlib/ast.md)** - `parse(optimize=)` applies the same substitution to a tree
 - **[True](true.md)** and **[None](none.md)** - Constants the lexer resolves, rather than the compiler
+
+## Further Reading
+
+- [python's pre-declared constants are kinda weird](https://sebsite.pw/w/20260801-pythonconstants.html){ target="_blank" rel="noopener" }:material-open-in-new: -
+  How the six differ from one another: which the lexer resolves, which the
+  compiler refuses to bind, and which are ordinary builtins that rebind
