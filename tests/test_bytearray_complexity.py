@@ -107,8 +107,9 @@ Measurement scope:
   more than ten times higher, and as time on a ten-byte receiver, where a
   tenfold result from 1,000,000 to 10,000,000 bytes costs between x3 and
   x40 - about x10 measured, against the x100 a result rebuilt by repeated
-  concatenation would cost. `strip()` at a fixed 1,000,000 bytes costs
-  x10 for ten times the `chars`, more than four times as much with the
+  concatenation would cost. `strip()` at a fixed 100,000 bytes costs
+  between x10 and x1,000 as `chars` grows from 100 to 10,000 bytes,
+  more than four times as much with the
   stripped byte last in `chars` as first, and a quarter as much with nothing
   to strip, and x10 again for a hundredfold `chars` with nothing to strip at
   all - the (s + 1)·c term. `translate()` at a fixed 1,000-byte receiver
@@ -1160,22 +1161,26 @@ class TestTransformsReturnNewObjects:
 
         `chars` is a membership test, scanned linearly, so the byte being
         stripped has to sit at its end for the scan to show: with it first,
-        every lookup stops at the first byte and the cost is the copy alone.
+        every lookup stops at the first byte. A hundredfold chars length
+        separates the search cost from the per-byte loop overhead.
         Stripping nothing still costs the one lookup that stops each end,
         which is the + 1 in the row's (s + 1)·c.
         """
-        data = bytearray(b"a" * 1_000_000)
+        data = bytearray(b"a" * 100_000)
         # Every `chars` is built here: allocating one scales with c too, and
         # inside the timed call it would pass for the cost being measured.
-        short, long = b"x" * 99 + b"a", b"x" * 999 + b"a"
-        first, absent = b"a" + b"x" * 999, b"x" * 1_000
+        short, long = b"x" * 99 + b"a", b"x" * 9_999 + b"a"
+        first, absent = b"a" + b"x" * 9_999, b"x" * 10_000
+
+        assert data.strip(short) == data.strip(long) == data.strip(first) == b""
+        assert data.strip(absent) == data
 
         by_chars = growth(lambda: data.strip(short), lambda: data.strip(long), inner=3)
         match_first = best_ns(lambda: data.strip(first), inner=3)
         nothing_to_strip = best_ns(lambda: data.strip(absent), inner=3)
         match_last = best_ns(lambda: data.strip(long), inner=3)
 
-        assert 4 < by_chars < 50, f"10x the chars cost x{by_chars:.2f}"
+        assert LINEAR < by_chars < QUADRATIC, f"100x the chars cost x{by_chars:.2f}"
         assert match_last > match_first * 4, (
             f"the byte's position in chars was free: {match_last:.0f}ns against {match_first:.0f}ns"
         )
