@@ -31,7 +31,7 @@ the entries in a zip archive.
 | `importlib.import_module(name, package=None)` | O(1) | O(1) | Loaded module: a `sys.modules` lookup, and the same object every time. Not loaded: a find, O(t + p·s), and a load, O(n + m), for each missing parent package and then the module |
 | `importlib.reload(module)` | O(t + p·s + n + m) | O(n + m) | Finds the spec again and runs the body in the existing namespace; modules it imports are not re-run |
 | `importlib.invalidate_caches()` | O(t + c) | O(c) | Every meta path finder, then every path entry finder in `sys.path_importer_cache`, and from Python 3.11 the `importlib.metadata` listings; the next search through each directory relists it, O(e) |
-| `importlib.__import__(name, globals=None, locals=None, fromlist=(), level=0)` | O(1) | O(1) | The function behind the `import` statement, with the same miss cost as `import_module()`; plus one attribute check per `fromlist` name, an import of each one the package lacks, and `'*'` expands to the package's `__all__` |
+| `importlib.__import__(name, globals=None, locals=None, fromlist=(), level=0)` | O(1) | O(1) | A pure-Python implementation of the built-in `__import__()`, which is the function the `import` statement calls; the same miss cost as `import_module()`, but a dotted name returns the head of that name - the top-level package for an absolute import, the first component under the anchor for a relative one - unless `fromlist` is non-empty. Then one attribute check per `fromlist` name, an import of each one the package lacks, and `'*'` expands to the package's `__all__`; a module without `__path__` skips the list entirely |
 
 ### importlib.util
 
@@ -691,6 +691,7 @@ assert registry._by_name == {}
 ## Related Modules
 
 - **[sys](sys.md)** - `sys.modules`, `sys.path`, `sys.meta_path` and `sys.path_importer_cache`, the state every row here reads
+- **[__import__()](../builtins/__import__.md)** - The builtin this function reimplements, and what the `import` statement calls
 - **[pkgutil](pkgutil.md)** - Walking the modules of a package, built on these finders
 - **[zipimport](zipimport.md)** - The path entry finder for zip archives, where `files()` pays O(z)
 - **[runpy](runpy.md)** - Running a module as a script through the same find-and-load path

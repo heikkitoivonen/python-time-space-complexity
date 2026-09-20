@@ -89,6 +89,7 @@ nav:
     - Help: builtins/help.md
     - Hex: builtins/hex.md
     - Id: builtins/id.md
+    - __import__: builtins/__import__.md
     - Input: builtins/input.md
     - Int: builtins/int_func.md
     - Integer: builtins/int.md
