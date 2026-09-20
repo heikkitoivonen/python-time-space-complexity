@@ -111,8 +111,10 @@ Measurement scope:
   between x10 and x1,000 as `chars` grows from 100 to 10,000 bytes,
   more than four times as much with the
   stripped byte last in `chars` as first, and a quarter as much with nothing
-  to strip, and x10 again for a hundredfold `chars` with nothing to strip at
-  all - the (s + 1)·c term. `translate()` at a fixed 1,000-byte receiver
+  to strip. With nothing to strip on a fixed 1,000-byte receiver, growing
+  `chars` from 10,000 to 1,000,000 bytes costs more than x10, measured in
+  batches of 100 calls - the (s + 1)·c term.
+  `translate()` at a fixed 1,000-byte receiver
   scales with the bytes in `delete`, which is its d term. `maketrans()`
   returns 256 bytes for 1-byte and 200-byte arguments and traces under 2,000
   bytes for the latter; over arguments of repeated bytes it scales with
@@ -1189,9 +1191,12 @@ class TestTransformsReturnNewObjects:
         )
 
         # ... but not nothing: the boundary byte is still looked up.
+        # Large chars buffers expose the scan beyond the fixed copy cost;
+        # batching keeps timer overhead small for the shorter scan.
         tiny = bytearray(b"a" * 1_000)
-        few, many = b"x" * 1_000, b"x" * 100_000
-        stopping = growth(lambda: tiny.strip(few), lambda: tiny.strip(many), inner=3)
+        few, many = b"x" * 10_000, b"x" * 1_000_000
+        assert tiny.strip(few) == tiny.strip(many) == tiny
+        stopping = growth(lambda: tiny.strip(few), lambda: tiny.strip(many), inner=100)
         assert stopping > LINEAR, f"100x the chars cost x{stopping:.1f} with nothing to strip"
 
     @pytest.mark.timing
