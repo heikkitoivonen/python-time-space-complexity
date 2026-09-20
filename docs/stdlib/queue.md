@@ -12,7 +12,7 @@ The `queue` module provides thread-safe queue implementations for coordinating w
 | `Queue.get_nowait()` | O(1) | O(1) | Remove item (raises Empty if empty) |
 | `Queue.qsize()` | O(1) | O(1) | Approximate size (not reliable under contention) |
 | `PriorityQueue.put()` | O(log n) | O(1) amortized | Add with priority (heap push) |
-| `PriorityQueue.get()` | O(log n) | O(1) amortized | Remove smallest-priority item (heap pop) |
+| `PriorityQueue.get()` | O(log n) | O(1) amortized | Remove largest-priority item (heap pop) |
 | `LifoQueue.put()` | O(1) amortized | O(1) | Add item (LIFO); uses list internally |
 | `LifoQueue.get()` | O(1) | O(1) | Remove item (LIFO) |
 | `SimpleQueue.put()` | O(1) | O(1) | Add item (unbounded, never blocks on size) |
