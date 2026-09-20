@@ -6,7 +6,7 @@ The `base64` module provides encoding and decoding for base64, base32, base16, a
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `base64.b64encode(data)` | O(n) | O(n) | n = data size |
+| `base64.b64encode(data)` | O(n) | O(1) | n = data size |
 | `base64.b64decode(data)` | O(n) | O(n) | n = encoded size |
 | `base64.standard_b64encode(data)` | O(n) | O(n) | Standard alphabet |
 | `base64.standard_b64decode(data)` | O(n) | O(n) | Standard alphabet |
