@@ -41,7 +41,9 @@ Measurement scope:
 * The undo entry of a move holds a list equal to but not identical with the
   turtle's item list, whether or not a buffer is installed. The peak
   allocation of one `forward()` rises more than 50x from 11 items to 10,001,
-  with and without a buffer, and a timing test finds it more than 10x slower.
+  with and without a buffer. A timing test compares 11 and 100,001 items
+  with a one-entry undo buffer and requires more than 10x the move time;
+  setup is outside the measurement and retained copies stay bounded.
   With 1,001 items and 100 buffered moves, the buffer holds 100 distinct
   copies of at least 1,001 ids each. One colour and width, 42 moves make a
   second line item, 84 a third and 126 a fourth; 100 moves alternating two
@@ -843,8 +845,9 @@ class TestMovesCopyTheItemList:
 
     @pytest.mark.timing
     def test_time_per_move_follows_the_items(self) -> None:
-        small = self.with_items(10)
-        large = self.with_items(10_000)
+        small = self.with_items(10, undobuffersize=1)
+        large = self.with_items(100_000, undobuffersize=1)
+        assert (len(small.pen.items), len(large.pen.items)) == (11, 100_001)
 
         durations = [
             best_ns(lambda: small.pen.forward(1), inner=20),
@@ -852,7 +855,7 @@ class TestMovesCopyTheItemList:
         ]
         ratio = durations[1] / durations[0]
 
-        assert ratio > 10, f"1,000x the items cost x{ratio:.1f}: {durations} ns"
+        assert ratio > 10, f"11 to 100,001 items cost x{ratio:.1f}: {durations} ns"
 
     def test_the_buffer_retains_one_copy_per_move(self) -> None:
         setup = self.with_items(1000)
