@@ -10,7 +10,7 @@ The `array` module provides an efficient array type for storing homogeneous data
 | `append()` | O(1) amortized | O(1) | O(n) worst case when resizing |
 | `extend()` | O(k) | O(k) | Add multiple |
 | Indexing | O(1) | O(1) | Access by index |
-| Search | O(n) | O(1) | Linear search |
+| Search | O(1) | O(1) | Linear search |
 | Insert | O(n) | O(1) | Insert at position |
 | Remove | O(n) | O(1) | Remove element |
 | `typecodes` | O(1) | O(1) | String of supported type codes |
