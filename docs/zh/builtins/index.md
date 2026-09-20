@@ -1,5 +1,5 @@
 ---
-source_sha: a1e1ce0938f3988636fa2ffc6fe0d31de197bb24b8182b4919610b9bcd1b718e
+source_sha: 2713c3f5da5b094280f3ea748c07a29b099def57bce9ddfbffb62f2060792e8f
 translated: machine
 ---
 
@@ -163,6 +163,7 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 | [`False`](false.md) | O(1) | O(1) | 单例 `bool` |
 | [`NotImplemented`](notimplemented.md) | O(1) | O(1) | 运算符不支持该操作时返回 |
 | [`Ellipsis`](ellipsis.md) | O(1) | O(1) | `...` 单例 |
+| [`__debug__`](debug.md) | O(1) | O(1) | 编译期折叠；`-O` 会移除它保护的代码 |
 
 ## 异常与解释器
 

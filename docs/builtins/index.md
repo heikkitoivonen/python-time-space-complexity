@@ -161,6 +161,7 @@ under Notes is what you pay to consume it.
 | [`False`](false.md) | O(1) | O(1) | Singleton `bool` |
 | [`NotImplemented`](notimplemented.md) | O(1) | O(1) | Returned by operators that decline |
 | [`Ellipsis`](ellipsis.md) | O(1) | O(1) | The `...` singleton |
+| [`__debug__`](debug.md) | O(1) | O(1) | Folded in at compile time; `-O` drops the code it guards |
 
 ## Exceptions & Interpreter
 

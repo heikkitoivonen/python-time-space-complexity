@@ -1,5 +1,5 @@
 ---
-source_sha: a1e1ce0938f3988636fa2ffc6fe0d31de197bb24b8182b4919610b9bcd1b718e
+source_sha: 2713c3f5da5b094280f3ea748c07a29b099def57bce9ddfbffb62f2060792e8f
 translated: machine
 ---
 
@@ -166,6 +166,7 @@ mainittu kustannus on se, minkä maksat iteraattorin läpikäynnistä.
 | [`False`](false.md) | O(1) | O(1) | Singleton-`bool` |
 | [`NotImplemented`](notimplemented.md) | O(1) | O(1) | Operaattorit palauttavat tämän kieltäytyessään |
 | [`Ellipsis`](ellipsis.md) | O(1) | O(1) | `...`-singleton |
+| [`__debug__`](debug.md) | O(1) | O(1) | Sijoitetaan käännösaikana; `-O` poistaa sen suojaaman koodin |
 
 ## Poikkeukset ja tulkki
 

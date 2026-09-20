@@ -63,6 +63,7 @@ nav:
     - Classmethod: builtins/classmethod.md
     - Compile: builtins/compile.md
     - Complex: builtins/complex_func.md
+    - __debug__: builtins/debug.md
     - Delattr: builtins/delattr.md
     - Dict: builtins/dict_func.md
     - Dictionaries: builtins/dict.md
