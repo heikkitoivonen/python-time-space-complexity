@@ -21,9 +21,11 @@ level, k = direct children. Most of them can be settled by observation:
   each: 1,000 then 4,000 statements 200 blocks deep emit x4.0 the characters,
   and 1,000 statements 100 then 400 blocks deep x3.9; the test asserts the
   character count, which is exact, and the growth in nodes separately;
-* `literal_eval()` of a set of 2,000 then 8,000 keys that all hash alike
-  (multiples of `sys.hash_info.modulus`): x15.2, against x4.6 for distinct
-  keys of the same width, and x34 between the two at 8,000 keys;
+* `literal_eval()` of parsed set trees with 500 then 8,000 integer keys:
+  colliding keys (multiples of `sys.hash_info.modulus`) cost more than x64,
+  while distinct hashes cost less than x64. Linear growth predicts x16
+  and quadratic growth x256. Parsing and warm-up happen outside timing;
+  the integer widths remain bounded to the same few machine words;
 * `compare()` stops at the first difference: a value in a later statement
   whose `__eq__` counts its calls is never consulted when the first
   statement already differs;
@@ -687,14 +689,25 @@ class TestLiteralEval:
 
     @pytest.mark.timing
     def test_colliding_keys_make_a_set_quadratic(self) -> None:
+        """Isolate set reconstruction with parsed trees and a 16x size step.
+
+        Linear and quadratic growth are separated by the x64 threshold.
+        CPython 3.14.7 measures x15.5 for distinct hashes and x283 for
+        collisions. Parsing is covered separately; only integer keys and
+        flat sets are varied here.
+        """
         modulus = sys.hash_info.modulus
-        assert len({hash(k * modulus) for k in range(1, 50)}) == 1
 
-        def keys(count: int, spread: int) -> str:
-            return "{" + ", ".join(str(k * modulus + k * spread) for k in range(1, count + 1)) + "}"
+        def keys(count: int, spread: int) -> ast.Expression:
+            values = [k * modulus + k * spread for k in range(1, count + 1)]
+            assert len({hash(value) for value in values}) == (count if spread else 1)
+            source = "{" + ", ".join(map(str, values)) + "}"
+            tree = ast.parse(source, mode="eval")
+            assert ast.literal_eval(tree) == set(values)
+            return tree
 
-        colliding_small, colliding_large = keys(2_000, 0), keys(8_000, 0)
-        distinct_small, distinct_large = keys(2_000, 1), keys(8_000, 1)
+        colliding_small, colliding_large = keys(500, 0), keys(8_000, 0)
+        distinct_small, distinct_large = keys(500, 1), keys(8_000, 1)
 
         colliding = ratio(
             lambda: ast.literal_eval(colliding_small), lambda: ast.literal_eval(colliding_large), 3
@@ -703,8 +716,8 @@ class TestLiteralEval:
             lambda: ast.literal_eval(distinct_small), lambda: ast.literal_eval(distinct_large), 3
         )
 
-        assert colliding > 9, f"x{colliding:.1f} for 4x colliding keys; quadratic would be 16"
-        assert distinct < 7, f"x{distinct:.1f} for 4x distinct keys; linear would be 4"
+        assert colliding > 64, f"x{colliding:.1f} for 16x colliding keys; quadratic would be 256"
+        assert distinct < 64, f"x{distinct:.1f} for 16x distinct keys; linear would be 16"
 
 
 class TestMain:
