@@ -694,13 +694,22 @@ class TestFrontDeletionAdvancesTheStart:
         )
 
     def test_deleting_from_the_front_allocates_nothing_until_it_compacts(self) -> None:
+        """The deletion is measured on a second call. From 3.12 the interpreter
+        attaches monitoring data to a code object on its first run after any
+        tracer or profiler has been installed in the process, and it lands in
+        the peak of whichever call runs that code object first: for
+        `delete_prefix` that is 72 bytes on 3.12, 64 on 3.13 and 128 on 3.14,
+        none of it the deletion's. 3.10 and 3.11 attach nothing.
+        """
         data = bytearray(LARGE)
 
         def delete_prefix() -> None:
             del data[:10]
 
+        delete_prefix()
+
         assert peak_bytes(delete_prefix) < 100
-        assert len(data) == LARGE - 10
+        assert len(data) == LARGE - 20
         assert data.__alloc__() > LARGE, "the buffer was compacted for a 10-byte prefix"
 
     @pytest.mark.parametrize(

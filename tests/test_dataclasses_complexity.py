@@ -284,11 +284,21 @@ class TestGeneratedEqualityComparesTuples:
     @pytest.mark.skipif(sys.version_info < (3, 13), reason="the tuples are built before 3.13")
     @pytest.mark.serial
     def test_the_peak_is_flat_from_313(self) -> None:
+        """Measured on a second call of `compare`: from 3.12 the interpreter
+        attaches monitoring data to a code object on its first run after any
+        tracer or profiler has been installed in the process, 128 bytes on 3.13
+        and 256 on 3.14 for the code this call enters, which belongs to the
+        interpreter rather than to the comparison.
+        """
         broad_type = wide(2_000)
         left, right = broad_type(*range(2_000)), broad_type(*range(2_000))
-        assert left == right  # warm the code paths
 
-        assert peak_bytes(lambda: left == right) == 0
+        def compare() -> bool:
+            return left == right
+
+        assert compare()  # warm the code paths
+
+        assert peak_bytes(compare) == 0
 
     @pytest.mark.timing
     def test_the_time_is_linear_in_the_fields_on_every_version(self) -> None:
