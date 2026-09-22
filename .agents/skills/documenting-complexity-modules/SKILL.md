@@ -36,6 +36,18 @@ the repository's highest-risk content.
    that one for the tests asserting it; CI covers the matrix. Use official
    documentation where behavior is contractual and source where implementation
    determines the bound.
+5. Diff the implementation between consecutive released branches once, before
+   writing - `git diff v3.10.13:Lib/csv.py v3.11.9:Lib/csv.py`, and the same
+   for each later pair across the supported range. Resolve a concrete release
+   tag per supported minor version first; `v3.10.x` is a placeholder, not a
+   ref. The path is whatever implements the subject: a module file, a package
+   directory such as `Lib/asyncio`, or the C source behind a builtin. Listing
+   which names exist per version finds added and removed APIs; it cannot
+   reveal the behavioral boundaries, and the diff does - a cache that appears,
+   a scan replaced by an attribute read, an argument that gains a default, a
+   predicate that starts excluding a case. Those are the version claims a page
+   gets wrong, and they surface one per review round if you do not look for
+   them together.
 
 Do not trust an existing claim, a plausible review comment, or a generic
 complexity rule without checking the operation's actual code path.
@@ -55,6 +67,14 @@ did:
    State any cost-model assumption there too, such as treating key hashing as
    O(1). A variable used by a single subsection's table may instead be defined
    in that table's Notes, as `s = sample length` is in the Sniffer rows.
+   Say what the variables count - items such as lines, names, parameters and
+   frames, or characters - and which operations the model prices at O(1).
+   That sentence is what makes a bound scoped rather than merely loose, and
+   it answers every later "you did not price the length of this string" at
+   once. Give each letter one meaning across the whole page: a letter reused
+   for two dimensions is a defect even when both bounds are right, and a
+   lowercase and an uppercase form of the same letter are two spellings a
+   reader cannot keep apart.
 4. Put `## Complexity Reference` next and include a table with exactly these
    semantic columns:
 
@@ -86,9 +106,10 @@ did:
    read-transform-write or aggregation example helps; `## Performance Best
    Practices` as a ✅ **Do** list and a ❌ **Avoid** list, each item tied to a
    cost on this page; `## Version Notes` as a bulleted list of
-   `**Python 3.x+**: ...` entries for changes on supported versions and
-   `**All Python 3**: ...` for a caveat that holds on every one; and
-   `## Related Modules` as `**[name](name.md)** - why a reader would go there`.
+   `**Python 3.x+**: ...` entries, admitting only the changes *Document the
+   Common Case* lists and nothing else, with `**All Python 3**: ...` for a
+   caveat that holds on every one; and `## Related Modules` as
+   `**[name](name.md)** - why a reader would go there`.
    Omit a closing section only when the module has nothing to put in it.
 7. Cover all scoped operations at the altitude set by *Document the Common
    Case* below: one bound per operation, with its size variables defined.
@@ -139,10 +160,18 @@ Keep these off the page:
   cache's row teaches nothing about the cache. Document the cost the operation
   itself controls; where caller-supplied cost dominates, name it once as a
   variable (h, f, the callback) and move on.
-- **Per-release micro-changes.** A version boundary earns a mention when it
-  changes the bound or the recommendation on a supported version. Shifts in
-  constant factors between minor releases do not, and neither does an
-  implementation detail stated so precisely that the next release falsifies it.
+- **Per-release micro-changes.** A version boundary earns a Version Notes entry
+  on three grounds: a public API a reader would reach for was added or removed,
+  a documented bound moved, or documented behavior changed - a predicate that
+  starts answering differently, an argument an example on the page needs. A
+  constant-factor shift does not qualify, however large and however carefully
+  you measured it: a second walk over a table the release already traversed
+  once, a shorter route to the same answer. Nor does an obscure member arriving
+  or leaving - a flag constant, a helper nobody calls, a keyword argument no
+  example uses. Neither does an implementation detail stated so precisely that
+  the next release falsifies it. The measurement behind a rejected entry belongs
+  in the test, where a later release breaks it loudly instead of leaving a stale
+  line on the page.
 - **Restated mechanism.** The C function reached, the struct field consulted,
   the order of two statements: that is evidence for the test file, not content
   for the page, unless the reader must do something differently because of it.
@@ -151,12 +180,39 @@ Apply one test to every note: would removing it change how someone uses the
 operation? If not, cut it. An empty Notes cell beside a correct bound is a good
 outcome, not an unfinished one.
 
+Count the cost of keeping one honestly. A marginal clause is not one line: it is
+a line, a variable in the size paragraph, a test, a review round that finds it
+imprecise, and the propagation of whatever that round concludes. Compare the
+finished page's notes against the reference page's - if they are markedly
+denser, the difference is usually clauses that failed the removal test and were
+corrected rather than cut.
+
 A deliberately loose bound fails that test even when it is honest about being
 loose. Bounding a recursive tree walk by the whole tree's metadata is true, and
 tells the reader that shape does not matter - when two trees of equal entry
 count differ eightfold by shape. Give the tight bound and its size variables;
 "conservative" is a bound no release can ever falsify, which is the same as one
 no reader can use.
+
+## A Claim Lives in Several Places
+
+A bound is not stated once. It appears in the Time cell and the Space cell, in
+the Notes beside them, in the prose section that explains it, in the trailing
+comment on the example that demonstrates it, in any Do or Avoid item resting on
+it, in the Version Notes where it moves, and in the test docstring recording how
+it was settled. Change one and the rest are wrong.
+
+So when a bound changes - from your own measurement or from a review finding -
+search the page and the test file for the operation's name and fix every site in
+the same edit. Correcting the row alone leaves the page contradicting itself,
+and each contradiction is a later finding that costs another round and another
+edit. Most findings after the first round are sites missed here.
+
+The same applies across rows. Where the cause is shared - an attribute the
+module reads, a cache it consults, a helper every path calls - find that
+mechanism's callers in the CPython source before writing the fix, and price them
+together. A bound corrected on one row and left wrong on the four rows that
+share its mechanism is the most common way a page stays wrong after review.
 
 ## Coverage Is a Claim
 

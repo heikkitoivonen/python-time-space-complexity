@@ -234,8 +234,17 @@ that is gone needs no test, and the inventory shrinks with the page.
 If direct observation cannot distinguish the growth class:
 
 1. Measure before choosing sizes or thresholds.
-2. Compare at least two input sizes and assert a ratio that separates the
-   claimed shape from the excluded shape; avoid absolute nanosecond limits.
+2. Compare at least three input sizes spanning two orders of magnitude, in
+   equal multiplicative steps so the intervals are comparable, and assert a
+   ratio that separates the claimed shape from the excluded one; avoid
+   absolute nanosecond limits. Work out what each candidate predicts for
+   the ratio before measuring - a 4x step costs 4x if linear and 16x if
+   quadratic - and check every interval against both. One interval settles
+   nothing when the operation sums terms of different order: it reports
+   whichever term dominates at that size, so a quadratic sitting under a
+   linear one reads as linear until the inputs are large enough. Two points
+   suffice only where the shapes differ by orders of magnitude, as a cache hit
+   does from a rebuild.
 3. Choose inputs large enough that setup, timer resolution, and fixed overhead
    do not dominate. Move setup outside the timed operation.
 4. Use repeated runs and the fastest sample where that matches local tests.
