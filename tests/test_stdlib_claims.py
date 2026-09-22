@@ -10,6 +10,7 @@ kind of test: `filecmp.dircmp` accepting a directory that does not exist
 proves it reads nothing at construction, and no tolerance is involved.
 
 docs/stdlib/array.md's claims live in tests/test_array_complexity.py,
+docs/stdlib/decimal.md's in tests/test_decimal_complexity.py,
 docs/stdlib/multiprocessing.md's in tests/test_multiprocessing_complexity.py
 and docs/stdlib/secrets.md's in tests/test_secrets_complexity.py, which cover
 those modules' tables as well.
@@ -41,7 +42,6 @@ import time
 import unicodedata
 from collections import defaultdict, deque
 from collections.abc import Callable, Iterator
-from decimal import Decimal, getcontext
 from fractions import Fraction
 from functools import cmp_to_key
 from ipaddress import IPv4Network
@@ -64,32 +64,6 @@ def best_time(func: Callable[[], Any], repeats: int = 5) -> float:
         func()
         times.append(time.perf_counter() - start)
     return min(times)
-
-
-class TestDecimalSpecialValues:
-    """docs/stdlib/decimal.md: special values short-circuit, skipping the
-    O(n) digit arithmetic."""
-
-    @pytest.mark.timing
-    def test_infinity_arithmetic_skips_the_digits(self) -> None:
-        precision = getcontext().prec
-        getcontext().prec = 50_000
-        try:
-            big = Decimal("1." + "9" * 20_000)
-            infinity = Decimal("Infinity")
-            digits_time = best_time(lambda: big + big)
-            special_time = best_time(lambda: infinity + 5)
-        finally:
-            getcontext().prec = precision
-
-        assert special_time * 3 < digits_time, (
-            f"a special value has no digits to add: "
-            f"digits={digits_time:.2e}s special={special_time:.2e}s"
-        )
-
-    def test_special_values_still_propagate(self) -> None:
-        assert Decimal("Infinity") + 5 == Decimal("Infinity")
-        assert (Decimal("NaN") + 5).is_nan()
 
 
 class TestDefaultdictInsertsOnRead:
