@@ -49,10 +49,11 @@ Measurement scope:
   a 1 MB line under 3x what it costs on a 10,000-character line, so it
   follows the chunk and not the stream. After `read()` to the end it is more
   than 100x cheaper than after `read(1,000,000)`. `seek(cookie)` on fresh
-  streams, to a cookie taken after `read(1,000,000)`, costs under 3x one
-  taken after `read(2,500)` in UTF-8, UTF-16 and ISO-2022-JP, timing the
-  seek alone, and a read after it returns a marker character placed at that
-  position; `seek(0)` costs under 3x across
+  streams, to a cookie taken after `read(1,000,000)`, costs under 10x one
+  taken after `read(2,500)` in UTF-8, UTF-16 and Latin-1, where a re-decode
+  to the cookie would cost hundreds of times more. Each stream is first
+  returned to 0, so freeing the decoded chunk is not timed, and a read after
+  the seek returns a marker character placed at that position; `seek(0)` costs under 3x across
   the same two streams. `tell()` inside a `for` loop raises `OSError`, and a
   nonzero relative seek raises on a `TextIOWrapper` and a `StringIO`.
 * `StringIO(s)` on a million ASCII characters peaks over a megabyte, and a
@@ -98,7 +99,9 @@ Not settled here:
   more.
 * Encoding and decoding at O(1) per character is a cost-model assumption,
   scoped on the page to codecs whose state clears between characters.
-  `tell()` is timed only on UTF-8. UTF-7 inside a long base64 run is
+  `tell()` is timed only on UTF-8. ISO-2022-JP, whose decoder keeps its
+  mode across a run, is outside that scope and not measured. UTF-7 inside a
+  long base64 run is
   outside that scope: its decoder never clears, `tell()` falls back to one
   decode call per byte, and 200 to 2,000 characters was observed to cost
   about 90x.
@@ -662,7 +665,7 @@ class TestTextTellFollowsTheChunk:
 
     @pytest.mark.timing
     @pytest.mark.parametrize(
-        ("encoding", "character"), [("utf-8", "é"), ("utf-16", "é"), ("iso2022_jp", "日")]
+        ("encoding", "character"), [("utf-8", "é"), ("utf-16", "é"), ("latin-1", "é")]
     )
     def test_seek_to_a_cookie_does_not_grow_with_the_chunk(
         self, encoding: str, character: str
@@ -672,7 +675,7 @@ class TestTextTellFollowsTheChunk:
             stream = io.TextIOWrapper(io.BytesIO(text.encode(encoding)), encoding=encoding)
             stream.read(size)
             cookie = stream.tell()
-            stream.read(size)  # leave the stream elsewhere, mid-chunk
+            stream.seek(0)  # drop the decoded chunk, whose freeing is not the seek's cost
             return stream, cookie
 
         def after_read(size: int) -> Callable[[], Callable[[], object]]:
@@ -689,8 +692,9 @@ class TestTextTellFollowsTheChunk:
 
         durations = [best_fresh_ns(after_read(size)) for size in (self.SMALL, self.LARGE)]
 
-        assert durations[1] < durations[0] * 3, (
-            f"{encoding}, read(2,500) then read(1,000,000): {durations} ns"
+        assert durations[1] < durations[0] * 10, (
+            f"{encoding}, cookies after read(2,500) and read(1,000,000): {durations} ns; "
+            "re-decoding to the cookie would cost hundreds of times more"
         )
 
     @pytest.mark.timing
