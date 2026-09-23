@@ -14,10 +14,11 @@ Measurement scope:
 * `recv()`, `recvfrom()` and `recvmsg()` with an 8 MiB `bufsize` and 5 bytes
   queued each peak above 8 MiB and return 5 bytes; `recv_into()`,
   `recvfrom_into()` and `recvmsg_into()` into a preallocated 8 MiB buffer peak
-  under 1 KB. In a timing test, `recv()` of 5 bytes with a 1 GiB `bufsize`
-  costs under 4x the same call with 64 MiB, where a bound in `b` predicts 16x.
-  Both sizes are above glibc's mmap threshold ceiling; the untouched pages of
-  the 1 GiB request are never written.
+  under 1 KB. On Linux, receiving 5 bytes with 64 MiB and 1 GiB buffers
+  incurs fewer minor page faults than one sixteenth of the requested pages.
+  Writing each page of a fresh 8 MiB mapping faults in at least half its
+  pages as a control. This checks that receiving a short payload does not
+  initialize the whole allocation, without timing allocator or kernel work.
 * `sendall()` of 32 MiB to a reader thread that receives into one buffer peaks
   under 10 KB; the reader allocates its buffer before tracing starts. A non-blocking `send()` of 4 MB returns a count above zero and
   below the length. `sendmsg()` of two 4 MiB buffers peaks under 10 KB; with
@@ -94,6 +95,9 @@ Not settled here:
   unresolved on Linux for the same reason.
 * `socket.SocketIO`, the raw object behind `makefile(buffering=0)`, is not in
   the official inventory and the page does not document it.
+* The page-fault probe runs only on Linux and checks demand paging, not
+  elapsed-time scaling. Allocator and virtual-memory bookkeeping costs are
+  not bounded by this test; the O(k) receive row describes payload copying.
 * Kernel buffer sizes, IPv6, UDP message boundaries and TLS are not varied.
 """
 
@@ -102,6 +106,7 @@ from __future__ import annotations
 import array
 import errno
 import io
+import mmap
 import os
 import pathlib
 import re
@@ -258,26 +263,36 @@ class TestReceivingAllocatesBufsize:
         assert counts == [5] and buffer[:5] == b"hello"
         assert peak < 1_000, f"receiving into an 8 MiB buffer peaked at {peak}"
 
-    @pytest.mark.timing
-    def test_recv_time_does_not_follow_bufsize(
+    @pytest.mark.serial
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux demand-paging probe")
+    def test_recv_does_not_initialize_unused_buffer_pages(
         self, pair: tuple[socket.socket, socket.socket]
     ) -> None:
+        import resource  # noqa: PLC0415 - unavailable on Windows
+
+        # A fresh mapping provides a control independent of Python's allocator.
+        with mmap.mmap(-1, 8 * MIB) as control:
+            control.madvise(mmap.MADV_NOHUGEPAGE)
+            before = resource.getrusage(resource.RUSAGE_SELF).ru_minflt
+            for offset in range(0, len(control), mmap.PAGESIZE):
+                control[offset] = 1
+            faults = resource.getrusage(resource.RUSAGE_SELF).ru_minflt - before
+            pages = len(control) // mmap.PAGESIZE
+            assert faults >= pages // 2, f"writing {pages} fresh pages caused only {faults} faults"
+
         left, right = pair
+        for size in (64 * MIB, 1024 * MIB):
+            left.sendall(b"hello")
+            before = resource.getrusage(resource.RUSAGE_SELF).ru_minflt
+            result = right.recv(size)
+            faults = resource.getrusage(resource.RUSAGE_SELF).ru_minflt - before
 
-        def receive(size: int) -> Callable[[], Any]:
-            def run() -> None:
-                left.send(b"hello")
-                right.recv(size)
-
-            return run
-
-        # Both sizes are over glibc's 32 MiB ceiling for its dynamic mmap threshold, so
-        # neither is served from a heap that an earlier free has grown.
-        small = best_ns(receive(64 * MIB), repeats=20)
-        large = best_ns(receive(1024 * MIB), repeats=20)
-
-        ratio = large / small
-        assert ratio < 4, f"16x the bufsize for 5 bytes cost x{ratio:.2f}; O(b) time predicts 16"
+            assert result == b"hello"
+            pages = size // mmap.PAGESIZE
+            assert faults < pages // 16, (
+                f"recv({size}) for 5 bytes caused {faults} minor page faults "
+                f"for a {pages}-page allocation"
+            )
 
 
 class TestSendingCopiesNothing:
