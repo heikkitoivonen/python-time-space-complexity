@@ -1,469 +1,421 @@
 # io Module Complexity
 
-The `io` module provides core I/O classes for working with binary and text data, including in-memory streams and file-like objects.
+The `io` module is the stack behind `open()`: a raw layer that makes one system call per sized
+read or write, a buffered layer that batches those calls, and a text layer that encodes and decodes.
+It also provides `StringIO` and `BytesIO`, which are the same interfaces over a buffer held in
+memory. Only `read()` with no size, `readall()`, `readlines()` and `getvalue()` return a whole
+stream at once.
+
+`n` is the bytes in a stream, or the characters for `StringIO`, and `k` is the bytes or characters
+one call reads, writes or returns; a write past the end also counts the gap it fills. `b` is a
+buffered object's buffer size, and `c` is the bytes a
+`TextIOWrapper` decoded in its last chunk. A system call is priced at the bytes it moves, and
+encoding or decoding at O(1) per character, for a codec whose state clears between characters as
+UTF-8, UTF-16 and the single-byte codecs do. An operation that flushes - `close()`, `detach()`,
+`seek()`, `truncate()`, and `tell()` or `reconfigure()` on a text stream - first pays up to O(b)
+to write out what its buffer holds.
 
 ## Complexity Reference
 
+### open
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `StringIO()` creation | O(1) | O(1) | Create empty string buffer |
-| `StringIO.write()` | O(n) amortized | O(n) | n = string length; amortized due to buffer resizing |
-| `StringIO.read()` | O(n) | O(n) | n = bytes to read |
-| `StringIO.getvalue()` | O(n) | O(n) | n = total buffer size; returns copy |
-| `BytesIO()` creation | O(1) | O(1) | Create empty bytes buffer |
-| `BytesIO.write()` | O(n) amortized | O(n) | n = bytes length; amortized due to buffer resizing |
-| `BytesIO.read()` | O(n) | O(n) | n = bytes to read |
-| `BytesIO.getvalue()` | O(n) | O(n) | n = total buffer size; returns copy |
-| `seek()` position change | O(1) | O(1) | Random access pointer |
-| `tell()` get position | O(1) | O(1) | Return current position |
+| `io.open(file, mode='r', buffering=-1, encoding=None, errors=None, newline=None, closefd=True, opener=None)` | O(1) | O(b) | The builtin `open()`: a `FileIO`, then a buffered object unless `buffering=0`, then a `TextIOWrapper` in text mode |
+| `io.open_code(path)` | O(1) | O(b) | Opens `path` for reading in binary mode |
+| `io.text_encoding(encoding, stacklevel=2)` | O(1) | O(1) | Returns `encoding`, or the default when it is `None`; Python 3.10+ |
+| `io.DEFAULT_BUFFER_SIZE` | O(1) | O(1) | The `b` a buffered object gets when none is given |
 
-## In-Memory Text Streams
+### IOBase
 
-### StringIO Basics
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `io.IOBase` | O(1) | O(1) | Base class of every stream; `isinstance(f, io.IOBase)` holds for all of them |
+| `IOBase.readline(size=-1)` | O(k) | O(k) | On an object with no `peek()`, such as an unbuffered raw file, one `read(1)` call per byte |
+| `IOBase.readlines(hint=-1)`, `list(f)` | O(n) | O(n) | Every remaining line at once, or whole lines until their total passes `hint`; iterate instead to hold one |
+| Iterating an `IOBase` | O(k) per line | O(k) | Calls `readline()` |
+| `IOBase.writelines(lines)` | O(n) | O(k) | n = total length of `lines`; one `write()` per item, adding no separators |
+| `IOBase.seek(offset, whence=os.SEEK_SET)`, `IOBase.tell()` | O(1) | O(1) | Binary streams; see `TextIOWrapper` for text |
+| `IOBase.truncate(size=None)` | O(1) | O(1) | On a file, one system call |
+| `IOBase.flush()` | O(1) | O(1) | Nothing to do here; a buffered writer writes out what it holds |
+| `IOBase.close()`, `IOBase.closed` | O(1) | O(1) | `close()` flushes first |
+| `IOBase.fileno()`, `IOBase.isatty()`, `IOBase.readable()`, `IOBase.seekable()`, `IOBase.writable()` | O(1) | O(1) | `fileno()` raises `UnsupportedOperation` on an in-memory stream |
+
+### RawIOBase and FileIO
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `io.RawIOBase` | O(1) | O(1) | Unbuffered binary streams: each sized read or write is at most one system call |
+| `RawIOBase.read(size=-1)` | O(k) | O(k) | May return fewer than `size` bytes; `size=-1` is `readall()` |
+| `RawIOBase.readall()` | O(n) | O(n) | Reads until end of file, one system call after another |
+| `RawIOBase.readinto(b)` | O(k) | O(1) | Fills a buffer you own, allocating nothing |
+| `RawIOBase.write(b)` | O(k) | O(1) | May write fewer bytes than given; check the return value |
+| `io.FileIO(name, mode='r', closefd=True, opener=None)` | O(1) | O(1) | One `open` system call; what `open(..., buffering=0)` returns |
+| `FileIO.mode`, `FileIO.name` | O(1) | O(1) | Stored at construction |
+
+### BufferedIOBase, BufferedReader, BufferedWriter, BufferedRandom, BufferedRWPair
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `io.BufferedIOBase` | O(1) | O(1) | Buffered binary streams; also what `BytesIO` implements |
+| `io.BufferedReader(raw, buffer_size=DEFAULT_BUFFER_SIZE)` | O(1) | O(b) | What `open(..., 'rb')` returns |
+| `io.BufferedWriter(raw, buffer_size=DEFAULT_BUFFER_SIZE)` | O(1) | O(b) | What `open(..., 'wb')` returns |
+| `io.BufferedRandom(raw, buffer_size=DEFAULT_BUFFER_SIZE)` | O(1) | O(b) | What `open(..., 'r+b')` returns; one buffer serves reads and writes |
+| `io.BufferedRWPair(reader, writer, buffer_size=DEFAULT_BUFFER_SIZE)` | O(1) | O(b) | Two raw streams, one each way, each with its own buffer; not seekable |
+| `BufferedIOBase.read(size=-1)`, `BufferedReader.read(size=-1)` | O(k) amortized | O(k) | Small reads come from the buffer, so a run of them costs one raw read per `b` bytes; `size=-1` reads to the end |
+| `BufferedIOBase.read1(size=-1)`, `BufferedReader.read1(size=-1)` | O(k) | O(k) | At most one raw read |
+| `BufferedReader.peek(size=0)` | O(b) | O(b) | Returns buffered bytes without consuming them, making at most one raw read; the result can be longer or shorter than `size` |
+| `BufferedIOBase.readinto(b)`, `BufferedIOBase.readinto1(b)` | O(k) | O(k) | The base implementation reads a `bytes` object and copies it in; `BufferedReader` and `BytesIO` fill your buffer directly, O(1) space |
+| `BufferedIOBase.write(b)`, `BufferedWriter.write(b)` | O(k) amortized | O(b) | Copies into the buffer and writes it out when it fills, so a run of small writes costs one raw write per `b` bytes |
+| `BufferedWriter.flush()` | O(b) | O(1) | Writes out at most one buffer |
+| `BufferedIOBase.detach()` | O(1) | O(1) | Returns the raw stream and leaves this object unusable |
+| `BufferedIOBase.raw` | O(1) | O(1) | The underlying raw stream |
+
+### TextIOBase and TextIOWrapper
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `io.TextIOBase` | O(1) | O(1) | Streams of `str`; `StringIO` and `TextIOWrapper` implement it |
+| `io.TextIOWrapper(buffer, encoding=None, errors=None, newline=None, line_buffering=False, write_through=False)` | O(1) | O(1) | What `open()` returns in text mode |
+| `TextIOBase.read(size=-1)` | O(k) | O(k) | Decodes what it returns; `size=-1` decodes the rest of the stream |
+| `TextIOBase.readline(size=-1)`, iterating | O(k) | O(k) | Decodes the binary buffer a chunk at a time |
+| `TextIOBase.write(s)` | O(k) | O(k) | Encodes and hands the bytes to the binary buffer; `line_buffering` flushes on a newline, `write_through` hands them on at once |
+| `TextIOWrapper.tell()` | O(c) | O(c) | Re-decodes the last chunk to find the byte position; O(1) after `read()` to the end, a `seek()` or a write. Raises `OSError` inside a `for` loop over the stream |
+| `TextIOWrapper.seek(cookie, whence=os.SEEK_SET)` | O(1) | O(1) | Takes 0 or a value `tell()` returned; relative seeks only by 0 |
+| `TextIOWrapper.reconfigure(*, encoding=None, errors=None, newline=None, line_buffering=None, write_through=None)` | O(1) | O(1) | |
+| `TextIOBase.detach()` | O(1) | O(1) | Flushes, returns the binary buffer, and leaves this object unusable |
+| `TextIOBase.buffer`, `TextIOBase.encoding`, `TextIOBase.errors`, `TextIOBase.newlines` | O(1) | O(1) | `newlines` lists the line endings translated so far when `newline=None` |
+| `TextIOWrapper.line_buffering`, `TextIOWrapper.write_through` | O(1) | O(1) | Set at construction or by `reconfigure()` |
+| `io.IncrementalNewlineDecoder(decoder, translate, errors='strict')` | O(1) | O(1) | `decode(input, final=False)` is O(k); the universal-newline translator that text streams use |
+
+### StringIO
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `io.StringIO(initial_value='', newline='\n')` | O(n) | O(n) | Copies the initial value |
+| `StringIO.write(s)` | O(k) amortized | O(k) | After a run of appends, the first `readline()`, partial `read()`, `truncate()` or write away from the end converts the buffer once, O(n) time and space |
+| `StringIO.read(size=-1)`, `StringIO.readline(size=-1)` | O(k) | O(k) | |
+| `StringIO.getvalue()` | O(n) | O(n) | |
+| `StringIO.seek(pos, whence=os.SEEK_SET)`, `StringIO.tell()` | O(1) | O(1) | Positions are characters; relative seeks only by 0, as for any text stream |
+| `StringIO.truncate(size=None)` | O(n) | O(n) | |
+
+### BytesIO
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `io.BytesIO(initial_bytes=b'')` | O(1) | O(1) | Shares a `bytes` argument instead of copying it; any other buffer is copied, O(n) |
+| `BytesIO.write(b)` | O(k) amortized | O(k) | A write to a stream that shares its bytes copies them first, O(n) |
+| `BytesIO.read(size=-1)`, `BytesIO.read1(size=-1)`, `BytesIO.readline(size=-1)` | O(k) | O(k) | |
+| `BytesIO.readinto(b)` | O(k) | O(1) | |
+| `BytesIO.getvalue()` | O(1) | O(1) | Returns the stream's own `bytes` object, which the stream then shares; O(n) while a `getbuffer()` view is open |
+| `BytesIO.getbuffer()` | O(1) | O(1) | A writable view of the contents, O(n) if the stream shares its bytes; the stream refuses writes until every view is released |
+| `BytesIO.seek(pos, whence=os.SEEK_SET)`, `BytesIO.tell()` | O(1) | O(1) | |
+| `BytesIO.truncate(size=None)` | O(n) | O(n) | |
+
+### Reader and Writer
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `io.Reader`, `Reader.read(size=..., /)` | O(1) | O(1) | Python 3.14+; `isinstance(f, io.Reader)` checks for a `read` method, so any file object passes |
+| `io.Writer`, `Writer.write(data, /)` | O(1) | O(1) | Python 3.14+; the same check for `write` |
+
+### Constants and exceptions
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `io.SEEK_SET`, `io.SEEK_CUR`, `io.SEEK_END` | O(1) | O(1) | The `whence` values 0, 1 and 2 |
+| `io.UnsupportedOperation` | O(1) | O(1) | Subclass of both `OSError` and `ValueError`; raised by a call the stream does not support |
+| `io.BlockingIOError` | O(1) | O(1) | The builtin `BlockingIOError`, raised by a non-blocking stream that would block |
+
+## Choosing a Layer
+
+### Buffered vs Raw Reads
+
+A raw stream makes a system call for every call you make on it. The buffered layer reads `b`
+bytes at a time and serves small reads from memory, so a loop of one-byte reads costs one raw
+read per buffer instead of one per byte. `readline()` on a raw stream is worse still: with no
+`peek()` to look ahead, it reads one byte at a time.
 
 ```python
-from io import StringIO
+import io
 
-# Create in-memory text stream - O(1)
-stream = StringIO()
+class CountingRaw(io.RawIOBase):
+    """An in-memory raw stream that counts the reads made on it."""
 
-# Write strings - O(k) amortized for k bytes
-stream.write("Hello\n")   # O(5)
-stream.write("World\n")   # O(5)
+    def __init__(self, data):
+        self.data, self.pos, self.reads = data, 0, 0
 
-# Get all content - O(n)
-content = stream.getvalue()  # O(11) for "Hello\nWorld\n"
-print(content)
-# Hello
-# World
+    def readable(self):
+        return True
 
-# Reset position to beginning - O(1)
-stream.seek(0)
+    def readinto(self, buffer):
+        self.reads += 1
+        chunk = self.data[self.pos:self.pos + len(buffer)]
+        buffer[:len(chunk)] = chunk
+        self.pos += len(chunk)
+        return len(chunk)
 
-# Read all - O(n)
-data = stream.read()
-print(data)  # "Hello\nWorld\n"
+line = b"x" * 9_999 + b"\n"
+
+raw = CountingRaw(line)
+assert raw.readline() == line  # O(k) calls - one per byte
+assert raw.reads == 10_000
+
+raw = CountingRaw(line)
+buffered = io.BufferedReader(raw, buffer_size=4096)  # O(b) space
+assert buffered.readline() == line  # O(k) - one raw read per 4,096 bytes
+assert raw.reads <= 4
+
+raw = CountingRaw(line)
+buffered = io.BufferedReader(raw, buffer_size=4096)
+while buffered.read(1):  # O(1) amortized, from the buffer
+    pass
+assert raw.reads <= 4
 ```
 
-### Writing and Reading
+### Buffered Writes
+
+A buffered writer copies into its buffer and writes it out when it fills. Many small writes cost
+a few large raw writes, and nothing reaches the raw stream until the buffer fills or you flush.
 
 ```python
-from io import StringIO
+import io
 
-stream = StringIO()
+class CountingSink(io.RawIOBase):
+    def __init__(self):
+        self.writes, self.data = 0, bytearray()
 
-# Write data - O(k)
-lines = ['apple', 'banana', 'cherry']
-for line in lines:
-    stream.write(line + '\n')
+    def writable(self):
+        return True
 
-# Get value - O(n)
-output = stream.getvalue()
-print(output)
-# apple
-# banana
-# cherry
+    def write(self, b):
+        self.writes += 1
+        self.data += b
+        return len(b)
 
-# Reset and read line by line - O(n)
-stream.seek(0)
-for line in stream:  # O(n) iteration
-    print(f"Line: {line.strip()}")
+sink = CountingSink()
+writer = io.BufferedWriter(sink, buffer_size=4096)
 
-# Close stream - O(1)
-stream.close()
+for _ in range(10_000):
+    writer.write(b"x")  # O(1) amortized - a copy into the buffer
+assert sink.writes <= 3
+
+writer.flush()  # O(b) - writes out what is left
+assert bytes(sink.data) == b"x" * 10_000
 ```
 
-## In-Memory Binary Streams
+### What open() Builds
 
-### BytesIO Basics
+`open()` stacks the layers for you, and its arguments decide how many. `buffering=0` stops at the
+raw `FileIO`; binary mode stops at the buffered layer; text mode adds a `TextIOWrapper`.
 
 ```python
-from io import BytesIO
+import io
+import os
+import tempfile
 
-# Create in-memory bytes stream - O(1)
-stream = BytesIO()
+fd, path = tempfile.mkstemp()
+os.close(fd)
+try:
+    with open(path, "w", encoding="utf-8") as f:  # O(1), O(b) for the buffer
+        assert isinstance(f, io.TextIOWrapper)
+        assert isinstance(f.buffer, io.BufferedWriter)
+        assert isinstance(f.buffer.raw, io.FileIO)
+        f.write("hello\n")  # O(k)
 
-# Write bytes - O(k) amortized
-stream.write(b"Binary ")     # O(7)
-stream.write(b"data")        # O(4)
+    with open(path, "rb") as f:
+        assert isinstance(f, io.BufferedReader)
+        assert f.peek(1).startswith(b"h")  # O(b) - consumes nothing
+        assert f.read() == b"hello\n"  # O(n)
 
-# Get all content - O(n)
-content = stream.getvalue()  # b"Binary data"
-print(content)
-
-# Reset and read - O(1) seek + O(n) read
-stream.seek(0)
-data = stream.read()
-print(data)  # b"Binary data"
+    with open(path, "rb", buffering=0) as f:
+        assert isinstance(f, io.FileIO)
+        assert f.read(5) == b"hello"  # O(k) - one system call
+finally:
+    os.remove(path)
 ```
 
-### Binary Data Manipulation
+## In-Memory Streams
+
+### Building Text With StringIO
+
+`StringIO.write()` appends in amortized O(k), so building a string of n characters is O(n)
+however many pieces it takes. `str.join()` over a list does the same. Repeated `+=` on a `str`
+has no such guarantee: CPython can extend the string in place when nothing else refers to it,
+but once another reference exists every `+=` copies what came before, and the loop is O(n²).
 
 ```python
-from io import BytesIO
-import struct
+import io
 
-stream = BytesIO()
+buffer = io.StringIO()
+for index in range(1_000):
+    buffer.write(f"row {index}\n")  # O(k) amortized
 
-# Pack binary data - O(k) per write
-stream.write(struct.pack('i', 42))      # 4 bytes
-stream.write(struct.pack('f', 3.14))    # 4 bytes
-stream.write(struct.pack('2s', b'AB'))  # 2 bytes
-
-# Get packed data - O(n)
-binary = stream.getvalue()  # 10 bytes total
-
-# Unpack from stream - O(1) seek + O(n) read
-stream.seek(0)
-value1 = struct.unpack('i', stream.read(4))[0]
-value2 = struct.unpack('f', stream.read(4))[0]
-value3 = struct.unpack('2s', stream.read(2))[0]
+text = buffer.getvalue()  # O(n)
+assert text.count("\n") == 1_000
+assert text == "".join(f"row {index}\n" for index in range(1_000))
 ```
 
-## Stream Position Operations
+### BytesIO Shares Its Bytes
 
-### Seeking and Telling
+`BytesIO` built from a `bytes` object keeps that object instead of copying it, and `getvalue()`
+hands its own object back. The copy is paid only when a write would change bytes that something
+else still refers to. `getbuffer()` gives a view that writes in place; while one is open the
+stream refuses `write()`, `truncate()` and `close()`.
 
 ```python
-from io import StringIO
+import io
 
-stream = StringIO("Hello World")
+data = b"x" * 100_000
 
-# Current position - O(1)
-print(stream.tell())  # 0
+stream = io.BytesIO(data)  # O(1) - no copy
+assert stream.getvalue() is data  # O(1)
 
-# Seek to position - O(1)
-stream.seek(6)
-print(stream.tell())  # 6
+stream.write(b"y")  # O(n) once - `data` is still referenced, so it is copied first
+assert data[0:1] == b"x"
+assert stream.getvalue()[0:1] == b"y"
 
-# Read from position - O(n)
-print(stream.read())  # "World"
-
-# Seek to end - O(1)
-stream.seek(0, 2)  # 2 = os.SEEK_END (only offset=0 allowed for text streams)
-print(stream.tell())  # 11
-
-# Seek to absolute position - O(1)
-stream.seek(6)
-print(stream.read())  # "World"
+view = stream.getbuffer()  # O(1)
+view[0] = ord("z")  # writes into the stream
+try:
+    stream.write(b"z")
+except BufferError as error:
+    assert "cannot be re-sized" in str(error)
+else:
+    raise AssertionError("a BytesIO was written while a view was open")
+view.release()
+assert stream.getvalue().startswith(b"zx")
 ```
 
-### Truncate and Resize
+## Text Streams
+
+### tell() and seek()
+
+A text stream's position is not a character count. `tell()` returns an opaque cookie, and to
+build it the wrapper re-decodes the chunk it last read: O(c). Handing the cookie back to `seek()`
+is O(1). `seek()` takes only such a cookie, 0, or a relative seek of 0. `tell()` is refused
+while a `for` loop is iterating the stream; call `readline()` in a loop where you need positions.
 
 ```python
-from io import StringIO
+import io
+import os
 
-stream = StringIO("Hello World")
+raw = io.BytesIO("naïve\ncafé\nüber\n".encode("utf-8"))
+text = io.TextIOWrapper(raw, encoding="utf-8")
 
-# Get length via tell - O(1)
-stream.seek(0, 2)  # Seek to end
-size = stream.tell()
-print(size)  # 11
+assert text.readline() == "naïve\n"  # O(k)
+cookie = text.tell()  # O(c) - re-decodes the chunk it read
+assert text.readline() == "café\n"
 
-# Truncate to position - O(1)
-stream.seek(5)
-stream.truncate()  # Truncate at position 5
+text.seek(cookie)  # O(1)
+assert text.readline() == "café\n"
 
-# Get value after truncate - O(n)
-print(stream.getvalue())  # "Hello"
+text.seek(0, os.SEEK_END)  # O(1)
+try:
+    text.seek(-3, os.SEEK_CUR)
+except io.UnsupportedOperation as error:
+    assert "nonzero" in str(error)
+else:
+    raise AssertionError("a text stream seeked by a character count")
 
-# Truncate to size - O(1)
-stream.truncate(3)
-print(stream.getvalue())  # "Hel"
+text.seek(0)  # O(1)
+try:
+    for line in text:
+        text.tell()
+except OSError as error:
+    assert "next() call" in str(error)
+else:
+    raise AssertionError("tell() worked inside a for loop")
 ```
 
-## Using Streams in Functions
+### Universal Newlines
 
-### Capture Output
-
-```python
-from io import StringIO
-import sys
-
-# Capture stdout - O(1) setup
-captured_output = StringIO()
-
-# Redirect stdout - O(1)
-original_stdout = sys.stdout
-sys.stdout = captured_output
-
-# Code writes to captured stream
-print("Line 1")
-print("Line 2")
-
-# Restore stdout - O(1)
-sys.stdout = original_stdout
-
-# Get captured output - O(n)
-output = captured_output.getvalue()
-print(f"Captured:\n{output}")
-```
-
-### Stream Wrapping
+With `newline=None`, the default for `open()`, a text stream translates `\r\n` and `\r` to `\n`
+as it decodes and records which endings it met in `newlines`.
 
 ```python
-from io import StringIO, TextIOWrapper
-from io import BytesIO
+import io
 
-# Wrap BytesIO with text layer
-bytes_stream = BytesIO()
-text_stream = TextIOWrapper(bytes_stream, encoding='utf-8')
+raw = io.BytesIO(b"one\r\ntwo\rthree\n")
+text = io.TextIOWrapper(raw, encoding="ascii", newline=None)
 
-# Write text - O(k)
-text_stream.write("Hello\nWorld\n")
-text_stream.flush()  # O(1)
+assert text.read() == "one\ntwo\nthree\n"  # O(n)
+assert set(text.newlines) == {"\r\n", "\r", "\n"}
 
-# Get bytes - O(n)
-print(bytes_stream.getvalue())  # b"Hello\nWorld\n"
-```
-
-## Advanced Stream Operations
-
-### Read Entire File-like Object
-
-```python
-from io import StringIO
-
-def process_stream(stream):
-    """Process any file-like object - O(n)"""
-    lines = stream.readlines()  # O(n) read all lines
-    return [line.strip() for line in lines]  # O(n) process
-
-stream = StringIO("line1\nline2\nline3\n")
-result = process_stream(stream)
-print(result)  # ['line1', 'line2', 'line3']
-```
-
-### Read with Buffer
-
-```python
-from io import BytesIO
-
-stream = BytesIO(b"x" * 1000)
-
-def process(data):
-    print(f"Processing {len(data)} bytes")
-
-# Read in chunks - O(n) total, O(1) per chunk
-chunk_size = 100
-while True:
-    chunk = stream.read(chunk_size)  # O(k) per chunk
-    if not chunk:
-        break
-    process(chunk)  # Process chunk
-```
-
-### Seek Performance
-
-```python
-from io import BytesIO
-
-# Large stream - O(1) space due to in-memory
-stream = BytesIO(b"A" * 1000000)
-
-# Random access is fast - O(1)
-stream.seek(500000)
-data = stream.read(100)
-
-stream.seek(100000)
-data = stream.read(100)
-
-# Much faster than sequential file I/O
-```
-
-## Use Cases
-
-### String Formatting
-
-```python
-from io import StringIO
-
-def format_table(rows):
-    """Format table without disk I/O"""
-    output = StringIO()  # O(1)
-    
-    for row in rows:
-        output.write(f"{row[0]:10} {row[1]:10} {row[2]:10}\n")  # O(k) amortized
-    
-    return output.getvalue()  # O(n) - one copy of the whole buffer
-    # O(n) overall. Repeated `text += row` can be O(n²), because each +=
-    # copies the string built so far - CPython can extend in place instead,
-    # but only when the target string has a single reference
-
-data = [
-    ('Name', 'Age', 'Score'),
-    ('Alice', '30', '95'),
-    ('Bob', '25', '87')
-]
-
-table = format_table(data)
-print(table)
-```
-
-### CSV Processing
-
-```python
-from io import StringIO
-import csv
-
-# Generate CSV in memory
-output = StringIO()
-writer = csv.writer(output)
-
-# Write rows - O(n)
-writer.writerow(['Name', 'Age', 'City'])
-writer.writerow(['Alice', '30', 'NYC'])
-writer.writerow(['Bob', '25', 'LA'])
-
-# Get CSV string - O(n)
-csv_data = output.getvalue()
-print(csv_data)
-
-# Parse CSV - O(n)
-input_stream = StringIO(csv_data)
-reader = csv.DictReader(input_stream)
-for row in reader:
-    print(row)
-```
-
-### JSON Processing
-
-```python
-from io import StringIO
-import json
-
-# Generate JSON in memory
-data = {
-    'users': [
-        {'name': 'Alice', 'age': 30},
-        {'name': 'Bob', 'age': 25}
-    ]
-}
-
-output = StringIO()
-
-# Write JSON - O(n)
-json.dump(data, output, indent=2)
-
-# Get JSON string - O(n)
-json_str = output.getvalue()
-print(json_str)
-
-# Parse JSON - O(n)
-input_stream = StringIO(json_str)
-parsed = json.load(input_stream)
+decoder = io.IncrementalNewlineDecoder(None, translate=True)
+assert decoder.decode("a\r") == "a"  # O(k) - holds the \r in case \n follows
+assert decoder.decode("\nb", final=True) == "\nb"
 ```
 
 ## Common Patterns
 
-### Multiline String Construction
+### Copying in Fixed-Size Chunks
+
+`readinto()` fills a buffer you allocated once, so copying a stream of any size holds one chunk.
 
 ```python
-from io import StringIO
+import io
 
-output = StringIO()
+source = io.BytesIO(bytes(range(256)) * 1_000)
+target = io.BytesIO()
 
-# Build multi-line string efficiently - O(n)
-lines = [f"Line {i}\n" for i in range(100)]
-for line in lines:
-    output.write(line)
+chunk = bytearray(16_384)
+view = memoryview(chunk)
+while count := source.readinto(chunk):  # O(k) - no new bytes object
+    target.write(view[:count])  # O(k) amortized
 
-result = output.getvalue()  # Single string, no concatenation overhead
+assert target.getvalue() == source.getvalue()
 ```
 
-### Filter and Transform
+### Decoding a Binary Stream
+
+A `TextIOWrapper` turns any binary stream into lines of text without reading it all first, the
+way `open()` does for files.
 
 ```python
-from io import StringIO
+import io
 
-def filter_and_transform(text):
-    """Process text with streaming"""
-    input_stream = StringIO(text)
-    output_stream = StringIO()
-    
-    # Process line by line - O(n)
-    for line in input_stream:
-        processed = line.upper().strip()
-        output_stream.write(processed + '\n')
-    
-    return output_stream.getvalue()
+payload = io.BytesIO("name,city\nAlice,Zürich\nBob,Oslo\n".encode("utf-8"))
 
-result = filter_and_transform("hello\nworld\npython")
-print(result)
+with io.TextIOWrapper(payload, encoding="utf-8") as lines:  # O(1)
+    header = next(lines)  # O(k)
+    rows = [line.rstrip("\n").split(",") for line in lines]  # O(k) per line
+
+assert header == "name,city\n"
+assert rows == [["Alice", "Zürich"], ["Bob", "Oslo"]]
 ```
 
-## Performance Comparison
+## Performance Best Practices
 
-### StringIO vs String Concatenation
+✅ **Do**:
 
-```python
-from io import StringIO
+- Keep the default buffering: a run of small reads or writes costs one system call per buffer
+- Iterate a file for lines instead of `readlines()`, so memory follows the line, not the file
+- Read large binary data with `readinto()` and one reused buffer
+- Build text with `StringIO` or `str.join()`, and call `getvalue()` once at the end
+- Hand `BytesIO` a `bytes` object rather than a `bytearray`: it is shared, not copied
+- Treat `tell()` on a text file as a cookie for `seek()`, not an offset to do arithmetic on
 
-# Bad: String concatenation - O(n²)
-result = ""
-for i in range(1000):
-    result += f"Line {i}\n"  # Creates new string each time
+❌ **Avoid**:
 
-# Good: StringIO - O(n)
-output = StringIO()
-for i in range(1000):
-    output.write(f"Line {i}\n")
-result = output.getvalue()
+- `readline()` on an unbuffered (`buffering=0`) file - one system call per byte
+- `getvalue()` inside a loop - each `StringIO` call is O(n)
+- `tell()` after every line of a large text file when you do not need to come back
+- Holding on to a `BytesIO.getvalue()` result while you keep writing - the next write copies
 
-# StringIO is much faster for many writes
-```
+## Version Notes
 
-### File vs In-Memory
+- **Python 3.10+**: Added `io.text_encoding()` and `EncodingWarning`
+- **Python 3.14+**: Added `io.Reader` and `io.Writer`
+- **Python 3.14+**: `DEFAULT_BUFFER_SIZE` is 128 KiB, and `open()` buffers by the larger of it and
+  the file's block size, counting at most 8 MiB of the block size; earlier versions use 8 KiB,
+  and `open()` the block size when the file reports one
 
-```python
-from io import StringIO
-import time
+## Related Modules
 
-data = "x" * 1000
-
-# File I/O - slower, disk bound
-start = time.time()
-with open('temp.txt', 'w') as f:
-    for _ in range(1000):
-        f.write(data)
-file_time = time.time() - start
-
-# In-memory - faster, CPU bound
-start = time.time()
-stream = StringIO()
-for _ in range(1000):
-    stream.write(data)
-memory_time = time.time() - start
-
-print(f"File: {file_time:.4f}s, Memory: {memory_time:.4f}s")
-# Memory is typically 10-100x faster
-```
-
-## Memory Efficiency
-
-### When to Use io Module
-
-```python
-from io import StringIO, BytesIO
-
-# Good: Temporary buffers, testing
-stream = StringIO()
-stream.write(some_output)
-assert "expected" in stream.getvalue()
-
-# Good: In-memory formatting
-output = StringIO()
-for item in items:
-    output.write(format_item(item))
-result = output.getvalue()
-
-# Avoid: Very large data (use generators/streaming)
-# Don't use io for multi-megabyte datasets
-```
-
-## Related Documentation
-
-- [Open Built-in](../builtins/open.md)
-- [Pickle Module](pickle.md)
-- [CSV Module](csv.md)
-- [JSON Module](json.md)
+- **[open](../builtins/open.md)** - the builtin that builds these stacks
+- **[mmap](mmap.md)** - maps a file into memory for random access without reads
+- **[shutil](shutil.md)** - `copyfileobj()` for chunked copying between streams
+- **[tempfile](tempfile.md)** - `SpooledTemporaryFile` keeps data in a `BytesIO` until it grows
+- **[codecs](codecs.md)** - the incremental decoders a `TextIOWrapper` uses
+- **[csv](csv.md)** - reads and writes text streams, including `StringIO`

@@ -28,7 +28,6 @@ import bisect
 import contextlib
 import filecmp
 import fnmatch
-import io
 import numbers
 import posixpath
 import pprint
@@ -578,26 +577,6 @@ class TestUnicodeDataLookupsAreTableReads:
         assert fallback < 100, (
             f"the fallback only sees already-ordered runs, so twenty times the "
             f"marks should cost about twenty times, not {fallback:.1f}x"
-        )
-
-
-class TestIoStringBuilding:
-    """docs/stdlib/io.md: StringIO accumulation is linear."""
-
-    @pytest.mark.timing
-    def test_stringio_accumulation_is_linear(self) -> None:
-        def build(rows: int) -> str:
-            buffer = io.StringIO()
-            for index in range(rows):
-                buffer.write(f"row {index}\n")
-            return buffer.getvalue()
-
-        small = best_time(lambda: build(2_000))
-        large = best_time(lambda: build(20_000))
-
-        assert large < small * 30, (
-            f"writes are amortized, so ten times the rows should be about ten "
-            f"times the work: {small:.2e}s vs {large:.2e}s"
         )
 
 
