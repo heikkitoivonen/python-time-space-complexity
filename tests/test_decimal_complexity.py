@@ -20,10 +20,12 @@ Measurement scope:
   grows more than 8x, which excludes linear. `Decimal(Decimal)` is asserted to
   return the same object.
 * Conversion out. `int(d)` grows more than 8x for 4x the coefficient digits,
-  and `int()`, `round(d)` and `as_integer_ratio()` each grow more than 8x for
-  4x the exponent at one coefficient digit - positive for the numerator,
-  negative for `as_integer_ratio()`'s denominator - which is the (n + e)² of
-  those rows. `float(d)` grows under 6x for the same 4x digit step. A float's
+  and `int()`, `round(d)` and `as_integer_ratio()` each grow more than 20x
+  per 10x exponent step at 500, 5,000 and 50,000, with one coefficient
+  digit - positive for the numerator, negative for the ratio denominator.
+  Both intervals exclude linear growth; they do not establish an exact
+  quadratic rate for integer exponentiation in `as_integer_ratio()`.
+  `float(d)` grows under 6x for the same 4x digit step. A float's
   exact expansion is asserted at 767 digits for the widest denormal and 309
   for `sys.float_info.max`, and its cost is flat across those two, so it is
   bounded by the format.
@@ -31,8 +33,10 @@ Measurement scope:
   `format(d, '.2f')` over the same pair stays under 2x on a coefficient of
   nines. The discarded-digit scan is measured separately: a coefficient of
   zeros makes `format()`, `round(d, 2)` and `to_integral_value()` each grow
-  more than 10x from 2,000 to 200,000 digits, which is why the page prices
-  them O(r + n) and not O(r). A field width is asserted to produce a
+  between 3x and 30x per 10x step at 20,000, 200,000 and 2,000,000
+  digits. Both intervals separate the scan from constant and quadratic
+  growth while the result stays fixed, exposing the n term of O(r + n).
+  A field width is asserted to produce a
   1,000,000-character result from a one-digit coefficient, which is the L
   term.
 * Addition. The coefficients are held at one digit while the exponent gap
@@ -193,6 +197,7 @@ from decimal import (
     localcontext,
     setcontext,
 )
+from functools import partial
 from typing import Any, cast
 
 import pytest
@@ -475,16 +480,20 @@ class TestConstructionBounds:
         self, name: str, sign: str, call: Callable[[Decimal], Any]
     ) -> None:
         """One coefficient digit either way: only the exponent grows."""
-        small, large = Decimal(f"1E{sign}5000"), Decimal(f"1E{sign}20000")
-        assert digits(small) == digits(large) == 1
+        sizes = (500, 5_000, 50_000)
+        times = []
         with localcontext() as ctx:
             ctx.prec = 100_000
-            ratio = best_ns(lambda: call(large), repeats=3) / best_ns(
-                lambda: call(small), repeats=3
+            for size in sizes:
+                value = Decimal(f"1E{sign}{size}")
+                assert digits(value) == 1
+                times.append(best_ns(partial(call, value), repeats=7))
+        for index, (small, large) in enumerate(zip(times[:-1], times[1:], strict=True)):
+            ratio = large / small
+            assert ratio > 20.0, (
+                f"{name}() at exponents {sizes[index]} and {sizes[index + 1]} "
+                f"cost {ratio:.1f}x at one coefficient digit; times (ns): {times}"
             )
-        assert ratio > 8.0, (
-            f"{name}() on 4x the exponent cost {ratio:.1f}x at one coefficient digit"
-        )
 
     def test_a_float_expansion_is_bounded_by_the_format(self) -> None:
         widest_denormal = sys.float_info.min - 5e-324
@@ -586,15 +595,20 @@ class TestRenderingRendersWhatItKeeps:
     def test_a_zero_tail_is_scanned_which_is_the_n_term(
         self, name: str, call: Callable[[Decimal], Any]
     ) -> None:
+        sizes = (20_000, 200_000, 2_000_000)
+        times = []
         with localcontext() as ctx:
-            ctx.prec = self.LARGE + 10
-            small = Decimal("1." + "0" * 1_999)
-            large = Decimal("1." + "0" * (self.LARGE - 1))
-            ratio = best_ns(lambda: call(large), inner=20) / best_ns(lambda: call(small), inner=20)
-        assert ratio > 10.0, (
-            f"{name}() has nothing non-zero to stop the scan at, so it is linear: "
-            f"{ratio:.1f}x for 100x the digits"
-        )
+            ctx.prec = sizes[-1] + 10
+            for size in sizes:
+                value = Decimal("1." + "0" * (size - 1))
+                assert call(value) == ("1.00" if name == "format" else Decimal(1))
+                times.append(best_ns(partial(call, value), inner=20))
+        for index, (small, large) in enumerate(zip(times[:-1], times[1:], strict=True)):
+            ratio = large / small
+            assert 3.0 < ratio < 30.0, (
+                f"{name}() scanning {sizes[index]} and {sizes[index + 1]} digits "
+                f"cost {ratio:.1f}x for a fixed result; times (ns): {times}"
+            )
 
     def test_a_field_width_writes_what_it_asks_for(self) -> None:
         one = Decimal(1)
