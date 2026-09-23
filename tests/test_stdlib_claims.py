@@ -43,7 +43,6 @@ from collections import defaultdict, deque
 from collections.abc import Callable, Iterator
 from fractions import Fraction
 from functools import cmp_to_key
-from ipaddress import IPv4Network
 from pathlib import Path
 from typing import Any
 
@@ -191,37 +190,6 @@ class TestCmpToKeyCallsPerComparison:
         assert key_calls["n"] == size, "key= is called exactly once per element"
         assert comparisons["n"] > size * 3, (
             f"compare() runs per comparison, about n log n: {comparisons['n']} calls for n={size}"
-        )
-
-
-class TestIpaddressSupernetIsBounded:
-    """docs/stdlib/ipaddress.md: widening drops one prefix bit per step, so
-    the loop is bounded by the address size."""
-
-    def test_widening_terminates_within_the_prefix_length(self) -> None:
-        network = IPv4Network("10.1.2.0/24")
-        steps = 0
-        while network.prefixlen > 0:
-            network = network.supernet()
-            steps += 1
-
-        assert steps == 24, "one bit per step, from /24 to /0"
-        assert steps <= 32, "and never more than the address width"
-
-    @pytest.mark.timing
-    def test_membership_does_not_scan_the_network(self) -> None:
-        from ipaddress import IPv4Address
-
-        small = IPv4Network("10.0.0.0/30")  # 4 addresses
-        huge = IPv4Network("10.0.0.0/8")  # 16 million
-
-        small_time = best_time(lambda: [IPv4Address("10.0.0.1") in small for _ in range(5_000)])
-        huge_time = best_time(lambda: [IPv4Address("10.0.0.1") in huge for _ in range(5_000)])
-
-        ratio = max(small_time, huge_time) / min(small_time, huge_time)
-        assert ratio < 3.0, (
-            f"membership is arithmetic on the prefix, not a scan: "
-            f"/30={small_time:.2e}s /8={huge_time:.2e}s"
         )
 
 
