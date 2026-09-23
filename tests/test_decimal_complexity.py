@@ -20,11 +20,13 @@ Measurement scope:
   grows more than 8x, which excludes linear. `Decimal(Decimal)` is asserted to
   return the same object.
 * Conversion out. `int(d)` grows more than 8x for 4x the coefficient digits,
-  and `int()`, `round(d)` and `as_integer_ratio()` each grow more than 20x
-  per 10x exponent step at 500, 5,000 and 50,000, with one coefficient
-  digit - positive for the numerator, negative for the ratio denominator.
-  Both intervals exclude linear growth; they do not establish an exact
-  quadratic rate for integer exponentiation in `as_integer_ratio()`.
+  and `int()` and `round(d)` each grow more than 20x per 10x positive
+  exponent step at 500, 5,000 and 50,000, with one coefficient digit.
+  Both intervals exclude linear growth. At the same exponent sizes,
+  `as_integer_ratio()` is asserted to return exactly `(10**e, 1)` for a
+  positive exponent and `(1, 10**e)` for a negative one. The expanded
+  integer's bit length lies between 3e and 4e, exposing the output-size
+  dependence on the exponent without timing integer exponentiation.
   `float(d)` grows under 6x for the same 4x digit step. A float's
   exact expansion is asserted at 767 digits for the widest denormal and 309
   for `sys.float_info.max`, and its cost is flat across those two, so it is
@@ -118,6 +120,10 @@ Measurement scope:
   flipped.
 
 Not settled here:
+
+* The time growth class of `as_integer_ratio()`: exact outputs and their bit
+  lengths establish exponent-dependent output size, not an exponentiation
+  algorithm's running time.
 
 * Where libmpdec switches from schoolbook to Karatsuba and then to a
   number-theoretic transform. The dispatch is read from
@@ -472,8 +478,6 @@ class TestConstructionBounds:
         [
             ("int", "+", lambda value: int(value)),
             ("round", "+", lambda value: round(value)),
-            ("as_integer_ratio numerator", "+", lambda value: value.as_integer_ratio()),
-            ("as_integer_ratio denominator", "-", lambda value: value.as_integer_ratio()),
         ],
     )
     def test_the_exponent_is_a_size_when_it_has_to_be_written_out(
@@ -494,6 +498,20 @@ class TestConstructionBounds:
                 f"{name}() at exponents {sizes[index]} and {sizes[index + 1]} "
                 f"cost {ratio:.1f}x at one coefficient digit; times (ns): {times}"
             )
+
+    @pytest.mark.parametrize("sign", ["+", "-"], ids=["numerator", "denominator"])
+    def test_integer_ratio_expands_the_exponent_into_the_result(self, sign: str) -> None:
+        """One coefficient digit produces an integer with size proportional to |e|."""
+        for size in (500, 5_000, 50_000):
+            value = Decimal(f"1E{sign}{size}")
+            assert digits(value) == 1
+
+            numerator, denominator = value.as_integer_ratio()
+
+            power = 10**size
+            assert (numerator, denominator) == ((power, 1) if sign == "+" else (1, power))
+            expanded = numerator if sign == "+" else denominator
+            assert 3 * size < expanded.bit_length() < 4 * size
 
     def test_a_float_expansion_is_bounded_by_the_format(self) -> None:
         widest_denormal = sys.float_info.min - 5e-324

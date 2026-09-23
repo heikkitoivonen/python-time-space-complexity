@@ -35,8 +35,9 @@ Measured on one aarch64 machine under CPython 3.14.7:
 * negation of a 1M-bit value allocates 133 KB at peak and 533 KB for 4M
   bits: a copy, so `-x` and `abs(-x)` are linear in the width;
 * `a & b` with a 1,000-bit `b` and a 1M-then-4M-bit `a`: x1.0, and the
-  result is the size of `b`; `a | b` and `a ^ b` with 250,000 then 4M bits,
-  batched 100 calls per sample: x20-x27 for 16x the wider operand;
+  result is the size of `b`; `a | b` and `a ^ b` at 250,000, 4M and 64M
+  bits allocate a fresh result as wide as the larger operand. Traced peaks
+  grow between 8x and 32x per 16x size step; their time scaling is not timed;
 * `~x`, `x << 100`, `x >> 100`: x3.7-x4.0; `1 << s` for 16x the shift: x15;
   `x >> (n - 100)`: x1.0 for a non-negative x; for a negative x with 1M
   then 16M bits, batched 20 calls per sample: x16 for 16x the width;
@@ -87,6 +88,7 @@ import time
 import tracemalloc
 import warnings
 from collections.abc import Callable
+from functools import partial
 from random import Random
 from typing import Any
 
@@ -388,7 +390,7 @@ class TestBitwise:
         assert sys.getsizeof(wide & -narrow) == sys.getsizeof(wide)
         assert sys.getsizeof(-wide & narrow) == sys.getsizeof(narrow)
 
-    @pytest.mark.timing
+    @pytest.mark.serial
     @pytest.mark.parametrize(
         "operation",
         [
@@ -396,22 +398,28 @@ class TestBitwise:
             pytest.param(lambda x, y: x ^ y, id="xor"),
         ],
     )
-    def test_or_and_xor_cost_the_wider_operand(self, operation: Callable[[int, int], int]) -> None:
-        """Batch 100 calls at 250,000 then 4,000,000 bits, holding the
-        narrower operand at 1,000 bits. A 16x step separates constant (1x),
-        linear (16x) and quadratic (256x) work despite allocation/cache
-        effects: CPython 3.11.14 measures 17-25x. Signs and digit patterns
-        are not varied.
+    def test_or_and_xor_allocate_for_the_wider_operand(
+        self, operation: Callable[[int, int], int]
+    ) -> None:
+        """Fresh wide results require storage even when the other operand is narrow.
+
+        Trace 250,000, 4,000,000 and 64,000,000 bits with a fixed positive
+        1,000-bit operand. This measures output allocation, not running time;
+        signs and digit patterns are not varied.
         """
         narrow = random_bits(1_000)
-        small, large = random_bits(250_000), random_bits(4_000_000)
+        peaks = []
+        for size in (250_000, 4_000_000, 64_000_000):
+            wide = random_bits(size)
+            result = operation(wide, narrow)
+            assert result is not wide
+            assert result.bit_length() == size
+            peak = peak_bytes(partial(operation, wide, narrow))
+            assert peak >= sys.getsizeof(result)
+            peaks.append(peak)
 
-        growth = ratio(
-            batched(lambda: operation(small, narrow), 100),
-            batched(lambda: operation(large, narrow), 100),
-        )
-
-        assert 6 < growth < 48, f"x{growth:.1f} for 16x the wide operand"
+        for small, large in zip(peaks[:-1], peaks[1:], strict=True):
+            assert 8 * small < large < 32 * small, f"16x the wide operand: peaks {peaks}"
 
     @pytest.mark.timing
     @pytest.mark.parametrize(

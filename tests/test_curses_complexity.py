@@ -62,6 +62,10 @@ Measurement scope:
   is in the visibility and deck position that operation needs. A panel another
   measurement had hidden would make `move()` time as a constant, which is the
   reading these tests exist to rule out.
+* `new_panel()` is timed in batches of 32 with prebuilt windows and retained
+  results, at deck sizes 64 and 6,400. The 100x interval costs under 15x
+  for creation and over 20x for removal, whose clock covers only dropping the
+  last reference; window setup and cleanup of creation batches are untimed.
 * `syncup()` is varied in two directions on windows built the same way: the
   depth at a fixed row count, and the row count at a fixed depth. Both move it,
   which is what makes the bound the product rather than the depth alone.
@@ -1752,49 +1756,51 @@ class TestPanels:
 
     @pytest.mark.timing
     def test_making_a_panel_is_cheap_and_dropping_one_is_not(self) -> None:
-        """The clock covers new_panel() alone, which is what makes it O(1).
+        """Time 32 creations per sample with windows built outside the clock.
 
-        Creating the window inside the measurement would have charged
-        `newwin()` to it, and letting the new panel go would have charged the
-        removal from the deck - the very cost the second half of this test
-        measures on its own.
+        Decks of 64 and 6,400 separate constant creation from linear
+        removal over a 100x interval. Results stay alive until after timing;
+        clearing them and building windows belong to sample setup.
         """
 
         def measure(stdscr: Any, deck: int) -> dict[str, float]:
             import curses
             import curses.panel
-            import gc
 
             held: list[Any] = [
                 curses.panel.new_panel(curses.newwin(6, 20, i % 4, i % 4)) for i in range(deck)
             ]
             assert len(held) == deck
+            created: list[Any] = []
 
             def making() -> Callable[[], Any]:
-                window = curses.newwin(6, 20, 0, 0)
-                return lambda: held.append(curses.panel.new_panel(window))
-
-            doomed: list[Any] = []
-
-            def dropping() -> Callable[[], Any]:
-                doomed.clear()
-                doomed.append(curses.panel.new_panel(curses.newwin(6, 20, 0, 0)))
+                created.clear()
+                windows = [curses.newwin(6, 20, 0, 0) for _ in range(32)]
 
                 def run() -> None:
-                    doomed.clear()
-                    gc.collect(0)
+                    for window in windows:
+                        created.append(curses.panel.new_panel(window))
 
                 return run
 
-            return {"make": _best(making, 15), "drop": _best(dropping, 15)}
+            make_time = _best(making, 15)
+            created.clear()
+            doomed: list[Any] = []
 
-        (small, _) = _screen(lambda stdscr: measure(stdscr, 256))
-        (large, _) = _screen(lambda stdscr: measure(stdscr, 1024))
+            def dropping() -> Callable[[], Any]:
+                doomed.append(curses.panel.new_panel(curses.newwin(6, 20, 0, 0)))
+                return doomed.clear
 
+            return {"make": make_time, "drop": _best(dropping, 15)}
+
+        small, _ = _screen(lambda stdscr: measure(stdscr, 64))
+        large, _ = _screen(lambda stdscr: measure(stdscr, 6400))
         making = large["make"] / small["make"]
         dropping = large["drop"] / small["drop"]
-        assert making < 2, f"4x the deck made new_panel() x{making:.1f}; it should not move"
-        assert dropping > 2, f"4x the deck made dropping a panel only x{dropping:.1f}"
+        assert making < 15, (
+            f"100x the deck made 32 new_panel() calls x{making:.1f}: {small}, {large}"
+        )
+        assert dropping > 20, f"100x the deck made panel removal x{dropping:.1f}: {small}, {large}"
 
     @pytest.mark.timing
     def test_update_panels_grows_with_the_square_of_the_deck(self) -> None:

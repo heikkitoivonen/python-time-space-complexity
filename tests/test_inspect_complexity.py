@@ -109,11 +109,11 @@ Measurement scope:
 * The 3.11-only `co_varnames` rebuild is asserted from both directions: the
   tuple's identity across two accesses is stable everywhere but 3.11, and
   `getargs()` over a two-parameter function carrying 5 against 2,000 locals
-  costs more than 4x there and under 2x elsewhere. `signature()` and
-  `getfullargspec()` read the same attribute and are named in the Version
-  Note. `getargs()` moves 9.5x over that pair on 3.11 and `signature()` 2.5x,
-  so both are asserted, at their own thresholds and against a flat
-  elsewhere.
+  costs more than 4x there and under 2x elsewhere. For `signature()` and
+  `getfullargspec()`, growing from 5 to 20,000 locals at two parameters
+  raises traced peak allocation more than 20x on 3.11 and less than 3x
+  elsewhere. The large temporary tuple exposes the rebuild without timing
+  signature construction's fixed overhead.
 * The version boundaries are asserted by behaviour, not by version alone:
   `getargvalues(frame).locals` supports `__setitem__` write-through on 3.13+
   and is a plain `dict` snapshot before, and a class's `findsource()` is
@@ -184,6 +184,7 @@ import subprocess
 import sys
 import textwrap
 import time
+import tracemalloc
 import types
 from collections.abc import AsyncGenerator, Callable, Generator
 from typing import Any
@@ -1443,19 +1444,28 @@ class TestArgumentSpecs:
         else:
             assert far < 2 * near, f"400x the locals cost {far / near:.1f}x ({near:.2f}us)"
 
-    @pytest.mark.timing
-    def test_the_signature_family_shares_the_3_11_rebuild(self) -> None:
-        """`signature()` reads the same attribute, so it moves on 3.11 alone."""
-        few, many = self._with_locals(5), self._with_locals(2_000)
+    @pytest.mark.serial
+    @pytest.mark.parametrize("inspect_call", [inspect.signature, inspect.getfullargspec])
+    def test_the_signature_family_shares_the_3_11_rebuild(
+        self, inspect_call: Callable[..., Any]
+    ) -> None:
+        """A rebuilt 20,002-entry tuple is visible in peak allocation."""
+        few, many = self._with_locals(5), self._with_locals(20_000)
         assert len(inspect.signature(many).parameters) == 2, "the locals changed p"
-
-        near = best_us(lambda: inspect.signature(few), inner=2_000)
-        far = best_us(lambda: inspect.signature(many), inner=2_000)
+        peaks = []
+        for target in (few, many):
+            inspect_call(target)
+            tracemalloc.start()
+            try:
+                inspect_call(target)
+                peaks.append(tracemalloc.get_traced_memory()[1])
+            finally:
+                tracemalloc.stop()
 
         if sys.version_info[:2] == (3, 11):
-            assert far > 2 * near, f"400x the locals cost {far / near:.1f}x ({near:.2f}us)"
+            assert peaks[1] > 20 * peaks[0], f"rebuilt locals tuple: peaks {peaks}"
         else:
-            assert far < 1.5 * near, f"400x the locals cost {far / near:.1f}x ({near:.2f}us)"
+            assert peaks[1] < 3 * peaks[0], f"cached locals tuple: peaks {peaks}"
 
     def test_getargs_reads_the_code_object(self) -> None:
         arguments = inspect.getargs(self._target.__code__)
