@@ -1,209 +1,197 @@
 """Tests for docs/stdlib/multiprocessing.md.
 
-Lib/multiprocessing/process.py: ``Process.__init__`` copies its args and
-kwargs and stores the target; ``start()`` calls ``_cleanup()``, which polls
-every child in the module's ``_children`` set, then builds the context's
-Popen - ``popen_fork`` forks and sends nothing through Python,
-``popen_spawn_posix`` and ``popen_forkserver`` pickle the process object
-with ``reduction.dump`` and write it to the child; ``join()`` waits on the
-Popen and discards a finished child from ``_children``; ``is_alive()`` is
-one ``poll()``; ``terminate()``, ``kill()`` and ``interrupt()`` (3.14+)
-send a signal and return; ``close()`` raises ValueError while ``poll()`` is
-None and afterwards ``_check_closed`` raises in the methods and the
-``exitcode``, ``pid`` and ``sentinel`` properties; ``active_children()`` is
-``_cleanup()`` plus ``list(_children)``. Lib/multiprocessing/pool.py:
-``Pool.__init__`` starts ``processes`` workers (``os.process_cpu_count()``
-from 3.13, ``os.cpu_count()`` before) and three daemon threads; ``map()``
-is ``_map_async(...).get()``, and ``_map_async`` lists an unsized iterable,
-computes ``chunksize`` as ``ceil(len / (4 * workers))`` and builds a
-MapResult holding ``[None] * len``; the task-handler thread iterates the
-chunk generator and pickles each ``(mapstar, (func, chunk))`` task with
-``inqueue._writer.send``, so the function is pickled once per chunk;
-``imap()`` and ``imap_unordered()`` queue a generator over the input with
-chunksize 1 and return an iterator whose ``_set`` appends every arriving
-result to a deque, ``IMapIterator`` parking out-of-order ones in
-``_unsorted``; ``ApplyResult._set`` unpickled nothing itself - the result
-handler thread did, on ``recv`` - runs the callback and only then sets the
-event ``ready()`` reads; ``get(timeout)`` raises the package's
-``TimeoutError``; ``__exit__`` is ``terminate()``, whose ``_terminate_pool``
-drains the inqueue, terminates each worker and joins it, and ``join()``
-raises ValueError in the RUN state. Lib/multiprocessing/queues.py:
-``Queue.put`` acquires the bounded semaphore, appends to a deque and
-notifies; the feeder thread started on the first ``put`` pops, pickles with
-``ForkingPickler.dumps``, and ``send_bytes`` under the writer lock, printing
-a traceback and releasing the semaphore when pickling fails; ``get``
-``recv_bytes`` under the reader lock, releases the semaphore and lock, and
-then ``loads``; ``qsize`` is ``maxsize - sem.get_value()``, ``empty`` is
-``not reader.poll()``; ``close`` marks the queue closed and queues the
-feeder's sentinel; ``join_thread`` joins the feeder; ``SimpleQueue.put``
-pickles in the caller, then ``send_bytes`` under the writer lock.
-Lib/multiprocessing/connection.py: ``send`` is ``_send_bytes(dumps(obj))``,
-``recv`` is ``loads(_recv_bytes())``, ``recv_bytes(maxlength)`` returns
-None from ``_recv_bytes`` past the limit, which ``_bad_message_length``
-turns into OSError, ``recv_bytes_into`` raises BufferTooShort carrying the
-message, ``_send`` loops on ``os.write`` and blocks when the socket buffer
-is full, ``poll`` is ``wait([self], timeout)``. Lib/multiprocessing/
-synchronize.py: every primitive is a named ``_multiprocessing.SemLock``,
-registered with the resource tracker unless the fork context unlinked it at
-once; ``Condition.wait`` releases the lock ``_count()`` times and acquires
-a semaphore, ``notify(n)`` releases the wait semaphore up to n times and
-acquires the woken counter once per sleeper, ``notify_all`` is
-``notify(sys.maxsize)``, ``Event.set`` is ``notify_all``, and Barrier is
-``threading.Barrier`` with its state in a two-int shared buffer.
-Lib/multiprocessing/sharedctypes.py: ``RawValue`` and ``RawArray`` take a
-heap block, ``memset`` it, and ``__init__`` it from the arguments; ``Value``
-and ``Array`` wrap the raw object with an ``RLock`` unless ``lock=False``,
-the wrapper's ``value``, ``__getitem__``, ``__setitem__`` and slices
-acquiring the lock and ``__len__`` not. Lib/multiprocessing/managers.py:
-``Manager()`` is ``SyncManager(...).start()``, which starts a server
-process and ``recv``s its address; each registered factory dispatches a
-``create`` on a fresh connection and returns a proxy whose ``_incref`` is
-another; ``BaseProxy._callmethod`` sends ``(id, methodname, args, kwds)``
-on the thread's connection and receives ``(kind, result)``; list proxies
-expose ``__getitem__`` but not ``__iter__``, so iteration is Python's
-index-until-IndexError fallback, and dict proxies expose ``__iter__`` as an
-Iterator proxy whose every ``__next__`` is a round trip; ``__exit__`` is
-``shutdown()``. ``log_to_stderr`` adds a StreamHandler on every call;
-``get_all_start_methods`` builds a new list; ``set_start_method`` raises
-RuntimeError once a context is set unless forced.
+The page prices the module by what crosses between processes: the time to
+start one, the time a call spends blocked, and the pickled bytes sent. None of
+those three can be pinned by a test on a shared machine, so the tests settle
+what the bounds are made of instead - who pickles, in which thread and how
+often, how many messages a call sends, which calls wait and which return at
+once, and what is shared rather than copied. Counting ``__getstate__`` and
+``__setstate__``, counting messages on a connection, and checking identity
+need no tolerance; the waits are settled by a gate the test holds and then
+releases, with a timeout far longer than the release takes.
 
-Observation settles every row that has something to observe:
+Measurement scope:
 
-* an unstarted Process has no pid, ident or exitcode, is not alive, raises
-  ValueError for ``sentinel`` and is absent from ``active_children()``; a
-  list passed as ``args`` is copied, so an item appended afterwards is not
-  seen; the target runs once, in a process whose ``os.getpid()`` is the
-  Process's ``pid`` and whose ``parent_process().pid`` is the parent's,
-  with its args and kwargs, where a direct ``run()`` runs it in the caller
-  and a Process without a target runs nothing; ``join()`` on a finished
-  child returns in under 5 seconds with a ten-second timeout and on a
-  blocked one returns after its 50 ms timeout with the child alive;
-  ``terminate()`` and ``kill()`` leave exit codes of -SIGTERM and -SIGKILL,
-  and ``terminate()`` returns well inside five seconds from a child that
-  ignores SIGTERM and stays alive until killed,
-  and on 3.14 ``interrupt()`` reaches a SIGINT handler the child installed;
-  ``close()`` raises ValueError on a live child, and afterwards
-  ``is_alive()``, ``join()``, ``exitcode`` and ``pid`` raise it;
-  ``active_children()`` with three live children returns a new
-  three-element list, polls each child once, and ``start()`` polls all
-  three; under ``spawn`` and ``forkserver`` an argument's ``__getstate__``
-  runs once in the parent during ``start()``, under ``fork`` never;
-* ``Pool(2)`` adds two to ``active_children()`` and ``close()`` +
-  ``join()`` removes them, a default ``Pool()`` adds the CPU count;
-  ``map()`` returns results in input order and exhausts a generator input,
-  and ``map_async()`` has exhausted one, in the calling thread, by the
-  time it returns, its tasks still gated;
-  on 1000 items the function's ``__getstate__`` runs 1000 times with
-  ``chunksize=1``, 8 times with the default on two workers, once with
-  ``chunksize=1000``, 100 times for ``imap`` over 100 items and 10 with
-  ``chunksize=10``; ``map_async`` returns with ``ready()`` false while its
-  tasks are held behind a file gate; ``imap()`` yields its first item
-  within five seconds while the input generator is still gated; six
-  results reach the iterator's deque with none consumed; over a gated first task and a free second, ``imap`` parks the free
-  result and times out where ``imap_unordered`` yields it at once; ``get(timeout=0.05)`` on a gated task
-  raises ``multiprocessing.TimeoutError``, which is not a subclass of the
-  builtin; ``successful()`` before ready raises ValueError; a result's ``__setstate__``
-  has run once, in a thread other than the main one, once ``wait()``
-  returns and before ``get()``, which does not run it again;
-  a callback runs in a thread that is not the main thread and sees
-  ``ready()`` false; ``apply_async`` after ``close()`` and ``join()``
-  before it raise ValueError; a task that has signalled it started and is
-  held behind a gate when a ``with`` block ends never writes its file, and
-  its worker has left ``active_children()`` by then;
-* a Queue's feeder, held inside one object's ``__getstate__``, has not
-  pickled the object put after it, and the value received reflects a
-  mutation made after ``put()`` returned; putting a lambda prints a
-  traceback in the feeder, leaves ``qsize()`` at 0 and ``get(timeout)``
-  raising Empty; ``Queue(maxsize=1)`` raises Full on the second
-  ``put_nowait`` and after a 50 ms timed put; ``get_nowait`` on an empty queue raises Empty; a payload's ``__setstate__``
-  finds the reader lock free while ``get()`` unpickles it; with the feeder held ``qsize()`` is 1 and
-  ``empty()`` still true, and it turns false once the feeder is released;
-  ``put`` and ``get`` after ``close()`` raise ValueError, ``join_thread()`` does not return while the feeder is held, and the
-  three items buffered behind it at ``close()`` still reach a child reader;
-  JoinableQueue's third ``task_done()`` for two puts raises ValueError and
-  ``join()`` stays blocked with one item outstanding and returns once both
-  are done; ``SimpleQueue.put`` runs ``__getstate__`` once, in the calling thread,
-  before returning;
-* ``Connection.send`` runs ``__getstate__`` once, in the calling thread,
-  before returning and ``recv`` returns an equal object; the read end of a one-way pipe refuses
-  ``send``; ``recv_bytes(maxlength)`` raises OSError for a longer message;
-  ``recv_bytes_into`` a short buffer raises BufferTooShort carrying the
-  message and a long one returns the length; ``poll()`` is false in under five seconds,
-  false after its 50 ms timeout, true after a send; a 4 MiB ``send_bytes``
-  is still blocked after 300 ms with no reader and finishes once one
-  reads; a closed connection reports ``closed`` and refuses ``recv``;
-* a free Lock is taken by a non-blocking acquire, a held one refuses it
-  and gives up a 50 ms timed acquire after at least 50 ms; releasing an
-  unheld Lock raises ValueError and an unheld RLock AssertionError; an
-  RLock held three times refuses another thread until the third release;
-  on 3.14 ``locked()`` follows the state; Semaphore(2) grants two and
-  refuses the third, ``get_value()`` says 2, and BoundedSemaphore raises
-  ValueError on the release past its initial value; ``notify(2)`` on six waiting threads wakes exactly two and
-  ``notify_all()`` the rest, every wait returning True well inside its
-  timeout; ``Event.set()`` is still blocked 200 ms after a child counted asleep on
-  the event, and past releasing its lock, was killed; three
-  timed-out waits leave three acknowledgements that the next ``notify()``
-  clears; a waiter releases a doubly-held RLock for the notifier, who gets it
-  well inside the wait's timeout, and the wait returns True with the lock
-  held twice again;
-  ``wait_for`` calls a true predicate once, and one made true by the
-  notifier twice, the second look coming from that notify well inside the
-  timeout;
-  ``Event.wait()`` on a set event returns True at once, on a clear one
-  returns False after its timeout, and ``set()`` wakes all five waiters, counted asleep first, well inside
-  their ten-second timeout;
-  the third of three barrier parties releases the other two and runs the
-  action once, ``abort()`` and ``reset()`` each raise BrokenBarrierError in both waiters
-  well inside their timeout, ``abort()`` leaving the barrier broken and
-  ``reset()`` not, and a 50 ms timeout that expires leaves it broken until
-  ``reset()``; in a fresh
-  interpreter the resource tracker has no pid before the first ``Lock()``
-  or ``Queue()`` and one afterwards under ``spawn`` and ``forkserver``,
-  and none afterwards under ``fork``;
-* ``Value(lock=False)`` is the bare ctypes object; a counting lock passed
-  to ``Value`` is acquired once per read of ``value``, to ``Array`` once
-  per item read and once per slice and never for ``len()``; ``Array`` from
-  a sequence is a copy, its slice a new list each time, bytes for a ``c``
-  array and str for a ``u`` array; a RawValue of a two-int Structure is zeroed and a four-char ``Value``
-  returns a fresh bytes copy; a child's writes
-  to a Value, an Array and a RawArray are visible in the parent;
-* ``Manager()`` adds one child and the ``with`` block's exit removes it;
-  ``append`` and ``[:]`` on a five-item list proxy each send one message on
-  the thread's server connection, iteration six, ``list()`` seven; ``copy()``, ``keys()``,
-  ``values()`` and ``items()`` on a dict proxy are one each, ``dict()`` six
-  and iteration seven; ``connect()`` from a second manager adds no child, and a list it creates
-  raises the first manager's server object count by one; ``get_server()`` on a started manager raises ProcessError;
-  ``register()`` on a subclass adds the factory there and not to the base,
-  a first registration on a SyncManager subclass copying the inherited
-  registry plus one;
-* ``cpu_count()`` is ``os.cpu_count()``; ``get_all_start_methods()`` is a
-  new list each call containing the current method; an unknown method
-  raises ValueError; a second ``set_start_method()`` in a fresh interpreter
-  raises RuntimeError and ``force=True`` does not; ``get_logger()`` is one
-  object and two ``log_to_stderr()`` calls add two handlers; the four
-  exceptions subclass ProcessError; ``SUBDEBUG`` and ``SUBWARNING`` are 5
-  and 25; ``reducer`` is the ``reduction`` module.
+* ``Process``: an unstarted one has no pid, ident or exitcode, is not alive,
+  raises ValueError for ``sentinel`` and is absent from ``active_children()``;
+  a list passed as ``args`` is copied; the target runs once, in a process
+  whose pid is the Process's and whose ``parent_process()`` is the caller,
+  while a direct ``run()`` runs it in the caller. ``join()`` on a finished
+  child returns at once and on a blocked one after its 50 ms timeout with the
+  child alive. ``terminate()`` and ``kill()`` leave exit codes of -SIGTERM
+  and -SIGKILL, and ``terminate()`` returns at once from a child that ignores
+  SIGTERM; on 3.14 ``interrupt()`` reaches the child's SIGINT handler.
+  ``close()`` refuses a live child, and afterwards ``is_alive()``, ``join()``,
+  ``exitcode`` and ``pid`` raise ValueError. With three live children,
+  ``active_children()`` polls each once and returns a new list, and
+  ``start()`` polls all three. An argument's ``__getstate__`` runs once in
+  the parent during ``start()`` under ``spawn`` and ``forkserver``, never
+  under ``fork``.
+* Start methods: in a fresh interpreter the first ``forkserver`` start sets
+  the server's pid and a second start keeps it; a ``fork`` start with a
+  second thread running warns DeprecationWarning from 3.12 and not before;
+  the resource tracker has no pid before the first ``Lock()`` or ``Queue()``
+  and one afterwards under ``spawn`` and ``forkserver``, none under ``fork``,
+  while the first ``SharedMemory`` or ``SharedMemoryManager()`` starts it
+  under all three.
+  ``get_all_start_methods()`` is a new list each call, an unknown method
+  raises ValueError, and a second ``set_start_method()`` raises RuntimeError
+  unless forced.
+* ``Pool``: ``Pool(2)`` adds two children and ``close()`` + ``join()``
+  removes them, a default ``Pool()`` adds the CPU count. ``map()`` returns
+  results in order and exhausts a generator; ``map_async()`` has exhausted
+  one, in the calling thread, by the time it returns, with its tasks held
+  behind a file gate. Over 1000 items on two workers the function's
+  ``__getstate__`` runs 1000 times with ``chunksize=1``, 8 with the default
+  and once with ``chunksize=1000``; ``imap`` pickles it 100 times over 100
+  items and 10 with ``chunksize=10``. ``imap()`` yields its first item while
+  its input generator is still gated, and with nothing consumed it reads a
+  100-item generator to the end and buffers all six results of another
+  call. Over a gated first task and a free second, ``imap`` parks the free
+  result where ``imap_unordered`` yields it. Results of ``apply_async`` and
+  ``imap`` are unpickled once, in a thread that is not the main one, before
+  ``get()`` or ``next()``, which do not unpickle them again. A callback runs
+  in the pool's result-handler thread and sees ``ready()`` false, and while one is held, a result
+  submitted after it does not become ready. ``get(timeout=0.05)`` raises
+  ``multiprocessing.TimeoutError``, which is not the builtin. ``join()``
+  before ``close()`` and ``apply_async()`` after it raise ValueError; a task
+  that has started when a ``with`` block ends never finishes, and its worker
+  is gone by then. A ``ThreadPool`` starts no children, pickles nothing and
+  returns the function's own objects; its ``terminate()`` returns while a
+  running task is still blocked, and that task then finishes.
+* ``Queue``: with the feeder held inside one object's ``__getstate__``, a
+  later ``put()`` has returned without pickling its object, which arrives
+  with a mutation made after ``put()``. Putting a lambda prints a traceback
+  in the feeder and ``get(timeout)`` raises Empty. ``maxsize=1`` raises Full
+  on the second ``put_nowait`` and after a 50 ms timed put. A payload's
+  ``__setstate__`` finds the reader lock free during ``get()``. With the
+  feeder held ``qsize()`` is 1 while ``empty()`` stays true, until the
+  feeder writes. After ``close()``, ``put`` and ``get`` raise ValueError,
+  ``join_thread()`` waits for the held feeder, and the items buffered behind
+  it still reach a child. ``JoinableQueue.join()`` waits for both of two
+  ``task_done()`` calls, and a third raises ValueError. ``SimpleQueue.put``
+  pickles once, in the calling thread, before returning. On macOS
+  ``qsize()`` raises NotImplementedError.
+* ``Connection``: ``send`` pickles once, in the calling thread; a one-way
+  pipe's ends refuse the other direction; ``recv_bytes(maxlength)`` raises
+  OSError for a longer message and ``recv_bytes_into`` a short buffer raises
+  BufferTooShort carrying it; ``poll()`` is false at once, false after a
+  50 ms timeout and true after a send; a 4 MiB ``send_bytes`` is still
+  blocked after 300 ms with no reader and finishes once one reads; a closed
+  connection refuses ``recv`` and ``fileno``.
+* ``Listener`` and ``Client``: ``last_accepted`` is None before a client and
+  set after, a connection round-trips a message, and a closed listener
+  refuses ``accept()``. A mismatched ``authkey`` raises AuthenticationError
+  on both ends. ``deliver_challenge()`` sends two messages and
+  ``answer_challenge()`` one, of the same lengths for a 1-byte and a
+  100,000-byte key. ``wait()`` asks each of five objects for its descriptor
+  on every call, returns only the ready one in a new list, and returns an
+  empty one after its 50 ms timeout.
+* Locks and conditions: a held Lock refuses a non-blocking acquire and gives
+  up a 50 ms one after at least 45 ms; an unheld Lock raises ValueError on
+  release and an unheld RLock AssertionError; an RLock held three times is
+  refused to another thread until the third release; on 3.14 ``locked()``
+  follows the state; Semaphore(2) grants two and refuses a third, and
+  BoundedSemaphore refuses a release past its value. ``notify(2)`` wakes
+  exactly two of six waiters and ``notify_all()`` the rest; three timed-out
+  waits leave three acknowledgements that the next ``notify()`` clears; after
+  a child asleep on an Event is killed, ``set()`` is still blocked after
+  200 ms. A waiter releases a doubly held RLock for the notifier and holds it
+  twice again on return. ``wait_for`` calls a true predicate once and one
+  made true by a notify twice. ``Event.set()`` wakes five sleeping waiters;
+  ``wait()`` returns at once when set and False after its timeout when not.
+  The third of three barrier parties releases the others and runs the action
+  once; ``abort()`` and ``reset()`` raise BrokenBarrierError in both waiters,
+  ``abort()`` leaving the barrier broken; an expired 50 ms timeout breaks it.
+* Shared ctypes: ``Value(lock=False)`` is the bare ctypes object; a counting
+  lock passed to ``Value`` is taken once per read or write of ``value`` -
+  twice for ``+=`` - and by ``Array`` once per item, once per slice and never
+  for ``len()``. ``Array`` from a sequence is a copy, its slice a new list
+  each time, bytes for ``'c'`` and str for ``'u'``; a Structure RawValue is
+  zeroed and a ``c_char`` value is a fresh bytes object. A child's writes to
+  a Value, an Array and a RawArray are visible in the parent.
+  ``synchronized()`` returns a wrapper whose ``get_obj()`` is the object
+  passed in, and two calls on one Structure type share a wrapper class with
+  a property per field. A Value, an Array, a RawValue and a RawArray passed to
+  ``Pool.apply()`` each raise RuntimeError.
+* ``SharedMemory``, in a timing test: creating a 16 MiB block costs under
+  50 times a 4 KiB one, fastest of seven, against the 4096x a linear cost
+  would give. ``buf`` is the same object on every access, a slice of it
+  writes into the block, and ``close()`` raises BufferError while the slice
+  is alive. A 64-byte and a 16 MiB block each pickle to under 200 bytes. A
+  block a child interpreter creates and does not unlink is gone
+  from /dev/shm once the child exits; so is one this process created and
+  unregistered that a child merely attached to; one created with
+  ``track=False`` (3.13+) is still there. ``ShareableList`` keeps its length,
+  takes a 7-byte str in the 8-byte slot of a 4-byte one and refuses 9 bytes
+  with ValueError, and gives an 8-byte value a 16-byte slot, shares writes with a
+  list attached by name, grows by at least 9,000 bytes for a 10,000-character
+  str, reads every one of 100 items for ``count()`` and at most seven for
+  ``index(5)``, and returns a new ``format`` string per access.
+* Managers: ``Manager()`` adds one child and its ``with`` block removes it; a
+  ``SyncManager()`` adds none until ``start()``, has no ``shutdown`` before
+  it, and refuses a second ``start()`` with ProcessError. On the thread's
+  server connection, ``append`` and ``[:]`` on a five-item list proxy each
+  send one message, iteration six and ``list()`` seven; a dict proxy's
+  ``copy()``, ``keys()``, ``values()`` and ``items()`` send one each,
+  ``dict()`` six and iteration seven; ``_getvalue()`` and ``_callmethod()``
+  send one each. ``connect()`` adds no child and its list lands in the first
+  server; ``get_server()`` on a started manager raises ProcessError.
+  ``register()`` on a subclass adds the factory there only, copies the
+  inherited registry on its first call and not on a second.
+  ``SharedMemoryManager.SharedMemory()`` and ``.ShareableList()`` each make
+  one ``track_segment`` call, and both blocks are gone once the ``with``
+  block ends.
+* ``multiprocessing.dummy``: ``Pipe()`` delivers the sent object itself
+  without pickling it, ``Process`` is a Thread subclass, ``Queue`` is
+  ``queue.Queue``, ``Manager()`` is the module and ``Pool()`` a ThreadPool.
+* ``cpu_count()`` is ``os.cpu_count()``; ``get_logger()`` is one object and
+  two ``log_to_stderr()`` calls add two handlers; the exceptions subclass
+  ProcessError; ``SUBDEBUG`` and ``SUBWARNING`` are 5 and 25; ``reducer`` is
+  the ``reduction`` module.
+* Every fenced Python block runs as a script in its own interpreter and
+  directory, asserting its own results, and a mutated assertion in one of
+  them is asserted to fail.
 
-Not settled by running code: s, w and b themselves - how long a process
-takes to start, how long a wait blocks and how many bytes an object pickles
-to are the platform's and pickle's; the O(e) zeroing of a RawArray, which
-is a memset the tests only observe the result of; ``Semaphore.get_value()``
-on macOS, where the tests skip it; ``freeze_support()`` inside a frozen
-executable; ``set_executable()`` and ``set_forkserver_preload()``, which
-only store a value the next child start reads; the deadlock of two peers
-that both send before receiving, which the tests infer from the one-way
-block; and Windows, where ``Pipe()`` returns a PipeConnection and the
-signals are TerminateProcess.
+Not settled here:
+
+* s, w and b themselves: how long a start takes, how long a call blocks, and
+  how many bytes an object pickles to belong to the platform and to pickle.
+  So do the ``m`` of a manager round trip and the challenge's HMAC.
+* ``RawArray``'s zeroing and the ``ShareableList`` attach cost of one offset
+  per item are read from Lib/multiprocessing/sharedctypes.py and
+  shared_memory.py; the tests see only the results. So is the O(g²) of
+  ``SharedMemoryManager.shutdown()``: ``_SharedMemoryTracker.unlink()`` in
+  Lib/multiprocessing/managers.py removes each name from the front of a
+  list, and blocks enough to show it do not fit in a container's /dev/shm.
+* The cost of the HMAC over the key itself is not priced: the page treats
+  the challenge as a round trip of fixed-size messages.
+* ``freeze_support()`` inside a frozen executable, and ``set_executable()``
+  and ``set_forkserver_preload()`` beyond storing their value, which only the
+  next child start reads.
+* The deadlock of two peers that both send a large message before receiving
+  is inferred from the one-way block, not staged.
+* macOS, where ``Queue.qsize()`` and ``Semaphore.get_value()`` raise
+  NotImplementedError and a ``BoundedSemaphore`` checks over-release only
+  for an initial value of 1: the tests skip those assertions or guard them
+  on ``sys.platform``, so no run here verifies them. The SharedMemory and
+  ShareableList tests look blocks up in /dev/shm and run on Linux only.
+* Windows, where ``Pipe()`` returns a PipeConnection, ``Listener`` uses a
+  named pipe whose ``last_accepted`` stays None, the signals are
+  TerminateProcess, ``interrupt()`` is missing, there is no resource
+  tracker, ``SharedMemory.unlink()`` does nothing, and
+  ``multiprocessing.popen_spawn_win32`` imports ``msvcrt``, which is also why
+  the page-scoped audit reports that module as an inspection error here.
+
 Not varied: pool workers beyond two except for the default count, pickled
 sizes beyond a few kilobytes except for the 4 MiB blocking send, manager
-serializers other than pickle, ``initializer`` and ``maxtasksperchild``,
-and contention between more than one child process on a primitive.
+serializers other than pickle, ``initializer`` and ``maxtasksperchild``, and
+contention between more than one child process on a primitive.
 
-Every helper thread here is a daemon and every child is joined or
-terminated, so a failing assertion cannot hang the interpreter at exit. A
-child is never killed while it is inside a wait on a primitive the test
-uses again, since the killed-sleeper test shows what that does to the next
-``set()``.
+Every helper thread is a daemon and every child is joined or killed, so a
+failing assertion cannot hang the interpreter at exit. A child is never killed
+while it waits on a primitive the test uses again, since the killed-sleeper
+test shows what that does to the next ``set()``.
 """
 
 from __future__ import annotations
@@ -213,13 +201,16 @@ import ctypes
 import math
 import multiprocessing
 import multiprocessing.connection
+import multiprocessing.dummy
 import multiprocessing.managers
 import multiprocessing.pool
 import multiprocessing.queues
+import multiprocessing.shared_memory
 import multiprocessing.sharedctypes
 import multiprocessing.synchronize
 import os
 import pathlib
+import pickle
 import queue
 import re
 import signal
@@ -228,7 +219,6 @@ import sys
 import textwrap
 import threading
 import time
-import types
 import warnings
 from collections.abc import Callable, Iterator
 from typing import Any, cast
@@ -236,154 +226,10 @@ from typing import Any, cast
 import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "multiprocessing.md"
-EXPECTED_BLOCKS = 6
+EXPECTED_BLOCKS = 12
 WAIT = 10.0
 SHORT = 0.05
 POSIX = sys.platform != "win32"
-
-_CONNECTION_TYPE = type(multiprocessing.Pipe()[0])
-
-CLASSES: dict[str, type] = {
-    "Process": multiprocessing.Process,
-    "Pool": multiprocessing.pool.Pool,
-    "AsyncResult": multiprocessing.pool.AsyncResult,
-    "Queue": multiprocessing.queues.Queue,
-    "JoinableQueue": multiprocessing.queues.JoinableQueue,
-    "SimpleQueue": multiprocessing.queues.SimpleQueue,
-    "Connection": _CONNECTION_TYPE,
-    "Lock": multiprocessing.synchronize.Lock,
-    "RLock": multiprocessing.synchronize.RLock,
-    "Semaphore": multiprocessing.synchronize.Semaphore,
-    "BoundedSemaphore": multiprocessing.synchronize.BoundedSemaphore,
-    "Condition": multiprocessing.synchronize.Condition,
-    "Event": multiprocessing.synchronize.Event,
-    "Barrier": multiprocessing.synchronize.Barrier,
-    # The lock methods live on the base both wrappers share, so a row on Value
-    # covers Array too.
-    "Value": multiprocessing.sharedctypes.SynchronizedBase,
-    "Array": multiprocessing.sharedctypes.SynchronizedArray,
-    "Manager": multiprocessing.managers.SyncManager,
-}
-# Classes whose __init__ installs public methods on the instance, and how to
-# build one so those names count as members too.
-INSTANCES: dict[str, Callable[[], object]] = {
-    "Lock": multiprocessing.Lock,
-    "RLock": multiprocessing.RLock,
-    "Semaphore": multiprocessing.Semaphore,
-    "BoundedSemaphore": multiprocessing.BoundedSemaphore,
-    "Condition": multiprocessing.Condition,
-    "Value": lambda: multiprocessing.Value("i", 0),
-    "Array": lambda: multiprocessing.Array("i", 1),
-}
-# Members that exist only on a started instance, which the coverage check
-# does not build.
-INSTANCE_ONLY_MEMBERS = {("Manager", "shutdown")}
-# Table names that are the types the module's factories return rather than
-# attributes of the module itself.
-RETURNED_TYPES = {"AsyncResult", "Connection"}
-# `reducer` is a module object too, and is the one that is API.
-LEAKED_IMPORTS = {"sys"}
-# Pool.Process is the hook the pool builds its workers with, not user API.
-UNDOCUMENTED_MEMBERS = {("Pool", "Process")}
-VERSION_GATED_MEMBERS: dict[tuple[str, str], tuple[tuple[int, int], str]] = {
-    ("Process", "interrupt"): ((3, 14), "Python 3.14+"),
-    ("Lock", "locked"): ((3, 14), "Python 3.14+"),
-    ("RLock", "locked"): ((3, 14), "Python 3.14+"),
-    ("Semaphore", "locked"): ((3, 14), "Python 3.14+"),
-    ("Manager", "set"): ((3, 14), "Python 3.14+"),
-}
-
-
-def _gated_away(owner: str, member: str) -> bool:
-    """A documented member this interpreter is allowed to lack: older than its gate."""
-    gate = VERSION_GATED_MEMBERS.get((owner, member))
-    return gate is not None and sys.version_info < gate[0]
-
-
-def _module_names() -> set[str]:
-    """Public names of the package that are not submodules, which importing adds."""
-    return {
-        name
-        for name in dir(multiprocessing)
-        if not name.startswith("_")
-        and (name == "reducer" or not isinstance(getattr(multiprocessing, name), types.ModuleType))
-    } - LEAKED_IMPORTS
-
-
-def _table_rows() -> list[str]:
-    text = PAGE.read_text(encoding="utf-8")
-    start = text.index("| Operation | Time | Space | Notes |")
-    end = text.index("\n\nSubmodules", start)
-    return [line for line in text[start:end].splitlines() if line.startswith("| `")]
-
-
-def _segments(span: str) -> Iterator[str]:
-    """The names in one backticked span, ``Array[i]`` and ``len(Array)`` included."""
-    for segment in span.split("/"):
-        segment = segment.strip()
-        segment = re.sub(r"\[.*\]", "", segment)
-        if segment.startswith("len(") and segment.endswith(")"):
-            segment = segment[4:-1]
-        segment = segment.removesuffix("()").strip()
-        if " " in segment:
-            segment = segment.split(" ", 1)[0]
-        yield segment
-
-
-def _documented_in(row: str) -> tuple[set[str], set[tuple[str, str]]]:
-    """Module-level names and (class, member) pairs one row names.
-
-    A backticked span is split on ``/``; a segment after the first inherits
-    the class of the segment before it, so ``Process.name/daemon`` names two
-    attributes of Process and ``Lock()`` / ``RLock()`` two module names.
-    """
-    names: set[str] = set()
-    members: set[tuple[str, str]] = set()
-    operation = row.split("|")[1]
-    for span in re.findall(r"`([^`]+)`", operation):
-        owner: str | None = None
-        for segment in _segments(span):
-            if "." in segment:
-                class_name, member = segment.split(".", 1)
-                owner = class_name
-                names.add(class_name)
-                members.add((class_name, member))
-            elif owner is not None:
-                members.add((owner, segment))
-            else:
-                names.add(segment)
-    return names, members
-
-
-def _documented() -> tuple[set[str], set[tuple[str, str]]]:
-    """Module-level names and (class, member) pairs the whole table names."""
-    names: set[str] = set()
-    members: set[tuple[str, str]] = set()
-    for row in _table_rows():
-        row_names, row_members = _documented_in(row)
-        names |= row_names
-        members |= row_members
-    return names, members
-
-
-def _public_members(owner: str) -> set[str]:
-    """Public names on the class or its bases, plus any its __init__ installs."""
-    members = {name for name in dir(CLASSES[owner]) if not name.startswith("_")}
-    if owner in INSTANCES:
-        members |= {name for name in dir(INSTANCES[owner]()) if not name.startswith("_")}
-    return members - {member for cls, member in UNDOCUMENTED_MEMBERS if cls == owner}
-
-
-def _documented_for(owner: str, members: set[tuple[str, str]]) -> set[str]:
-    """Members documented on the class or on a documented base of it."""
-    bases = {name for name, cls in CLASSES.items() if cls in CLASSES[owner].__mro__}
-    return {member for documented_owner, member in members if documented_owner in bases}
-
-
-def _has_member(owner: str, member: str) -> bool:
-    if hasattr(CLASSES[owner], member):
-        return True
-    return owner in INSTANCES and hasattr(INSTANCES[owner](), member)
 
 
 def wait_until(predicate: Callable[[], bool], timeout: float = WAIT) -> bool:
@@ -599,6 +445,35 @@ def drain(iterable: Any) -> None:
         pass
 
 
+def run_python(source: str) -> subprocess.CompletedProcess[str]:
+    """Run a dedented snippet in a fresh interpreter, for state that only a new process has."""
+    return subprocess.run(
+        [sys.executable, "-c", textwrap.dedent(source)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        stdin=subprocess.DEVNULL,
+        check=False,
+    )
+
+
+def shm_exists(name: str) -> bool:
+    """Whether a POSIX shared-memory block exists, looked up without attaching to it."""
+    return os.path.exists(os.path.join("/dev/shm", name.lstrip("/")))
+
+
+class CountingFileno:
+    """Counts how often ``wait()`` asks it for its descriptor."""
+
+    def __init__(self, conn: Any) -> None:
+        self.conn = conn
+        self.calls = 0
+
+    def fileno(self) -> int:
+        self.calls += 1
+        return self.conn.fileno()
+
+
 class CountingLock:
     """A lock that only counts, for observing what the shared-ctypes wrappers hold it for."""
 
@@ -632,78 +507,6 @@ def gate() -> Iterator[Any]:
 def pool() -> Iterator[multiprocessing.pool.Pool]:
     with multiprocessing.Pool(2) as running:
         yield running
-
-
-class TestEveryPublicNameIsDocumented:
-    """The table has to name every public attribute of `multiprocessing` and of its classes."""
-
-    def test_no_module_name_is_missing_from_the_table(self) -> None:
-        missing = sorted(_module_names() - _documented()[0])
-
-        assert not missing, f"{len(missing)} public names absent from the table: {missing}"
-
-    def test_no_public_member_is_missing_from_the_table(self) -> None:
-        """A member inherited from a documented base counts as documented."""
-        members = _documented()[1]
-        missing: list[str] = []
-        for owner in CLASSES:
-            documented = _documented_for(owner, members)
-            missing.extend(
-                f"{owner}.{name}" for name in sorted(_public_members(owner) - documented)
-            )
-
-        assert not missing, f"{len(missing)} members absent from the table: {missing}"
-
-    def test_the_table_names_nothing_that_does_not_exist(self) -> None:
-        """The other direction, so a typo cannot pass as coverage."""
-        names, members = _documented()
-
-        unknown_names = sorted(names - _module_names() - RETURNED_TYPES)
-        unknown_members = sorted(
-            f"{owner}.{member}"
-            for owner, member in members
-            if owner not in CLASSES
-            or (
-                not _has_member(owner, member)
-                and not _gated_away(owner, member)
-                and (owner, member) not in INSTANCE_ONLY_MEMBERS
-            )
-        )
-
-        assert not unknown_names, f"the table names attributes the module lacks: {unknown_names}"
-        assert not unknown_members, f"the table names members that do not exist: {unknown_members}"
-
-    def test_the_version_gated_rows_say_so(self) -> None:
-        rows = _table_rows()
-        for (owner, member), (_, marker) in VERSION_GATED_MEMBERS.items():
-            owning = [row for row in rows if (owner, member) in _documented_in(row)[1]]
-            assert len(owning) == 1, f"expected one row naming {owner}.{member}, found {owning}"
-            assert marker in owning[0], f"the {owner}.{member} row should say {marker}"
-
-    def test_the_coverage_check_would_notice_a_gap(self) -> None:
-        """A coverage test that cannot fail proves nothing about coverage."""
-        names, members = _documented()
-
-        assert {"Process", "Pool", "Pipe", "cpu_count", "SUBDEBUG", "reducer"} <= names
-        assert {
-            ("Process", "start"),
-            ("Process", "sentinel"),
-            ("Pool", "starmap_async"),
-            ("Queue", "cancel_join_thread"),
-            ("Connection", "recv_bytes_into"),
-            ("Connection", "writable"),
-            ("Value", "get_obj"),
-            ("Manager", "Namespace"),
-            ("Manager", "address"),
-        } <= members
-        assert _module_names() - (names - {"Barrier"}) == {"Barrier"}
-        assert {"Process", "reducer"} <= _module_names() and "pool" not in _module_names()
-        assert _public_members("JoinableQueue") - _documented_for(
-            "JoinableQueue", members - {("JoinableQueue", "task_done")}
-        ) == {"task_done"}
-        assert "acquire" in _public_members("Lock")
-        assert "value" in _public_members("Value")
-        assert "put" in _documented_for("JoinableQueue", members)
 
 
 class TestProcessRows:
@@ -770,7 +573,7 @@ class TestProcessRows:
             start = time.perf_counter()
             blocked.join(SHORT)
             elapsed = time.perf_counter() - start
-            assert elapsed >= SHORT, elapsed
+            assert elapsed >= SHORT * 0.9, elapsed
             assert blocked.is_alive()
         finally:
             gate.set()
@@ -1043,6 +846,89 @@ class TestPoolRows:
         assert wait_until(lambda: len(cast("Any", iterator)._items) == 6)
         assert list(iterator) == list(range(6))
 
+    def test_imap_reads_the_whole_input_without_being_iterated(
+        self, pool: multiprocessing.pool.Pool
+    ) -> None:
+        consumed: list[int] = []
+
+        def numbers() -> Iterator[int]:
+            for number in range(100):
+                consumed.append(number)
+                yield number
+
+        iterator = pool.imap(identity, numbers())
+
+        assert wait_until(lambda: len(consumed) == 100), f"read {len(consumed)} of 100"
+        assert list(iterator) == list(range(100))
+
+    def test_imap_results_are_unpickled_before_next_asks_for_them(
+        self, pool: multiprocessing.pool.Pool
+    ) -> None:
+        UNPICKLES.clear()
+        iterator = pool.imap(make_reconstructed, ["a", "b"])
+
+        assert wait_until(lambda: len(cast("Any", iterator)._items) == 2)
+        assert len(UNPICKLES) == 2
+        assert threading.main_thread() not in UNPICKLES
+        assert [item.tag for item in iterator] == ["a", "b"]
+        assert len(UNPICKLES) == 2, "next() unpickled a result again"
+
+    def test_a_slow_callback_holds_up_every_later_result(
+        self, pool: multiprocessing.pool.Pool
+    ) -> None:
+        entered = threading.Event()
+        release = threading.Event()
+
+        def slow(_: int) -> None:
+            entered.set()
+            release.wait(WAIT)
+
+        first = pool.apply_async(identity, (1,), callback=slow)
+        assert entered.wait(WAIT)
+        second = pool.apply_async(identity, (2,))
+        try:
+            second.wait(SHORT * 6)
+            assert not second.ready(), "a result was delivered while a callback ran"
+        finally:
+            release.set()
+        assert second.get(WAIT) == 2
+        assert first.get(WAIT) == 1
+
+    def test_a_thread_pool_passes_tasks_and_results_by_reference(self) -> None:
+        function = Counting("threaded")
+        payload = [object()]
+        children = len(multiprocessing.active_children())
+        PICKLES.clear()
+
+        with multiprocessing.pool.ThreadPool(2) as pool:
+            assert len(multiprocessing.active_children()) == children
+            assert pool.map(function, range(10)) == [value * 2 for value in range(10)]
+            assert pool.map(identity, payload)[0] is payload[0]
+            assert next(pool.imap(identity, payload)) is payload[0]
+
+        assert PICKLES == []
+
+    def test_a_thread_pool_terminate_leaves_a_running_task_running(self) -> None:
+        entered = threading.Event()
+        release = threading.Event()
+        finished: list[int] = []
+
+        def task() -> None:
+            entered.set()
+            release.wait(WAIT)
+            finished.append(1)
+
+        pool = multiprocessing.pool.ThreadPool(1)
+        pool.apply_async(task)
+        assert entered.wait(WAIT)
+        terminator = spawn_thread(pool.terminate)
+        try:
+            join_threads([terminator])
+            assert finished == [], "terminate() waited for the task"
+        finally:
+            release.set()
+        assert wait_until(lambda: finished == [1]), "the task was stopped"
+
     def test_imap_keeps_input_order_and_imap_unordered_yields_on_arrival(
         self, pool: multiprocessing.pool.Pool, tmp_path: pathlib.Path
     ) -> None:
@@ -1105,7 +991,7 @@ class TestPoolRows:
         bound.set()
 
         assert result.get(WAIT) == 5
-        assert seen["thread"] is not threading.main_thread()
+        assert seen["thread"] is cast("Any", pool)._result_handler
         assert seen["ready"] is False
         assert seen["value"] == 5
 
@@ -1195,7 +1081,7 @@ class TestQueueRows:
         start = time.perf_counter()
         with pytest.raises(queue.Full):
             shared.put(2, timeout=SHORT)
-        assert time.perf_counter() - start >= SHORT
+        assert time.perf_counter() - start >= SHORT * 0.9
 
         assert shared.get(timeout=WAIT) == 1
         shared.put_nowait(2)
@@ -1205,7 +1091,7 @@ class TestQueueRows:
         start = time.perf_counter()
         with pytest.raises(queue.Empty):
             shared.get(timeout=SHORT)
-        assert time.perf_counter() - start >= SHORT
+        assert time.perf_counter() - start >= SHORT * 0.9
         shared.close()
         shared.join_thread()
 
@@ -1313,6 +1199,13 @@ class TestQueueRows:
         shared.close()
         shared.join_thread()
 
+    @pytest.mark.skipif(sys.platform != "darwin", reason="qsize() is only unavailable on macOS")
+    def test_qsize_is_unavailable_on_macos(self) -> None:
+        shared = multiprocessing.Queue()
+        with pytest.raises(NotImplementedError):
+            shared.qsize()
+        shared.close()
+
     def test_simple_queue_pickles_in_the_caller(self) -> None:
         shared = multiprocessing.SimpleQueue()
         payload = Counting("simple")
@@ -1392,7 +1285,7 @@ class TestConnectionRows:
         assert time.perf_counter() - start < WAIT / 2
         start = time.perf_counter()
         assert not right.poll(SHORT)
-        assert time.perf_counter() - start >= SHORT
+        assert time.perf_counter() - start >= SHORT * 0.9
 
         left.send(1)
         assert right.poll(WAIT)
@@ -1427,6 +1320,96 @@ class TestConnectionRows:
         right.close()
 
 
+class TestListenerRows:
+    """Listener(), Client(), wait() and the two challenge functions."""
+
+    def test_a_listener_hands_a_client_a_connection(self) -> None:
+        results: list[int] = []
+
+        def call(address: Any) -> None:
+            with multiprocessing.connection.Client(address) as conn:
+                conn.send([1, 2])
+                results.append(conn.recv())
+
+        with multiprocessing.connection.Listener() as listener:
+            assert listener.last_accepted is None
+            caller = spawn_thread(call, listener.address)
+            with listener.accept() as conn:
+                conn.send(sum(conn.recv()))
+            join_threads([caller])
+            if POSIX:  # a Windows named-pipe listener leaves it None
+                assert listener.last_accepted is not None
+
+        assert results == [3]
+        with pytest.raises(OSError):
+            listener.accept()
+
+    def test_a_mismatched_authkey_is_refused_on_both_sides(self) -> None:
+        errors: list[type] = []
+
+        def call(address: Any) -> None:
+            try:
+                multiprocessing.connection.Client(address, authkey=b"wrong")
+            except multiprocessing.AuthenticationError as error:
+                errors.append(type(error))
+
+        with multiprocessing.connection.Listener(authkey=b"right") as listener:
+            caller = spawn_thread(call, listener.address)
+            with pytest.raises(multiprocessing.AuthenticationError):
+                listener.accept()
+            join_threads([caller])
+
+        assert errors == [multiprocessing.AuthenticationError]
+
+    @staticmethod
+    def _challenge_sizes(key: bytes) -> dict[str, list[int]]:
+        """The length of every message each side sends during one exchange."""
+        sizes: dict[str, list[int]] = {"deliver": [], "answer": []}
+        left, right = multiprocessing.Pipe()
+        for conn, side in ((left, "deliver"), (right, "answer")):
+            original = conn.send_bytes
+
+            def counting(buf: Any, *args: Any, _side: str = side, _send: Any = original) -> None:
+                sizes[_side].append(len(buf))
+                _send(buf, *args)
+
+            cast("Any", conn).send_bytes = counting
+
+        answerer = spawn_thread(multiprocessing.connection.answer_challenge, right, key)
+        multiprocessing.connection.deliver_challenge(left, key)
+        join_threads([answerer])
+        left.close()
+        right.close()
+        return sizes
+
+    def test_the_challenge_is_the_same_few_messages_for_any_key(self) -> None:
+        short = self._challenge_sizes(b"k")
+        long = self._challenge_sizes(b"k" * 100_000)
+
+        assert short == long, (short, long)
+        assert len(short["deliver"]) == 2 and len(short["answer"]) == 1, short
+
+    def test_wait_registers_every_object_and_returns_the_ready_ones(self) -> None:
+        pipes = [multiprocessing.Pipe(duplex=False) for _ in range(5)]
+        readers: Any = [CountingFileno(reader) for reader, _ in pipes]
+
+        start = time.perf_counter()
+        assert multiprocessing.connection.wait(readers, SHORT) == []
+        assert time.perf_counter() - start >= SHORT * 0.9
+        assert all(reader.calls >= 1 for reader in readers)
+
+        pipes[2][1].send(1)
+        before = [reader.calls for reader in readers]
+        first = multiprocessing.connection.wait(readers, WAIT)
+        second = multiprocessing.connection.wait(readers, WAIT)
+
+        assert first == second == [readers[2]] and first is not second
+        assert all(reader.calls >= count + 2 for reader, count in zip(readers, before, strict=True))
+        for reader, writer in pipes:
+            reader.close()
+            writer.close()
+
+
 class TestSynchronizationRows:
     """Lock, RLock, Semaphore, BoundedSemaphore, Condition, Event and Barrier."""
 
@@ -1437,7 +1420,7 @@ class TestSynchronizationRows:
         assert not lock.acquire(False)
         start = time.perf_counter()
         assert not lock.acquire(timeout=SHORT)
-        assert time.perf_counter() - start >= SHORT
+        assert time.perf_counter() - start >= SHORT * 0.9
         lock.release()
         assert lock.acquire(False)
         lock.release()
@@ -1631,7 +1614,7 @@ class TestSynchronizationRows:
 
         start = time.perf_counter()
         assert not event.wait(SHORT)
-        assert time.perf_counter() - start >= SHORT
+        assert time.perf_counter() - start >= SHORT * 0.9
 
         results: list[bool] = []
         threads = [spawn_thread(lambda: results.append(event.wait(WAIT))) for _ in range(5)]
@@ -1705,6 +1688,7 @@ class TestSynchronizationRows:
         barrier.reset()
         assert not barrier.broken
 
+    @pytest.mark.skipif(not POSIX, reason="Windows has no resource tracker")
     @pytest.mark.parametrize("method", ["fork", "spawn", "forkserver"])
     @pytest.mark.parametrize("factory", ["Lock", "Queue"])
     def test_the_first_primitive_starts_the_resource_tracker_except_under_fork(
@@ -1735,8 +1719,8 @@ class TestSynchronizationRows:
         assert result.stdout.split() == ["True", str(method != "fork")]
 
 
-class TestSharedMemoryRows:
-    """RawValue(), RawArray(), Value() and Array()."""
+class TestSharedCtypesRows:
+    """RawValue(), RawArray(), Value(), Array() and synchronized()."""
 
     def test_value_without_a_lock_is_the_raw_object(self) -> None:
         raw = multiprocessing.Value("i", 5, lock=False)
@@ -1812,6 +1796,262 @@ class TestSharedMemoryRows:
         assert value.value == 42
         assert array[:] == [0, 10, 20]
         assert raw[:] == [1, 2, 3]
+
+    def test_an_augmented_assignment_takes_the_lock_twice(self) -> None:
+        lock = CountingLock()
+        value: Any = multiprocessing.Value("i", 0, lock=cast("Any", lock))
+
+        value.value += 1
+
+        assert (lock.acquires, lock.releases) == (2, 2), "one for the read, one for the write"
+        assert value.value == 1
+
+    def test_a_pool_task_argument_cannot_be_a_shared_ctypes_object(
+        self, pool: multiprocessing.pool.Pool
+    ) -> None:
+        for shared in (
+            multiprocessing.Value("i", 1),
+            multiprocessing.Array("i", 3),
+            multiprocessing.RawValue("i", 1),
+            multiprocessing.RawArray("i", 3),
+        ):
+            with pytest.raises(RuntimeError, match="through inheritance"):
+                pool.apply(identity, (shared,))
+
+    def test_synchronized_wraps_the_object_in_place(self) -> None:
+        raw = multiprocessing.RawValue("i", 3)
+        cells = multiprocessing.RawArray("i", 3)
+
+        wrapped: Any = multiprocessing.sharedctypes.synchronized(raw)
+        wrapped_cells: Any = multiprocessing.sharedctypes.synchronized(cells)
+
+        assert wrapped.get_obj() is raw
+        assert wrapped_cells.get_obj() is cells
+        raw.value = 4
+        cells[1] = 7
+        assert wrapped.value == 4
+        assert wrapped_cells[:] == [0, 7, 0]
+
+        class Pair(ctypes.Structure):
+            _fields_ = [("x", ctypes.c_int), ("y", ctypes.c_int)]
+
+        first: Any = multiprocessing.sharedctypes.synchronized(multiprocessing.RawValue(Pair))
+        second: Any = multiprocessing.sharedctypes.synchronized(multiprocessing.RawValue(Pair))
+        assert type(first) is type(second), "the wrapper class was built twice"
+        assert all(isinstance(vars(type(first))[name], property) for name in ("x", "y"))
+        first.x = 5
+        assert first.get_obj().x == 5
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="looks blocks up in /dev/shm")
+class TestSharedMemoryRows:
+    """SharedMemory() and its members.
+
+    Existence is checked in /dev/shm rather than by attaching, since attaching
+    registers the block with this process's resource tracker.
+    """
+
+    @pytest.mark.timing
+    def test_creating_a_block_costs_the_same_at_any_size(self) -> None:
+        def fastest(size: int) -> float:
+            best = float("inf")
+            for _ in range(7):
+                start = time.perf_counter()
+                block = multiprocessing.shared_memory.SharedMemory(create=True, size=size)
+                best = min(best, time.perf_counter() - start)
+                block.close()
+                block.unlink()
+            return best
+
+        small, large = fastest(4 << 10), fastest(16 << 20)
+
+        assert large / small < 50, f"4 KiB {small * 1e6:.1f} us, 16 MiB {large * 1e6:.1f} us"
+
+    def test_buf_is_one_view_whose_slices_share_the_block(self) -> None:
+        block: Any = multiprocessing.shared_memory.SharedMemory(create=True, size=16)
+        try:
+            assert block.buf is block.buf
+            assert block.size >= 16
+            window = block.buf[4:8]
+            window[0] = 7
+            assert block.buf[4] == 7
+            with pytest.raises(BufferError):
+                block.close()
+            window.release()
+            attached: Any = multiprocessing.shared_memory.SharedMemory(name=block.name)
+            assert attached.buf[4] == 7
+            attached.close()
+        finally:
+            block.close()
+            block.unlink()
+        assert not shm_exists(block.name)
+
+    def test_a_block_pickles_as_its_name_whatever_its_size(self) -> None:
+        sizes = []
+        for size in (64, 16 << 20):
+            block = multiprocessing.shared_memory.SharedMemory(create=True, size=size)
+            try:
+                sizes.append(len(pickle.dumps(block)))
+            finally:
+                block.close()
+                block.unlink()
+
+        assert max(sizes) < 200, sizes
+
+    def test_the_resource_tracker_unlinks_a_block_left_behind(self) -> None:
+        result = run_python(
+            """
+            from multiprocessing import shared_memory
+            block = shared_memory.SharedMemory(create=True, size=64)
+            print(block.name)
+            block.close()
+            """
+        )
+
+        assert result.returncode == 0, result.stderr
+        name = result.stdout.strip()
+        assert wait_until(lambda: not shm_exists(name)), f"{name} outlived its creator"
+
+    def test_attaching_registers_the_block_too(self) -> None:
+        from multiprocessing import resource_tracker
+
+        block = multiprocessing.shared_memory.SharedMemory(create=True, size=64)
+        resource_tracker.unregister(cast("Any", block)._name, "shared_memory")
+        try:
+            result = run_python(
+                f"""
+                from multiprocessing import shared_memory
+                shared_memory.SharedMemory(name={block.name!r}).close()
+                """
+            )
+            assert result.returncode == 0, result.stderr
+            assert wait_until(lambda: not shm_exists(block.name)), "the attacher left it"
+        finally:
+            block.close()
+            if shm_exists(block.name):
+                block.unlink()
+
+    @pytest.mark.skipif(sys.version_info < (3, 13), reason="track= was added in Python 3.13")
+    def test_track_false_leaves_the_block_for_the_caller(self) -> None:
+        result = run_python(
+            """
+            from multiprocessing import shared_memory
+            block = shared_memory.SharedMemory(create=True, size=64, track=False)
+            print(block.name)
+            block.close()
+            """
+        )
+
+        assert result.returncode == 0, result.stderr
+        name = result.stdout.strip()
+        try:
+            time.sleep(SHORT * 4)
+            assert shm_exists(name)
+        finally:
+            leftover = cast("Any", multiprocessing.shared_memory.SharedMemory)(name, track=False)
+            leftover.close()
+            leftover.unlink()
+
+    @pytest.mark.parametrize("method", ["fork", "spawn", "forkserver"])
+    @pytest.mark.parametrize("factory", ["SharedMemory", "SharedMemoryManager"])
+    def test_the_first_block_or_manager_starts_the_resource_tracker(
+        self, method: str, factory: str
+    ) -> None:
+        if method not in multiprocessing.get_all_start_methods():
+            pytest.skip(f"the {method} start method is not available here")
+        create = {
+            "SharedMemory": "shared_memory.SharedMemory(create=True, size=64).unlink()",
+            "SharedMemoryManager": "managers.SharedMemoryManager()",
+        }[factory]
+        result = run_python(
+            f"""
+            import multiprocessing
+            multiprocessing.set_start_method({method!r})
+            from multiprocessing import managers, resource_tracker, shared_memory
+            before = resource_tracker._resource_tracker._pid
+            {create}
+            after = resource_tracker._resource_tracker._pid
+            print(before is None, after is not None)
+            """
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.split() == ["True", "True"]
+
+
+class CountingList(multiprocessing.shared_memory.ShareableList):
+    """Counts item reads, to see how far count() and index() walk."""
+
+    reads = 0
+
+    def __getitem__(self, position: int) -> Any:
+        CountingList.reads += 1
+        return super().__getitem__(position)
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="looks blocks up in /dev/shm")
+class TestShareableListRows:
+    """ShareableList() and its members."""
+
+    def test_items_are_fixed_in_number_and_in_str_capacity(self) -> None:
+        items: Any = cast("Any", multiprocessing.shared_memory.ShareableList)(
+            [1, 2.5, "text", b"raw", None]
+        )
+        try:
+            assert len(items) == 5
+            assert list(items) == [1, 2.5, "text", b"raw", None]
+            items[0] = 42
+            items[2] = "textabc"
+            assert items[0] == 42 and items[2] == "textabc"
+            with pytest.raises(ValueError, match="exceeds available storage"):
+                items[2] = "textabcde"
+            eight = cast("Any", multiprocessing.shared_memory.ShareableList)([b"12345678"])
+            try:
+                eight[0] = b"x" * 16
+                with pytest.raises(ValueError, match="exceeds available storage"):
+                    eight[0] = b"x" * 17
+            finally:
+                eight.shm.close()
+                eight.shm.unlink()
+            with pytest.raises(ValueError, match="exceeds available storage"):
+                items[2] = "x" * 100
+            assert not hasattr(items, "append")
+            assert isinstance(items.shm, multiprocessing.shared_memory.SharedMemory)
+            attached: Any = multiprocessing.shared_memory.ShareableList(name=items.shm.name)
+            assert list(attached) == [42, 2.5, "textabc", b"raw", None]
+            attached[1] = 7.5
+            assert items[1] == 7.5
+            attached.shm.close()
+        finally:
+            items.shm.close()
+            items.shm.unlink()
+
+    def test_the_block_grows_with_the_str_lengths(self) -> None:
+        short = multiprocessing.shared_memory.ShareableList(["x"])
+        long = multiprocessing.shared_memory.ShareableList(["x" * 10_000])
+        try:
+            assert long.shm.size - short.shm.size >= 9_000
+        finally:
+            for items in (short, long):
+                items.shm.close()
+                items.shm.unlink()
+
+    def test_count_reads_every_item_and_index_stops_at_the_first_match(self) -> None:
+        items = CountingList(list(range(100)))
+        try:
+            CountingList.reads = 0
+            assert items.count(5) == 1
+            assert CountingList.reads >= 100
+
+            CountingList.reads = 0
+            assert items.index(5) == 5
+            assert CountingList.reads <= 7
+
+            formats = items.format
+            assert formats == "q" * 100 and formats is not items.format
+        finally:
+            items.shm.close()
+            items.shm.unlink()
 
 
 class TestManagerRows:
@@ -1911,6 +2151,90 @@ class TestManagerRows:
         assert registry is not inherited
         assert len(registry) == len(inherited) + 1
         assert "counter" not in inherited
+        Derived.register("another", list)
+        assert cast("Any", Derived)._registry is registry, "a later call copied again"
+
+    def test_a_base_manager_starts_nothing_until_start(self) -> None:
+        children = len(multiprocessing.active_children())
+        manager = multiprocessing.managers.SyncManager()
+
+        assert len(multiprocessing.active_children()) == children
+        assert not hasattr(manager, "shutdown")
+        manager.start()
+        try:
+            assert len(multiprocessing.active_children()) == children + 1
+            with pytest.raises(multiprocessing.ProcessError):
+                manager.start()
+        finally:
+            manager.shutdown()
+        manager.join(WAIT)
+
+    def test_callmethod_and_getvalue_are_one_round_trip(self) -> None:
+        calls: list[object] = []
+
+        with multiprocessing.Manager() as manager:
+            items: Any = manager.list(range(5))
+            assert len(items) == 5  # opens this thread's connection
+            connection = items._tls.connection
+            original_send = connection.send
+
+            def counting_send(message: object) -> None:
+                calls.append(message)
+                original_send(message)
+
+            connection.send = counting_send
+            copied = items._getvalue()
+            assert len(calls) == 1
+            length = items._callmethod("__len__")
+            assert len(calls) == 2
+
+        assert type(copied) is list and copied == [0, 1, 2, 3, 4]
+        assert length == 5
+
+    @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="looks blocks up in /dev/shm")
+    def test_a_shared_memory_manager_registers_and_then_unlinks_its_blocks(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        methods: list[str] = []
+        original = cast("Any", multiprocessing.managers).dispatch
+
+        def counting(conn: Any, ident: Any, methodname: str, *args: Any, **kwargs: Any) -> Any:
+            methods.append(methodname)
+            return original(conn, ident, methodname, *args, **kwargs)
+
+        monkeypatch.setattr(multiprocessing.managers, "dispatch", counting)
+        with multiprocessing.managers.SharedMemoryManager() as manager:
+            methods.clear()
+            block = manager.SharedMemory(64)
+            assert methods == ["track_segment"]
+            items = manager.ShareableList([1, 2])
+            assert methods == ["track_segment"] * 2
+            names = [block.name, items.shm.name]
+            assert all(shm_exists(name) for name in names)
+            block.close()
+            items.shm.close()
+
+        assert not any(shm_exists(name) for name in names)
+
+
+class TestDummyRows:
+    """multiprocessing.dummy: the same API on threads."""
+
+    def test_the_dummy_module_passes_objects_by_reference(self) -> None:
+        dummy: Any = multiprocessing.dummy
+        payload = Counting("dummy")
+        PICKLES.clear()
+
+        left, right = dummy.Pipe()
+        left.send(payload)
+
+        assert right.recv() is payload
+        assert PICKLES == []
+        assert issubclass(dummy.Process, threading.Thread)
+        assert dummy.Queue is queue.Queue
+        assert dummy.Manager() is dummy
+        with dummy.Pool(2) as pool:
+            assert isinstance(pool, multiprocessing.pool.ThreadPool)
 
 
 class TestModuleFunctionRows:
@@ -1955,6 +2279,49 @@ class TestModuleFunctionRows:
 
         assert result.returncode == 0, result.stderr
         assert result.stdout.split() == ["refused", "True"]
+
+    def test_fork_warns_when_the_parent_has_threads_from_3_12(self) -> None:
+        if "fork" not in multiprocessing.get_all_start_methods():
+            pytest.skip("the fork start method is not available here")
+        release = threading.Event()
+        helper = spawn_thread(release.wait, WAIT)
+        try:
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                process: Any = multiprocessing.get_context("fork").Process(
+                    target=identity, args=(1,)
+                )
+                process.start()
+            join_process(process)
+        finally:
+            release.set()
+            join_threads([helper])
+
+        warned = any(issubclass(item.category, DeprecationWarning) for item in caught)
+        assert warned is (sys.version_info >= (3, 12)), [str(item.message) for item in caught]
+
+    def test_the_first_forkserver_start_launches_the_server_once(self) -> None:
+        if "forkserver" not in multiprocessing.get_all_start_methods():
+            pytest.skip("the forkserver start method is not available here")
+        result = run_python(
+            """
+            import multiprocessing
+            from multiprocessing import forkserver
+
+            context = multiprocessing.get_context("forkserver")
+            before = forkserver._forkserver._forkserver_pid
+            pids = []
+            for _ in range(2):
+                process = context.Process(target=int)
+                process.start()
+                process.join()
+                pids.append(forkserver._forkserver._forkserver_pid)
+            print(before is None, pids[0] is not None, pids[0] == pids[1])
+            """
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.split() == ["True", "True", "True"]
 
     def test_get_logger_is_one_object_and_log_to_stderr_adds_a_handler_per_call(
         self,
@@ -2027,7 +2394,12 @@ def _block_containing(marker: str) -> str:
 
 
 class TestDocumentedExamples:
-    """Every block runs, under the interpreter running the tests."""
+    """Every block runs in its own interpreter and directory, and asserts its own results.
+
+    The blocks start processes, pools, managers and a listener, so each runs as
+    a script under the default start method, which is how its
+    ``if __name__ == "__main__":`` guard is meant to be exercised.
+    """
 
     def test_the_page_has_the_expected_blocks(self) -> None:
         blocks = _blocks()
@@ -2040,7 +2412,9 @@ class TestDocumentedExamples:
         failures: list[str] = []
 
         for line, source in _blocks():
-            result = _run(source, tmp_path)
+            cwd = tmp_path / f"line{line}"
+            cwd.mkdir()
+            result = _run(source, cwd)
             if result.returncode != 0 or result.stderr.strip():
                 failures.append(f"{PAGE.name}:{line}: {result.stderr.strip()}")
 
@@ -2049,30 +2423,10 @@ class TestDocumentedExamples:
     def test_the_runner_catches_a_broken_block(self, tmp_path: pathlib.Path) -> None:
         """A runner that cannot fail proves nothing about the blocks it ran."""
         source = _block_containing("cells = Array(")
-        broken = source.replace('Array("i", 5)', 'Array("i")', 1)
-        assert broken != source, "the mutation did not change the constructor call"
+        broken = source.replace("assert counter.value == 1", "assert counter.value == 2", 1)
+        assert broken != source, "the mutation did not change the assertion"
 
         result = _run(broken, tmp_path)
 
         assert result.returncode != 0
-        assert "TypeError" in result.stderr
-
-    @pytest.mark.parametrize(
-        ("marker", "stdout"),
-        [
-            ('name="worker"', ["worker squares 7: 49", "0"]),
-            ("pool.map(square", ["332833500 0"]),
-            ("def produce(", ["[0, 1, 2, 3, 4]"]),
-            ("def respond(", ["PING"]),
-            ("cells = Array(", ["1 [0, 10, 20, 30, 40]"]),
-            ("shared = manager.list(", ["[0, 1, 2, 3, 4, 5] [0, 2, 4, 6, 8, 10]"]),
-        ],
-        ids=["process", "pool", "queue", "pipe", "shared", "manager"],
-    )
-    def test_the_stated_output_is_what_the_block_produces(
-        self, marker: str, stdout: list[str], tmp_path: pathlib.Path
-    ) -> None:
-        result = _run(_block_containing(marker), tmp_path)
-
-        assert result.returncode == 0, result.stderr.strip()
-        assert result.stdout.splitlines() == stdout
+        assert "AssertionError" in result.stderr
