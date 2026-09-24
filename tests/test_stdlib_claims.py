@@ -305,30 +305,39 @@ class TestPyexpatStreams:
 
 
 class TestSqliteCommitBatching:
-    """docs/stdlib/sqlite3.md: the durability cost is paid per transaction,
-    which is why batching beats committing each insert."""
+    """docs/stdlib/sqlite3.md: a commit is where a file database waits for the
+    disk, so a commit per row pays that wait per row.
+
+    100 inserts into a file database under tmp_path with the default
+    synchronous setting: one commit per row against one commit for the batch.
+    More than 10x is asserted; the dev box measured about 400x at 300 rows.
+    Only the default journal mode is measured, not WAL or synchronous=OFF, and
+    the ratio assumes tmp_path is on a disk-backed filesystem: on a
+    memory-backed one a sync costs next to nothing.
+    """
 
     @pytest.mark.timing
-    def test_one_commit_beats_one_commit_per_row(self) -> None:
-        def run(commit_each: bool) -> float:
-            connection = sqlite3.connect(":memory:")
+    def test_one_commit_beats_one_commit_per_row(self, tmp_path: Path) -> None:
+        def run(commit_each: bool, attempt: int) -> float:
+            path = tmp_path / f"{commit_each}-{attempt}.db"
+            connection = sqlite3.connect(path)
             connection.execute("CREATE TABLE t (a)")
+            connection.commit()
             start = time.perf_counter()
-            for value in range(2_000):
+            for value in range(100):
                 connection.execute("INSERT INTO t VALUES (?)", (value,))
                 if commit_each:
                     connection.commit()
-            if not commit_each:
-                connection.commit()
+            connection.commit()
             elapsed = time.perf_counter() - start
             connection.close()
             return elapsed
 
-        batched = min(run(False) for _ in range(3))
-        per_row = min(run(True) for _ in range(3))
+        batched = min(run(False, attempt) for attempt in range(3))
+        per_row = min(run(True, attempt) for attempt in range(3))
 
-        assert per_row > batched, (
-            f"a commit per row pays the transaction cost 2000 times: "
+        assert per_row > batched * 10, (
+            f"a commit per row should wait for the disk 100 times: "
             f"batched={batched:.2e}s per_row={per_row:.2e}s"
         )
 

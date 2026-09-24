@@ -566,7 +566,8 @@ class TestCopytreeCostsPerEntry:
 
 
 class TestSqliteInsertTouchesEveryIndex:
-    """docs/stdlib/sqlite3.md priced INSERT at an unconditional O(log n)."""
+    """docs/stdlib/sqlite3.md: INSERT is O((1 + i)·log n) - each index on the
+    table is one more B-tree to insert into. 4,000 rows, no indexes against five."""
 
     @pytest.mark.timing
     def test_more_indexes_make_inserts_slower(self) -> None:
