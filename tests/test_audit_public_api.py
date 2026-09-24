@@ -133,6 +133,8 @@ def test_page_mapping(tmp_path: Path) -> None:
     stdlib.mkdir(parents=True)
     for name in ("collections", "counter", "xml", "xml.dom", "cprofile"):
         (stdlib / f"{name}.md").touch()
+    for name in ("concurrent", "concurrent_futures", "concurrent.interpreters"):
+        (stdlib / f"{name}.md").touch()
     assert (
         audit.documentation_page(tmp_path, "collections", "collections.Counter.update")
         == stdlib / "counter.md"
@@ -143,6 +145,18 @@ def test_page_mapping(tmp_path: Path) -> None:
     )
     assert (
         audit.documentation_page(tmp_path, "cProfile", "cProfile.Profile") == stdlib / "cprofile.md"
+    )
+    assert (
+        audit.documentation_page(
+            tmp_path, "concurrent.futures.process", "concurrent.futures.process.BrokenProcessPool"
+        )
+        == stdlib / "concurrent_futures.md"
+    )
+    assert (
+        audit.documentation_page(
+            tmp_path, "concurrent.interpreters", "concurrent.interpreters.Queue"
+        )
+        == stdlib / "concurrent.interpreters.md"
     )
     assert (
         audit.documentation_page(tmp_path, "builtins", "builtins.ValueError.args").name

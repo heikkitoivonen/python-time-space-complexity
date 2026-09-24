@@ -52,7 +52,7 @@ def test_collections_types_have_one_documentation_owner() -> None:
 @pytest.mark.parametrize(
     ("page", "targets"),
     [
-        ("concurrent.md", ["concurrent_futures.md"]),
+        ("concurrent.md", ["concurrent_futures.md", "concurrent.interpreters.md"]),
         ("xml.md", ["xml.dom.md", "xml.sax.md", "xml.etree.elementtree.md", "pyexpat.md"]),
     ],
 )

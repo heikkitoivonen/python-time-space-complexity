@@ -1,389 +1,381 @@
 # concurrent.futures Module Complexity
 
-The `concurrent.futures` module provides high-level interfaces for asynchronously executing callables using ThreadPoolExecutor and ProcessPoolExecutor.
+The `concurrent.futures` module runs callables on a pool of threads, processes or (from Python
+3.14) interpreters, and hands back a `Future` for each call. The pool's own bookkeeping is cheap
+and mostly O(1) per task; what costs is starting workers, moving arguments and results across a
+process or interpreter boundary, and waiting on many futures at once.
 
-## Functions & Classes
+`n` is tasks submitted, or futures passed to `wait()` and `as_completed()`; `w` is the pool's
+`max_workers`; `q` is tasks queued but not yet started; `b` is `map()`'s `buffersize`; `c` is
+callbacks registered on one future; `a` is the pickled size of one task's arguments and result.
+The bounds price the module's work, not the callable's: time a task spends running, and time a
+caller spends blocked waiting for it, belong to the task. The few `wait()` and `as_completed()`
+calls watching one future at a time are treated as O(1).
+
+## Complexity Reference
+
+### ThreadPoolExecutor
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `ThreadPoolExecutor(max_workers)` | O(w) | O(w) | Create pool, w = worker count |
-| `ProcessPoolExecutor(max_workers)` | O(w) | O(w) | Create process pool |
-| `InterpreterPoolExecutor(max_workers)` | O(w) | O(w) | Create interpreter pool |
-| `executor.submit(fn, *args)` | O(1) | O(1) | Submit task to queue |
-| `executor.map(fn, iterable)` | O(n) | O(n) | Submit all tasks, n = item count |
-| `Future.result()` | O(1) | O(r) | Get result, r = result size |
-| `as_completed(futures)` | O(n log n) | O(n) | Sorts futures by id for lock ordering, then event-based iteration |
-| `wait(futures)` | O(n) | O(n) | Wait for futures |
-| `Executor` creation | O(1) | O(1) | Base class init |
-| `Future` creation | O(1) | O(1) | Pending future |
-| `CancelledError` / `TimeoutError` | O(1) | O(1) | Exception types |
-| `InvalidStateError` / `BrokenExecutor` | O(1) | O(1) | Exception types |
-| `FIRST_COMPLETED` / `FIRST_EXCEPTION` / `ALL_COMPLETED` | O(1) | O(1) | Sentinel constants |
+| `ThreadPoolExecutor(max_workers=None, thread_name_prefix='', initializer=None, initargs=())` | O(1) | O(1) | Starts no threads; `max_workers` defaults to `min(32, CPUs + 4)` |
+| `ThreadPoolExecutor.submit(fn, /, *args, **kwargs)` | O(1) | O(1) | Queues one work item and starts at most one thread: only when no worker is idle and fewer than w are running. Arguments are passed by reference |
+| `ThreadPoolExecutor.map(fn, *iterables, timeout=None, chunksize=1, buffersize=None)` | O(n) | O(n) | Consumes every input and submits every task before it returns; with `buffersize` (3.14+), O(b) space and b tasks submitted up front, one more as each result is taken. `chunksize` is ignored |
+| `ThreadPoolExecutor.shutdown(wait=True, *, cancel_futures=False)` | O(w + q) | O(1) | Joins the threads after the queue drains; `cancel_futures=True` cancels the q queued tasks instead of running them |
 
-## ThreadPoolExecutor
+### ProcessPoolExecutor
 
-### Creation and Configuration
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `ProcessPoolExecutor(max_workers=None, mp_context=None, initializer=None, initargs=(), max_tasks_per_child=None)` | O(1) | O(1) | Starts no processes; `max_workers` defaults to the CPU count |
+| `ProcessPoolExecutor.submit(fn, /, *args, **kwargs)` | O(1), O(w) process starts on the first call with `fork` | O(1) | With the `fork` start method the first submit starts all w workers; with `spawn` or `forkserver` each submit starts at most one, when none is idle. Arguments are pickled later, on a feeder thread, in O(a) |
+| `ProcessPoolExecutor.map(fn, *iterables, timeout=None, chunksize=1, buffersize=None)` | O(n) | O(n) | Sends ⌈n / chunksize⌉ tasks, each pickling its chunk, so a larger `chunksize` means fewer round trips; with `buffersize` (3.14+), b chunks are in flight |
+| `ProcessPoolExecutor.shutdown(wait=True, *, cancel_futures=False)` | O(w + q) | O(w) | Joins the manager thread, which joins the workers |
+| `ProcessPoolExecutor.terminate_workers()`, `ProcessPoolExecutor.kill_workers()` | O(w) | O(w) | Python 3.14+: one signal per live worker, after a `shutdown(wait=False, cancel_futures=True)`; the pool cannot be used afterwards |
+
+### InterpreterPoolExecutor
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `InterpreterPoolExecutor(max_workers=None, thread_name_prefix='', initializer=None, initargs=())` | O(1) | O(1) | Python 3.14+. A `ThreadPoolExecutor` whose threads each run their own interpreter; creates none yet |
+| `InterpreterPoolExecutor.submit(fn, /, *args, **kwargs)` | O(1) | O(1) | As `ThreadPoolExecutor.submit`. The worker then pays O(a) to copy or pickle the callable, arguments and result across, and a new worker first creates a whole interpreter |
+
+### Executor
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `Executor` | O(1) | O(1) | Abstract base; a subclass supplies `submit()` and inherits `map()`, `shutdown()` and the context manager |
+| `Executor.submit(fn, /, *args, **kwargs)`, `Executor.map(...)`, `Executor.shutdown(...)` | as the subclass | as the subclass | `with executor:` calls `shutdown(wait=True)` on exit |
+
+### Future
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `Future()` | O(1) | O(1) | Pending; executors create these, and tests may too |
+| `Future.result(timeout=None)` | O(1) | O(1) | Returns the stored object itself, not a copy; blocks until done, and raises the task's exception, `CancelledError` or `TimeoutError` |
+| `Future.exception(timeout=None)` | O(1) | O(1) | The stored exception, or `None` |
+| `Future.done()`, `Future.running()`, `Future.cancelled()` | O(1) | O(1) | |
+| `Future.cancel()` | O(c) | O(1) | Runs the callbacks when it succeeds; returns `False` once the task is running or finished, and `True` again on a cancelled future without rerunning them |
+| `Future.add_done_callback(fn)` | O(1) | O(1) | Appends; on a future already done it calls `fn` at once, in the calling thread |
+| `Future.set_result(result)`, `Future.set_exception(exception)` | O(c) | O(1) | For executor implementations: stores, wakes waiters, runs the c callbacks; `InvalidStateError` if already done |
+| `Future.set_running_or_notify_cancel()` | O(1) | O(1) | For executor implementations: `False` when the future was cancelled |
+
+### Waiting on Futures
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `concurrent.futures.wait(fs, timeout=None, return_when=ALL_COMPLETED)` | O(n log n) | O(n) | Sorts the futures by `id()` to lock them in a fixed order, then returns `(done, not_done)` sets |
+| `concurrent.futures.as_completed(fs, timeout=None)` | O(n log n) | O(n) | The same sort once, then yields each distinct future once: those already finished first, then the rest in completion order |
+| `concurrent.futures.FIRST_COMPLETED`, `FIRST_EXCEPTION`, `ALL_COMPLETED` | O(1) | O(1) | String constants for `return_when` |
+
+### Exceptions
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `concurrent.futures.CancelledError`, `concurrent.futures.InvalidStateError` | O(1) | O(1) | Raised by `result()` on a cancelled future, and by `set_result()` on a finished one |
+| `concurrent.futures.TimeoutError` | O(1) | O(1) | The builtin `TimeoutError` from Python 3.11 |
+| `concurrent.futures.BrokenExecutor` | O(1) | O(1) | Base of `thread.BrokenThreadPool`, `process.BrokenProcessPool` and `interpreter.BrokenInterpreterPool` (3.14+), raised once a worker fails to start or dies |
+
+## Submitting Work
+
+### Workers Start on Demand
+
+Building a pool starts nothing. `ThreadPoolExecutor.submit()` starts a thread only when no
+worker has marked itself idle, so a pool whose worker is idle when each task arrives reuses one
+thread however large `max_workers` is.
 
 ```python
+import threading
 from concurrent.futures import ThreadPoolExecutor
 
-# Create thread pool: O(w) time and space
-# w = number of worker threads
-executor = ThreadPoolExecutor(max_workers=4)  # O(w)
+before = threading.active_count()
+executor = ThreadPoolExecutor(max_workers=8)  # O(1) - no threads yet
+assert threading.active_count() == before
 
-# Default: min(32, os.cpu_count() + 4) threads
-executor = ThreadPoolExecutor()  # O(w) where w = default count
+release = threading.Event()
+futures = [executor.submit(release.wait) for _ in range(3)]  # O(1) each
+assert threading.active_count() == before + 3  # one new thread per busy task
 
-# Time to create: O(w) to spawn threads
-# Space: O(w) for thread objects
+futures += [executor.submit(release.wait) for _ in range(20)]
+assert threading.active_count() == before + 8  # capped at max_workers
+
+release.set()
+executor.shutdown()  # O(w + q)
+assert all(future.result() is True for future in futures)
 ```
 
-### Submitting Tasks
+### map() Submits Everything at Once
 
-#### Time Complexity: O(1) per submit
+`Executor.map()` is not lazy on its input: it takes every item and submits every task before
+it returns, so it holds n futures however the results are consumed. From Python 3.14,
+`buffersize` keeps about that many tasks in flight, submitting one more as each result is taken.
 
 ```python
+import sys
 from concurrent.futures import ThreadPoolExecutor
 
-executor = ThreadPoolExecutor(max_workers=4)
+taken = []
 
-# Submit single task: O(1)
-# Just adds to queue, doesn't wait
-future = executor.submit(some_function, arg1, arg2)  # O(1)
+def items():
+    for index in range(100):
+        taken.append(index)
+        yield index
 
-# Submit many tasks: O(n) total
-for item in items:  # n = len(items)
-    future = executor.submit(process, item)  # O(1) per submit
-    # Total: O(n)
+with ThreadPoolExecutor(max_workers=2) as executor:
+    results = executor.map(abs, items())  # O(n) - the whole input is consumed here
+    assert len(taken) == 100
+    assert list(results) == list(range(100))  # in input order
+
+if sys.version_info >= (3, 14):
+    taken.clear()
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = executor.map(abs, items(), buffersize=4)  # O(b) in flight
+        assert len(taken) == 4
+        assert next(results) == 0
+        assert list(results) == list(range(1, 100))
 ```
 
-#### Space Complexity: O(1) per submit
+### Results in Input Order vs Completion Order
+
+`map()` yields results in input order, so one slow early task holds back every later result
+that is already done. `as_completed()` yields futures as they finish.
 
 ```python
-from concurrent.futures import ThreadPoolExecutor
+import threading
+from concurrent.futures import ThreadPoolExecutor, TimeoutError, as_completed
 
-# Each submit adds to queue: O(1) space
-# Queue grows as tasks accumulate
-executor = ThreadPoolExecutor(max_workers=2)
+gate = threading.Event()
 
-for i in range(1000):
-    executor.submit(task, i)  # O(1) per submit, O(1000) total space
+def task(index):
+    if index == 0:
+        gate.wait()
+    return index
+
+with ThreadPoolExecutor(max_workers=4) as executor:
+    try:
+        ordered = executor.map(task, range(4), timeout=0.5)
+        try:
+            next(ordered)  # waits for task 0, although 1, 2 and 3 finish at once
+        except TimeoutError:
+            pass
+        else:
+            raise AssertionError('the first result arrived before task 0 finished')
+
+        futures = [executor.submit(task, index) for index in range(1, 4)]
+        finished = {future.result() for future in as_completed(futures)}  # O(n log n)
+        assert finished == {1, 2, 3}
+    finally:
+        gate.set()
 ```
 
-## ProcessPoolExecutor
+## Process Pools
 
-### Creation and Configuration
+### Starting Workers
+
+With the `fork` start method, the default on Linux before Python 3.14, the first `submit()`
+forks all w workers at once. With `spawn`, and `forkserver`, the Linux default from 3.14, each
+`submit()` starts at most one. Either way `max_tasks_per_child` (3.11+) makes a worker exit and
+be replaced after that many tasks, and needs a start method other than `fork`.
+
+```python
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor
+
+if __name__ == '__main__':
+    for method, started in (('fork', 4), ('spawn', 1)):
+        context = multiprocessing.get_context(method)
+        with ProcessPoolExecutor(max_workers=4, mp_context=context) as executor:  # O(1)
+            assert multiprocessing.active_children() == []
+            assert executor.submit(pow, 2, 10).result() == 1024
+            assert len(multiprocessing.active_children()) == started
+```
+
+### Pickling Happens Later
+
+A process pool pickles each task on a feeder thread, not in `submit()`. So `submit()` does not
+pay for large arguments, and an argument that cannot be pickled is reported through its future
+rather than by `submit()`.
 
 ```python
 from concurrent.futures import ProcessPoolExecutor
 
-# Create process pool: O(w) time and space
-executor = ProcessPoolExecutor(max_workers=4)  # O(w)
+class Unpicklable:
+    def __reduce__(self):
+        raise TypeError('cannot pickle this')
 
-# Time to create: O(w) to spawn processes (slower than threads)
-# Space: O(w) per process (much larger than threads)
+if __name__ == '__main__':
+    with ProcessPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(abs, Unpicklable())  # O(1) - returns at once
+        try:
+            future.result()
+        except TypeError as error:
+            assert 'cannot pickle' in str(error)
+        else:
+            raise AssertionError('an unpicklable argument was sent')
 
-# Default: os.cpu_count() processes
-executor = ProcessPoolExecutor()  # O(w) where w = CPU count
+        # chunksize=5 sends 4 tasks for 20 items: fewer round trips
+        assert list(executor.map(abs, range(-20, 0), chunksize=5)) == list(range(20, 0, -1))
 ```
 
-### Submitting Tasks
+## Futures
+
+### Reading a Result
+
+`result()` hands back the object the task returned, without copying it, and a future that is
+already done answers at once. A cancelled future raises `CancelledError`.
 
 ```python
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import CancelledError, Future, InvalidStateError
 
-executor = ProcessPoolExecutor(max_workers=4)
+payload = list(range(1000))
+future = Future()
+future.set_result(payload)  # O(c) - no callbacks here
+assert future.done() and not future.running()
+assert future.result() is payload  # O(1) - the same object
+assert future.exception() is None
 
-# Submit single task: O(1)
-# Serializes arguments (pickle)
-future = executor.submit(some_function, arg1, arg2)  # O(1) + pickle time
-
-# Submit many: O(n)
-for item in items:
-    future = executor.submit(process, item)  # O(1) per submit
-```
-
-## Mapping Operations
-
-### map() - Apply Function to Iterable
-
-```python
-from concurrent.futures import ThreadPoolExecutor
-
-executor = ThreadPoolExecutor(max_workers=4)
-
-# Map function over items: O(n)
-# n = number of items
-items = range(1000)
-results = list(executor.map(process, items))  # O(n)
-
-# Submits all: O(n) time
-# Returns iterator (doesn't wait for all immediately)
-```
-
-### Space Complexity
-
-```python
-from concurrent.futures import ThreadPoolExecutor
-
-# map() returns iterator
-executor = ThreadPoolExecutor(max_workers=4)
-
-# Iterator version: O(1) memory (lazy)
-for result in executor.map(func, huge_list):
-    process(result)  # Memory: O(1) not O(n)
-
-# list() version: O(n) memory
-results = list(executor.map(func, huge_list))  # O(n) memory
-```
-
-## Getting Results
-
-### Future.result() - Get Result
-
-```python
-from concurrent.futures import ThreadPoolExecutor
-import time
-
-executor = ThreadPoolExecutor(max_workers=2)
-
-# Submit task
-future = executor.submit(long_running_task)  # O(1)
-
-# Wait and get result: O(1) operation + blocking time
-# (actual time depends on task execution)
 try:
-    result = future.result()  # O(1) operation, blocks until ready
-except Exception as e:
-    print(f"Task failed: {e}")
-```
+    future.set_result(None)
+except InvalidStateError:
+    pass
+else:
+    raise AssertionError('a finished future accepted a second result')
 
-### Timeout
-
-```python
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
-
-executor = ThreadPoolExecutor(max_workers=2)
-future = executor.submit(long_task)
-
-# Get result with timeout: O(1) operation
+pending = Future()
+assert pending.cancel() is True  # O(c)
 try:
-    result = future.result(timeout=5)  # Wait max 5 seconds, O(1) operation
-except TimeoutError:
-    print("Task didn't complete in time")
+    pending.result()
+except CancelledError:
+    pass
+else:
+    raise AssertionError('a cancelled future returned a result')
 ```
 
-## Waiting for Results
+### Done Callbacks
 
-### as_completed() - Iterate as Futures Complete
+A callback added before completion runs in whichever thread completes the future; one added
+afterwards runs immediately, in the thread that adds it.
 
 ```python
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+from concurrent.futures import Future
 
-executor = ThreadPoolExecutor(max_workers=4)
+seen = []
+future = Future()
+future.add_done_callback(lambda done: seen.append(('early', done.result())))  # O(1)
 
-# Submit all tasks: O(n)
-futures = [executor.submit(task, i) for i in range(100)]  # O(n)
+worker = threading.Thread(target=future.set_result, args=(42,))
+worker.start()
+worker.join()
+assert seen == [('early', 42)]
 
-# Get futures as they complete: O(n log n) overall
-# (initial lock-order sorting + event-based waiter)
-for future in as_completed(futures):  # O(n log n) total
-    result = future.result()  # O(1) per future
-    process(result)
+future.add_done_callback(lambda done: seen.append(('late', threading.current_thread())))
+assert seen[1] == ('late', threading.current_thread())  # ran here, at once
 ```
 
-### wait() - Wait for Multiple Futures
+## Waiting on Many Futures
+
+`wait()` and `as_completed()` each take a set of the futures and sort it by `id()` so that
+their locks are always taken in the same order, which is the log factor. They collapse
+duplicates, and a `wait()` whose condition already holds returns without blocking.
 
 ```python
-from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
+from concurrent.futures import (
+    ALL_COMPLETED, FIRST_COMPLETED, FIRST_EXCEPTION, Future, as_completed, wait,
+)
 
-executor = ThreadPoolExecutor(max_workers=4)
+done_ok, failed, pending = Future(), Future(), Future()
+done_ok.set_result('ok')
+failed.set_exception(ValueError('bad'))
 
-# Submit tasks
-futures = set()
-for i in range(100):
-    futures.add(executor.submit(task, i))  # O(n) total
+done, not_done = wait([done_ok, pending], return_when=FIRST_COMPLETED)  # O(n log n)
+assert done == {done_ok} and not_done == {pending}
 
-# Wait for first to complete: O(n)
-done, not_done = wait(futures, return_when=FIRST_COMPLETED)  # O(n)
+done, not_done = wait([done_ok, failed, pending], return_when=FIRST_EXCEPTION)
+assert failed in done and pending in not_done
 
-# Wait for all to complete: O(n)
-done, not_done = wait(futures)  # O(n)
+done, not_done = wait([done_ok, pending], timeout=0.01, return_when=ALL_COMPLETED)
+assert not_done == {pending}
 
-# Wait with timeout: O(n)
-done, not_done = wait(futures, timeout=10)  # O(n)
+assert len(list(as_completed([done_ok, done_ok, failed]))) == 2  # duplicates collapse
 ```
 
 ## Common Patterns
 
-### Simple Parallel Processing
+### Fan Out, Collect as Finished
 
 ```python
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-def process_items(items):
-    """Process items in parallel."""
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        # Submit all tasks: O(n)
-        futures = [executor.submit(process, item) for item in items]
-        
-        # Collect results: O(n)
-        results = [f.result() for f in futures]
-    
-    return results
-    # Total: O(n) time, O(w) memory for workers + O(n) for results
-```
+def work(item):
+    return item * item
 
-### Process Large Dataset in Batches
-
-```python
-from concurrent.futures import ThreadPoolExecutor
-
-def batch_process(items, batch_size=100):
-    """Process items in batches."""
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        results = []
-        
-        # Process in batches: O(n/batch_size) iterations
-        for i in range(0, len(items), batch_size):
-            batch = items[i:i+batch_size]
-            # Submit batch: O(batch_size)
-            futures = [executor.submit(process, item) for item in batch]
-            # Get results: O(batch_size)
-            results.extend([f.result() for f in futures])
-        
-        return results
-```
-
-### Map with Exception Handling
-
-```python
-from concurrent.futures import ThreadPoolExecutor
-
-def safe_map(func, items, max_workers=4):
-    """Map with exception handling."""
-    results = []
-    
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Submit all: O(n)
-        futures = {executor.submit(func, item): item for item in items}
-        
-        # Collect with error handling: O(n)
-        for future in futures:
-            try:
-                result = future.result()
-                results.append((futures[future], result))
-            except Exception as e:
-                results.append((futures[future], None))
-    
-    return results
-    # Total: O(n)
-```
-
-### Timeout Pattern
-
-```python
-from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
-
-def process_with_timeout(items, timeout=30):
-    """Process items with per-item timeout."""
-    results = []
-    
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        # Submit all: O(n)
-        futures = {executor.submit(task, item): item for item in items}
-        
-        # Wait with timeout: O(n log n) overall
-        try:
-            for future in as_completed(futures, timeout=timeout):  # O(n log n)
-                result = future.result()
-                results.append(result)
-        except TimeoutError:
-            # Some tasks didn't complete
-            pass
-    
-    return results
-```
-
-## Performance Characteristics
-
-### ThreadPoolExecutor vs ProcessPoolExecutor
-
-```python
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
-
-# ThreadPoolExecutor: For I/O-bound tasks
-# - Fast creation: O(w) with light threads
-# - Good for network, file I/O
-# - Shares GIL, limited by GIL for CPU
-executor = ThreadPoolExecutor(max_workers=8)
-
-# ProcessPoolExecutor: For CPU-bound tasks
-# - Slower creation: O(w) with heavy processes
-# - Good for computation
-# - No GIL, true parallelism
-executor = ProcessPoolExecutor(max_workers=4)
-
-# Rule: use ProcessPoolExecutor for CPU-bound
-# Use ThreadPoolExecutor for I/O-bound
-```
-
-### Best Practices
-
-```python
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
-
-# Good: Use context manager for cleanup
+items = range(20)
 with ThreadPoolExecutor(max_workers=4) as executor:
-    futures = [executor.submit(task, i) for i in range(10)]
-    for future in as_completed(futures):
-        result = future.result()
+    futures = {executor.submit(work, item): item for item in items}  # O(n)
+    results = {}
+    for future in as_completed(futures):  # O(n log n), then one per completion
+        results[futures[future]] = future.result()  # O(1)
 
-# Avoid: Manual shutdown
-executor = ThreadPoolExecutor(max_workers=4)
-futures = [executor.submit(task, i) for i in range(10)]
-executor.shutdown(wait=True)  # Required, easily forgotten
-
-# Good: Use map() for simple function application
-results = list(executor.map(process, items))  # O(n)
-
-# Avoid: Manual submit for each item (less efficient)
-futures = [executor.submit(process, item) for item in items]
-
-# Good: Limit queue size implicitly
-# Tasks submitted faster than executed will wait
-
-# Avoid: Submitting unlimited tasks
-# Can exhaust memory if submission >> execution
+assert results == {item: item * item for item in items}
 ```
 
-### Worker Count Selection
+### Bounded Submission
+
+A loop that submits faster than the pool runs grows the queue without limit. Holding at most a
+fixed number of futures in flight keeps memory at that number.
 
 ```python
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
-import os
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 
-# CPU-bound: CPU count
-cpu_count = os.cpu_count() or 4
-executor = ProcessPoolExecutor(max_workers=cpu_count)
+limit = 8
+total = 0
+with ThreadPoolExecutor(max_workers=4) as executor:
+    in_flight = set()
+    for item in range(100):
+        if len(in_flight) >= limit:
+            done, in_flight = wait(in_flight, return_when=FIRST_COMPLETED)  # O(limit log limit)
+            total += sum(future.result() for future in done)
+        in_flight.add(executor.submit(abs, -item))  # O(1)
+    total += sum(future.result() for future in in_flight)
 
-# I/O-bound: higher number (1-2x CPU count)
-executor = ThreadPoolExecutor(max_workers=cpu_count * 2)
-
-# Network services: even higher
-executor = ThreadPoolExecutor(max_workers=32)
+assert total == sum(range(100))
 ```
+
+## Performance Best Practices
+
+✅ **Do**:
+
+- Use a `with` block, so `shutdown(wait=True)` joins the workers even when an exception escapes
+- Pass `buffersize` to `map()` (3.14+) or bound submission yourself when the input is large or
+  endless: without it every task is submitted, and every future held, before the first result
+- Use `as_completed()` when any finished result is useful; `map()` waits on each in input order
+- Raise `chunksize` on `ProcessPoolExecutor.map()` for many small tasks, to cut the round trips
+- Reuse one pool; with `fork` its first `submit()` starts every worker
+
+❌ **Avoid**:
+
+- `ProcessPoolExecutor` for tasks smaller than their pickled arguments and result: the O(a)
+  transfer each way is paid on top of the work
+- Calling `wait(return_when=FIRST_COMPLETED)` on the whole pending set once per finished task:
+  each call sorts everything still pending, O(n² log n) in all, where `as_completed()` sorts once
+- `shutdown(wait=False)` when you then rely on the results being there; nothing has been joined
 
 ## Version Notes
 
-- **Python 3.2+**: concurrent.futures module introduced
-- **Python 3.3+**: Enhanced performance
-- **Python 3.5+**: Better integration with asyncio
-- **Python 3.9+**: ProcessPoolExecutor improvements
+- **Python 3.11+**: `concurrent.futures.TimeoutError` is the builtin `TimeoutError`;
+  `ProcessPoolExecutor` takes `max_tasks_per_child`
+- **Python 3.13+**: the default `max_workers` of both pools follows `os.process_cpu_count()`
+- **Python 3.14+**: Added `InterpreterPoolExecutor`, `map(buffersize=...)`,
+  `terminate_workers()` and `kill_workers()`; the default start method on Linux is
+  `forkserver`, so the first `submit()` no longer starts every worker there
 
-## Related Documentation
+## Related Modules
 
-- [asyncio Module](asyncio.md) - Async/await programming
-- [threading Module](threading.md) - Thread-based parallelism
-- [multiprocessing Module](multiprocessing.md) - Process-based parallelism
-- [queue Module](queue.md) - Thread-safe queues
+- **[concurrent.interpreters](concurrent.interpreters.md)** - The interpreters behind
+  `InterpreterPoolExecutor`, and what crossing into one costs
+- **[multiprocessing](multiprocessing.md)** - `Pool`, start methods, and the queues a process pool
+  pickles through
+- **[threading](threading.md)** - The threads and locks under `ThreadPoolExecutor`
+- **[asyncio](asyncio.md)** - `run_in_executor()` and `wrap_future()` bridge these futures
+- **[queue](queue.md)** - Bounded queues for producer-consumer work without futures

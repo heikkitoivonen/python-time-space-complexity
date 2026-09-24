@@ -254,6 +254,8 @@ CLASS_PAGES = {
     "collections.Counter": "counter",
     "collections.OrderedDict": "ordereddict",
     "collections.namedtuple": "namedtuple",
+    # A submodule whose page name is not its dotted module name.
+    "concurrent.futures": "concurrent_futures",
 }
 
 

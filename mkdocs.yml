@@ -172,6 +172,7 @@ nav:
     - Compression: stdlib/compression.md
     - Concurrent: stdlib/concurrent.md
     - Concurrent.futures: stdlib/concurrent_futures.md
+    - Concurrent.interpreters: stdlib/concurrent.interpreters.md
     - Configparser: stdlib/configparser.md
     - Contextlib: stdlib/contextlib.md
     - Contextvars: stdlib/contextvars.md
