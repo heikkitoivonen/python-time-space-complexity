@@ -76,9 +76,12 @@ and of 80000 registered commands, near 4 for the list scan; ``register()``
 of 2000 commands on an empty registry and on one holding 80000, near 1
 with the garbage collector paused, since the full registry's 80000 closures
 would otherwise be traversed by a collection the measurement triggers; and
-``trace_info()`` on 1000 and 4000 traces, and ``trace_remove()`` of the
-last 50 of each, both near 16 or more because Tcl's ``trace info variable``
-restarts its walk of the trace list for every trace it reports.
+``trace_info()`` and removal of the newest trace on 200, 2000 and 20000
+traces. Each 10x step must cost more than 20x (linear predicts 10x,
+quadratic 100x). Both use the fastest of five samples with cyclic GC
+paused; removal restores the trace outside the timer before the next sample.
+Tcl's ``trace info variable`` restarts its walk of the trace list for
+every trace it reports. Trace modes and callback bodies are held fixed.
 
 Not settled by running code, because every Tk window needs a display and
 neither the pinned interpreter here nor CI has one: the widget, window
@@ -836,23 +839,38 @@ class TestGrowth:
         assert register_ratio < 2, f"40x the commands made register x{register_ratio:.1f}"
 
     def test_trace_info_and_trace_remove_are_quadratic_in_the_traces(self) -> None:
-        def traced(count: int) -> tuple[Any, list[str]]:
+        sizes = (200, 2000, 20000)
+        timings: dict[str, list[float]] = {"trace_info": [], "trace_remove": []}
+        for count in sizes:
             var = tkinter.StringVar(master=_tcl())
-            return var, [var.trace_add("write", lambda *args: None) for _ in range(count)]
+            for _ in range(count - 1):
+                var.trace_add("write", lambda *args: None)
+            name = var.trace_add("write", lambda *args: None)
 
-        def remove_last(var: Any, names: list[str]) -> Callable[[], None]:
-            def run() -> None:
-                for name in reversed(names[-50:]):
+            gc_enabled = gc.isenabled()
+            gc.disable()
+            try:
+                timings["trace_info"].append(_best(var.trace_info))
+                samples = []
+                for _ in range(5):
+                    start = time.perf_counter()
                     var.trace_remove("write", name)
+                    samples.append(time.perf_counter() - start)
+                    name = var.trace_add("write", lambda *args: None)
+                timings["trace_remove"].append(min(samples))
+            finally:
+                if gc_enabled:
+                    gc.enable()
+            assert len(var.trace_info()) == count
+            del var
 
-            return run
-
-        small, large = traced(1000), traced(4000)
-        info_ratio = _best(large[0].trace_info, 3) / _best(small[0].trace_info, 3)
-        remove_ratio = _best(remove_last(*large), repeat=1) / _best(remove_last(*small), repeat=1)
-
-        assert info_ratio > 8, f"4x the traces made trace_info x{info_ratio:.1f}"
-        assert remove_ratio > 8, f"4x the traces made trace_remove x{remove_ratio:.1f}"
+        for operation, times in timings.items():
+            for index in range(len(sizes) - 1):
+                ratio = times[index + 1] / times[index]
+                assert ratio > 20, (
+                    f"{operation}: {sizes[index]} -> {sizes[index + 1]} traces "
+                    f"cost x{ratio:.2f}; seconds at {sizes}: {times}"
+                )
 
 
 def _blocks() -> list[tuple[int, str]]:
