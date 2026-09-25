@@ -6,11 +6,12 @@ rest. The unit of work is one input line.
 
 `k` is the characters in the command line being run, `a` is the names `dir()` reports for the
 interpreter's class (every `do_`, `help_` and `complete_` method, plus those inherited from `Cmd`
-and `object`), `n` is the strings `columnize()` lays out, `q` is the lines waiting in `cmdqueue`,
-and `t` is the characters in the docstring `help` shows for a topic. Every bound is what `cmd` adds
-around a handler: the `do_`, `help_` and `complete_` methods' own work is not included. Names and
-the strings `columnize()` lays out are counted, not measured: their lengths are treated as short
-and not priced. `identchars` is treated as a fixed-size string, and attribute lookup as O(1).
+and `object`), `n` is the strings `columnize()` lays out, `w` is its display width, `q` is the lines
+waiting in `cmdqueue`, and `t` is the characters in the docstring `help` shows for a topic. Every
+bound is what `cmd` adds around a handler: the `do_`, `help_` and `complete_` methods' own work is
+not included. Names and the strings `columnize()` lays out are counted, not measured: their lengths
+are treated as short and not priced. `identchars` is treated as a fixed-size string, and attribute
+lookup as O(1).
 
 ## Complexity Reference
 
@@ -20,13 +21,13 @@ and not priced. `identchars` is treated as a fixed-size string, and attribute lo
 |-----------|------|-------|-------|
 | `cmd.Cmd(completekey='tab', stdin=None, stdout=None)` | O(1) | O(1) | Stores the streams and an empty `cmdqueue`; `stdin` is read only when `use_rawinput` is false |
 | `Cmd.cmdloop(intro=None)` | O(k) per line | O(k) | Runs until `postcmd()` returns a true value, which by default is whatever the handler returned; end of input arrives as the line `'EOF'`. A line taken from `cmdqueue` adds O(q) |
-| `Cmd.onecmd(line)` | O(k) | O(k) | One `parseline()` and one attribute lookup for `do_<command>`, however many commands the class has |
+| `Cmd.onecmd(line)` | O(k) | O(k) | For a non-empty line, one `parseline()` and one attribute lookup for `do_<command>`, however many commands the class has |
 | `Cmd.parseline(line)` | O(k) | O(k) | Returns `(command, args, line)`; a leading `?` becomes `help`, and `!` becomes `shell` when `do_shell` exists |
 | `Cmd.emptyline()` | O(k) | O(k) | Runs `lastcmd` again through `onecmd()`, so an empty line costs what the last command cost; O(1) when there is none |
 | `Cmd.default(line)` | O(k) | O(k) | Writes `*** Unknown syntax:` and the line |
 | `Cmd.precmd(line)`, `Cmd.postcmd(stop, line)` | O(1) | O(1) | Called for every line; the defaults return `line` and `stop` unchanged |
 | `Cmd.preloop()`, `Cmd.postloop()` | O(1) | O(1) | Called once as `cmdloop()` starts and once as it returns; empty by default |
-| `Cmd.cmdqueue` | O(q) per line taken | O(q) | A list the loop reads with `pop(0)` before asking for input, so replaying q queued lines is O(q²) in all |
+| `Cmd.cmdqueue` | O(1) | O(q) | A list the loop takes lines from with `pop(0)` before asking for input: O(q) per line taken, so replaying q queued lines is O(q²) in all |
 
 ### Help and completion
 
@@ -34,8 +35,8 @@ and not priced. `identchars` is treated as a fixed-size string, and attribute lo
 |-----------|------|-------|-------|
 | `Cmd.do_help(arg)` for one topic | O(k + t) | O(k + t) | Calls `help_<topic>()` when it exists, otherwise prints the docstring of `do_<topic>` |
 | `Cmd.do_help('')`, `help` alone | O(a log a + n²) | O(a) | One `get_names()`, then one `print_topics()` each for documented commands, help topics and undocumented commands |
-| `Cmd.print_topics(header, cmds, cmdlen, maxcol)` | O(n²) | O(n) | A header, a `ruler` line under it when `ruler` is set, then `columnize(cmds, maxcol - 1)`; prints nothing for an empty list |
-| `Cmd.columnize(list, displaywidth=80)` | O(n²) | O(n) | Tries each row count from one upward until the columns fit, measuring the strings again each time; a list that fits on one line is O(n) |
+| `Cmd.print_topics(header, cmds, cmdlen, maxcol)` | O(n²) | O(min(n, maxcol)) | A header, a `ruler` line under it when `ruler` is set, then `columnize(cmds, maxcol - 1)`; prints nothing for an empty list |
+| `Cmd.columnize(list, displaywidth=80)` | O(n²) | O(min(n, w)) | Tries each row count from one upward until the columns fit, measuring the strings again each time; a list that fits on one line is O(n). It holds the column widths of one attempt and the text of one row, and a row can hold all n strings |
 | `Cmd.get_names()` | O(a log a) | O(a) | The class's `dir()`, which is sorted; every `help` listing and every command-name completion calls it |
 | `Cmd.complete(text, state)` | O(k + a log a) at state 0, O(1) after | O(k + a) | The readline completer: state 0 builds the whole match list and later states index it. For an argument, state 0 costs O(k) plus the `complete_<command>` method |
 | `Cmd.completenames(text, *ignored)` | O(a log a) | O(a) | Command names starting with `text` |
@@ -142,7 +143,7 @@ shell.onecmd('multiply 2 3')  # no do_multiply: default() reports it
 assert shell.stdout.getvalue() == '*** Unknown syntax: multiply 2 3\n'
 ```
 
-### Empty Lines Repeat the Last Command
+### Empty Lines
 
 An empty line calls `emptyline()`, which runs `lastcmd` again. That costs whatever the last
 command cost and repeats its effects; override `emptyline()` to make an empty line do nothing.
@@ -316,7 +317,7 @@ assert output.getvalue() == 'Ada\n'
 ✅ **Do**:
 
 - Stream a long script through `stdin` with `use_rawinput = False`: O(k) per line, with nothing
-  held but the current line
+  held but the current line and `lastcmd`
 - Define `do_EOF` and return a true value, so the loop stops at end of input
 - Override `emptyline()` when repeating the last command is costly or unwanted
 - Call `onecmd()` directly to test handlers; it is one line's work without the prompt or the
@@ -326,7 +327,8 @@ assert output.getvalue() == 'Ada\n'
 
 - Queuing a long script in `cmdqueue` - each line taken shifts the rest, O(q²) in all
 - Passing `columnize()` thousands of strings - it is O(n²) once they wrap onto many rows
-- Passing `stdin=` with `use_rawinput` left true - the loop reads the terminal and ignores it
+- Passing `stdin=` with `use_rawinput` left true - the loop reads standard input through `input()`
+  and ignores it
 
 ## Version Notes
 

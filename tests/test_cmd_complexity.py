@@ -13,14 +13,26 @@ Measurement scope:
 * `columnize()` over a list subclass that counts item reads: 1,000 eight-
   character strings at width 80 read more than 40x as many items as 100 do,
   where a linear layout would read 10x; 1,000 strings wider than the display
-  read more than 40x as many as 100. Twenty two-character strings that fit
-  on one line read at most 3n items. The output is asserted for a list that
+  read more than 40x as many as 100. Both stay under 200x, where a cubic
+  layout would read 1,000x. Twenty two-character strings that fit on one
+  line read at most 3n items. Space: 10,000 eight-character strings at width
+  80 peak under 10,000 traced bytes, where one list of them would take
+  80,000; at width 1,000,000, where they fit on one row, the peak exceeds
+  80,000 bytes and is less than 30x the peak for 1,000 strings, where
+  quadratic space would be 100x - the min(n, w) of the page. The output is asserted for a list that
   wraps, one that fits, and an empty one.
 * Dispatch against enumeration: a class with 10,000 `do_` methods against
   one with 10. `onecmd()` costs less than 3x as much, and `get_names()` more
   than 30x. `onecmd()` and one-topic `help` are asserted not to call
   `get_names()` at all; a `help` listing calls it once, as does each
   command-name completion at state 0 and none at later states.
+* Parsing against line length: `parseline()` on a 100,000-character line
+  costs less than 400x a 1,000-character one, where quadratic parsing would
+  cost 10,000x, both for a long argument and for a long command name. One-
+  topic `help` on a 100,000-character docstring costs less than 400x a
+  1,000-character one; this is what bounds `inspect.cleandoc()` on 3.13+.
+  The docstrings repeat one indented 17-character line, so line count and
+  length grow together; ragged indentation and tabs are not varied.
 * `get_names()` equals `sorted(dir(type(shell)))`. The log factor in
   O(a log a) is read from Objects/object.c, where `dir()` sorts its result,
   not measured.
@@ -58,16 +70,14 @@ Not settled here:
 * The Tab behaviour under GNU readline. Every interpreter available locally
   links libedit, so the GNU branch of `test_tab_completes_a_command_name` has
   not run; per Lib/cmd.py it binds `tab: complete` on every version.
-* Space bounds are read from Lib/cmd.py: `columnize()` holds the column
-  widths and one row of texts, `get_names()` returns one list of a names.
-  They are not measured. String lengths - names, columnized strings - are
-  outside the model by the page's definition, and not varied.
-* `do_help(arg)` for one topic looks up `help_<topic>`, then `do_<topic>`,
-  and is O(k + t) with t the docstring's length, which since 3.13 passes
-  through `inspect.cleandoc()`; read from Lib/cmd.py and not measured.
+* Space bounds other than `columnize()`'s are read from Lib/cmd.py:
+  `get_names()` returns one list of a names, and parsing holds slices of the
+  line. They are not measured. String lengths - names, columnized strings -
+  are outside the model by the page's definition, and not varied.
+* One-topic `help` is timed with k held short; its lookups of `help_<topic>`
+  then `do_<topic>` are read from Lib/cmd.py.
 * The handler, `help_` and `complete_` methods' own costs are excluded by
-  definition. Line length k is not varied: parsing is `str.strip()`, slicing
-  and a scan of the command name, read from Lib/cmd.py. Treating
+  definition. Treating
   `identchars` as fixed-size is a cost-model assumption; the name scan tests
   each character against that string.
 """
@@ -85,6 +95,7 @@ import subprocess
 import sys
 import textwrap
 import time
+import tracemalloc
 from collections.abc import Callable
 from typing import Any
 
@@ -105,6 +116,13 @@ def best_ns(func: Callable[[], Any], repeats: int = 7, inner: int = 1) -> float:
         best = elapsed if best is None else min(best, elapsed)
     assert best is not None
     return best
+
+
+class NullStream(io.StringIO):
+    """An output stream that discards what is written."""
+
+    def write(self, text: str) -> int:
+        return len(text)
 
 
 class CountingList(list[str]):
@@ -400,6 +418,17 @@ class TestParsingAndDispatch:
         assert dispatch[1] < dispatch[0] * 3, f"onecmd at 10 and 10,000 commands: {dispatch} ns"
         assert listing[1] > listing[0] * 30, f"get_names at 10 and 10,000 commands: {listing} ns"
 
+    @pytest.mark.timing
+    def test_parsing_is_linear_in_the_line(self) -> None:
+        shell = cmd.Cmd(stdout=NullStream())
+        for label, make in [("argument", lambda k: "c " + "x" * k), ("name", lambda k: "c" * k)]:
+            short, long = make(1_000), make(100_000)
+            times = [
+                best_ns(lambda line=line: shell.parseline(line), inner=20) for line in (short, long)
+            ]
+
+            assert times[1] < times[0] * 400, f"a long {label} at 1,000 and 100,000: {times} ns"
+
 
 class TestEmptyLines:
     """`Cmd.emptyline` repeats `lastcmd`; `lastcmd` is the last nonempty
@@ -491,6 +520,22 @@ class TestHelp:
 
         assert output.getvalue() == "Add integers.\nCommands are words.\n*** No help on quit\n"
 
+    @pytest.mark.timing
+    def test_one_topic_is_linear_in_the_docstring(self) -> None:
+        def shell_with_doc(chars: int) -> cmd.Cmd:
+            def do_topic(self: cmd.Cmd, arg: str) -> None:
+                pass
+
+            do_topic.__doc__ = "    line of text\n" * (chars // 17)
+            return type("Documented", (cmd.Cmd,), {"do_topic": do_topic})(stdout=NullStream())
+
+        shells = [shell_with_doc(1_000), shell_with_doc(100_000)]
+        for shell in shells:
+            shell.onecmd("help topic")
+        times = [best_ns(lambda s=shell: s.do_help("topic"), inner=5) for shell in shells]
+
+        assert times[1] < times[0] * 400, f"docstrings of 1,000 and 100,000 chars: {times} ns"
+
     def test_the_listing_calls_get_names_once_and_prints_three_groups(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -548,7 +593,7 @@ class TestHelp:
 
 class TestColumnizeIsQuadratic:
     """`Cmd.columnize` | O(n²) once the strings wrap onto many rows; O(n)
-    when they fit on one line."""
+    when they fit on one line; O(min(n, w)) space."""
 
     @staticmethod
     def reads(strings: list[str], width: int = 80) -> int:
@@ -560,18 +605,38 @@ class TestColumnizeIsQuadratic:
         small = self.reads(["x" * 8] * 100)
         large = self.reads(["x" * 8] * 1_000)
 
-        assert large > small * 40, f"100 and 1,000 strings read {small} and {large} items"
+        assert small * 40 < large < small * 200, f"100 and 1,000 strings: {small}, {large} reads"
 
     def test_strings_wider_than_the_display_are_quadratic_too(self) -> None:
         small = self.reads(["x" * 100] * 100)
         large = self.reads(["x" * 100] * 1_000)
 
-        assert large > small * 40, f"100 and 1,000 wide strings read {small} and {large} items"
+        assert small * 40 < large < small * 200, f"100 and 1,000 wide strings: {small}, {large}"
 
     def test_a_list_that_fits_on_one_line_is_linear(self) -> None:
         strings = ["ab"] * 20
 
         assert self.reads(strings) <= 3 * len(strings)
+
+    @staticmethod
+    def peak(count: int, width: int) -> int:
+        strings = ["x" * 8] * count
+        shell = cmd.Cmd(stdout=NullStream())
+        shell.columnize(strings[:10], width)
+        tracemalloc.start()
+        try:
+            shell.columnize(strings, width)
+            return tracemalloc.get_traced_memory()[1]
+        finally:
+            tracemalloc.stop()
+
+    def test_space_is_bounded_by_the_display_width(self) -> None:
+        narrow = self.peak(10_000, 80)
+        wide = [self.peak(count, 1_000_000) for count in (1_000, 10_000)]
+
+        assert narrow < 10_000, f"10,000 strings at width 80 peaked at {narrow} bytes"
+        assert wide[1] > 80_000, f"10,000 strings on one row peaked at {wide[1]} bytes"
+        assert wide[1] < wide[0] * 30, f"1,000 and 10,000 strings on one row: {wide} bytes"
 
     def test_the_layout(self) -> None:
         output = io.StringIO()
