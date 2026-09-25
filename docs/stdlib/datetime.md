@@ -1,356 +1,303 @@
 # datetime Module Complexity
 
-The `datetime` module provides classes for manipulating dates and times.
+The `datetime` module provides dates, times, durations and fixed-offset time zones. A `date`,
+`datetime`, `time` or `timedelta` is a fixed-size record of small integers with a bounded range
+(years 1 to 9999, durations under a billion days), so arithmetic, comparison, hashing, attribute
+access and replacement are constant time however far apart two values are.
 
-Every operation on a `datetime`, `date`, `time` or `timedelta` *object* is
-constant time: they are fixed-size records of small integers, so arithmetic,
-comparison, attribute access and replacement have nothing to scale with. Only
-the conversions to and from strings do. Throughout, `n` is the length of a
-string being parsed or produced and `f` the length of a format string.
+Only the conversions to and from strings scale. `n` is the characters in a string being parsed and
+`f` is the characters in a format string, and the parsing space bounds assume ASCII input. An aware
+object that needs its UTC offset calls its `tzinfo` a bounded number of times; the bounds count
+each call as O(1), which it is for `timezone`. A [`zoneinfo.ZoneInfo`](zoneinfo.md) prices its
+calls on its own page: up to a binary search over its recorded transitions.
 
-## Class Creation and Operations
+## Complexity Reference
 
-| Operation | Time | Space | Notes |
-|-----------|------|-------|-------|
-| `datetime.now()` | O(1) | O(1) | Current date/time |
-| `datetime.fromtimestamp(ts)` | O(1) | O(1) | From Unix timestamp |
-| `datetime.strptime(s, fmt)` | O(n + f) | O(f) | Compiles `fmt` to a regex and caches it; the first call in a process also imports `_strptime` |
-| `date(year, month, day)` | O(1) | O(1) | Create date |
-| `time(hour, min, sec)` | O(1) | O(1) | Create time |
-| `timedelta(days, seconds, ...)` | O(1) | O(1) | Create duration |
-| `dt1 - dt2` | O(1) | O(1) | Datetime arithmetic |
-| `str(dt)` | O(1) | O(1) | Convert to string |
-| `dt.strftime(fmt)` | O(f) | O(f) | One pass over the format |
-
-## Date Operations
+### date
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `date.year`, `date.month`, `date.day` | O(1) | O(1) | Attribute access |
+| `date(year, month, day)` | O(1) | O(1) | |
 | `date.today()` | O(1) | O(1) | Current local date |
-| `date.fromisoformat(s)` | O(n) | O(1) | Parsed in C, with no format to compile; the cheaper choice when the input is ISO 8601 |
-| `date.fromtimestamp(ts)` | O(1) | O(1) | From Unix timestamp |
-| `date.fromordinal(n)` | O(1) | O(1) | From proleptic Gregorian ordinal |
-| `date.fromisocalendar(y, w, d)` | O(1) | O(1) | From ISO year, week, day |
-| `date.weekday()` | O(1) | O(1) | Day of week (0=Mon, 6=Sun) |
-| `date.isoweekday()` | O(1) | O(1) | Day of week (1=Mon, 7=Sun) |
-| `date.isocalendar()` | O(1) | O(1) | Returns (year, week, weekday) |
-| `date.isoformat()` | O(1) | O(1) | ISO 8601 string |
-| `date.strftime(fmt)` | O(f) | O(f) | One pass over the format |
-| `date.ctime()` | O(1) | O(1) | C-style string |
-| `date.timetuple()` | O(1) | O(1) | time.struct_time |
-| `date.toordinal()` | O(1) | O(1) | Proleptic Gregorian ordinal |
-| `date.replace(year=...)` | O(1) | O(1) | Return new date |
-| `date.__format__(fmt)` | O(f) | O(f) | `strftime` for a non-empty spec, `isoformat()` for an empty one |
+| `date.fromtimestamp(timestamp)` | O(1) | O(1) | Local date of a POSIX timestamp |
+| `date.fromordinal(ordinal)` | O(1) | O(1) | Day 1 is 0001-01-01 |
+| `date.fromisoformat(date_string)` | O(n) | O(1) | Parsed in C with no format to compile |
+| `date.fromisocalendar(year, week, day)` | O(1) | O(1) | |
+| `date.strptime(date_string, format)` | O(n + f) | O(f) | Python 3.14+; the same parser as `datetime.strptime()` |
+| `date.year`, `date.month`, `date.day` | O(1) | O(1) | |
+| `date.min`, `date.max`, `date.resolution` | O(1) | O(1) | Class attributes; `resolution` is one day |
+| `date.replace(year=..., month=..., day=...)` | O(1) | O(1) | Returns a new date |
+| `date1 - date2`, `date + timedelta`, `date - timedelta` | O(1) | O(1) | |
+| `date1 < date2`, `date1 == date2`, `hash(date)` | O(1) | O(1) | |
+| `date.toordinal()` | O(1) | O(1) | |
+| `date.weekday()`, `date.isoweekday()` | O(1) | O(1) | Monday is 0 and 1 respectively |
+| `date.isocalendar()` | O(1) | O(1) | A `(year, week, weekday)` named tuple |
+| `date.timetuple()` | O(1) | O(1) | A `time.struct_time` |
+| `date.isoformat()`, `str(date)` | O(1) | O(1) | Fixed-width output |
+| `date.ctime()` | O(1) | O(1) | Fixed-width output |
+| `date.strftime(format)` | O(f) | O(f) | One pass over the format; the output is proportional to it |
+| `date.__format__(format)` | O(f) | O(f) | `strftime()` for a non-empty spec, `str()` for an empty one |
 
-## Datetime Operations
+### datetime
 
-| Operation | Time | Space | Notes |
-|-----------|------|-------|-------|
-| `datetime.combine(date, time)` | O(1) | O(1) | Combine date and time objects |
-| `datetime.fromisoformat(s)` | O(n) | O(1) | Parsed in C, with no format to compile; far cheaper than `strptime` for ISO 8601 input |
-| `datetime.date()` | O(1) | O(1) | Extract date part |
-| `datetime.time()` | O(1) | O(1) | Extract time part (no tzinfo) |
-| `datetime.timetz()` | O(1) | O(1) | Extract time part (with tzinfo) |
-| `datetime.timestamp()` | O(1) | O(1) | Return POSIX timestamp |
-| `datetime.utctimetuple()` | O(1) | O(1) | UTC time.struct_time |
-| `datetime.dst()` | O(1) | O(1) | Daylight saving offset |
-| `datetime.tzname()` | O(1) | O(1) | Timezone name string |
-| `datetime.utcoffset()` | O(1) | O(1) | UTC offset as timedelta |
-| `datetime.astimezone()` | O(1) | O(1) | Convert between timezones |
-| `datetime.now(tz)` | O(1) | O(1) | Current datetime in tz |
-| `datetime.utcnow()` | O(1) | O(1) | Current UTC datetime |
-| `datetime.utcfromtimestamp(ts)` | O(1) | O(1) | From timestamp (UTC) |
-| `datetime.fromtimestamp(ts, tz)` | O(1) | O(1) | From timestamp with tz |
-| `datetime.replace(...)` | O(1) | O(1) | New datetime with fields replaced |
-| `datetime.timetuple()` | O(1) | O(1) | time.struct_time |
-| `datetime.ctime()` | O(1) | O(1) | C-style string |
-| `datetime.isoformat()` | O(1) | O(1) | ISO 8601 string |
-| `datetime.__format__(fmt)` | O(f) | O(f) | `strftime` for a non-empty spec, `isoformat()` for an empty one |
-
-## Time Operations
+`datetime` is a subclass of `date` and inherits every row above. The rows here are the ones it
+adds or answers differently.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `time.hour`, `time.minute`, `time.second` | O(1) | O(1) | Attribute access |
-| `time.fromisoformat(s)` | O(n) | O(1) | Parsed in C, with no format to compile |
-| `time.isoformat()` | O(1) | O(1) | ISO 8601 string |
-| `time.strftime(fmt)` | O(f) | O(f) | One pass over the format |
-| `time.replace(hour=...)` | O(1) | O(1) | Return new time |
-| `time.dst()` | O(1) | O(1) | Daylight saving offset |
-| `time.tzname()` | O(1) | O(1) | Timezone name string |
-| `time.utcoffset()` | O(1) | O(1) | UTC offset as timedelta |
-| `time.fold` | O(1) | O(1) | Attribute access |
+| `datetime(year, month, day, hour=0, minute=0, second=0, microsecond=0, tzinfo=None, *, fold=0)` | O(1) | O(1) | |
+| `datetime.now(tz=None)`, `datetime.today()` | O(1) | O(1) | With `tz`, converts through `tz.fromutc()` |
+| `datetime.utcnow()` | O(1) | O(1) | Deprecated since 3.12; returns a naive datetime |
+| `datetime.fromtimestamp(timestamp, tz=None)` | O(1) | O(1) | With `tz`, converts through `tz.fromutc()` |
+| `datetime.utcfromtimestamp(timestamp)` | O(1) | O(1) | Deprecated since 3.12; returns a naive datetime |
+| `datetime.combine(date, time, tzinfo=time.tzinfo)` | O(1) | O(1) | |
+| `datetime.fromisoformat(date_string)` | O(n) | O(1) | Parsed in C with no format to compile; cheaper than `strptime()` for ISO 8601 input |
+| `datetime.strptime(date_string, format)` | O(n + f) | O(f) | Compiles the format to a regular expression and caches it; the first call in a process also imports `_strptime` |
+| `datetime.hour`, `datetime.minute`, `datetime.second`, `datetime.microsecond` | O(1) | O(1) | |
+| `datetime.tzinfo`, `datetime.fold` | O(1) | O(1) | |
+| `datetime.min`, `datetime.max`, `datetime.resolution` | O(1) | O(1) | Class attributes; `resolution` is one microsecond |
+| `datetime.date()`, `datetime.time()`, `datetime.timetz()` | O(1) | O(1) | `time()` drops the `tzinfo`, `timetz()` keeps it |
+| `datetime.replace(...)` | O(1) | O(1) | Returns a new datetime; replacing `tzinfo` does not convert |
+| `dt1 - dt2`, `dt + timedelta`, `dt - timedelta` | O(1) | O(1) | |
+| `dt1 < dt2`, `dt1 == dt2`, `hash(dt)` | O(1) | O(1) | |
+| `datetime.astimezone(tz=None)` | O(1) | O(1) | To another zone: calls `self.utcoffset()`, then `tz.fromutc()` |
+| `datetime.utcoffset()`, `datetime.dst()`, `datetime.tzname()` | O(1) | O(1) | With a `tzinfo`, one call to its method of the same name; `None` without one |
+| `datetime.timestamp()` | O(1) | O(1) | A naive datetime is taken as local time |
+| `datetime.timetuple()`, `datetime.utctimetuple()` | O(1) | O(1) | |
+| `datetime.isoformat(sep='T', timespec='auto')`, `str(dt)` | O(1) | O(1) | Bounded output: microseconds and a UTC offset add fields |
+| `datetime.ctime()` | O(1) | O(1) | Fixed-width output |
+| `datetime.strftime(format)` | O(f) | O(f) | One pass over the format; the output is proportional to it |
+| `datetime.__format__(format)` | O(f) | O(f) | `strftime()` for a non-empty spec, `str()` for an empty one |
 
-## Timedelta Operations
+### time
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `td.total_seconds()` | O(1) | O(1) | Total seconds |
-| `td.days`, `td.seconds`, `td.microseconds` | O(1) | O(1) | Attributes |
-| `td1 + td2` | O(1) | O(1) | Add durations |
-| `td1 - td2` | O(1) | O(1) | Subtract durations |
-| `td * n` | O(1) | O(1) | Multiply duration |
-| `td / n` | O(1) | O(1) | Divide duration |
-| `td // n` | O(1) | O(1) | Floor divide duration |
-| `abs(td)` | O(1) | O(1) | Absolute duration |
-| `-td` | O(1) | O(1) | Negate duration |
+| `time(hour=0, minute=0, second=0, microsecond=0, tzinfo=None, *, fold=0)` | O(1) | O(1) | |
+| `time.fromisoformat(time_string)` | O(n) | O(1) | Parsed in C with no format to compile |
+| `time.strptime(date_string, format)` | O(n + f) | O(f) | Python 3.14+; the same parser as `datetime.strptime()` |
+| `time.hour`, `time.minute`, `time.second`, `time.microsecond` | O(1) | O(1) | |
+| `time.tzinfo`, `time.fold` | O(1) | O(1) | |
+| `time.min`, `time.max`, `time.resolution` | O(1) | O(1) | Class attributes |
+| `time.replace(...)` | O(1) | O(1) | Returns a new time |
+| `time1 < time2`, `time1 == time2`, `hash(time)` | O(1) | O(1) | |
+| `time.utcoffset()`, `time.dst()`, `time.tzname()` | O(1) | O(1) | With a `tzinfo`, one call to its method, passed `None`; `None` without one |
+| `time.isoformat(timespec='auto')`, `str(time)` | O(1) | O(1) | Bounded output: microseconds and a UTC offset add fields |
+| `time.strftime(format)` | O(f) | O(f) | One pass over the format |
+| `time.__format__(format)` | O(f) | O(f) | `strftime()` for a non-empty spec, `str()` for an empty one |
 
-## Timezone Utilities
+### timedelta
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `timezone(offset)` | O(1) | O(1) | Fixed offset tzinfo |
-| `timezone.utc` | O(1) | O(1) | UTC tzinfo singleton |
-| `UTC` | O(1) | O(1) | UTC tzinfo alias |
-| `tzinfo` | O(1) | O(1) | Abstract base for tzinfo |
+| `timedelta(days=0, seconds=0, microseconds=0, milliseconds=0, minutes=0, hours=0, weeks=0)` | O(1) | O(1) | Normalised to days, seconds and microseconds; `OverflowError` beyond the range |
+| `timedelta.days`, `timedelta.seconds`, `timedelta.microseconds` | O(1) | O(1) | The three stored fields |
+| `timedelta.min`, `timedelta.max`, `timedelta.resolution` | O(1) | O(1) | Class attributes; `max` is just under a billion days |
+| `timedelta.total_seconds()` | O(1) | O(1) | |
+| `td1 + td2`, `td1 - td2`, `-td`, `+td`, `abs(td)` | O(1) | O(1) | |
+| `td * x`, `td / x`, `td // i`, `td1 / td2`, `td1 // td2`, `td1 % td2`, `divmod(td1, td2)` | O(1) | O(1) | `x` may be an int or a float, `i` an int; `td * x` and `td / x` round to the nearest microsecond |
+| `td1 < td2`, `td1 == td2`, `hash(td)` | O(1) | O(1) | |
+| `str(td)` | O(1) | O(1) | |
 
-## Constants
+### tzinfo and timezone
 
-| Name | Time | Space | Notes |
-|------|------|-------|-------|
-| `MINYEAR` / `MAXYEAR` | O(1) | O(1) | Supported year bounds |
-| `datetime_CAPI` | O(1) | O(1) | C API capsule |
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `tzinfo` | O(1) | O(1) | Abstract base class; a subclass supplies the methods below |
+| `tzinfo.utcoffset(dt)`, `tzinfo.dst(dt)`, `tzinfo.tzname(dt)` | O(1) | O(1) | For a subclass, whatever it implements; the base class raises `NotImplementedError` |
+| `tzinfo.fromutc(dt)` | O(1) | O(1) | The default calls `dt.utcoffset()` and `dt.dst()` |
+| `timezone(offset[, name])` | O(1) | O(1) | A fixed offset, strictly between -24 and +24 hours; `name` must be a string |
+| `timezone.utc` | O(1) | O(1) | A singleton; `timezone(timedelta(0))` returns it |
+| `timezone.min`, `timezone.max` | O(1) | O(1) | Offsets of -23:59 and +23:59 |
+| `timezone.utcoffset(dt)`, `timezone.dst(dt)`, `timezone.tzname(dt)` | O(1) | O(1) | The stored offset, `None`, and the name |
+| `timezone.fromutc(dt)` | O(1) | O(1) | Adds the stored offset |
 
-## Common Operations
+### Constants
 
-### Getting Current Time
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `datetime.MINYEAR`, `datetime.MAXYEAR` | O(1) | O(1) | 1 and 9999 |
+| `datetime.UTC` | O(1) | O(1) | Python 3.11+; the same object as `timezone.utc` |
+| `datetime.datetime_CAPI` | O(1) | O(1) | Capsule holding the C API for extension modules |
 
-```python
-from datetime import datetime, date, time
+## Parsing Strings
 
-# Get current datetime - O(1)
-now = datetime.now()
+### ISO 8601 or a Format
 
-# Get current date - O(1)
-today = date.today()
-
-# Component access - O(1)
-year = now.year
-month = now.month
-day = now.day
-hour = now.hour
-minute = now.minute
-second = now.second
-```
-
-### Creating Datetime Objects
-
-```python
-from datetime import datetime, date, timedelta
-
-# Create date - O(1)
-d = date(2024, 1, 15)
-
-# Create datetime - O(1)
-dt = datetime(2024, 1, 15, 12, 30, 45)
-
-# Create timedelta - O(1)
-delta = timedelta(days=5, hours=3, minutes=30)
-```
-
-### Parsing and Formatting
+`fromisoformat()` is a fixed parser written in C. `strptime()` runs in Python: it translates its
+format into a regular expression, matches the input with it and converts each captured field, so
+for ISO 8601 input `fromisoformat()` is the cheaper of the two. Both are linear in the input.
+Where its format has whitespace, `strptime()` accepts a run of any length, and from Python 3.11
+`fromisoformat()` accepts any number of fractional-second digits.
 
 ```python
 from datetime import datetime
 
-# Parse string - O(n + f) for input length n and format length f
-dt = datetime.strptime("2024-01-15 12:30:45", "%Y-%m-%d %H:%M:%S")
+text = "2024-01-15T12:30:45"
 
-# Same result with no format to compile - O(n)
-dt = datetime.fromisoformat("2024-01-15 12:30:45")
+parsed = datetime.fromisoformat(text)                 # O(n), no format
+same = datetime.strptime(text, "%Y-%m-%dT%H:%M:%S")   # O(n + f)
+assert parsed == same == datetime(2024, 1, 15, 12, 30, 45)
 
-# Format as string - O(f)
-formatted = dt.strftime("%Y-%m-%d %H:%M:%S")
-# "2024-01-15 12:30:45"
-
-# ISO format - O(1)
-iso_str = dt.isoformat()
-# "2024-01-15T12:30:45"
+# strptime rejects input its format does not describe
+try:
+    datetime.strptime(text, "%Y-%m-%d")
+except ValueError as error:
+    assert "unconverted data remains" in str(error)
+else:
+    raise AssertionError("trailing input was accepted")
 ```
 
-### Arithmetic Operations
+### The First strptime Call
 
-```python
-from datetime import datetime, timedelta
-
-dt1 = datetime(2024, 1, 15)
-dt2 = datetime(2024, 1, 20)
-
-# Difference - O(1)
-delta = dt2 - dt1  # 5 days
-
-# Add time - O(1)
-new_dt = dt1 + timedelta(days=5)
-
-# Subtract time - O(1)
-new_dt = dt1 - timedelta(hours=2)
-
-# Get total seconds - O(1)
-total_secs = delta.total_seconds()
-```
-
-### Comparisons
-
-```python
-from datetime import datetime, timedelta
-
-dt1 = datetime(2024, 1, 15)
-dt2 = datetime(2024, 1, 20)
-
-# Comparisons - O(1)
-if dt1 < dt2:
-    print("dt1 is earlier")
-
-if dt1 == dt2:
-    print("Same datetime")
-
-# Sort datetimes - O(n log n)
-dates = [dt2, dt1, dt1 + timedelta(days=1)]
-sorted_dates = sorted(dates)  # O(n log n)
-```
-
-## Timezone Class
-
-| Operation | Time | Space | Notes |
-|-----------|------|-------|-------|
-| `timezone(offset)` | O(1) | O(1) | Create fixed offset timezone |
-| `timezone.utc` | O(1) | O(1) | UTC timezone constant |
-| `tz.utcoffset(dt)` | O(1) | O(1) | Return offset from UTC |
-| `tz.tzname(dt)` | O(1) | O(1) | Return timezone name |
-| `tz.dst(dt)` | O(1) | O(1) | Return DST offset (always None for timezone) |
-| `tz.fromutc(dt)` | O(1) | O(1) | Convert UTC datetime to this timezone |
-
-## Timezone Operations
-
-```python
-from datetime import datetime, timezone, timedelta
-
-# UTC timezone - O(1)
-utc = timezone.utc
-
-# Create datetime with UTC - O(1)
-dt_utc = datetime(2024, 1, 15, tzinfo=utc)
-
-# Custom timezone offset - O(1)
-tz = timezone(timedelta(hours=5))
-dt_local = datetime(2024, 1, 15, tzinfo=tz)
-
-# Convert between timezones - O(1)
-dt_in_tz = dt_utc.astimezone(tz)
-
-# Replace timezone - O(1)
-dt_new_tz = dt_utc.replace(tzinfo=tz)
-```
-
-## Performance Notes
-
-### Parsing Performance
-
-`strptime` does two things the bound does not show. The first call in a
-process imports `_strptime`, which is where most of that call's time goes; and
-each format is compiled to a regular expression that is then cached, so a
-format costs far more the first time it is seen than on any later parse.
-
-```python
-from datetime import datetime
-
-# First call in the process: imports _strptime, then compiles the format
-dt = datetime.strptime("2024-01-15", "%Y-%m-%d")  # O(n + f), plus the import
-
-# Same format again: the compiled regex is already cached - O(n + f)
-dt = datetime.strptime("2024-02-20", "%Y-%m-%d")
-
-# No format at all, and no regex: parsed in C - O(n)
-dt = datetime.fromisoformat("2024-02-20")
-```
-
-Prefer `fromisoformat()` whenever the input is ISO 8601. It is the cheaper of
-the two by a wide margin, and it never builds a regex.
-
-### Caching Parsed Dates
-
-The format cache is cleared as soon as it holds more than five formats.
-Parsing one format repeatedly compiles it once; rotating through more than
-five pays the rebuild on every parse, so group the work by format rather than
-interleaving it.
+The first `strptime()` in a process imports `_strptime`, a one-off cost, and each format is
+compiled when it is first used. A run of parses with one format compiles it once and reuses the
+result, but only a handful of compiled formats are kept, so parse a batch one format at a time
+rather than cycling through many.
 
 ```python
 from datetime import datetime
 
 rows = ["2024-01-15", "2024-02-20", "2024-03-25"]
 
-# One compile, then a cache hit per row - O(n + f) each
-dates = [datetime.strptime(row, "%Y-%m-%d") for row in rows]
+# One compile, then O(n + f) per row
+parsed = [datetime.strptime(row, "%Y-%m-%d") for row in rows]
+assert [d.month for d in parsed] == [1, 2, 3]
 
-# Cheaper again where the input allows it - O(n) each, no compile
-dates = [datetime.fromisoformat(row) for row in rows]
+# No format and no compile - O(n) per row
+assert [datetime.fromisoformat(row) for row in rows] == parsed
 ```
 
-## Special Considerations
+## Formatting Strings
 
-### UTC vs Local Time
+`isoformat()` and `str()` produce output of bounded length and are O(1). `strftime()` walks its format
+once and its output grows with it, so it is O(f); `format()` and f-strings route a non-empty spec
+through `strftime()`.
+
+```python
+from datetime import datetime
+
+moment = datetime(2024, 1, 15, 12, 30, 45)
+
+assert moment.isoformat() == "2024-01-15T12:30:45"          # O(1)
+assert str(moment) == "2024-01-15 12:30:45"                 # O(1)
+assert moment.strftime("%d/%m/%Y") == "15/01/2024"          # O(f)
+assert f"{moment:%H:%M}" == "12:30"                         # O(f), via strftime
+assert f"{moment}" == str(moment)                           # empty spec, via str
+```
+
+## Arithmetic and Comparison
+
+Every value is a handful of integers, so the distance between two of them costs nothing extra:
+subtracting dates nine thousand years apart is the same work as subtracting neighbours.
+
+```python
+from datetime import date, datetime, timedelta
+
+first = datetime(2024, 1, 15)
+second = datetime(2024, 1, 20)
+
+delta = second - first                          # O(1)
+assert delta == timedelta(days=5)
+assert delta.total_seconds() == 432_000         # O(1)
+assert first + timedelta(days=5) == second      # O(1)
+assert first < second                           # O(1)
+
+span = date(9999, 12, 31) - date(1, 1, 1)       # O(1) - the distance is not a factor
+assert span.days == 3_652_058
+
+# Past the supported range is an error, not a bigger object
+try:
+    date(9999, 12, 31) + timedelta(days=1)
+except OverflowError as error:
+    assert "out of range" in str(error)
+else:
+    raise AssertionError("a date past MAXYEAR was built")
+```
+
+## Time Zones
+
+`timezone` is a fixed offset, so arithmetic, comparison and conversion on a datetime that uses one
+stay O(1). `astimezone()` converts, keeping the instant; `replace(tzinfo=...)` relabels, keeping
+the wall-clock time.
+
+```python
+from datetime import datetime, timedelta, timezone
+
+utc_moment = datetime(2024, 1, 15, 12, 0, tzinfo=timezone.utc)
+plus_five = timezone(timedelta(hours=5))                # O(1)
+
+converted = utc_moment.astimezone(plus_five)            # O(1) - one fromutc() call
+assert converted.hour == 17
+assert converted == utc_moment                          # the same instant
+
+relabelled = utc_moment.replace(tzinfo=plus_five)       # O(1) - no conversion
+assert relabelled.hour == 12
+assert relabelled != utc_moment                         # a different instant
+
+assert plus_five.dst(converted) is None                 # a fixed offset has no DST
+assert timezone(timedelta(0)) is timezone.utc           # the singleton
+```
+
+## Common Patterns
+
+### Grouping Timestamps by Day
+
+```python
+from collections import Counter
+from datetime import datetime
+
+log = [
+    "2024-01-15T08:15:00",
+    "2024-01-15T17:40:00",
+    "2024-01-16T09:05:00",
+]
+
+per_day = Counter(datetime.fromisoformat(line).date() for line in log)  # O(n) per line
+assert per_day[datetime(2024, 1, 15).date()] == 2
+assert len(per_day) == 2
+```
+
+### Storing Aware Timestamps
 
 ```python
 from datetime import datetime, timezone
 
-# Local time (no timezone info)
-local = datetime.now()  # O(1)
+now = datetime.now(timezone.utc)            # O(1), aware
+stored = now.isoformat()                    # O(1)
+restored = datetime.fromisoformat(stored)   # O(n)
 
-# UTC time
-utc = datetime.utcnow()  # O(1) - deprecated in 3.12
-utc = datetime.now(timezone.utc)  # O(1) - preferred
-
-# Always use timezone-aware datetimes for serialization
+assert restored == now
+assert restored.utcoffset() is not None
 ```
 
-### Date Arithmetic Limitations
-
-```python
-from datetime import datetime, timedelta
-
-dt = datetime(2024, 1, 31)
-
-# Careful with month/year arithmetic
-# No direct "add 1 month" operation
-# Must handle edge cases
-
-# Add days - works fine, O(1)
-new_dt = dt + timedelta(days=1)
-```
-
-## Version Notes
-
-- **Python 3.2+**: timezone-aware datetimes recommended
-- **Python 3.6+**: Better timezone support
-- **Python 3.9+**: `zoneinfo` module added for IANA timezones
-- **Python 3.11+**: `fromisoformat()` accepts most of ISO 8601, including a
-  trailing `Z` and the basic format; before that it read only what
-  `isoformat()` produced
-- **Python 3.12+**: `datetime.utcnow()` and `datetime.utcfromtimestamp()` are
-  deprecated in favour of the timezone-aware `datetime.now(timezone.utc)` and
-  `datetime.fromtimestamp(ts, timezone.utc)`
-
-## Related Modules
-
-- **[time](time.md)** - Lower-level time functions
-- **[zoneinfo](zoneinfo.md)** - IANA timezone database
-- **[calendar](calendar.md)** - Calendar functions
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use timezone-aware datetimes for storage/transmission
-- Use UTC internally, convert to local for display
-- Use `datetime.now(timezone.utc)` not `datetime.utcnow()`
-- Group parsing work by format; prefer `fromisoformat()` for ISO 8601
-- Use `isoformat()` for serialization
+- Parse ISO 8601 with `fromisoformat()`: it needs no format and no compiled regex
+- Parse a batch with one format at a time, so `strptime()` compiles it once
+- Serialize with `isoformat()` and read back with `fromisoformat()`: O(1) out, O(n) in, no format either way
+- Use `datetime.now(timezone.utc)` for the current UTC time; it is O(1) like `utcnow()`, and aware
 
 ❌ **Avoid**:
 
-- Mixing timezone-aware and naive datetimes
-- Interleaving more than five parse formats in a tight loop
-- Using `datetime.utcnow()` (deprecated)
-- Manual timezone arithmetic (use libraries)
-- Assuming time is monotonic (use `time.monotonic()`)
+- `strptime()` with a hand-written ISO format, when `fromisoformat()` reads the same input for less
+- `datetime.utcnow()` and `datetime.utcfromtimestamp()`, deprecated since 3.12
+- `replace(tzinfo=...)` to convert between zones - it relabels without converting; use `astimezone()`
+
+## Version Notes
+
+- **Python 3.11+**: `fromisoformat()` accepts most of ISO 8601, including a trailing `Z`, the
+  basic format and any number of fractional-second digits; before that it read only what
+  `isoformat()` produced
+- **Python 3.11+**: Added `datetime.UTC`
+- **Python 3.12+**: `datetime.utcnow()` and `datetime.utcfromtimestamp()` are deprecated in
+  favour of `datetime.now(timezone.utc)` and `datetime.fromtimestamp(timestamp, timezone.utc)`
+- **Python 3.14+**: Added `date.strptime()` and `time.strptime()`
+
+## Related Modules
+
+- **[time](time.md)** - POSIX timestamps, `struct_time` and monotonic clocks
+- **[zoneinfo](zoneinfo.md)** - IANA time zones, whose offset lookups search the recorded transitions
+- **[calendar](calendar.md)** - Month and year layouts built on `date`
