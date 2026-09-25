@@ -30,10 +30,11 @@ Measurement scope:
   yields one. `address_exclude()`'s networks are asserted inside the outer
   network, clear of the hole and of each other.
 * `collapse_addresses()` merges 256 /32s into one /24 and a covered /16 into
-  its /8, and raises `TypeError` for mixed versions. 1,000, 10,000 and
-  100,000 shuffled /32s each cost under 30x the previous tenth, which
-  excludes quadratic growth; the m log m and the linear shapes are not told
-  apart.
+  its /8, and raises `TypeError` for mixed versions. Address ordering
+  comparisons for 100, 1,000 and 10,000 shuffled /32s grow between 10x
+  and 30x per 10x input step, excluding a quadratic comparison count.
+  Every input network survives, in sorted order. This counts comparisons,
+  not allocation, hashing or total elapsed time.
 * Parsing from a string, an integer and packed bytes is asserted to give the
   same address, `str`, `packed`, `exploded`, `compressed` and
   `reverse_pointer` are asserted by value, and ordering an IPv4 against an
@@ -434,25 +435,34 @@ class TestSummarizingAndCollapsing:
             mixed: list[Any] = [v4("10.0.0.0/8"), v6("2001:db8::/32")]
             list(ipaddress.collapse_addresses(mixed))
 
-    @pytest.mark.timing
-    def test_collapse_is_not_quadratic(self) -> None:
+    def test_collapse_comparisons_are_not_quadratic(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Count address comparisons, including those made by network sorting.
+
+        Per 10x step, n log n predicts about 13-15x and quadratic 100x.
+        Spaced /32 networks cannot merge; prefix lengths are held fixed.
+        """
         rng = random.Random(7)
+        comparisons = 0
+        original_lt = ipaddress.IPv4Address.__lt__
 
-        def inputs(size: int) -> list[ipaddress.IPv4Network]:
+        def counted_lt(address: ipaddress.IPv4Address, other: Any) -> Any:
+            nonlocal comparisons
+            comparisons += 1
+            return original_lt(address, other)
+
+        monkeypatch.setattr(ipaddress.IPv4Address, "__lt__", counted_lt)
+        counts = []
+        for size in (100, 1_000, 10_000):
             chosen = rng.sample(range(2**24), size)
-            return [ipaddress.IPv4Network((value << 8, 32)) for value in chosen]
+            inputs = [ipaddress.IPv4Network((value << 8, 32)) for value in chosen]
+            comparisons = 0
+            result = list(ipaddress.collapse_addresses(inputs))
+            counts.append(comparisons)
+            assert [int(item.network_address) for item in result] == sorted(v << 8 for v in chosen)
+            assert all(item.prefixlen == 32 for item in result)
 
-        sizes = (1_000, 10_000, 100_000)
-        durations = [
-            best_ns(
-                partial(lambda items: list(ipaddress.collapse_addresses(items)), inputs(size)),
-                repeats=3,
-            )
-            for size in sizes
-        ]
-
-        for smaller, larger in pairwise(durations):
-            assert larger < smaller * 30, f"10x the networks each step: {durations} ns"
+        for smaller, larger in pairwise(counts):
+            assert 10 * smaller < larger < 30 * smaller, f"10x the networks: {counts=}"
 
 
 class TestSpecialPurposeRanges:

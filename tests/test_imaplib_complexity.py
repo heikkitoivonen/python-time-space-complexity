@@ -32,11 +32,11 @@ Measurement scope:
 * `append()` of a message with bare `\\n` line endings delivers it to the
   server with `\\r\\n` endings, and the literal handed to `sendall()` is a
   new object, not the caller's message.
-* `authenticate()` calls its callback once per server challenge; with the
-  fake's two challenges and the callback returning 16,000 and then 256,000
-  bytes each time, the call costs between 64x and 1,024x, where linear
-  encoding gives 16x, quadratic 256x and cubic 4,096x. The challenge count
-  is not varied.
+* `authenticate()` calls its callback once per server challenge. A bytes
+  subclass counts the suffix bytes copied while encoding replies of 10,
+  100 and 1,000 48-byte chunks. Across two challenges the count is exactly
+  48 * k * (k - 1), exposing quadratic copying without timing the fake
+  server. The server receives the original reply on both challenges.
 * `Int2AP()` returns only the letters `A` to `P`, and 16x the digits costs
   between 64x and 1,024x; it is timed on numbers of 2,000 and 32,000 hex
   digits built before timing starts.
@@ -812,23 +812,34 @@ class TestAuthenticate:
         assert server.auth_replies == expected  # type: ignore[attr-defined]
         assert "AUTHENTICATE" in server.commands
 
-    @pytest.mark.timing
-    def test_encoding_the_reply_is_quadratic(self) -> None:
-        def authenticate(size: int) -> Callable[[], Any]:
-            token = b"x" * size
+    @pytest.mark.parametrize("chunks", [10, 100, 1_000])
+    def test_encoding_the_reply_copies_quadratically(self, chunks: int) -> None:
+        """Count shrinking suffix copies at a fixed two server challenges.
 
-            def run() -> None:
-                FakeIMAP4().authenticate("XTEST", lambda challenge: token)
+        Each 48-byte chunk leaves a suffix shorter by 48 bytes. Their lengths
+        sum to a quadratic; this observes input slicing, not elapsed time or
+        the additional copies made while concatenating encoded output.
+        """
+        copied = 0
 
-            return run
+        class Reply(bytes):
+            def __getitem__(self, key: Any) -> Any:
+                nonlocal copied
+                result = super().__getitem__(key)
+                if isinstance(key, slice):
+                    if key.start == 48 and key.stop is None:
+                        copied += len(result)
+                    return Reply(result)
+                return result
 
-        small = best_ns(authenticate(16_000))
-        large = best_ns(authenticate(256_000))
+        token = Reply(b"x" * (48 * chunks))
+        server = FakeServer()
+        client = FakeIMAP4(server)
+        typ, _ = client.authenticate("XTEST", lambda challenge: token)
 
-        assert 64 < large / small < 1024, (
-            f"16x the reply cost x{large / small:.1f} ({small:.0f} to {large:.0f} ns); "
-            "linear gives x16, quadratic x256 and cubic x4096"
-        )
+        assert typ == "OK"
+        assert server.auth_replies == [bytes(token), bytes(token)]  # type: ignore[attr-defined]
+        assert copied == 48 * chunks * (chunks - 1), f"{chunks=}, {copied=}"
 
 
 # --- Connections ---------------------------------------------------------------------

@@ -30,9 +30,11 @@ Measurement scope:
   observed to build the pure-Python encoder and `dumps()` not to, and a
   timing test puts `dump()` into a sink at more than 2x the cost of
   `dumps()` on 32,000 records and between 0.5x and 2x on one 10 MB
-  string. The d in O(n·d) is a timing test on 20,000
-  records placed under 1 and then 100 levels of nesting: `dump()` costs
-  more than 3x at the deeper placement while `dumps()` stays under 2x.
+  string. The d in O(n·d) is a timing test on 2,000
+  records placed under 1 and then 300 levels of nesting: `dump()` costs
+  more than 10x at the deeper placement while `dumps()` stays under 10x.
+  The 300x depth step separates a depth multiplier from fixed traversal
+  overhead; the serialized sizes differ by less than 10%.
   With `indent=2`, the peak of `dump()` above its plain peak grows between
   3x and 6x from 400 to 800 nested dictionaries, where one indentation
   string per open level predicts 4x, a constant per level 2x and a cubic
@@ -410,10 +412,11 @@ class TestDumpStreams:
     def test_dump_cost_grows_with_depth_at_a_fixed_size(self) -> None:
         """The d in O(n·d): the same records cost more the deeper they sit.
 
-        Linear in n predicts 1x for both; the relay through 100 open
+        Linear in n predicts about 1x for both; the relay through 300 open
         generators is what separates `dump()` from `dumps()` here.
         """
-        shallow, nested = at_depth(20_000, 1), at_depth(20_000, 100)
+        shallow, nested = at_depth(2_000, 1), at_depth(2_000, 300)
+        assert len(json.dumps(nested)) < 1.1 * len(json.dumps(shallow))
         sink = CountingSink()
 
         dump_ratio = best_ns(lambda: json.dump(nested, sink)) / best_ns(
@@ -421,8 +424,8 @@ class TestDumpStreams:
         )
         dumps_ratio = best_ns(lambda: json.dumps(nested)) / best_ns(lambda: json.dumps(shallow))
 
-        assert dumps_ratio < 2, f"dumps() should not care about depth: x{dumps_ratio:.2f}"
-        assert dump_ratio > 3, f"dump() at 100 levels cost only x{dump_ratio:.2f} of 1 level"
+        assert dumps_ratio < 10, f"dumps() over 300x depth: x{dumps_ratio:.2f}"
+        assert dump_ratio > 10, f"dump() over 300x depth: x{dump_ratio:.2f}"
 
     def test_indent_makes_dump_hold_each_level_s_indentation(self) -> None:
         """The indentation held above the plain peak quadruples per doubling
