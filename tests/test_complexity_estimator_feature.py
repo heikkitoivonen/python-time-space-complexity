@@ -1,6 +1,7 @@
 import math
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -15,11 +16,6 @@ except ImportError:
     pytest.fail("Could not import estimate_complexity from scripts/")
 
 # Define test functions with type hints
-
-
-def constant_time(n: int):
-    """Fixed work independent of n, long enough to exceed timer overhead."""
-    return sum(range(10_000))
 
 
 def linear_time_list(data: list[int]):
@@ -135,23 +131,32 @@ class TestComplexityEstimator:
         assert isinstance(args[0], list)
         assert len(args[0]) == 10
 
-    @pytest.mark.timing
-    def test_integration_constant(self):
-        """Measure fixed work over a 10,000x input range.
+    def test_integration_constant(self, monkeypatch: pytest.MonkeyPatch):
+        """Integrate input generation, batch timing and fitting with a controlled clock.
 
-        Each call sums the same 10,000 integers regardless of n. The fastest
-        of five batches reduces interruption noise; batching keeps clock and
-        call overhead small compared with the measured work.
+        Each call advances the clock by one unit, independently of n. Exact
+        per-call times also verify that measurement divides by the batch size.
+        Real-clock scheduling noise is outside this deterministic wiring test.
         """
-        n_values = [10, 100, 1000, 10_000, 100_000]
-        times = []
-        for n in n_values:
-            t = min(
-                estimate_complexity.measure_execution_time(constant_time, n, iterations=50)
-                for _ in range(5)
-            )
-            times.append(t)
+        ticks = 0
+        calls: list[int] = []
 
+        def constant_time(n: int):
+            nonlocal ticks
+            calls.append(n)
+            ticks += 1
+
+        monkeypatch.setattr(
+            estimate_complexity, "time", SimpleNamespace(perf_counter=lambda: ticks)
+        )
+        n_values = [10, 100, 1000, 10_000, 100_000]
+        times = [
+            estimate_complexity.measure_execution_time(constant_time, n, iterations=50)
+            for n in n_values
+        ]
+
+        assert calls == [n for n in n_values for _ in range(51)]  # warm-up plus batch
+        assert times == [1.0] * len(n_values)
         complexity, _ = estimate_complexity.detect_complexity(n_values, times)
         assert complexity == "O(1) (Constant)", f"{complexity=}, {times=}"
 

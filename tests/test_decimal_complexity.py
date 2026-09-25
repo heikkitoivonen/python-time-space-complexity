@@ -88,7 +88,9 @@ Measurement scope:
   the operand's width. `same_quantum()` is asserted by behaviour only.
 * Comparison. Two coefficients differing only in the last digit cost more
   than 10x as much at 200,000 digits as at 2,000; two differing in the first
-  digit stay within 2x. An operand whose extra digits are the only thing
+  digit cost less than a tenth of a last-digit difference at the same
+  200,000-digit width, batched 1,000 calls per sample. An operand whose
+  extra digits are the only thing
   deciding equality costs more than 10x over the same step, which is why the
   row is O(n + m) and not O(min(n, m)). `compare()` is asserted to return a
   `Decimal`, `compare_signal()` to raise on a NaN operand,
@@ -1199,7 +1201,7 @@ class TestConstantTimeAccessors:
 
 class TestComparisonsStopAtTheFirstDifference:
     """`a < b`, `compare()`, `compare_signal()`, `compare_total()` |
-    O(min(n, m)).
+    O(n + m).
 
     Three shapes: coefficients differing in the first digit, coefficients of
     equal length differing only in the last, and a one-digit operand against
@@ -1208,15 +1210,22 @@ class TestComparisonsStopAtTheFirstDifference:
     """
 
     @pytest.mark.timing
-    def test_an_early_difference_costs_nothing(self) -> None:
-        with localcontext() as ctx:
-            ctx.prec = 300_000
-            small_a, small_b = wide(2_000), other(2_000)
-            large_a, large_b = wide(200_000), other(200_000)
-            ratio = best_ns(lambda: large_a < large_b, inner=100) / best_ns(
-                lambda: small_a < small_b, inner=100
-            )
-        assert ratio < 2.0, f"a first-digit difference grew {ratio:.1f}x over 100x the digits"
+    def test_an_early_difference_short_circuits_the_scan(self) -> None:
+        """Hold width at 200,000 digits and vary the first differing position.
+
+        A full scan in both cases predicts comparable times; short-circuiting
+        must make the first-digit case at least 10x faster. Operand construction
+        is outside the timer and each sample batches 1,000 comparisons.
+        """
+        a = Decimal("1" * 200_000)
+        early = Decimal("2" + "1" * 199_999)
+        late = Decimal("1" * 199_999 + "2")
+        assert a < early
+        assert a < late
+        early_ns = best_ns(lambda: a < early, inner=1_000)
+        late_ns = best_ns(lambda: a < late, inner=1_000)
+
+        assert late_ns > 10 * early_ns, f"first vs last difference: {early_ns=}, {late_ns=}"
 
     @pytest.mark.timing
     def test_a_late_one_costs_the_whole_coefficient(self) -> None:

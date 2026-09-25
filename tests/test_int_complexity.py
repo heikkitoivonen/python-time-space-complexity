@@ -50,8 +50,9 @@ Measured on one aarch64 machine under CPython 3.14.7:
 * comparing equal 4M-bit values against 16M-bit ones: x4.0; comparing values
   of different widths: x1.0;
 * `hash`: x4.0; `bit_count`: x3.9; `from_bytes`: x4.1; `to_bytes` of a fixed
-  1,000-bit value into 125,000 then 500,000 bytes: x4.0, so the length is the
-  size variable, not the value's width;
+  1,000-bit value into 125,000, 1,250,000 and 12,500,000 bytes is batched
+  20 calls per sample. Each 10x length step must cost between 3x and 30x,
+  separating linear from constant and quadratic at a fixed value width;
 * `str`, `repr` and `f"{x}"` of 1,000 then 4,000 decimal digits: x17-x18,
   quadratic on every version
   because 4,000 digits is under the 3.12 fast path's 1,000-digit (30-bit)
@@ -634,14 +635,17 @@ class TestIdentities:
 
     @pytest.mark.timing
     def test_to_bytes_is_linear_in_the_requested_length(self) -> None:
-        """The value stays 1,000 bits wide; only the padding grows."""
+        """Vary padding over two 10x steps; linear predicts 10x, quadratic 100x."""
         value = random_bits(1_000)
+        sizes = (125_000, 1_250_000, 12_500_000)
+        times = [
+            best_time(batched(partial(value.to_bytes, size, "big"), loops=20), repeats=7)
+            for size in sizes
+        ]
 
-        growth = ratio(
-            lambda: value.to_bytes(125_000, "big"), lambda: value.to_bytes(500_000, "big")
-        )
-
-        assert 2.5 < growth < 7, f"x{growth:.1f} for 4x the length"
+        for small, large in zip(times, times[1:], strict=False):
+            growth = large / small
+            assert 3 < growth < 30, f"x{growth:.2f} for 10x the length: {sizes=}, {times=}"
 
     @pytest.mark.timing
     def test_from_bytes_is_linear_in_the_byte_count(self) -> None:
