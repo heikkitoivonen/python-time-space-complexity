@@ -43,8 +43,9 @@ below and the full guide in [TRANSLATING.md](TRANSLATING.md).
 
 ## Running Tests
 
-`make test` runs tests without the `timing` or `serial` markers with four pytest
-workers, then runs the marked tests serially after all workers finish.
+`make test` runs tests without the `timing` or `serial` markers with pytest
+workers selected automatically (`-n auto`), then runs the marked tests serially
+after all workers finish.
 `make check` uses the same sequence, together
 with lint, formatting, type, and skill checks. Every test remains included.
 

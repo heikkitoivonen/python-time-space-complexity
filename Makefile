@@ -7,7 +7,7 @@ DEV_ADDR ?= 127.0.0.1:8000
 
 # Keep stopwatch assertions isolated from other test workers. Set this to 0
 # to run the non-timing phase serially too.
-TEST_WORKERS ?= 4
+TEST_WORKERS ?= auto
 
 help:
 	@echo "Python Big-O: Time & Space Complexity - Development Commands"
@@ -29,7 +29,7 @@ help:
 	@echo "  make format      Format code with ruff"
 	@echo "  make types       Run pyright type checker"
 	@echo "  make check       Run lint, types, skill checks, and tests"
-	@echo "  make test        Run checks with 4 workers, then timing/serial tests"
+	@echo "  make test        Run checks with automatic workers, then timing/serial tests"
 	@echo "                   Override with TEST_WORKERS=N (0 disables workers)"
 	@echo "  make audit       Print live documentation coverage (no files written)"
 	@echo "  make skills-build    Build the offline skill in build/skills/"

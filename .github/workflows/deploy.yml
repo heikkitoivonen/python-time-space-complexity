@@ -43,7 +43,7 @@ jobs:
       # the deploy. `make check` still runs the whole suite before a commit.
       - name: Run tests
         run: |
-          uv run pytest -m "not timing and not serial" -n 4 --dist=loadfile
+          uv run pytest -m "not timing and not serial" -n auto --dist=loadfile
           uv run pytest -m "serial and not timing" -n 0
 
       - name: Check documentation coverage on newest supported Python

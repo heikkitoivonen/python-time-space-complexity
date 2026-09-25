@@ -41,7 +41,7 @@
 
 ## 运行测试
 
-`make test` 使用四个 pytest 工作进程运行没有 `timing` 或 `serial` 标记的测试，
+`make test` 使用自动确定数量的 pytest 工作进程（`-n auto`）运行没有 `timing` 或 `serial` 标记的测试，
 等所有工作进程都结束后，再串行运行带有这些标记的测试。
 `make check` 使用相同的顺序，并另外检查 lint、格式、类型和技能。所有测试都会运行。
 
