@@ -11,15 +11,15 @@ proves it reads nothing at construction, and no tolerance is involved.
 
 docs/stdlib/array.md's claims live in tests/test_array_complexity.py,
 docs/stdlib/decimal.md's in tests/test_decimal_complexity.py,
-docs/stdlib/multiprocessing.md's in tests/test_multiprocessing_complexity.py
-and docs/stdlib/secrets.md's in tests/test_secrets_complexity.py, which cover
+docs/stdlib/multiprocessing.md's in tests/test_multiprocessing_complexity.py,
+docs/stdlib/secrets.md's in tests/test_secrets_complexity.py and
+docs/stdlib/smtplib.md's in tests/test_smtplib_complexity.py, which cover
 those modules' tables as well.
 
 Deliberately not covered, because a unit test cannot settle them:
 
 * docs/stdlib/pwd.md - lookup cost is decided by the NSS backend, which may
   be a local file or a network directory
-* docs/stdlib/smtplib.md - round trip counts need a real SMTP conversation
 * docs/stdlib/cgi.md, docs/stdlib/cgitb.md - removed in Python 3.13, so a
   test would have to be skipped on any current interpreter
 """
