@@ -38,16 +38,14 @@ Measurement scope:
 * `memmove()` and `memset()` over 10,000,000 bytes peak under 20 KB.
 * `resize()` grows `sizeof()` and preserves the old bytes, leaves `len()`
   alone, and raises `ValueError` below the type's size.
-* Definition time, with the collector paused, at 1,000 and 16,000 `c_int`
-  fields: a `Union` grows under 64x on every version and a `Structure` under
-  64x on 3.14+, where linear predicts 16x and quadratic 256x. At 16,000
-  fields a `Structure` takes under 8x a `Union`'s time on 3.14+ and over 8x
-  before it; before 3.14 that structure/union ratio also grows more than 3x
-  from 1,000 to 16,000 fields, which a linear structure term would hold
-  constant. Locally the growth is 6x to 11x on 3.10 to 3.13 and about 1x on
-  3.14, where the pre-3.14 cost is each field re-copying the growing
-  buffer-format string (Modules/_ctypes/stgdict.c). The definition's space is its f `CField`
-  descriptors, one per field, asserted by count.
+* Definition time, with the collector paused, at 500 and 32,000 `c_int`
+  fields, a 64x step where linear predicts x64 and quadratic x4096. A
+  `Structure` is asserted over x300 before 3.14 and under x300 from 3.14; a
+  `Union` under x512 on every version. Locally (aarch64) a `Structure` grows
+  x1200 to x1700 on 3.10 to 3.13 and x67 to x72 on 3.14, and a `Union` x68
+  to x128 everywhere. The pre-3.14 cost is each field re-copying the growing
+  buffer-format string (Modules/_ctypes/stgdict.c). The definition's space is
+  its f `CField` descriptors, one per field, asserted by count.
 * An anonymous member of 100 fields is asserted to give the outer structure
   a descriptor for each of them.
 * `SetPointerType()` completes an incomplete pointer to a self-referencing
@@ -559,44 +557,28 @@ class TestStructures:
     @staticmethod
     def definition_ns(base: type, fields: int) -> float:
         names = [(f"f{index}", ctypes.c_int) for index in range(fields)]
-        return best_ns(lambda: type("S", (base,), {"_fields_": names}))
+        return best_ns(lambda: type("S", (base,), {"_fields_": names}), repeats=3)
+
+    @classmethod
+    def growth(cls, base: type) -> tuple[float, list[float]]:
+        """Definition time at 32,000 fields over 500: x64 if linear, x4096 if quadratic."""
+        durations = [cls.definition_ns(base, fields) for fields in (500, 32_000)]
+        return durations[1] / durations[0], durations
 
     @pytest.mark.timing
-    @pytest.mark.skipif(sys.version_info < (3, 14), reason="O(f^2) before 3.14")
-    def test_structure_definition_is_linear_in_fields(self) -> None:
-        durations = [self.definition_ns(ctypes.Structure, f) for f in (1_000, 16_000)]
-        ratio = durations[1] / durations[0]
+    def test_structure_definition_is_quadratic_before_314_and_linear_after(self) -> None:
+        ratio, durations = self.growth(ctypes.Structure)
 
-        assert ratio < 64, f"16x the fields: {durations} ns, x{ratio:.1f}"
+        if sys.version_info >= (3, 14):
+            assert ratio < 300, f"64x the fields: {durations} ns, x{ratio:.0f}"
+        else:
+            assert ratio > 300, f"64x the fields: {durations} ns, only x{ratio:.0f}"
 
     @pytest.mark.timing
     def test_union_definition_is_linear_in_fields(self) -> None:
-        durations = [self.definition_ns(ctypes.Union, f) for f in (1_000, 16_000)]
-        ratio = durations[1] / durations[0]
+        ratio, durations = self.growth(ctypes.Union)
 
-        assert ratio < 64, f"16x the fields: {durations} ns, x{ratio:.1f}"
-
-    @pytest.mark.timing
-    def test_structure_against_union_at_16000_fields(self) -> None:
-        structure = self.definition_ns(ctypes.Structure, 16_000)
-        union = self.definition_ns(ctypes.Union, 16_000)
-        ratio = structure / union
-
-        if sys.version_info >= (3, 14):
-            assert ratio < 8, f"16,000 fields: structure/union x{ratio:.1f}"
-        else:
-            assert ratio > 8, f"16,000 fields: structure/union only x{ratio:.1f}"
-
-    @pytest.mark.timing
-    @pytest.mark.skipif(sys.version_info >= (3, 14), reason="O(f) from 3.14")
-    def test_the_structure_only_cost_grows_faster_than_the_fields_before_314(self) -> None:
-        """A linear term would keep the structure/union ratio constant as f grows."""
-        ratios = []
-        for fields in (1_000, 16_000):
-            structure = self.definition_ns(ctypes.Structure, fields)
-            ratios.append(structure / self.definition_ns(ctypes.Union, fields))
-
-        assert ratios[1] > ratios[0] * 3, f"structure/union at 1,000 and 16,000 fields: {ratios}"
+        assert ratio < 512, f"64x the fields: {durations} ns, x{ratio:.0f}"
 
     def test_an_instance_is_zero_filled_and_costs_its_bytes(self) -> None:
         big = self.define([("data", ctypes.c_char * 10_000_000)])
