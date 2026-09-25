@@ -1,4 +1,4 @@
-<!-- source_sha: d204e14b21e795f0d6fa8244dd8f2d792a10137a03ad1e9b39996721abcb5b9e -->
+<!-- source_sha: 7c21ccea674eb146b27732caa56e963c4f20603a75e50f18bca8af6f82490da6 -->
 <!-- translated: machine -->
 
 [English](CONTRIBUTING.md) | **简体中文**
@@ -177,7 +177,7 @@ uv run python scripts/validate_translations.py
 
 ### 添加语言
 
-欢迎添加新的语言，包括部分翻译。具体步骤(插件配置、搜索词干分析器、第一个页面、验证器注册)详见 [TRANSLATING.md](TRANSLATING.md)。
+欢迎添加新的语言，包括部分翻译。具体步骤(插件配置、搜索词干分析器、页面正文之外的站点界面——公告栏、回退提示、页脚署名——第一个页面、验证器注册)详见 [TRANSLATING.md](TRANSLATING.md)。
 
 ## 本地构建
 
