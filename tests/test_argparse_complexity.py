@@ -13,7 +13,16 @@ Measurement scope:
 * `add_argument()` costs the same with 100 and 10,000 arguments already
   declared (asserted under 3x; measured about 1x). With `choices`, a counting
   container shows every value iterated when the argument is added, and not
-  again on a successful parse of a set-like container.
+  again on a successful parse of a set-like container; the traced peak grows
+  between 30x and 300x from 1,000 to 100,000 choices (measured about 100x).
+  Redeclaring the newest of 10,000 options under `conflict_handler='resolve'`
+  costs more than 8x redeclaring it among 100 (measured 17x to 41x on
+  3.10-3.14).
+* Behind a `metavar`, a counting container shows the usage line iterating no
+  choices, and help iterating all of them: for a plain help string before
+  3.14, and from 3.14 only for one containing `%`, which is then also expanded
+  when the argument is added. `nargs=REMAINDER` is asserted to accept a value
+  outside `choices`.
 * `parse_args([])`, `get_default()` of an unknown name and `set_defaults()`
   grow more than 20x from 100 to 10,000 declared options (measured 75x to
   170x on 3.10-3.14), which is the O(a) term; the defaults of every declared
@@ -22,6 +31,8 @@ Measurement scope:
   the option spellings: on a parser of 2,000 options, 200 abbreviations,
   bundled `-qr` strings or negative numbers cost more than 5x the same count
   of exact spellings, separate flags or plain numbers (measured 11x to 50x).
+  200 unknown long options cost more than 4x with abbreviations allowed than
+  with `allow_abbrev=False` (measured 13x to 17x).
 * The n·k term: a recording subclass of `ArgumentParser._match_argument` shows
   each option handed the whole rest of the command line's pattern, so 1,000
   options ahead of 1,000 positionals are handed suffixes totalling more than a
@@ -30,8 +41,9 @@ Measurement scope:
   not read past the option's own values, and is not observed. On 3.12 and earlier, 8x the options (1,000 to 8,000
   `-v` flags) costs more than 25x (measured about 60x); on 3.13+ it costs
   under 25x (measured about 9x), which is the page's "far smaller sizes".
-* `append` copies its list on every occurrence: a list subclass default whose
-  `__copy__` records its length sees lengths 0 to r-1 for r occurrences. A
+* `append` and `extend` copy their list on every occurrence: a list subclass
+  default whose `__copy__` records its length sees lengths 0 to r-1 for r
+  occurrences. A
   plain list goes through `items[:]` in `_copy_items` in Lib/argparse.py,
   which is read, not measured; the default list is asserted unchanged.
 * A mutually exclusive group of 1,600 members costs more than 25x one of 200
@@ -90,7 +102,13 @@ Not settled here:
   size is not varied.
 * Help text with a long description or many choices is not varied apart from
   the option count; the O(h) bound is read from HelpFormatter, which wraps
-  each block of text once with textwrap.
+  each block of text with textwrap. That bound assumes words shorter than a
+  line: `textwrap` splits a longer word by slicing off one line at a time,
+  copying the rest each time, and that case is not priced.
+* `error()`'s O(m) term for the message and `exit()` writing its message are
+  read from Lib/argparse.py; the message length is not varied.
+* A `range` in `choices` answers `in` arithmetically only for `int` values,
+  so the page names a set, not a `range`, as the unscanned container.
 """
 
 from __future__ import annotations
@@ -207,9 +225,63 @@ class TestDeclaringArguments:
 
         assert "{" + ",".join(str(value) for value in range(20)) + "}" in usage
 
+    def test_choices_take_linear_space_when_the_argument_is_added(self) -> None:
+        def peak(count: int) -> int:
+            parser = argparse.ArgumentParser()
+            return peak_bytes(lambda: parser.add_argument("--x", type=int, choices=range(count)))
+
+        small, large = peak(1_000), peak(100_000)
+
+        assert small * 30 < large < small * 300, (
+            f"100x the choices peaked x{large / small:.1f}; quadratic predicts 10,000"
+        )
+
+    @pytest.mark.parametrize(
+        ("help_text", "formatter"),
+        [
+            ("pick one", argparse.HelpFormatter),
+            ("pick one", argparse.ArgumentDefaultsHelpFormatter),
+        ],
+        ids=["plain-help", "defaults-formatter"],
+    )
+    def test_help_expands_choices_behind_a_metavar_by_version_and_formatter(
+        self, help_text: str, formatter: type[argparse.HelpFormatter]
+    ) -> None:
+        choices = CountingChoices(range(1_000))
+        parser = argparse.ArgumentParser(prog="p", formatter_class=formatter)
+
+        parser.add_argument("--pick", type=int, choices=choices, metavar="N", help=help_text)
+        added = choices.iterated
+        parser.format_usage()
+        in_usage = choices.iterated - added
+        parser.format_help()
+        in_help = choices.iterated - added - in_usage
+
+        expanded = sys.version_info < (3, 14) or formatter is argparse.ArgumentDefaultsHelpFormatter
+        assert in_usage == 0
+        assert in_help == (1_000 if expanded else 0)
+        assert added == (1_000 if expanded and sys.version_info >= (3, 14) else 0)
+
+    def test_remainder_skips_the_choices_check(self) -> None:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("rest", nargs=argparse.REMAINDER, choices=["allowed"])
+
+        assert parser.parse_args(["other"]).rest == ["other"]
+
+    @pytest.mark.timing
+    def test_resolving_a_conflict_scans_the_arguments(self) -> None:
+        def cost(existing: int) -> float:
+            parser = parser_with_options(existing, conflict_handler="resolve")
+            newest = f"--option{existing - 1:05d}"
+            return best_ns(lambda: parser.add_argument(newest), inner=20)
+
+        ratio = cost(10_000) / cost(100)
+
+        assert ratio > 8, f"100x the arguments cost x{ratio:.1f} to redeclare the newest"
+
 
 class TestEveryParseVisitsEveryArgument:
-    """`parse_args()` | O(a + n·k): the O(a) term is paid on every call,
+    """`parse_args()` | O(a + n + n·k + a·s): the O(a) term is paid on every call,
     and `get_default()` | O(a), `set_defaults()` | O(a + d)."""
 
     @pytest.mark.timing
@@ -313,10 +385,22 @@ class TestOptionSpellings:
         both = parser.parse_args(["-xy"])
         assert both.x and both.y
 
+    @pytest.mark.timing
+    def test_allow_abbrev_false_skips_the_scan_for_unknown_long_options(self) -> None:
+        unknown = ["--zzz"] * 200
+        scanning = parser_with_options(2_000)
+        strict = parser_with_options(2_000, allow_abbrev=False)
+
+        ratio = best_ns(lambda: scanning.parse_known_args(unknown)) / best_ns(
+            lambda: strict.parse_known_args(unknown)
+        )
+
+        assert ratio > 4, f"abbreviations cost x{ratio:.1f} on 200 unknown long options"
+
 
 class TestEachOptionExaminesTheRest:
-    """`parse_args()` | O(a + n·k): each option matches its values against the
-    rest of the command line."""
+    """`parse_args()` | O(a + n + n·k + a·s): each option matches its values
+    against the rest of the command line."""
 
     def test_each_option_is_handed_the_rest_of_the_command_line(self) -> None:
         lengths: list[int] = []
@@ -366,10 +450,11 @@ class TestEachOptionExaminesTheRest:
 
 
 class TestAppendCopiesPerOccurrence:
-    """An `append` option repeated r times costs O(r²): the list is copied on
-    every occurrence."""
+    """An `append` or `extend` option repeated r times costs O(r²): the list is
+    copied on every occurrence."""
 
-    def test_each_occurrence_copies_the_whole_list(self) -> None:
+    @pytest.mark.parametrize("action", ["append", "extend"])
+    def test_each_occurrence_copies_the_whole_list(self, action: str) -> None:
         copied: list[int] = []
 
         class Recorded(list):  # type: ignore[type-arg]
@@ -378,7 +463,8 @@ class TestAppendCopiesPerOccurrence:
                 return Recorded(self)
 
         parser = argparse.ArgumentParser()
-        parser.add_argument("--tag", action="append", default=Recorded())
+        nargs = "+" if action == "extend" else None
+        parser.add_argument("--tag", action=action, nargs=nargs, default=Recorded())
 
         result = parser.parse_args(["--tag", "t"] * 50)
 
@@ -519,7 +605,7 @@ class TestParsingForms:
 
 
 class TestHelp:
-    """`format_help()` | O(h), rendered on every call; a successful parse
+    """`format_help()` | O(a + h), rendered on every call; a successful parse
     renders nothing."""
 
     @pytest.mark.timing
@@ -629,7 +715,7 @@ class TestActionsAndTypes:
 
         assert parser.parse_args(["--name", "ada"]).name == "ADA"
 
-    def test_argument_files_are_read_one_line_at_a_time(self, tmp_path: pathlib.Path) -> None:
+    def test_each_argument_file_line_is_converted_in_order(self, tmp_path: pathlib.Path) -> None:
         lines: list[str] = []
 
         class Recording(argparse.ArgumentParser):

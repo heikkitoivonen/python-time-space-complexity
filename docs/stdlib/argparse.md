@@ -10,12 +10,14 @@ text only when it is asked for.
 is the strings that start with `-` without being an exact option spelling (see *Option
 Spellings*); `a` is the arguments added to the parser, counting each option spelling
 (`-v, --verbose` counts twice); `c` is the values in a `choices` container; `g` is the arguments in
-one mutually exclusive group; `d` is the keyword arguments passed, or a namespace's attributes; and
-`h` is the characters of help or usage text produced. A parser is assumed to declare a handful of
+one mutually exclusive group; `d` is the keyword arguments passed, or a namespace's attributes;
+`h` is the characters of help or usage text produced; and `m` is the characters of an error
+message. A parser is assumed to declare a handful of
 positional arguments, of spellings per argument and of aliases per subcommand, and few mutually
 exclusive groups: each group adds O(g²) time and space to every parse, which the parsing rows leave
-out. `type` conversion, the action itself, `choices` membership and comparing two attribute values
-are priced at O(1) - a `choices` list is scanned, where a set or a `range` is not.
+out. Help text is assumed to break at spaces: `textwrap`'s cost for one word longer than a line is
+not priced. `type` conversion, the action itself, `choices` membership and comparing two attribute values
+are priced at O(1) - a `choices` list is scanned, where a set is not.
 
 ## Complexity Reference
 
@@ -24,7 +26,7 @@ are priced at O(1) - a `choices` list is scanned, where a set or a `range` is no
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `argparse.ArgumentParser(prog=None, usage=None, description=None, ...)` | O(1) | O(1) | Registers the built-in actions and adds `-h/--help`; `parents=[...]` adds O(a) for the parents' arguments it copies |
-| `ArgumentParser.add_argument(name or flags..., **kwargs)` | O(1) | O(1) | Does not grow with the arguments already added; with `choices`, O(c) to render them into the metavar |
+| `ArgumentParser.add_argument(name or flags..., **kwargs)` | O(1) | O(1) | Does not grow with the arguments already added; with `choices`, O(c) time and space to render them into the metavar; replacing an existing option under `conflict_handler='resolve'` is O(a) |
 | `ArgumentParser.add_argument_group(title=None, description=None)` | O(1) | O(1) | Groups arguments in the help only; parsing does not see it |
 | `ArgumentParser.add_mutually_exclusive_group(required=False)` | O(1) | O(1) | Every later parse builds the group's conflict table, O(g²) time and space |
 | `ArgumentParser.set_defaults(**kwargs)` | O(a + d) | O(d) | Visits every argument to update a matching `dest` |
@@ -53,11 +55,11 @@ are priced at O(1) - a `choices` list is scanned, where a set or a `range` is no
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `ArgumentParser.format_help()` | O(a + h) | O(a + h) | Visits every argument, including those with `help=SUPPRESS`; rendered on each call, nothing is cached |
+| `ArgumentParser.format_help()` | O(a + h) | O(a + h) | Visits every argument, including those with `help=SUPPRESS`; rendered on each call, nothing is cached. Choices hidden behind a `metavar` can still be rendered, O(c) each (see *Choices and Types*) |
 | `ArgumentParser.format_usage()` | O(a + h) | O(a + h) | h = characters of the usage line alone |
 | `ArgumentParser.print_help(file=None)`, `ArgumentParser.print_usage(file=None)` | O(a + h) | O(a + h) | Format, then write to `sys.stdout` or `file` |
-| `ArgumentParser.error(message)` | O(a + h) | O(a + h) | Prints the usage and the message to `sys.stderr`, then raises `SystemExit(2)` |
-| `ArgumentParser.exit(status=0, message=None)` | O(1) | O(1) | Raises `SystemExit(status)`, after writing `message` to `sys.stderr` if given, in time linear in its length |
+| `ArgumentParser.error(message)` | O(a + h + m) | O(a + h + m) | Prints the usage and the message to `sys.stderr`, then raises `SystemExit(2)` |
+| `ArgumentParser.exit(status=0, message=None)` | O(m) | O(1) | Raises `SystemExit(status)`, after writing `message` to `sys.stderr` if given |
 | `argparse.HelpFormatter`, `argparse.RawDescriptionHelpFormatter`, `argparse.RawTextHelpFormatter`, `argparse.ArgumentDefaultsHelpFormatter`, `argparse.MetavarTypeHelpFormatter` | O(1) | O(1) | Passed as `formatter_class`; a fresh formatter renders each help or usage message |
 
 ### Actions and types
@@ -190,9 +192,13 @@ with tempfile.TemporaryDirectory() as directory:
 
 ### Choices and Types
 
-`choices` is checked with `in` for every value, and unless a `metavar` stands in for them, all of
-its values are rendered when the argument is added and again into any usage or help text. A large numeric range
-belongs in a `type` function, which checks a bound in O(1) and keeps the help short.
+A value is checked against `choices` with `in`; `nargs=argparse.REMAINDER` skips the check. Unless a
+`metavar` stands in for them, all of the choices are rendered when the argument is added and again
+into the usage line. A `metavar` does not keep them out of help formatting: the argument's help
+string is expanded with every choice joined into one string. Before Python 3.14 that happens for
+every argument with help; from 3.14 only when its help string contains `%`, as
+`ArgumentDefaultsHelpFormatter` makes it, and then also once when the argument is added. A large
+numeric range belongs in a `type` function, which checks a bound in O(1) and keeps the help short.
 
 ```python
 import argparse
@@ -308,7 +314,7 @@ assert 'the following arguments are required: path' in stderr.getvalue()
 ## Namespace
 
 A `Namespace` is a plain attribute holder. `vars()` returns its own dictionary, so changing that
-dictionary changes the namespace; equality compares every attribute.
+dictionary changes the namespace; equality compares the two attribute dictionaries.
 
 ```python
 import argparse
@@ -366,7 +372,7 @@ assert main(['a', 'b', 'a', '--unique']) == 2
 ❌ **Avoid**:
 
 - Argument files with many thousands of options, above all on Python 3.12 and earlier, where the quadratic term appears at far smaller sizes
-- `choices=range(...)` over a wide range - O(c) when the argument is added and whenever usage is shown
+- `choices=range(...)` over a wide range - O(c) when the argument is added and whenever usage or help is shown
 
 ## Version Notes
 
