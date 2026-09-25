@@ -1,10 +1,10 @@
 # statistics Module Complexity
 
 The `statistics` module computes averages, spread, relations between two inputs, kernel density
-estimates and normal-distribution quantities. It is pure Python, and what separates its functions
-is what they hold: `mean()`, `fmean()`, `geometric_mean()` and the spread functions stream through
-their input keeping only running sums, while the medians, quantiles and modes keep a copy or a
-count as large as the data.
+estimates and normal-distribution quantities. What separates its functions is what they hold:
+`mean()`, `fmean()`, `geometric_mean()` and the spread functions stream through their input keeping
+only running sums, while the medians, quantiles and modes keep a copy or a count as large as the
+data.
 
 `n` is the data points (the length of `data`, or of each of `x` and `y`), `u` is the distinct
 values among them, `q` is the number of intervals asked of a `quantiles()` method (its `n`
@@ -23,7 +23,7 @@ what a call allocates, its result included, but not its input.
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `statistics.mean(data)` | O(n) | O(1) | One pass with exact arithmetic; accepts an iterator |
-| `statistics.fmean(data, weights=None)` | O(n) | O(1), O(n) for iterator weights | One pass in floats, so it is faster than `mean()`; iterator weights are copied to a list |
+| `statistics.fmean(data, weights=None)` | O(n) | O(1), O(n) for weights that are not a list or tuple | One pass in floats, so it is faster than `mean()`; other weights, such as an iterator or a `range`, are copied to a list |
 | `statistics.geometric_mean(data)` | O(n) | O(1) | Accepts an iterator |
 | `statistics.harmonic_mean(data, weights=None)` | O(n) | O(1), O(n) for iterator data or weights | An iterator `data` or `weights` is copied to a list first |
 | `statistics.median(data)` | O(n log n) | O(n) | Sorts a copy; O(n) time when `data` is already sorted |
@@ -54,12 +54,12 @@ what a call allocates, its result included, but not its input.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `statistics.kde(data, h, kernel='normal', *, cumulative=False)` | O(1) | O(1) | For `normal`, `logistic` and `sigmoid`, which weight every point; `data` is held by reference |
+| `statistics.kde(data, h, kernel='normal', *, cumulative=False)` | O(1) | O(1) | For `normal` (or `gauss`), `logistic` and `sigmoid`, which weight every point; `data` is held by reference |
 | `statistics.kde(data, h, kernel)` with a bounded kernel | O(n log n) | O(n) | Every other kernel: sorts a copy of `data` once |
-| Calling an estimate built with `normal`, `logistic` or `sigmoid` | O(n) | O(1) | Sums a kernel term for every data point |
+| Calling an estimate built with `normal`, `gauss`, `logistic` or `sigmoid` | O(n) | O(1) | Sums a kernel term for every data point |
 | Calling an estimate built with a bounded kernel | O(log n + w) | O(w) | Binary searches the sorted copy, then sums the w points in reach; a call after `len(data)` changes first re-sorts, O(n log n) time and O(n) space |
 | `statistics.kde_random(data, h, kernel='normal', *, seed=None)` | O(1) | O(1) | `data` is held by reference |
-| Calling a `kde_random()` result | O(1) | O(1) | One random data point plus one kernel offset |
+| Calling a `kde_random()` result | O(1) | O(1) | One random data point plus one kernel offset; the pick indexes `data`, so O(1) holds for a list or tuple |
 
 ### NormalDist
 
@@ -197,9 +197,9 @@ else:
 
 ## Kernel Density Estimates
 
-`kde()` returns a function, and the choice of kernel decides where the cost lands. The `normal`,
-`logistic` and `sigmoid` kernels give every point some weight, so building the estimate is free and
-every evaluation sums over all n points. The bounded kernels sort a copy once, and each
+`kde()` returns a function, and the choice of kernel decides where the cost lands. The `normal` (or
+`gauss`), `logistic` and `sigmoid` kernels give every point some weight, so building the estimate is
+free and every evaluation sums over all n points. The bounded kernels sort a copy once, and each
 evaluation then looks only at the points within the bandwidth.
 
 ```python
@@ -322,6 +322,8 @@ assert outliers == [12.5]
 - **Python 3.11+**: `fmean()` accepts `weights`, and `linear_regression()` accepts `proportional`
 - **Python 3.12+**: `correlation()` accepts `method='ranked'`; it and `linear_regression()` hold
   centred copies of their inputs, O(n) space where 3.10 and 3.11 used O(1)
+- **Python 3.12+**: `fmean()` copies any weights that are not a list or tuple; 3.11 copies only
+  iterator weights, and a `range` costs O(1) space
 - **Python 3.13+**: Added `kde()` and `kde_random()`
 - **Python 3.13+**: `quantiles()` of a single data point returns q - 1 copies of it instead of
   raising `StatisticsError`

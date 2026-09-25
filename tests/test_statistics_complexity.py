@@ -22,10 +22,8 @@ Measurement scope:
   over 1.6 MB instead. `harmonic_mean()` peaks under 64 KB over a list and
   over 1.6 MB over a generator, and likewise for a list and a generator of
   weights; `fmean()` with a generator of weights peaks over 1.6 MB and with
-  a list of weights under 64 KB (3.11+). Sized weights that are neither a
-  list nor a tuple, such as a `range`, are copied on 3.12+ and not on 3.11;
-  the page claims only the iterator case, and the sized case is not
-  asserted. `mean()`, `variance()` and `pvariance()` are asserted to return
+  a list of weights under 64 KB (3.11+). A `range` of weights peaks over
+  1.6 MB on 3.12+ and under 64 KB on 3.11. `mean()`, `variance()` and `pvariance()` are asserted to return
   a `Fraction` for `Fraction` data and a `Decimal` for `Decimal` data.
 * `mean()` and `variance()` are timed at 10,000, 40,000 and 160,000 floats;
   each 4x step is asserted under 8x, which a quadratic's 16x would exceed.
@@ -50,7 +48,7 @@ Measurement scope:
   correlation (3.12+) is asserted to make over 100,000 comparisons on 10,000
   shuffled values.
 * `kde()` (3.13+) over 100,000 floats peaks under 16 KB with the normal
-  kernel and over 800 KB with the triangular one. A call to the normal-kernel
+  kernel and its `gauss` alias and over 800 KB with the triangular one. A call to the normal-kernel
   estimate costs over 30x more at 100,000 points than at 1,000; a call to the
   triangular estimate on evenly spaced points with a bandwidth covering two
   of them costs under 5x more. On 10,001 shuffled values of the counting
@@ -61,7 +59,9 @@ Measurement scope:
   normal-kernel estimate and a `kde_random()` result see an in-place change
   to `data`. `kde_random()` peaks under 16 KB to build over 100,000 points,
   each draw lies within `h` of a data point for the rectangular kernel, and
-  a draw costs under 5x more at 100,000 points than at 1,000.
+  a draw costs under 5x more at 100,000 points than at 1,000. Draws are
+  measured from a list only: a draw indexes `data`, which a `deque` does in
+  O(n).
 * `NormalDist` has two slots and no `__dict__`; `samples(s)` returns s
   floats and its peak grows more than 50x from s = 1,000 to s = 100,000;
   `quantiles(q)` returns q - 1 values. The O(1) methods, properties and
@@ -80,8 +80,9 @@ Not settled here:
   bounded set of power-of-two denominators, which is what the allocation
   measurements exercise; data with many distinct denominators is not varied.
 * `kde_random()` draws for the quartic and triweight kernels solve for the
-  inverse CDF by Newton-Raphson iteration; its iteration count is read as
-  bounded from Lib/statistics.py and not measured.
+  inverse CDF by Newton-Raphson iteration to a fixed tolerance. The loop
+  has no iteration cap; that its count does not depend on n is read from
+  Lib/statistics.py, and the count is not measured.
 * `NormalDist.inv_cdf()` is a fixed rational approximation (Wichura AS241),
   read from source; its O(1) is not timed.
 * Input order is varied only for the sorting functions; the streaming
@@ -234,8 +235,14 @@ class TestStreamingFunctionsHoldNoData:
         listed = peak_bytes(lambda: NEWER.fmean(self.DATA, weights))
         streamed = peak_bytes(lambda: NEWER.fmean(self.DATA, (w for w in weights)))
 
+        ranged = peak_bytes(lambda: NEWER.fmean(self.DATA, range(len(self.DATA))))
+
         assert listed < SMALL, f"fmean() with list weights peaked at {listed} bytes"
         assert streamed > LARGE, f"fmean() with generator weights peaked at {streamed} bytes"
+        if sys.version_info >= (3, 12):
+            assert ranged > LARGE, f"fmean() with range weights peaked at only {ranged} bytes"
+        else:
+            assert ranged < SMALL, f"fmean() with range weights peaked at {ranged} bytes on 3.11"
         assert NEWER.fmean([10, 20], weights=[3, 1]) == 12.5
 
 
@@ -440,9 +447,11 @@ class TestKernelDensityEstimates:
         data = floats(100_000)
 
         normal = peak_bytes(lambda: NEWER.kde(data, h=0.1))
+        gauss = peak_bytes(lambda: NEWER.kde(data, h=0.1, kernel="gauss"))
         bounded = peak_bytes(lambda: NEWER.kde(data, h=0.1, kernel="triangular"))
 
         assert normal < 16_000, f"kde(normal) peaked at {normal} bytes"
+        assert gauss < 16_000, f"kde(gauss) peaked at {gauss} bytes"
         assert bounded > 800_000, f"kde(triangular) peaked at only {bounded} bytes"
 
     @pytest.mark.timing
@@ -494,11 +503,12 @@ class TestKernelDensityEstimates:
 
         CountingFloat.comparisons = 0
         NEWER.kde(data, h=1.0)
+        NEWER.kde(data, h=1.0, kernel="gauss")
 
         assert built > 100_000, f"building made only {built} comparisons"
         assert called < 100, f"a call made {called} comparisons"
         assert resorted > 100_000, f"a call after append made only {resorted} comparisons"
-        assert CountingFloat.comparisons == 0, "building a normal-kernel estimate compared values"
+        assert CountingFloat.comparisons == 0, "building a normal or gauss estimate compared values"
 
     def test_a_normal_kernel_estimate_reads_data_by_reference(self) -> None:
         data = [0.0, 1.0, 2.0]
