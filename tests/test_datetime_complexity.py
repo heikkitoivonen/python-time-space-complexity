@@ -7,7 +7,8 @@ string being parsed and `f` for a format. The fixed-size framing is settled by
 object sizes and a range check, the tzinfo cost model by a counting `tzinfo`,
 the format cache by observing `_strptime`'s cache, and the growth of the
 string conversions by traced allocation and timing ratios over 100x size
-steps.
+steps. Each growth ratio is bounded on both sides: above 20x, so the term is
+there, and below 1,000x, so it is not quadratic.
 
 Measurement scope:
 
@@ -25,12 +26,20 @@ Measurement scope:
   answer `None` without a `tzinfo`.
 * `strptime()`'s n term: the format `"%Y %m"`, with its regex cached, parses
   inputs whose whitespace run grows from 1,000 to 100,000 characters; time
-  grows more than 20x and the traced peak stays under 4 KB at both sizes.
+  grows between 20x and 1,000x and the traced peak stays under 4 KB at both
+  sizes.
   Its f term: a format whose whitespace run grows from 1,000 to 100,000
   characters, parsing the same 7-character input with the format cache
-  emptied before each call, costs more than 20x more; a format of 10,000 and
-  100,000 literal characters, compiled with `re`'s cache purged as well,
-  peaks more than 5x higher.
+  emptied before each call, costs between 20x and 1,000x more; a format of
+  10,000 and 100,000 literal characters, compiled with `re`'s cache purged as
+  well, peaks between 5x and 50x higher.
+* Whitespace runs that meet: a `LocaleTime` with its AM/PM names set empty,
+  standing in for a locale that has none, compiles `"%Y %p %m"` to two
+  adjacent whitespace patterns. Rejecting `"2024"` plus 500 and 5,000 spaces
+  then costs more than 35x more, against less than 35x for the single run of
+  `"%Y %m"`.
+* A rejected input of 10,000 characters appears in full in the `ValueError`
+  from `date.fromisoformat()` and from `strptime()`.
 * The first `strptime()` in a fresh interpreter imports `_strptime`, which
   `fromisoformat()` never does, and costs more than 100x a later parse with
   the same format. A counting `TimeRE.compile` sees one compile for ten
@@ -40,12 +49,14 @@ Measurement scope:
   cache empty. On a 19-character ISO string with the format cached,
   `strptime()` costs more than 5x `fromisoformat()`.
 * `fromisoformat()`'s n term: from 3.11, `datetime` and `time` inputs whose
-  fractional-second digits grow from 1,000 to 100,000 cost more than 20x
-  more, with a traced peak under 1 KB at both sizes; on every version,
-  `date.fromisoformat()` rejecting 1,000 and 100,000 characters costs more
-  than 20x more.
-* `strftime()` over a format repeated 10 and 1,000 times costs more than 20x
-  more, and its output and traced peak grow with it. `isoformat()`, `str()`
+  fractional-second digits grow from 1,000 to 100,000 cost between 20x and
+  1,000x more, with a traced peak under 1 KB at both sizes; on every version,
+  `date.fromisoformat()` rejecting 1,000 and 100,000 characters costs between
+  20x and 1,000x more.
+* `strftime()` over a format repeated 10 and 1,000 times costs between 20x
+  and 1,000x more, and its output and traced peak grow with it. `%Z` with a
+  `timezone` named by 10,000 characters formats to all of them, through
+  `strftime()` and `format()`, for a `datetime` and a `time`. `isoformat()`, `str()`
   and `ctime()` produce the same length for years 1, 2024 and 9999; with
   microseconds and the widest UTC offset a datetime's ISO form is 42
   characters and a time's 31 at each of those years.
@@ -58,7 +69,10 @@ Measurement scope:
 * The version notes are asserted on each side of their boundary with
   `sys.version_info`: `fromisoformat()`'s wider grammar and `datetime.UTC` at
   3.11, the `utcnow()` and `utcfromtimestamp()` deprecation at 3.12, and
-  `date.strptime()` and `time.strptime()` at 3.14.
+  `date.strptime()` and `time.strptime()` at 3.14. Building the regular
+  expression for 5,000 and 100,000 `%%` directives costs under 60x more from
+  3.12.8 and 3.13.1 and over 60x before; 3.12.7 measured about 170x and
+  3.12.14 about 20x.
 * Every fenced Python block runs in its own subprocess, and a mutated
   assertion in one of them is asserted to fail with an `AssertionError` at
   that line.
@@ -71,21 +85,23 @@ Not settled here:
   listed above, and is not a stated count.
 * Locale. The formats measured use numeric directives only; name directives
   (`%A`, `%B`, `%p`) compile to the locale's names, which changes a constant,
-  not the term. A locale or `time.tzname` change also rebuilds `_strptime`'s
-  tables, a constant not measured here.
+  not the term, unless a name set is empty (measured above only through a
+  modified `LocaleTime`, not a real locale). A locale or `time.tzname` change
+  also rebuilds `_strptime`'s tables, a constant not measured here.
 * Platform. `strftime()` hands the format to the C library, so its linearity
   is measured on glibc only.
-* Error-message lengths, which echo the rejected input, and are O(n) space.
-  The page's parsing space bounds assume ASCII input: `fromisoformat()`
-  copies a non-ASCII input, such as one with a non-ASCII date-time
-  separator, to UTF-8, which is O(n) space on a successful parse.
+* Non-ASCII input. The page's parsing space bounds assume ASCII input:
+  `fromisoformat()` copies a non-ASCII input, such as one with a non-ASCII
+  date-time separator, to UTF-8, which is O(n) space on a successful parse.
+* Integer arguments of unbounded size. The O(1) constructor rows assume
+  machine-sized arguments; `timedelta(weeks=k, days=-7 * k)` with a
+  100,000-bit `k` succeeds after big-integer arithmetic on `k`. The page
+  does not price arithmetic on arguments far outside the range.
 * Implementation facts read from Modules/_datetimemodule.c and
   Lib/_strptime.py rather than observed: that the types store fixed-width
   integer fields, that `fromisoformat()` is written in C, and that
   `strptime()` runs in Python. The equal object sizes and the subtraction
   timing above are consistent with the first and do not establish it.
-* Formats with several whitespace runs between directives, whose regex can
-  backtrack on adversarial input.
 """
 
 from __future__ import annotations
@@ -344,7 +360,7 @@ class TestStrptime:
         short_ns = best_ns(lambda: datetime.strptime(short, "%Y %m"), inner=20)
         long_ns = best_ns(lambda: datetime.strptime(long, "%Y %m"), inner=20)
 
-        assert long_ns > short_ns * 20, (
+        assert short_ns * 20 < long_ns < short_ns * 1_000, (
             f"100x the input cost x{long_ns / short_ns:.1f} ({short_ns:.0f}ns to {long_ns:.0f}ns)"
         )
 
@@ -373,7 +389,7 @@ class TestStrptime:
         short_ns = best_ns(lambda: parse(short), inner=5)
         long_ns = best_ns(lambda: parse(long), inner=5)
 
-        assert long_ns > short_ns * 20, (
+        assert short_ns * 20 < long_ns < short_ns * 1_000, (
             f"100x the format cost x{long_ns / short_ns:.1f} "
             f"({short_ns:.0f}ns to {long_ns:.0f}ns) for the same 7-character input"
         )
@@ -393,7 +409,9 @@ class TestStrptime:
 
         small, large = compile_peak(10_000), compile_peak(100_000)
 
-        assert large > small * 5, f"10x the format peaked at {large} bytes against {small}"
+        assert small * 5 < large < small * 50, (
+            f"10x the format peaked at {large} bytes against {small}"
+        )
 
     @pytest.mark.skipif(sys.version_info < (3, 14), reason="date.strptime() is 3.14+")
     def test_date_and_time_strptime_use_the_same_cache(self, clean_format_cache: None) -> None:
@@ -407,6 +425,26 @@ class TestStrptime:
     def test_rejects_trailing_input(self) -> None:
         with pytest.raises(ValueError, match="unconverted data remains"):
             datetime.strptime("2024-01-15T12:30:45", "%Y-%m-%d")
+
+    @pytest.mark.timing
+    def test_whitespace_runs_that_meet_backtrack(self) -> None:
+        """A locale with no AM/PM names compiles `%p` to nothing, so the runs on
+        either side of it meet; rejecting 10x the spaces costs about 100x."""
+        no_am_pm = _strptime.LocaleTime()
+        no_am_pm.am_pm = ["", ""]
+        meeting = _strptime.TimeRE(no_am_pm).compile("%Y %p %m")
+        single = _strptime.TimeRE().compile("%Y %m")
+
+        def ratio(regex: re.Pattern[str]) -> float:
+            short, long = "2024" + " " * 500 + "x", "2024" + " " * 5_000 + "x"
+            assert regex.match(short) is None
+            return best_ns(lambda: regex.match(long), repeats=3) / best_ns(
+                lambda: regex.match(short), repeats=3
+            )
+
+        meeting_ratio, single_ratio = ratio(meeting), ratio(single)
+        assert meeting_ratio > 35, f"10x the spaces cost x{meeting_ratio:.0f} for two runs"
+        assert single_ratio < 35, f"10x the spaces cost x{single_ratio:.0f} for one run"
 
 
 class TestTheFirstStrptimeCall:
@@ -524,7 +562,7 @@ class TestFromisoformat:
             short_ns = best_ns(short, inner=50)
             long_ns = best_ns(long, inner=50)
 
-            assert long_ns > short_ns * 20, (
+            assert short_ns * 20 < long_ns < short_ns * 1_000, (
                 f"{parse.__qualname__}: 100x the digits cost x{long_ns / short_ns:.1f}"
             )
 
@@ -552,7 +590,19 @@ class TestFromisoformat:
         short_ns = best_ns(lambda: reject(short), inner=50)
         long_ns = best_ns(lambda: reject(long), inner=50)
 
-        assert long_ns > short_ns * 20, f"100x the input cost x{long_ns / short_ns:.1f}"
+        assert short_ns * 20 < long_ns < short_ns * 1_000, (
+            f"100x the input cost x{long_ns / short_ns:.1f}"
+        )
+
+    def test_a_rejected_input_is_echoed_in_the_error(self) -> None:
+        tail = "x" * 10_000
+        with pytest.raises(ValueError) as fromiso:
+            date.fromisoformat(tail)
+        with pytest.raises(ValueError) as strp:
+            datetime.strptime("2024-01-15" + tail, "%Y-%m-%d")
+
+        assert tail in str(fromiso.value)
+        assert tail in str(strp.value)
 
 
 class TestFormatting:
@@ -566,7 +616,9 @@ class TestFormatting:
         short_ns = best_ns(lambda: moment.strftime(short), inner=100)
         long_ns = best_ns(lambda: moment.strftime(long), inner=100)
 
-        assert long_ns > short_ns * 20, f"100x the format cost x{long_ns / short_ns:.1f}"
+        assert short_ns * 20 < long_ns < short_ns * 1_000, (
+            f"100x the format cost x{long_ns / short_ns:.1f}"
+        )
 
     def test_strftime_output_and_peak_follow_the_format(self) -> None:
         moment = datetime(2024, 1, 15, 12, 30, 45)
@@ -576,7 +628,9 @@ class TestFormatting:
         short_peak = peak_bytes(lambda: moment.strftime(short))
         long_peak = peak_bytes(lambda: moment.strftime(long))
 
-        assert long_peak > short_peak * 20, f"peaks {short_peak} and {long_peak} bytes"
+        assert short_peak * 20 < long_peak < short_peak * 1_000, (
+            f"peaks {short_peak} and {long_peak} bytes"
+        )
 
     def test_iso_and_ctime_forms_are_fixed_width(self) -> None:
         for render in (datetime.isoformat, str, datetime.ctime):
@@ -600,6 +654,13 @@ class TestFormatting:
         for value in (date(2024, 1, 15), datetime(2024, 1, 15, 12, 30), time(12, 30)):
             assert format(value, "") == str(value)
             assert format(value, "%H:%M %d") == value.strftime("%H:%M %d")
+
+    def test_a_zone_name_counts_toward_the_format(self) -> None:
+        name = "z" * 10_000
+        zone = timezone(timedelta(0), name)
+        for value in (datetime(2024, 1, 15, tzinfo=zone), time(12, tzinfo=zone)):
+            assert value.strftime("%Z") == name
+            assert format(value, "%Z") == name
 
 
 class TestRowValues:
@@ -716,6 +777,22 @@ class TestVersionNotes:
                 naive = datetime.utcnow()
                 datetime.utcfromtimestamp(0)
         assert naive.tzinfo is None
+
+    @pytest.mark.timing
+    def test_compiling_a_format_turned_linear_in_3_12_8_and_3_13_1(self) -> None:
+        """20x the directives costs about 20x from 3.12.8 and 3.13.1, and about
+        150x before."""
+        builder = _strptime.TimeRE()
+        few, many = "%%" * 5_000, "%%" * 100_000
+        few_ns = best_ns(lambda: builder.pattern(few), repeats=3)
+        many_ns = best_ns(lambda: builder.pattern(many), repeats=3)
+        ratio = many_ns / few_ns
+
+        linear = sys.version_info >= (3, 13, 1) or (3, 12, 8) <= sys.version_info < (3, 13)
+        if linear:
+            assert ratio < 60, f"20x the directives cost x{ratio:.0f}"
+        else:
+            assert ratio > 60, f"20x the directives cost x{ratio:.0f}"
 
     def test_date_and_time_strptime_arrive_in_3_14(self) -> None:
         present = sys.version_info >= (3, 14)

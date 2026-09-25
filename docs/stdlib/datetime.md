@@ -6,10 +6,15 @@ The `datetime` module provides dates, times, durations and fixed-offset time zon
 access and replacement are constant time however far apart two values are.
 
 Only the conversions to and from strings scale. `n` is the characters in a string being parsed and
-`f` is the characters in a format string, and the parsing space bounds assume ASCII input. An aware
-object that needs its UTC offset calls its `tzinfo` a bounded number of times; the bounds count
-each call as O(1), which it is for `timezone`. A [`zoneinfo.ZoneInfo`](zoneinfo.md) prices its
-calls on its own page: up to a binary search over its recorded transitions.
+`f` is the characters in a format string, plus, in `strftime()`, the length of the zone's name for
+each `%Z`. The parsing space bounds are for ASCII input that parses: a rejected string can be
+echoed in the `ValueError`, which is O(n). The `strptime()` bounds assume a format in which no two
+whitespace runs can meet; around a directive that can match nothing, such as `%p` in a locale with
+no AM/PM names, rejecting a long run of spaces backtracks, O(n²) where two runs meet.
+
+An aware object that needs its UTC offset calls its `tzinfo` a bounded number of times; the bounds
+count each call as O(1), which it is for `timezone`. A [`zoneinfo.ZoneInfo`](zoneinfo.md) prices
+its calls on its own page: up to a binary search over its recorded transitions.
 
 ## Complexity Reference
 
@@ -294,6 +299,8 @@ assert restored.utcoffset() is not None
 - **Python 3.11+**: Added `datetime.UTC`
 - **Python 3.12+**: `datetime.utcnow()` and `datetime.utcfromtimestamp()` are deprecated in
   favour of `datetime.now(timezone.utc)` and `datetime.fromtimestamp(timestamp, timezone.utc)`
+- **Python 3.12.8+ and 3.13.1+**: compiling a `strptime()` format is O(f); earlier releases
+  build its regular expression in O(f·d) for a format of d ≥ 1 directives
 - **Python 3.14+**: Added `date.strptime()` and `time.strptime()`
 
 ## Related Modules
