@@ -26,6 +26,9 @@ Measurement scope:
   hashes stay between p and 20p and comparisons under 20p. With every
   argument hashing to one value, comparisons reach p(p-1)/2, which is why the
   page's cost model treats hashing as O(1).
+* Type-variable collection, 3.11+: `Callable` over 10 and 100 distinct
+  objects that define `__typing_subst__` compares them v(v-1)/2 times and
+  keeps all of them in `__parameters__`.
 * `get_args()`: an ordinary alias returns the identical tuple on two calls;
   `Callable` at 10 and 10,000 parameters and `Annotated` at 10 and 10,000
   metadata items return a fresh result whose traced peak grows more than 20x.
@@ -39,8 +42,9 @@ Measurement scope:
   is read; two reads call it once in all.
 * Runtime protocols: on 3.10 and 3.11 a check the class has already passed
   still calls `typing._get_protocol_attrs`, which returns all 40 members.
-  From 3.12 that check makes no static attribute lookup on the instance,
-  while a failing check makes at least one on each call. A data protocol of
+  From 3.12 that check makes no static attribute lookup on the instance and
+  does not call the protocol's `__subclasshook__`, which a new subclass then
+  calls once; a failing check makes between 1 and 40 lookups on each call. A data protocol of
   1 and 40 members reads every member of the instance on each check, and
   `issubclass()` against it raises `TypeError`.
 * `runtime_checkable()` iterates each of 1 and 40 members once from 3.12.2
@@ -78,6 +82,10 @@ Not settled here:
   `override` and `dataclass_transform` are read from Lib/typing.py in each
   released branch (3.10.19 to 3.14.2): each returns an existing object or
   sets a fixed number of attributes.
+* That `Generic[...]` and `Protocol[...]` collect their type variables the
+  same way, and that 3.10's `_collect_type_vars` makes the same list check
+  over `TypeVar` instances only, is read from Lib/typing.py; the counting
+  test runs from 3.11.
 * The log factor of `no_type_check()` is `dir()`'s sort, read from source;
   only the count of names visited is observed.
 * `clear_overloads()` being O(o) follows from clearing a dictionary of
@@ -289,6 +297,32 @@ class TestVariableAritySubscriptions:
         hashes = 0
         assert typing.Tuple[fresh] is alias
         assert hashes == count
+
+    @pytest.mark.skipif(sys.version_info < (3, 11), reason="3.10 collects only TypeVars")
+    @pytest.mark.parametrize("count", [10, 100])
+    def test_collecting_type_variables_compares_each_with_those_found(self, count: int) -> None:
+        """The O(v²) term of the introduction, and of the `Generic` and
+        `Protocol` rows: v distinct type variables cost v(v-1)/2 comparisons."""
+        comparisons = 0
+
+        class Variable:
+            def __typing_subst__(self, arg: Any) -> Any:
+                return arg
+
+            def __call__(self) -> None: ...
+
+            def __eq__(self, other: object) -> bool:
+                nonlocal comparisons
+                comparisons += 1
+                return self is other
+
+            __hash__ = object.__hash__
+
+        variables = tuple(Variable() for _ in range(count))
+        alias = typing.Callable[list(variables), int]  # type: ignore[misc]
+
+        assert alias.__parameters__ == variables  # type: ignore[attr-defined]
+        assert comparisons == count * (count - 1) // 2
 
     @pytest.mark.parametrize("count", [10, 100])
     @pytest.mark.parametrize("duplicates", [False, True])
@@ -549,9 +583,20 @@ class TestRuntimeProtocols:
         obj = type("Impl", (), {f"m{index}": (lambda self: None) for index in range(40)})()
         assert isinstance(obj, wide)
         visits = record_static_lookups(monkeypatch, obj)
+        hooks: list[type] = []
+        structural_check = wide.__subclasshook__
+
+        def record_hook(other: type) -> Any:
+            hooks.append(other)
+            return structural_check(other)
+
+        monkeypatch.setattr(wide, "__subclasshook__", record_hook)
 
         assert isinstance(obj, wide)
-        assert visits == []
+        assert visits == [] and hooks == [], "the answer came from the cache"
+        subclass = type("Sub", (type(obj),), {})
+        assert isinstance(subclass(), wide)
+        assert len(hooks) == 1, "a new class runs the structural check"
 
     @pytest.mark.skipif(sys.version_info < (3, 12), reason="walks the members before 3.12")
     def test_a_failing_check_reads_the_instance_every_time(
@@ -562,9 +607,10 @@ class TestRuntimeProtocols:
         assert not isinstance(obj, wide)
         visits = record_static_lookups(monkeypatch, obj)
 
-        for calls in (1, 2):
+        for _ in range(2):
+            before = len(visits)
             assert not isinstance(obj, wide)
-            assert calls <= len(visits) <= 40 * calls, visits
+            assert 1 <= len(visits) - before <= 40, visits
 
     @pytest.mark.parametrize("count", [1, 40])
     def test_a_data_protocol_reads_every_member_each_time(
@@ -596,7 +642,7 @@ class TestRuntimeProtocols:
 
 
 class TestDeclaringProtocols:
-    """`class P(Protocol)` | O(p + m); `runtime_checkable` | O(m) from 3.12.2;
+    """`class P(Protocol)` | O(p² + m); `runtime_checkable` | O(m) from 3.12.2;
     `get_protocol_members` | O(m)."""
 
     def test_defining_a_protocol_pays_for_its_members(self) -> None:
@@ -672,6 +718,7 @@ class TestDeclaringTypes:
         point = self.Point(1.0, 2.0)
 
         assert point.x == 1.0
+        assert isinstance(point, tuple)
         assert tuple(point) == (1.0, 2.0)
 
     def test_a_typed_dict_counts_inherited_fields(self) -> None:

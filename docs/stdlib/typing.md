@@ -6,9 +6,14 @@ and when something reads the hints back.
 
 `k` is the annotations on an object, or the fields of a declared class; `p` is the type arguments
 in one subscription, counted after flattening for a union; `m` is the members of a protocol,
-inherited ones included; and `a` is the attributes defined on a class and on its bases. Bounds
-treat hashing and comparing a type argument, reading an attribute and evaluating one ordinary
-annotation as O(1).
+inherited ones included; and `a` is the attributes defined on a class and on its bases, and for
+`no_type_check()` on the nested classes it recurses into. Bounds treat hashing and comparing a
+type argument, reading an attribute and evaluating one ordinary annotation as O(1).
+
+Building an alias also collects the distinct type variables among its arguments, checking each
+against a list of those already found, so v of them cost O(v²). The subscription rows below leave
+that term out, as v is a handful in practice; the `Generic` and `Protocol` rows, whose p arguments
+are all type variables, include it.
 
 ## Complexity Reference
 
@@ -53,8 +58,8 @@ keeps only recent subscriptions, which is why identity is not guaranteed.
 | `typing.TypeVarTuple(name)`, `typing.ParamSpec(name)` | O(1) | O(1) | `TypeVarTuple` is 3.11+ |
 | `typing.NewType(name, tp)` | O(1) | O(1) | Builds a callable that returns its argument unchanged |
 | `typing.NamedTuple`, `typing.TypedDict` | O(k) | O(k) | k = fields, inherited ones included; one class per declaration, built when the `class` statement runs |
-| `class C(typing.Generic[T, ...])` | O(p) | O(p) | Collects the type parameters of its bases, on top of what the class body costs |
-| `class P(typing.Protocol)` | O(p + m) | O(p + m) | From 3.12 the m member names are also collected and kept for runtime checks |
+| `class C(typing.Generic[T, ...])` | O(p²) | O(p) | Collects the type parameters of its bases, each checked against those already found, on top of what the class body costs |
+| `class P(typing.Protocol)` | O(p² + m) | O(p + m) | From 3.12 the m member names are also collected and kept for runtime checks |
 | `typing.TypeAlias` | O(1) | O(1) | A marker for the type checker |
 | `typing.TypeAliasType(name, value, *, type_params=())` | O(1) | O(1) | Python 3.12+; what a `type` statement builds |
 | `typing.ForwardRef(arg)` | Compiles `arg` before 3.14; O(1) from 3.14 | Holds the compiled code before 3.14; O(1) from 3.14 | From 3.14 the string is kept and compiled only when evaluated |
@@ -143,7 +148,7 @@ assert set(get_args(Union[int, str])) == {int, str}      # O(1) to read back
 ```
 
 !!! note "Unions changed shape in Python 3.14"
-    From 3.14, `Union[int, str]` produces the same object as `int | str` — a `types.UnionType`
+    From 3.14, `Union[int, str]` produces the same kind of object as `int | str` — a `types.UnionType`
     rather than a `typing.Union` alias — and it is not cached, so two identical unions are
     equal but not identical. Compare unions with `==`, never with `is`.
 
