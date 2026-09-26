@@ -268,6 +268,12 @@ def is_private_module(name: str) -> bool:
     return top.startswith("_") and not top.startswith("__")
 
 
+def undocumented_private(name: str, apis: dict[str, Any]) -> bool:
+    """A single-underscore name counts only when the official inventory documents it."""
+    last = name.rsplit(".", 1)[-1]
+    return last.startswith("_") and not last.startswith("__") and name not in apis
+
+
 def is_codec_module(name: str) -> bool:
     """Individual codec implementations are outside the audit; retain alias metadata."""
     return name.startswith("encodings.") and name != "encodings.aliases"
@@ -605,7 +611,8 @@ def inspect_public_api(
 ) -> dict[str, Any]:
     """Enumerate public bindings, inherited class members, enums, and fields.
 
-    Public means a non-underscore binding from dir() or __all__. Re-exported
+    Public means a non-underscore binding from dir() or __all__; a single-underscore name
+    in __all__ counts only when the official inventory documents it. Re-exported
     names are included, even when they may be implementation imports. Class dunder
     members and constants are excluded; __import__ remains included as a builtin API.
     No API functions or constructors are called; descriptors are inspected statically.
@@ -643,7 +650,7 @@ def inspect_public_api(
     for name in sorted(names):
         if (
             name.startswith("_")
-            and name not in exports
+            and (name not in exports or undocumented_private(f"{module.__name__}.{name}", apis))
             and not (module is builtins and name in SPECIAL_BUILTINS)
         ):
             continue

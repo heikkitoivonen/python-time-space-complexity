@@ -65,6 +65,19 @@ def test_single_underscore_modules_are_excluded(monkeypatch: pytest.MonkeyPatch)
     assert [item["name"] for item in unresolved] == ["__future__", "__future__.annotations"]
 
 
+def test_undocumented_underscore_exports_are_not_inspected() -> None:
+    module = ModuleType("probe")
+    module._helper = lambda: None  # type: ignore[attr-defined]
+    module._documented = lambda: None  # type: ignore[attr-defined]
+    module.public = lambda: None  # type: ignore[attr-defined]
+    module.__all__ = ["_helper", "_documented", "public"]  # type: ignore[attr-defined]
+    apis = public_manifest({"probe._documented": "function"})["apis"]
+
+    names = {item["name"] for item in audit.inspect_public_api(module, apis)["items"]}
+
+    assert names == {"probe._documented", "probe.public"}
+
+
 class Example(Parent):
     annotated: str
 
