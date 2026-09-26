@@ -19,7 +19,7 @@ call, and one result can answer every question this module asks of it.
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `stat.S_ISDIR(mode)`, `stat.S_ISREG(mode)` | O(1) | O(1) | Compare the file-type bits with one type |
-| `stat.S_ISLNK(mode)` | O(1) | O(1) | `os.stat()` follows a link, so only a mode from `os.lstat()` can be a link |
+| `stat.S_ISLNK(mode)` | O(1) | O(1) | `os.stat()` follows a link by default, so only a mode from `os.lstat()` or `follow_symlinks=False` can be a link |
 | `stat.S_ISCHR(mode)`, `stat.S_ISBLK(mode)`, `stat.S_ISFIFO(mode)`, `stat.S_ISSOCK(mode)` | O(1) | O(1) | Character and block devices, named pipes, sockets |
 | `stat.S_ISDOOR(mode)`, `stat.S_ISPORT(mode)`, `stat.S_ISWHT(mode)` | O(1) | O(1) | Solaris doors and event ports, BSD and macOS whiteouts; always `False` on a platform without the type |
 
@@ -92,8 +92,8 @@ with tempfile.TemporaryDirectory() as root:
 
 ### Symbolic Links
 
-A mode from `os.stat()` describes the file a link points to, so `S_ISLNK()` on it is never true.
-Ask `os.lstat()` when the link itself is the question.
+A mode from `os.stat()` with its default `follow_symlinks=True` describes the file a link points
+to, so `S_ISLNK()` on it is never true. Ask `os.lstat()` when the link itself is the question.
 
 ```python
 import os
@@ -128,8 +128,8 @@ assert stat.filemode(0o644) == '?rw-r--r--'                   # no file type bit
 
 ## Permission Bits
 
-`S_IMODE()` strips the file type, leaving what `os.chmod()` accepts, so a permission change is a
-read, one bit operation and a write. `S_IREAD`, `S_IWRITE` and `S_IEXEC` are the owner bits
+`S_IMODE()` strips the file type, leaving what `os.chmod()` accepts, so on POSIX a permission
+change is a read, one bit operation and a write. `S_IREAD`, `S_IWRITE` and `S_IEXEC` are the owner bits
 alone: testing `S_IEXEC` does not say whether the group or others may execute the file.
 
 ```python
@@ -210,7 +210,7 @@ with tempfile.TemporaryDirectory() as root:
 
 - Chaining `os.path.isfile()`, `os.path.isdir()` and `os.path.exists()` on one path - a system call
   each
-- `S_ISLNK()` on a mode from `os.stat()` - it is never true
+- `S_ISLNK()` on a mode from `os.stat()` with links followed - it is never true
 - Reading `S_IREAD`, `S_IWRITE` or `S_IEXEC` as "anyone may" - they are the owner's bits only
 
 ## Related Modules

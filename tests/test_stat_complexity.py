@@ -12,7 +12,8 @@ always-false predicate - are settled by counting calls and by comparing results.
 Measurement scope:
 
 * The thirteen functions are asserted to be the `_stat` builtins, more than
-  half of the constants to exist on `_stat`, and `Lib/stat.py` is loaded a second time with `_stat` blocked to get the
+  half of the constants to exist on `_stat` with equal values, and
+  `Lib/stat.py` is loaded a second time with `_stat` blocked to get the
   fallback, whose functions are asserted to be Python functions defining the
   same public names except the ones `_stat` adds per platform.
 * Fixed width: the C functions raise `OverflowError` for 2**64 and for -1.
@@ -62,7 +63,11 @@ Not settled here:
 * That `os.path.exists()` and its siblings each cost a system call is observed
   on Linux as one `os.stat` call each; the system calls themselves are not
   counted. On Windows from 3.12, Lib/ntpath.py binds them to `nt._path_*`
-  helpers that do not call `os.stat`, so the count there is category D.
+  helpers that do not call `os.stat`, so the count there is category D and
+  the counting test is skipped on Windows.
+* The page's permission example is POSIX: Windows `os.chmod()` sets only the
+  read-only flag, so the `os.chmod()` round-trip and `shutil.copymode()` tests
+  are skipped there, category D.
 * That every name outside the platform-only set exists on every platform is
   read from Lib/stat.py, which defines its names unconditionally; the test
   compares it with the running platform's `stat` only.
@@ -175,10 +180,12 @@ class TestTheCModuleIsWhatRuns:
             assert getattr(stat, name) is getattr(_stat, name), name
             assert isinstance(getattr(stat, name), types.BuiltinFunctionType), name
 
-    def test_most_constants_come_from_the_c_module(self) -> None:
+    def test_most_constants_are_the_c_module_values(self) -> None:
         constants = {name for name in public_names(stat) if name not in FUNCTIONS}
         from_c = {name for name in constants if hasattr(_stat, name)}
         assert len(from_c) > len(constants) / 2, sorted(constants - from_c)
+        for name in from_c:
+            assert getattr(stat, name) == getattr(_stat, name), name
 
     def test_the_fallback_defines_python_functions(self, fallback: types.ModuleType) -> None:
         for name in FUNCTIONS:
@@ -259,6 +266,7 @@ class TestOneStatAnswersEveryQuestion:
     each make a system call of their own", while the predicates on a fetched mode make
     none. A counter substituted for `os.stat` separates the two."""
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="ntpath bypasses os.stat from 3.12")
     def test_each_os_path_predicate_stats_again(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -272,10 +280,10 @@ class TestOneStatAnswersEveryQuestion:
             return real(target, *args, **kwargs)  # type: ignore[arg-type]
 
         monkeypatch.setattr(os, "stat", counting)
-        os.path.isfile(path)
-        os.path.isdir(path)
-        os.path.exists(path)
-        assert len(calls) == 3
+        for predicate in (os.path.isfile, os.path.isdir, os.path.exists):
+            calls.clear()
+            predicate(path)
+            assert len(calls) == 1, predicate.__name__
 
         calls.clear()
         mode = os.stat(path).st_mode
@@ -326,6 +334,7 @@ class TestPermissionBits:
         assert stat.filemode(stat.S_IFREG | 0o4755) == "-rwsr-xr-x"
         assert stat.filemode(stat.S_IFDIR | 0o1777) == "drwxrwxrwt"
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows chmod sets read-only only")
     def test_imode_round_trips_through_chmod(self, tmp_path: pathlib.Path) -> None:
         path = tmp_path / "script.py"
         path.write_text("")
@@ -333,6 +342,7 @@ class TestPermissionBits:
         os.chmod(path, stat.S_IMODE(os.stat(path).st_mode) | stat.S_IXUSR)
         assert stat.S_IMODE(os.stat(path).st_mode) == 0o740
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows chmod sets read-only only")
     def test_copymode_copies_the_permission_bits(self, tmp_path: pathlib.Path) -> None:
         source = tmp_path / "source"
         target = tmp_path / "target"
@@ -455,8 +465,10 @@ def _run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[st
 class TestDocumentedExamples:
     """Each block runs in its own subprocess and working directory, creates
     the files it stats in a temporary directory, and asserts its own result.
-    The symlink blocks need a platform where an unprivileged process may make
-    links, which Linux is."""
+    The symlink and permission blocks are POSIX: they need a platform where an
+    unprivileged process may make links and `os.chmod()` sets every permission
+    bit, which Linux is. The runner is not guarded, so on Windows it fails
+    rather than skips; no run this project performs is on Windows."""
 
     def test_the_page_has_the_expected_blocks(self) -> None:
         assert len(_blocks()) == EXPECTED_BLOCKS
