@@ -1,656 +1,475 @@
-# Pathlib Module Complexity
+# pathlib Module Complexity
 
-The `pathlib` module provides an object-oriented approach to filesystem path handling.
+The `pathlib` module wraps filesystem paths in objects. It has two halves: pure paths, which are
+string manipulation with a path-shaped API and never touch the filesystem, and concrete `Path`
+objects, which add the operations that make system calls. Most of the cost of the second half is
+the syscalls themselves; most of the cost of the first is building and parsing strings.
+
+`n` is the components in a path and `L` its characters, and `c` is the characters in its final
+component. `s` is the segments a path was built from: from 3.12 a path keeps its constructor's
+arguments unparsed, and a path joined onto another keeps all of that path's segments as well as its
+own. For directory work, `w` is the entries in one directory (the widest, where an operation opens
+several), `E` the entries examined across every directory an operation opens, and `P` the total length of the directory paths a walk has queued but not yet opened. `b` is
+bytes of file content, and `k` the directories `mkdir(parents=True)` has to create. A syscall
+counts as O(1), as on the [os](os.md) page: the kernel still resolves a path component by
+component, but that is not what a caller chooses between. Glob patterns are treated as fixed size.
+A pure-path bound assumes the path is already parsed; from 3.12 parsing is deferred, and the first
+operation that needs it pays O(L) once.
 
 ## Complexity Reference
 
-Unless a row says otherwise, n is the number of components in the path and the
-bound covers one call on an already-parsed path. Nothing in the first table
-touches the filesystem.
-
-### Classes
-
-| Name | Time | Space | Notes |
-|------|------|-------|-------|
-| `PurePath`, `PurePosixPath`, `PureWindowsPath` | O(n) | O(n) | Construction only; these never touch the filesystem |
-| `Path`, `PosixPath`, `WindowsPath` | O(n) | O(n) | `Path()` returns the flavour matching the running platform |
-| `UnsupportedOperation` | O(1) | O(1) | Python 3.13+; raised where a flavour has no such operation |
-
-### Pure Path Operations
+### PurePath
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `PurePath(str)` | O(n) | O(n) | n = length of the string; from 3.12 both are O(1), the string being stored and parsed on first use |
-| `path / segment`, `PurePath.joinpath()` | O(n) | O(n) | n = combined length; from 3.12 the segments are stored unparsed and the cost is deferred with the rest |
-| `PurePath.parts` | O(n) | O(n) | Rebuilt on every access from 3.12; cached after the first before that |
-| `PurePath.parent` | O(n) | O(n) | Builds a new path from the tail |
-| `PurePath.parents` | O(1) | O(1) | A lazy sequence; `parents[i]` costs O(n - i) and `list(parents)` is O(n²) |
-| `PurePath.name/stem/suffix/anchor/drive/root` | O(1) | O(1) | Read from the parsed path |
-| `PurePath.suffixes` | O(m) | O(m) | m = length of the final component |
-| `PurePath.with_name()`, `.with_stem()`, `.with_suffix()`, `.with_segments()` | O(n) | O(n) | `with_segments()` is 3.12+ |
-| `PurePath.relative_to()`, `.is_relative_to()` | O(n²) | O(n) | O(n) before 3.12 |
-| `PurePath.match()`, `.full_match()` | O(p + n) | O(1) | p = components in the pattern; `full_match()` is 3.13+ |
-| `PurePath.as_posix()`, `str(path)` | O(n) | O(n) | The string is cached after the first build |
-| `PurePath.as_uri()` | O(n) | O(n) | Return file:// URI; deprecated on `PurePath` in 3.14, so call it on a `Path` |
+| `pathlib.PurePath(*pathsegments)`, `pathlib.PurePosixPath(*pathsegments)`, `pathlib.PureWindowsPath(*pathsegments)` | O(L); O(s) from 3.12 | O(L); O(s) from 3.12 | From 3.12 the segments are stored and parsed on first use; either flavour works on any platform |
+| `path / segment`, `PurePath.joinpath(*pathsegments)` | O(L); O(s) from 3.12 | O(L); O(s) from 3.12 | From 3.12 the new path copies every segment of the old one, so a path grown one name at a time pays for all the names before it |
+| `PurePath.with_segments(*pathsegments)` | O(s) | O(s) | Python 3.12+; builds a path of the same type, and every derived path goes through it |
+| `PurePath.parts` | O(n) | O(n) | A fresh tuple on every access from 3.12; cached after the first before that |
+| `PurePath.parent` | O(L) | O(L) | A new path |
+| `PurePath.parents` | O(1) | O(1) | A lazy sequence: `parents[i]` is O(L), and `list(parents)` is O(n·L) |
+| `PurePath.name`, `PurePath.anchor`, `PurePath.drive`, `PurePath.root` | O(1) | O(1) | Read from the parsed path |
+| `PurePath.stem`, `PurePath.suffix`, `PurePath.suffixes` | O(c) | O(c) | Sliced from the final component |
+| `PurePath.with_name(name)`, `PurePath.with_stem(stem)`, `PurePath.with_suffix(suffix)` | O(L) | O(L) | A new path |
+| `PurePath.relative_to(other)` | O(L); O(n·L) from 3.12 | O(L); O(n·L) on 3.12 | From 3.12 each ancestor is compared by building its string; 3.12 also lists every ancestor of `other`. Bounds are for the default `walk_up=False` |
+| `PurePath.is_relative_to(other)` | O(L); O(n·L) from 3.12 | O(L) | The same search as `relative_to()` |
+| `PurePath.match(pattern)`, `PurePath.full_match(pattern)` | O(L) | O(L) | `full_match()` is Python 3.13+ |
+| `str(path)`, `PurePath.as_posix()` | O(L) | O(L) | `str()` is cached after its first call |
+| `PurePath.as_uri()` | O(L) | O(L) | Deprecated on `PurePath` in 3.14; call it on a `Path` |
 | `PurePath.is_absolute()` | O(1) | O(1) | Reads the anchor |
-| `PurePath.is_reserved()` | O(1) | O(1) | Windows names only; deprecated in 3.13 |
-| `PurePath.parser` | O(1) | O(1) | Python 3.13+; the `posixpath` or `ntpath` module behind this flavour |
+| `PurePath.is_reserved()` | O(L) | O(L) | Windows names only; deprecated in 3.13, which also made it check every component rather than the final one |
+| `PurePath.parser` | O(1) | O(1) | Python 3.13+; the `posixpath` or `ntpath` module behind the flavour |
 
-### Filesystem Operations
+### Path
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `Path.cwd()` | O(n) | O(n) | n = length of current directory |
-| `Path.home()` | O(n) | O(n) | n = length of home directory |
-| `Path.exists()` | O(1) | O(1) | One stat call |
-| `Path.is_file()` | O(1) | O(1) | One stat call |
-| `Path.is_dir()` | O(1) | O(1) | One stat call |
-| `Path.is_symlink()` | O(1) | O(1) | One lstat call |
-| `Path.is_junction()` | O(1) | O(1) | Python 3.12+; always False on POSIX |
-| `Path.is_mount()` | O(1), O(n) on 3.12 | O(1) | n = path components; stats the path and its parent; on 3.12 it resolves the parent instead, at one lstat per component |
-| `Path.is_socket()` | O(1) | O(1) | One stat call |
-| `Path.is_fifo()` | O(1) | O(1) | One stat call |
-| `Path.is_block_device()` | O(1) | O(1) | One stat call |
-| `Path.is_char_device()` | O(1) | O(1) | One stat call |
-| `Path.stat()` | O(1) | O(1) | Get file stats |
-| `Path.lstat()` | O(1) | O(1) | Like stat but don't follow symlinks |
-| `Path.info` | O(1) | O(1) | Python 3.14+; caches what it stats, so repeated queries cost one syscall between them |
-| `Path.resolve()` | O(n) | O(n) | n = path components; one lstat each |
-| `Path.absolute()` | O(n) | O(n) | Make absolute without resolving symlinks |
-| `Path.expanduser()` | O(n) | O(n) | Expand ~ to home directory |
-| `Path.iterdir()` | O(d) | O(d) | d = directory entries; the whole listing is read before the first item |
-| `Path.walk()` | O(n) | O(w + d) | Python 3.12+; n = total entries, d = max depth, w = entries queued but not yet walked |
-| `Path.glob(pattern)` | O(n) | O(w); O(w + d) with `**` | n = entries scanned, not entries matched; w = entries of the largest directory scanned, d = depth reached |
-| `Path.rglob(pattern)` | O(n) | O(w + d) | `glob('**/' + pattern)`; n = entries in the tree, d = depth reached |
-| `Path.mkdir()` | O(1) | O(1) | O(d) for d missing components with `parents=True` |
-| `Path.touch()` | O(1) | O(1) | Create file or update timestamp |
-| `Path.rename(target)` | O(1) | O(1) | Rename path |
-| `Path.replace(target)` | O(1) | O(1) | Rename, overwriting target if exists |
-| `Path.unlink()` | O(1) | O(1) | Delete file |
-| `Path.rmdir()` | O(1) | O(1) | Delete empty directory |
-| `Path.symlink_to(target)` | O(1) | O(1) | Create symlink |
-| `Path.hardlink_to(target)` | O(1) | O(1) | Create hard link |
-| `Path.link_to(target)` | O(1) | O(1) | Removed in 3.12; use `hardlink_to()`, whose arguments are the other way round |
-| `Path.readlink()` | O(n) | O(n) | n = length of symlink target |
-| `Path.chmod(mode)` | O(1) | O(1) | Change file mode |
-| `Path.lchmod(mode)` | O(1) | O(1) | chmod without following symlinks |
-| `Path.owner()` | O(1) | O(1) | One stat call plus a user-database lookup |
-| `Path.group()` | O(1) | O(1) | One stat call plus a group-database lookup |
+| `pathlib.Path(*pathsegments)`, `pathlib.PosixPath(*pathsegments)`, `pathlib.WindowsPath(*pathsegments)` | O(L); O(s) from 3.12 | O(L); O(s) from 3.12 | As `PurePath`; `Path()` builds the running platform's flavour, and the other flavour cannot be built |
+| `Path.cwd()`, `Path.home()` | O(L) | O(L) | L = length of the directory's path |
+| `Path.absolute()` | O(L) | O(L) | Joins onto the working directory; no stat |
+| `Path.expanduser()` | O(L) | O(L) | `~user` is looked up in the user database |
+| `Path.resolve(strict=False)` | O(L) | O(L) | One lstat per component; L includes every symlink target spliced into the path |
+| `Path.stat()`, `Path.lstat()` | O(1) | O(1) | One syscall |
+| `Path.exists()`, `Path.is_file()`, `Path.is_dir()`, `Path.is_symlink()`, `Path.is_socket()`, `Path.is_fifo()`, `Path.is_block_device()`, `Path.is_char_device()` | O(1) | O(1) | One stat call each, an lstat for `is_symlink()`; the directory holding the path is not read |
+| `Path.is_junction()` | O(1) | O(1) | Python 3.12+; always `False` off Windows |
+| `Path.is_mount()` | O(1); O(L) on 3.12 | O(1) | Stats the path and its parent; 3.12 resolves the parent instead, one lstat per component |
 | `Path.samefile(other)` | O(1) | O(1) | Two stat calls |
-| `Path.open(mode)` | O(1) | O(1) | Open file (returns file object) |
-| `Path.read_text()` | O(n) | O(n) | Read file as text |
-| `Path.read_bytes()` | O(n) | O(n) | Read file as bytes |
-| `Path.write_text()` | O(n) | O(n) | Write text to file |
-| `Path.write_bytes()` | O(n) | O(n) | Write bytes to file |
-| `Path.copy(target)`, `.copy_into(dir)` | O(b) | O(1) | Python 3.14+; b = bytes copied, streamed rather than held |
-| `Path.move(target)`, `.move_into(dir)` | O(1) | O(1) | Python 3.14+; O(b) across filesystems, where it copies and deletes |
-| `Path.from_uri(uri)` | O(n) | O(n) | Create Path from URI (Python 3.13+) |
+| `Path.owner()`, `Path.group()` | O(1) | O(1) | One stat call plus a user- or group-database lookup |
+| `Path.info` | O(1) | O(1) | Python 3.14+; a `PathInfo` cached on the path, see below |
+| `Path.as_uri()`, `Path.from_uri(uri)` | O(L) | O(L) | `from_uri()` is Python 3.13+ |
 
-## Path Construction
+### Directories
 
-### Time Complexity: O(n)
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `Path.iterdir()` | O(w) | O(w) | The whole directory is read before the first item: when `iterdir()` is called from 3.13, at the first `next()` before |
+| `Path.glob(pattern)` | O(E) | O(w) | For a pattern without `**`; E counts every entry scanned, matching or not |
+| `Path.glob('**/' + pattern)`, `Path.rglob(pattern)` | O(E) | O(w + P); O(A + Y) through 3.11 | `rglob(pattern)` is `glob('**/' + pattern)`. Through 3.11 it holds the listing of every directory on the branch being scanned (A entries) and every path it has yielded (Y = their total length); bounds are for one `**` |
+| `Path.walk(top_down=True, on_error=None, follow_symlinks=False)` | O(E) | O(w + P) | Python 3.12+; `top_down=False` also holds every ancestor's listing until its subtree is done |
+| `Path.mkdir(mode=0o777, parents=False, exist_ok=False)` | O(1); O(k·L) with `parents=True` | O(1); O(k·L) with `parents=True` | Recurses once per missing component, like `os.makedirs()` |
+| `Path.rmdir()` | O(1) | O(1) | The directory must be empty |
 
-Where n = length of the path string.
+### Files and links
 
-```python
-from pathlib import Path
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `Path.open(mode='r', buffering=-1, encoding=None, errors=None, newline=None)` | O(1) | O(1) | Opens the file as `open()` does |
+| `Path.read_text(encoding=None, errors=None)`, `Path.read_bytes()` | O(b) | O(b) | The whole file is held |
+| `Path.write_text(data, encoding=None, errors=None, newline=None)` | O(b) | O(b) | The string is encoded whole before it is written |
+| `Path.write_bytes(data)` | O(b) | O(1) | Writes the buffer it is given without copying it |
+| `Path.touch()`, `Path.unlink()` | O(1) | O(1) | |
+| `Path.rename(target)`, `Path.replace(target)` | O(1) | O(1) | One rename; neither copies across filesystems |
+| `Path.symlink_to(target)`, `Path.hardlink_to(target)` | O(1) | O(1) | |
+| `Path.link_to(target)` | O(1) | O(1) | Removed in 3.12; `hardlink_to()` takes its arguments the other way round |
+| `Path.readlink()` | O(L) | O(L) | L = length of the link's target |
+| `Path.chmod(mode)`, `Path.lchmod(mode)` | O(1) | O(1) | |
+| `Path.copy(target)`, `Path.copy_into(target_dir)` | O(b); O(E + b) for a directory | O(1) for a file | Python 3.14+; a file is streamed, a directory copied entry by entry |
+| `Path.move(target)`, `Path.move_into(target_dir)` | O(1) | O(1) | Python 3.14+; a rename within one filesystem; across two, a copy and delete at `copy()`'s cost |
 
-# Simple path: O(n) in the length of the string
-path = Path('/home/user/documents/file.txt')
+### PathInfo
 
-# Relative path: O(n)
-path = Path('docs/README.md')
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `pathlib.types`, `pathlib.types.PathInfo` | O(1) | O(1) | Python 3.14+; the protocol `Path.info` implements |
+| `PathInfo.exists()`, `PathInfo.is_dir()`, `PathInfo.is_file()` | O(1) | O(1) | At most one stat call, on the first query, shared by the three and kept for the object's life |
+| `PathInfo.is_symlink()` | O(1) | O(1) | One lstat call, kept separately |
 
-# Current directory: O(n) in path length
-cwd = Path.cwd()
+### Exceptions
 
-# Home directory: O(n) in path length
-home = Path.home()
-```
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `pathlib.UnsupportedOperation` | O(1) | O(1) | Python 3.13+; a `NotImplementedError`, raised for instance by building a `WindowsPath` on POSIX |
 
-### Space Complexity: O(n)
-
-```python
-from pathlib import Path
-
-# Stores the path string
-path = Path('/' + 'a' * 10000)  # O(n) space
-```
+## Building Paths
 
 ### Construction Is Deferred From Python 3.12
 
-Before 3.12 the constructor splits the string into components immediately.
-From 3.12 it only keeps the arguments; the split happens on the first
-operation that needs it, and the result is cached on the object. Building a
-path costs O(1) there, and building paths you never use costs nothing beyond
-the reference.
-
-```python
-from pathlib import Path
-
-# 3.12+: O(1) - nothing is parsed yet
-path = Path('/' + 'a' * 100000)
-
-# The deferred parse is paid here, once
-text = str(path)  # O(n)
-
-# Cached: subsequent uses do not pay it again
-text = str(path)  # O(1)
-```
-
-The same applies to joining, which is why `/` is cheap on recent versions and
-proportional to the path on older ones.
-
-## Pure Paths Never Touch the Filesystem
-
-`PurePath` and its two flavours are string manipulation with a path-shaped
-API. Every operation in the pure table above costs what parsing and rebuilding
-a string costs, and none of them can fail because a file is missing or a
-directory is unreadable.
-
-```python
-from pathlib import PurePosixPath, PureWindowsPath
-
-# No such directory anywhere; all of this still works
-p = PurePosixPath('/nowhere/at/all/report.tar.gz')
-
-p.name        # 'report.tar.gz'  O(1)
-p.stem        # 'report.tar'     O(1)
-p.suffix      # '.gz'            O(1)
-p.suffixes    # ['.tar', '.gz']  O(m) in the final component
-p.parts       # ('/', 'nowhere', 'at', 'all', 'report.tar.gz')  O(n)
-
-# Windows semantics on any platform
-PureWindowsPath('C:/Users/x').drive   # 'C:'  O(1)
-```
-
-`Path` inherits all of it and adds the operations that do make system calls.
-
-## Two Things That Cost More Than They Look
-
-### relative_to() Is Quadratic From Python 3.12
-
-`relative_to()` and `is_relative_to()` walk the parents of one path looking for
-the other, and testing each candidate scans the parents again. Before 3.12 the
-comparison was a slice; from 3.12 the search is quadratic in the number of
-components, which turns a deep path into real work.
+Before 3.12 the constructor splits the string into components straight away. From 3.12 it keeps the
+arguments and splits them on the first operation that needs it, caching the result, so a path that
+is built and never inspected costs no more than holding its arguments.
 
 ```python
 from pathlib import PurePosixPath
 
-deep = PurePosixPath('/' + '/'.join(f'd{i}' for i in range(200)) + '/f.txt')
+path = PurePosixPath('/' + 'a' * 100_000)  # O(L); O(1) from 3.12 - nothing is parsed yet
 
-# O(n²) from 3.12, O(n) before it
-deep.relative_to('/d0')
+text = str(path)  # O(L) - builds the string; from 3.12 the deferred parse too
+assert str(path) is text  # O(1) - cached
 ```
 
-For a path a handful of components long this is invisible. For one two hundred
-deep, called in a loop over many paths, it is the loop's dominant cost.
+### Joining Copies the Segments
 
-### parts Is Rebuilt On Every Access From Python 3.12
+From 3.12 a joined path keeps the unparsed segments of the path it was joined onto as well as its
+own, and copies them. Joining onto a path built from one string is O(1); joining onto a path that
+was itself grown one name at a time costs as many segments as that path already holds. Before 3.12
+each join copies the parsed parts instead, O(L). On every version, then, a loop that extends one
+path by a name per step is quadratic in the number of steps, and one `joinpath()` call is not.
 
-`parts` returns a fresh tuple each time it is read. Up to 3.11 the tuple was
-cached after the first access; from 3.12 it is not, so reading it inside a loop
-pays O(n) each time round.
+```python
+from pathlib import PurePosixPath
+
+names = [f'd{index}' for index in range(100)]
+
+# Grown in place: each step copies every segment before it - quadratic in the names
+grown = PurePosixPath('/data')
+for name in names:
+    grown = grown / name
+
+# Joined once: one path of 101 segments, O(s)
+joined = PurePosixPath('/data').joinpath(*names)
+
+assert grown == joined
+assert len(joined.parts) == 102  # O(n)
+```
+
+## Pure Paths Never Touch the Filesystem
+
+`PurePath` and its two flavours are string manipulation. None of their operations can fail because
+a file is missing, and `PureWindowsPath` gives Windows semantics on any platform.
+
+```python
+from pathlib import PurePosixPath, PureWindowsPath
+
+p = PurePosixPath('/nowhere/at/all/report.tar.gz')  # no such directory anywhere
+
+assert p.name == 'report.tar.gz'         # O(1)
+assert p.stem == 'report.tar'            # O(c)
+assert p.suffixes == ['.tar', '.gz']     # O(c)
+assert p.parts == ('/', 'nowhere', 'at', 'all', 'report.tar.gz')  # O(n)
+assert p.with_suffix('.zip').name == 'report.tar.zip'  # O(L)
+assert p.match('*.gz')                   # O(L)
+
+assert PureWindowsPath('C:/Users/x').drive == 'C:'  # O(1)
+assert PureWindowsPath('C:/Users/x').as_posix() == 'C:/Users/x'  # O(L)
+```
+
+## Components and Ancestors
+
+### parts Is Rebuilt on Every Access From Python 3.12
+
+Up to 3.11 `parts` is cached on the path after the first access. From 3.12 each access builds a
+new tuple, so reading it in a loop pays O(n) every time round; read it once.
 
 ```python
 from pathlib import PurePosixPath
 
 p = PurePosixPath('/a/b/c/d/e/f.txt')
 
-# Read once, use many times
-parts = p.parts
+parts = p.parts  # O(n), and again on every access from 3.12
 first, last = parts[0], parts[-1]
+assert (first, last) == ('/', 'f.txt')
 ```
 
-`parents` is the opposite: it is a lazy sequence, O(1) to obtain, and
-`parents[i]` builds only the path it returns. Materialising the whole of it
-with `list()` is O(n²), because each of the n parents holds up to n components.
+### parents Is Lazy
 
-## Path Operations
-
-### exists(), is_file(), is_dir()
-
-#### Time Complexity: O(1)
-
-Each makes exactly one stat call, whatever the path's length or the size of
-the directory holding it.
+`parents` costs nothing to obtain, and `parents[i]` builds only the path it returns. Materialising
+the whole sequence is O(n·L), because each of the n ancestors is a path of its own.
 
 ```python
-from pathlib import Path
+from pathlib import PurePosixPath
 
-path = Path('file.txt')
+p = PurePosixPath('/a/b/c/d.txt')
 
-# Single stat system call: O(1)
-if path.exists():      # O(1) - stat call
-    print('exists')
-
-if path.is_file():     # O(1) - stat call
-    print('is file')
-
-if path.is_dir():      # O(1) - stat call
-    print('is directory')
+ancestors = p.parents  # O(1)
+assert ancestors[0] == PurePosixPath('/a/b/c')  # O(L)
+assert list(ancestors) == [
+    PurePosixPath('/a/b/c'), PurePosixPath('/a/b'), PurePosixPath('/a'), PurePosixPath('/'),
+]  # O(n·L)
 ```
 
-#### Space Complexity: O(1)
+### relative_to() Is Quadratic From Python 3.12
+
+From 3.12 `relative_to()` and `is_relative_to()` look for `other` among the path's ancestors, and
+compare each candidate by building its string: O(n·L), which with components of similar length is
+quadratic in the depth. Before 3.12 it is one slice comparison. On 3.12 alone `relative_to()` also
+lists every ancestor of `other` before it starts, so a deep base costs quadratic space too.
 
 ```python
-from pathlib import Path
+from pathlib import PurePosixPath
 
-path = Path('large_name' * 20)
+deep = PurePosixPath('/' + '/'.join(f'd{i}' for i in range(200)) + '/f.txt')
 
-# No additional memory needed
-exists = path.exists()  # O(1) space
+tail = deep.relative_to('/d0')  # O(n·L) from 3.12, O(L) before
+assert tail.parts[0] == 'd1'
+assert deep.is_relative_to('/d0')  # the same search
 ```
 
-## Path Resolution
+## Querying the Filesystem
 
-### resolve()
+### One Stat Call per Predicate
 
-#### Time Complexity: O(n)
-
-Where n = number of path components; each one costs an lstat call, and a
-symlink adds the components of its target.
+Each predicate makes one stat call, whatever the path's length or the size of the directory
+holding it. Asking three questions of the same path makes three calls.
 
 ```python
+import tempfile
 from pathlib import Path
 
-# Simple resolution: O(n) where n = components
-path = Path('docs/../files/./file.txt')
-absolute = path.resolve()  # O(n) - normalize and resolve
+with tempfile.TemporaryDirectory() as tmp:
+    path = Path(tmp) / 'file.txt'
+    path.write_text('contents')  # O(b)
 
-# With symlinks: O(n) where n = symlinks + components
-# Each symlink read is a system call
-path = Path('/path/with/symlinks/file.txt')
-absolute = path.resolve()  # O(n)
+    assert path.exists()        # O(1) - one stat
+    assert path.is_file()       # O(1) - another
+    assert not path.is_dir()    # O(1) - and another
+    assert path.stat().st_size == 8  # O(1)
+    assert path.samefile(Path(tmp, 'file.txt'))  # O(1) - two stats
 ```
 
-### Space Complexity: O(n)
+### Path.info Caches the Answer (Python 3.14)
+
+`Path.info` takes one stat call on its first query and answers `exists()`, `is_file()` and
+`is_dir()` from it after that; `is_symlink()` takes one lstat, cached the same way. The cache lives
+as long as the `Path` object, so a long-lived `Path` whose file changes underneath it keeps
+answering from the old stat. Build a fresh `Path` where that matters.
 
 ```python
+import tempfile
 from pathlib import Path
 
-# Stores resolved path
-path = Path('relative/path').resolve()  # O(n) space
+with tempfile.TemporaryDirectory() as tmp:
+    path = Path(tmp) / 'report.txt'
+    path.write_text('contents')
+
+    info = path.info  # O(1)
+    assert info.exists() and info.is_file() and not info.is_dir()  # one stat between them
+
+    path.unlink()
+    assert info.exists()  # still the cached answer
+    assert not Path(tmp, 'report.txt').info.exists()  # a fresh Path stats again
 ```
 
-## Directory Operations
+## Listing Directories
 
-### iterdir()
+### iterdir() Reads the Whole Directory
 
-#### Time Complexity: O(d)
-
-Where d = number of directory entries.
-
-```python
-from pathlib import Path
-
-path = Path.home()
-
-# List all entries: O(d) where d = entries
-for item in path.iterdir():  # O(d)
-    print(item)
-
-# Count entries: O(d)
-count = sum(1 for _ in path.iterdir())  # O(d)
-```
-
-#### Space Complexity: O(d)
-
-`iterdir()` returns an iterator, but it is not a streaming one: the directory
-is read in full and every name is materialised before the first item is
-yielded. Iterating instead of calling `list()` avoids holding the `Path`
-objects, not the listing they are built from.
+`iterdir()` returns an iterator, but not a streaming one: the directory is read in full before the
+first item is produced. Iterating instead of calling `list()` avoids holding the `Path` objects, not
+the listing they are built from, so taking the first entry of a large directory still costs O(w).
 
 ```python
+import tempfile
 from pathlib import Path
 
-path = Path.home()
+with tempfile.TemporaryDirectory() as tmp:
+    base = Path(tmp)
+    for index in range(5):
+        (base / f'f{index}.txt').touch()
 
-# The listing is already in memory by the time this yields anything
-for item in path.iterdir():  # O(d) space, not O(1)
-    print(item)
-
-# Building a list on top of it costs the Path objects as well
-entries = list(path.iterdir())  # O(d) space
+    first = next(base.iterdir())  # O(w) - the whole listing is read first
+    assert first.parent == base
+    assert len(list(base.iterdir())) == 5  # O(w)
 ```
 
 !!! warning "A big directory costs memory even if you stop early"
-    `next(iter(path.iterdir()))` reads the whole directory. Where that
-    matters, `os.scandir()` is the streaming alternative - see
-    [OS Module](os.md).
+    `next(path.iterdir())` reads the whole directory. Where that matters, `os.scandir()` is the
+    streaming alternative - see [os](os.md).
 
-### glob()
+### glob() Scans Entries, Not Matches
 
-#### Time Complexity: O(n)
-
-Where n = number of entries scanned, which is every entry of every directory
-the pattern opens, not the number of entries that match.
+`glob()` pays for every entry in every directory the pattern opens, whether or not it matches, and
+lists each directory whole before yielding from it. A pattern that finds one file in a directory of
+ten thousand still reads ten thousand names.
 
 ```python
+import tempfile
 from pathlib import Path
 
-path = Path('.')
+with tempfile.TemporaryDirectory() as tmp:
+    base = Path(tmp)
+    for index in range(100):
+        (base / f'f{index}.dat').touch()
+    (base / 'needle.txt').touch()
 
-# Simple glob: O(n) where n = entries in this directory
-py_files = list(path.glob('*.py'))  # O(n)
-
-# Nested glob: O(n) over every entry in the subtree
-txt_files = list(path.glob('**/*.txt'))  # O(n)
-
-# A non-matching leading component still costs the scan that rejects it
-results = list(path.glob('[a-z]*/data/*.json'))  # O(n)
+    matches = list(base.glob('*.txt'))  # O(E) = 101 entries scanned for one match
+    assert matches == [base / 'needle.txt']
 ```
 
-#### Space Complexity: O(w)
+### Recursive Globs and walk()
 
-Where w = entries of the largest directory scanned. Like `iterdir()`, `glob()`
-reads a directory in one go, so the peak follows the widest directory it opens
-rather than the number of matches it yields. A `**` in the pattern walks the
-tree as `rglob()` does, and pays its O(w + d) space instead.
+`rglob(pattern)` is `glob('**/' + pattern)`, and both walk the whole tree below the starting point.
+From 3.12 they hold one directory's listing and the directories still queued, so iterating the
+results costs no more than the walk. Through 3.11 they also keep the listing of every directory on
+the branch being scanned and every path already yielded, to drop duplicates: there, iterating saves
+no memory over `list()`. `walk()` holds the same listing and queue, plus, when walking bottom-up,
+each ancestor's listing until its subtree is done.
 
 ```python
+import tempfile
 from pathlib import Path
 
-# Iterating does not make the scan incremental within a directory
-for match in Path('.').glob('*'):  # O(w) space
-    print(match)
+with tempfile.TemporaryDirectory() as tmp:
+    base = Path(tmp)
+    (base / 'a' / 'b').mkdir(parents=True)  # O(k·L)
+    (base / 'a' / 'x.py').touch()
+    (base / 'a' / 'b' / 'y.py').touch()
+    (base / 'z.txt').touch()
 
-# Collecting the results adds the matches on top
-matches = list(Path('.').glob('*'))  # O(w + matches) space
+    found = sorted(base.rglob('*.py'))  # O(E) - every entry in the tree
+    assert found == sorted(base.glob('**/*.py'))
+    assert sorted(p.name for p in found) == ['x.py', 'y.py']
 
-# A ** pattern pays rglob's depth term instead of the flat O(w)
-txt_files = list(Path('.').glob('**/*.txt'))  # O(w + d) space
+    visited = [(d.name, sorted(files)) for d, _, files in base.walk()]  # O(E), 3.12+
+    assert ('b', ['y.py']) in visited
 ```
 
-### rglob()
+## Reading, Writing and Copying
 
-#### Time Complexity: O(n)
+### Whole-File Reads and Writes
 
-Where n = total entries in the directory tree.
+`read_text()` and `read_bytes()` return the whole file, so they hold O(b). `write_text()` encodes
+its string whole before writing it; `write_bytes()` writes the buffer it is given without copying.
 
 ```python
+import tempfile
 from pathlib import Path
 
-path = Path('.')
+with tempfile.TemporaryDirectory() as tmp:
+    path = Path(tmp) / 'data.txt'
 
-# Recursive glob: O(n) where n = all entries in the tree
-all_py = list(path.rglob('*.py'))  # O(n)
+    path.write_text('x' * 1000, encoding='utf-8')  # O(b) time and memory
+    assert path.read_text(encoding='utf-8') == 'x' * 1000  # O(b)
 
-# rglob(pattern) is glob('**/' + pattern)
-all_txt = list(path.rglob('*.txt'))  # O(n)
+    path.write_bytes(b'\x00\xff' * 500)  # O(b) time, O(1) extra memory
+    assert len(path.read_bytes()) == 1000  # O(b)
 ```
 
-#### Space Complexity: O(w + d)
+### Renaming Is a Syscall, Not a Copy
 
-Where w = entries of the largest directory scanned and d = depth reached.
-Depth does not fold into width: a deeper tree costs more than a shallow one
-holding the same entries.
+`rename()` and `replace()` are one syscall each within a filesystem and never copy; across
+filesystems they fail rather than fall back. `mkdir(parents=True)` recurses once per missing
+component.
 
 ```python
+import tempfile
 from pathlib import Path
 
-# All results in memory, on top of the walk's own O(w + d)
-matches = list(Path('.').rglob('*.py'))  # O(matches) space
+with tempfile.TemporaryDirectory() as tmp:
+    base = Path(tmp)
+    (base / 'a' / 'b' / 'c').mkdir(parents=True)  # O(k·L) for k missing components
+
+    source = base / 'a' / 'b' / 'c' / 'f.txt'
+    source.write_text('payload')
+    moved = source.rename(base / 'f.txt')  # O(1)
+    assert moved.read_text() == 'payload' and not source.exists()
+
+    moved.unlink()  # O(1)
+    (base / 'a' / 'b' / 'c').rmdir()  # O(1) - it must be empty
 ```
 
-## File I/O
+### copy() and move() (Python 3.14)
 
-### read_text() / read_bytes()
-
-#### Time Complexity: O(n)
-
-Where n = file size.
+`copy()` streams a file, so it is O(b) in time and O(1) in memory however large the file is; a
+directory is copied entry by entry. `move()` within one filesystem is a rename and costs neither.
 
 ```python
+import tempfile
 from pathlib import Path
 
-path = Path('data.txt')
-path.write_text('example')
+with tempfile.TemporaryDirectory() as tmp:
+    source = Path(tmp) / 'report.txt'
+    source.write_text('contents')
 
-# Read entire file: O(n) where n = file size
-content = path.read_text()  # O(n)
+    backup = source.copy(Path(tmp) / 'backup.txt')  # O(b) time, O(1) memory
+    archive = source.move(Path(tmp) / 'archive.txt')  # O(1) on the same filesystem
 
-# Read binary: O(n)
-data = path.read_bytes()  # O(n)
-
-# Read with encoding: O(n)
-content = path.read_text(encoding='utf-8')  # O(n)
-```
-
-#### Space Complexity: O(n)
-
-```python
-from pathlib import Path
-
-Path('large_file.txt').write_text('x' * 1000)
-
-# Stores entire file content
-content = Path('large_file.txt').read_text()  # O(n) space
-```
-
-### write_text() / write_bytes()
-
-#### Time Complexity: O(n)
-
-Where n = content size.
-
-```python
-from pathlib import Path
-
-path = Path('output.txt')
-
-# Write text: O(n) in the length of the string
-path.write_text('Hello, World!')
-
-# Write bytes: O(n)
-path.write_bytes(b'Binary data')
-
-# Overwrites file: O(n) regardless of original size
-path.write_text('x' * 1000000)
-```
-
-#### Space Complexity: O(n)
-
-```python
-from pathlib import Path
-
-# Encodes to bytes before writing
-content = 'x' * 1000000
-Path('file.txt').write_text(content)  # O(n) extra space
-```
-
-## File System Modifications
-
-### mkdir(), rmdir(), unlink(), rename()
-
-#### Time Complexity: O(1)
-
-```python
-from pathlib import Path
-
-# Create directory: O(1) - single system call
-Path('new_dir').mkdir()  # O(1)
-
-# Create with parents: O(d) where d = missing components
-Path('a/b/c/d').mkdir(parents=True, exist_ok=True)  # O(d)
-
-# Remove empty directory: O(1)
-Path('new_dir').rmdir()  # O(1)
-
-# Rename: O(1) - same filesystem
-Path('a/b/c/d').rename('a/b/c/e')  # O(1)
-
-# Remove file: O(1)
-Path('file.txt').touch()  # O(1)
-Path('file.txt').unlink()  # O(1)
-```
-
-#### Space Complexity: O(1)
-
-```python
-from pathlib import Path
-
-# No significant memory allocation
-Path('dir').mkdir()  # O(1) space
-Path('dir').rmdir()  # O(1) space
+    assert backup.read_text() == archive.read_text() == 'contents'
+    assert not source.exists()
 ```
 
 ## Common Patterns
 
-### Safe File Operations
+### Processing a Tree
 
 ```python
+import tempfile
 from pathlib import Path
 
-# Check before operating
-path = Path('file.txt')
-path.write_text('contents')
+with tempfile.TemporaryDirectory() as tmp:
+    base = Path(tmp)
+    (base / 'pkg').mkdir()
+    (base / 'pkg' / 'a.py').write_text('print(1)\n')
+    (base / 'b.py').write_text('x = 1\ny = 2\n')
 
-if path.exists() and path.is_file():  # O(1) + O(1)
-    content = path.read_text()  # O(n)
+    lines = 0
+    for file in base.rglob('*.py'):  # O(E) to find the files
+        lines += len(file.read_text().splitlines())  # O(b) per file
+
+    assert lines == 3
 ```
 
-### Directory Tree Processing
+### Comparing With os.path
+
+The filesystem calls cost the same either way. The string handling does not: `os.path.join()`
+always builds the joined string, while `/` leaves the string for the first operation that needs it,
+and from 3.12 leaves the parsing too.
 
 ```python
-from pathlib import Path
-
-def process(text):
-    return len(text)
-
-# Process all files: O(n) to walk, plus the size of each file read
-for file in Path('.').rglob('*.py'):  # O(n) to find files
-    content = file.read_text()  # O(size) per file
-    process(content)
-```
-
-### Path Construction
-
-```python
-from pathlib import Path
-
-names = ['a.txt', 'b.txt']
-
-# Build paths: O(n) in total path length, O(1) from Python 3.12
-base = Path('data')
-file = base / 'subdir' / 'file.txt'
-
-# Multiple files
-for name in names:
-    path = base / name
-```
-
-### Safe Deletion
-
-```python
-from pathlib import Path
-import shutil
-
-path = Path('directory')
-
-# Delete directory and contents: O(n) where n = total entries
-if path.is_dir():  # O(1)
-    shutil.rmtree(path)  # O(n)
-
-# Or using pathlib
-# Path.rmdir() only works on empty directories
-```
-
-## Comparison with os.path
-
-```python
-from pathlib import Path
 import os
-
-# pathlib (object-oriented)
-p = Path('data') / 'file.txt'  # O(n), O(1) from Python 3.12
-exists = p.exists()  # O(1)
-
-# os.path (functional)
-path = os.path.join('data', 'file.txt')  # O(n)
-exists = os.path.exists(path)  # O(1)
-
-# The filesystem calls cost the same either way. The string handling does not:
-# from 3.12 pathlib defers it, so a path that is built and never used is free,
-# while os.path.join always produces the joined string.
-```
-
-## Performance Characteristics
-
-### Best Practices
-
-```python
+import tempfile
 from pathlib import Path
 
-def process(path):
-    return path.name
+with tempfile.TemporaryDirectory() as tmp:
+    p = Path(tmp) / 'file.txt'  # O(L); O(s) from 3.12
+    s = os.path.join(tmp, 'file.txt')  # O(L)
 
-# Good: scan once
-base = Path('.')
-files = list(base.glob('*.py'))  # O(n) once
-
-for file in files:  # Iterate cached results
-    process(file)  # O(1) per file
-
-# Bad: repeated glob calls rescan the directory every time
-for i in range(100):
-    files = list(Path('.').glob('*.py'))  # O(n) * 100
+    assert str(p) == s  # O(L) - the string is built here, on first use
+    assert not p.exists() and not os.path.exists(s)  # O(1) each - one stat
 ```
 
-## Python 3.14: info, copy and move
+## Performance Best Practices
 
-`Path.info` is a cached view of what one stat call already told the
-interpreter. Each query on the same object is free; each `Path.exists()` is
-another syscall.
+✅ **Do**:
 
-```python
-from pathlib import Path
+- Build a deep path with one `joinpath(*names)` call rather than a `/` per name in a loop
+- Read `parts` once into a local instead of in a loop
+- Use `Path.info` on 3.14 to ask several questions of one file for one stat call
+- Glob once and reuse the list, rather than globbing the same directory repeatedly
+- Use `os.scandir()` for a huge directory you only need the start of
 
-path = Path('report.txt')
-path.write_text('contents')
+❌ **Avoid**:
 
-# One stat call answers all three
-info = path.info
-info.exists(), info.is_file(), info.is_dir()
-
-# Three separate stat calls
-path.exists(), path.is_file(), path.is_dir()
-```
-
-The cache never expires, so a long-lived `Path` whose file changes underneath
-it keeps answering from the old stat. Build a fresh `Path` where that matters.
-
-`copy()` streams, so it is O(b) in the bytes moved and O(1) in space however
-large the file is. `move()` on one filesystem is a rename and costs neither.
-
-```python
-from pathlib import Path
-
-source = Path('report.txt')
-source.write_text('contents')
-
-source.copy(Path('backup.txt'))   # O(b) time, O(1) space
-source.move(Path('archive.txt'))  # O(1) on the same filesystem
-```
+- `next(path.iterdir())` to test whether a large directory is empty - it reads the whole directory
+- `relative_to()` on deep paths in a hot loop on 3.12+, where it is quadratic in the depth
+- Iterating `rglob()` over a big tree on 3.10 and 3.11 in the belief that it saves memory - it keeps every match
+- `read_text()` on a file too large to hold; open it and read it in chunks
 
 ## Version Notes
 
-- **Python 3.4+**: pathlib introduced
-- **Python 3.10+**: `Path.hardlink_to()` added, deprecating `Path.link_to()`
-- **Python 3.12+**: `Path.walk()`, `Path.is_junction()` and
-  `PurePath.with_segments()` added; construction and joining defer parsing to
-  first use; `parts` is rebuilt per access and `relative_to()` becomes
-  quadratic; `Path.link_to()` removed
-- **Python 3.13+**: `Path.from_uri()`, `PurePath.full_match()`,
-  `PurePath.parser` and `UnsupportedOperation` added; `iterdir()` reads the
-  directory when it is called rather than at the first `next()`;
-  `PurePath.is_reserved()` deprecated
-- **Python 3.14+**: `Path.copy()`, `Path.copy_into()`, `Path.move()`,
-  `Path.move_into()` and `Path.info` added; `PurePath.as_uri()` deprecated in
-  favour of `Path.as_uri()`
+- **Python 3.12+**: `Path.walk()`, `Path.is_junction()` and `PurePath.with_segments()` added;
+  construction and joining store segments and defer parsing to first use; `parts` is rebuilt on
+  every access; `relative_to()` and `is_relative_to()` become O(n·L); recursive globs stop holding
+  every match and every ancestor's listing; `Path.link_to()` removed
+- **Python 3.13+**: `Path.from_uri()`, `PurePath.full_match()`, `PurePath.parser` and
+  `UnsupportedOperation` added; `iterdir()` reads the directory when it is called rather than at
+  the first `next()`; a pattern ending in `**` also yields files; `PurePath.is_reserved()`
+  deprecated, and checks every component
+- **Python 3.14+**: `Path.copy()`, `Path.copy_into()`, `Path.move()`, `Path.move_into()`,
+  `Path.info` and `pathlib.types` added; `PurePath.as_uri()` deprecated in favour of
+  `Path.as_uri()`
 
-## Related Documentation
+## Related Modules
 
-- [OS Module](os.md) - Low-level filesystem operations
-- [Glob Module](glob.md) - Unix-style pathname expansion
+- **[os](os.md)** - the syscalls underneath, and `os.scandir()` for streaming a directory
+- **[glob](glob.md)** - the same pattern matching over strings
+- **[shutil](shutil.md)** - `rmtree()` and `copytree()` for whole trees
