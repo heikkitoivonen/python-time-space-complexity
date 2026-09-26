@@ -40,8 +40,8 @@ such as `(?:ab)*`, which records each iteration.
 | `Pattern.findall(string[, pos[, endpos]])` | O(s + g) | O(k + g) | One string per match, or a tuple of c group strings when there are two or more groups, O(k·c + g) |
 | `Pattern.finditer(string[, pos[, endpos]])` | O(c) | O(c) | Nothing is scanned until the first `next()` |
 | Iterating a `finditer()` | O(s) in total | O(c) per match | Each step scans forward to the next match |
-| `Pattern.sub(repl, string, count=0)` | O(s + t + r) | O(k + t + r) | The result is joined from a list of pieces; a `repl` with backreferences is parsed on first use and then served from a cache, and a function `repl` adds O(f) per match |
-| `Pattern.subn(repl, string, count=0)` | O(s + t + r) | O(k + t + r) | `sub()` that also returns the number of replacements |
+| `Pattern.sub(repl, string, count=0)` | O(s + t + k·t + r) | O(k + t + r) | The result is joined from a list of pieces; a `repl` with backreferences is parsed on first use and then served from a cache, and expanded at every match, O(t) even where its groups are empty; a function `repl` adds O(f) per match |
+| `Pattern.subn(repl, string, count=0)` | O(s + t + k·t + r) | O(k + t + r) | `sub()` that also returns the number of replacements |
 | `Pattern.split(string, maxsplit=0)` | O(s + m + k·c + g) | O(m + k·c + g) | k + 1 pieces, plus c group strings per match when the pattern captures |
 | `Pattern.pattern`, `Pattern.flags`, `Pattern.groups` | O(1) | O(1) | Stored with the compiled pattern |
 | `Pattern.groupindex` | O(1) | O(1) | The name-to-number mapping, returned without copying it |

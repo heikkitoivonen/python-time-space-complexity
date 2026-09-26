@@ -16,7 +16,7 @@ Measurement scope:
 * `re.compile` over `(?:abc)` repeated 10, 100 and 1,000 times: each 10x
   step in the pattern costs between 4x and 40x, which admits linear growth
   and excludes quadratic. Two alternatives sharing a prefix of 4,000 and then
-  16,000 characters cost over 8x per 4x step, which is the O(n²) case. The
+  16,000 characters cost between 8x and 40x per 4x step, which is the O(n²) case. The
   same pattern and flags compiled twice is the same object; after `purge()`
   it is not, nor with `re.DEBUG`, which prints the parse tree. Long literals, alternations of 8,000
   words, 8,000 capturing or named groups and 16,000 backreferences all
@@ -68,7 +68,9 @@ Measurement scope:
   against a subject it never matches, which is the t term. A template with
   a backreference, used 50 times, is parsed once, observed
   through the cache on `re._compile_template` (3.12+) or `re._compile_repl`.
-  A function replacement is called once per match.
+  A function replacement is called once per match. Over 2,001 empty
+  matches, a template of 1,000 backreferences to an empty group costs over
+  20x one of a single backreference, with the same result: the k·t term.
 * `Pattern.groupindex` is a `mappingproxy` that refuses assignment when the
   pattern has named groups, and a new empty dict when it has none; it costs
   under 3x as much with 2,000 named groups as with one. The module-level
@@ -213,7 +215,7 @@ class TestCompilation:
         re.purge()
 
         steps = [later / earlier for earlier, later in zip(times, times[1:], strict=False)]
-        assert steps[-1] > 8, f"4x the prefix should cost ~16x: {times} ns, steps {steps}"
+        assert 8 < steps[-1] < 40, f"4x the prefix should cost ~16x: {times} ns, steps {steps}"
 
     def test_debug_bypasses_the_cache(
         self, clean_pattern_cache: None, capsys: pytest.CaptureFixture[str]
@@ -245,7 +247,7 @@ class TestCompilation:
 
 
 class TestModuleFunctionsCompileOnAMiss:
-    """The module-level rows: O(n) to compile on a miss, a lookup on a hit."""
+    """The module-level rows: `re.compile`'s cost on a miss, a lookup on a hit."""
 
     def test_a_pattern_used_twice_is_compiled_once(
         self, clean_pattern_cache: None, monkeypatch: pytest.MonkeyPatch
@@ -632,7 +634,7 @@ class TestMatchObjectsHoldPositions:
 
 
 class TestFindallAndFinditer:
-    """`findall` | O(k + g) space; `finditer` | O(1) to build, O(c) per match."""
+    """`findall` | O(k + g) space; `finditer` | O(c) to build, O(c) per match."""
 
     def test_finditer_holds_one_match_at_a_time(self) -> None:
         pattern = re.compile(r"\w+")
@@ -701,8 +703,8 @@ class TestFindallAndFinditer:
 
 
 class TestSubstitution:
-    """`sub` | O(s + r) | O(k + r): the result and its pieces, a cached template, and one
-    function call per match."""
+    """`sub` | O(s + t + k·t + r) | O(k + t + r): the result and its pieces, a cached
+    template expanded at every match, and one function call per match."""
 
     def test_the_peak_follows_the_result_not_the_subject(self) -> None:
         pattern = re.compile(r"\d")
@@ -752,6 +754,22 @@ class TestSubstitution:
 
         info = cache.cache_info()
         assert info.misses == 1 and info.hits == 49, info
+
+    @pytest.mark.timing
+    def test_a_template_is_expanded_at_every_match(self) -> None:
+        """The k·t term: 2,001 empty matches, each expanding backreferences to
+        an empty group, so r stays 2,000 while the template grows 1,000x."""
+        pattern = re.compile("()")
+        subject = "x" * 2_000
+        brief, lengthy = r"\1", r"\1" * 1_000
+        pattern.sub(brief, "x")  # parse both templates
+        pattern.sub(lengthy, "x")
+
+        assert pattern.sub(brief, subject) == pattern.sub(lengthy, subject) == subject
+        short = best_ns(lambda: pattern.sub(brief, subject), repeats=3)
+        long = best_ns(lambda: pattern.sub(lengthy, subject), repeats=3)
+
+        assert long > short * 20, f"1 backreference {short:.0f} ns, 1,000 {long:.0f} ns"
 
     def test_a_function_is_called_once_per_match(self) -> None:
         calls: list[str] = []
@@ -867,7 +885,8 @@ class TestPatternCache:
 
         re.compile("pattern-new")  # the 513th pattern
 
-        assert re.compile("pattern-oldest") is oldest, "the least recently used is dropped"
+        assert (str, "pattern-oldest", 0) in pattern_cache(), "the least recently used is dropped"
+        assert re.compile("pattern-oldest") is oldest
 
     @pytest.mark.skipif(MAXCACHE2 is None, reason="the fast-path cache is Python 3.12+")
     def test_the_fast_path_cache_is_smaller(self) -> None:
