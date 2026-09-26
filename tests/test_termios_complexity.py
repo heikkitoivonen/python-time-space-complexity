@@ -29,9 +29,10 @@ Measurement scope:
   afterwards.
 * `tcflow(TCOOFF)` makes a non-blocking write to the slave raise
   `BlockingIOError` and keeps a blocking one in a thread unfinished for
-  0.3 s; `TCOON` lets the next write, or the waiting one, through to the
-  master. `TCIOFF` and `TCION` deliver the slave's `cc[VSTOP]` and
-  `cc[VSTART]` bytes to the master.
+  0.3 s after the thread signals it is about to write; `TCOON` lets the
+  next write, or the waiting one, through to the master. `TCIOFF` and
+  `TCION` deliver the slave's `cc[VSTOP]` and `cc[VSTART]` bytes to the
+  master.
 * `tcdrain()` returns within a second with 100 bytes the master has not read,
   and `tcsendbreak(fd, 0)` within 0.2 s, under the 0.25 s a serial break
   lasts. These are the pseudo-terminal's behaviour on Linux, and both are
@@ -325,9 +326,16 @@ class TestQueueControl:
     def test_a_blocking_write_waits_for_tcoon(self, pair: tuple[int, int]) -> None:
         master, slave = pair
         termios.tcflow(slave, termios.TCOOFF)
-        writer = threading.Thread(target=os.write, args=(slave, b"held"), daemon=True)
+        about_to_write = threading.Event()
+
+        def write() -> None:
+            about_to_write.set()
+            os.write(slave, b"held")
+
+        writer = threading.Thread(target=write, daemon=True)
 
         writer.start()
+        assert about_to_write.wait(5)
         writer.join(0.3)
         waited = writer.is_alive()
         termios.tcflow(slave, termios.TCOON)

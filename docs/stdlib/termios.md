@@ -27,7 +27,7 @@ terminal's, not work done here.
 |-----------|------|-------|-------|
 | `termios.tcdrain(fd)` | O(1) | O(1) | Blocks until the output written to `fd` has been transmitted; how long depends on the device and on what is queued |
 | `termios.tcflush(fd, queue)` | O(1) | O(1) | Discards input not yet read (`TCIFLUSH`), output not yet transmitted (`TCOFLUSH`), or both (`TCIOFLUSH`) |
-| `termios.tcflow(fd, action)` | O(1) | O(1) | Returns at once. `TCOOFF` suspends output until `TCOON`, so a write in between waits, or raises `BlockingIOError` on a non-blocking descriptor; `TCIOFF` and `TCION` send the terminal's STOP and START characters |
+| `termios.tcflow(fd, action)` | O(1) | O(1) | Returns at once. `TCOOFF` suspends output until `TCOON`; on a Linux pseudo-terminal a write in between waits, or raises `BlockingIOError` on a non-blocking descriptor; `TCIOFF` and `TCION` send the terminal's STOP and START characters |
 | `termios.tcsendbreak(fd, duration)` | O(1) | O(1) | A zero `duration` holds a serial line in the break state for 0.25 to 0.5 seconds; a nonzero one has a system-dependent meaning |
 
 ### Window size
@@ -52,8 +52,9 @@ terminal's, not work done here.
 ### Changing One Mode
 
 Reading the attributes builds a fresh seven-entry list; writing them back is a fixed number of
-system calls however many flags change. Turning `ICANON` off makes input available a byte at a
-time instead of a line at a time, and turns `cc[VMIN]` and `cc[VTIME]` into integers.
+system calls however many flags change. Turning `ICANON` off ends line-at-a-time input and turns
+`cc[VMIN]` and `cc[VTIME]` into integers; with `VMIN` 1 and `VTIME` 0, as below, a read returns
+after one byte.
 
 ```python
 import os
