@@ -16,7 +16,10 @@ Measurement scope:
   leaving runs past it, observed by a recorded event list. A second `with` on
   the same object raises `AttributeError`. Used as a decorator it runs the
   generator function once per call of the decorated function, over three
-  calls. The same is observed for `@asynccontextmanager`.
+  calls. For `@asynccontextmanager`, calling runs none of the body, entering
+  and leaving are observed the same way, a second `async with` raises
+  `AttributeError`, and as a decorator it runs the generator once per call
+  over two calls.
 * `ExitStack` and `AsyncExitStack` unwind last-registered first, each callback
   exactly once, and leave the stack empty; a pushed `__exit__` that returns
   true suppresses the exception, and the callback below it sees `None`.
@@ -345,7 +348,7 @@ class TestExitStackUnwindsOnce:
         assert len(stack._exit_callbacks) == 0  # type: ignore[attr-defined]  # noqa: SLF001
         assert type(moved) is ExitStack
 
-    def test_unwinding_holds_no_more_than_one_callback(self) -> None:
+    def test_unwinding_100_000_callbacks_peaks_under_20_kb(self) -> None:
         stack = ExitStack()
         for _ in range(100_000):
             stack.callback(int)
@@ -653,11 +656,12 @@ class TestSuppress:
     @pytest.mark.skipif(sys.version_info < (3, 12), reason="exception groups from 3.12")
     def test_the_split_grows_with_the_group(self) -> None:
         def splitting(g: int) -> Callable[[], None]:
-            leaves = [ValueError(n) for n in range(g)]
+            group = GROUP("g", [ValueError(n) for n in range(g)])
 
             def run() -> None:
+                group.__traceback__ = None
                 with suppress(ValueError):
-                    raise GROUP("g", leaves)
+                    raise group
 
             return run
 

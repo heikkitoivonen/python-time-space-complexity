@@ -358,10 +358,11 @@ import tempfile
 from contextlib import redirect_stderr, redirect_stdout
 
 buffer = io.StringIO()
+original = sys.stdout
 with redirect_stdout(buffer):  # O(1) - swaps sys.stdout
     print("captured")
 assert buffer.getvalue() == "captured\n"
-assert sys.stdout is sys.__stdout__
+assert sys.stdout is original
 
 errors = io.StringIO()
 with redirect_stderr(errors):  # O(1)
