@@ -111,7 +111,7 @@ if sys.version_info >= (3, 14):
 
 ## Parsing and Converting
 
-Parsing a string walks it once. Every other constructor and every attribute works on the fixed
+Parsing a string is linear in its length. Every other constructor and every attribute works on the fixed
 128 bits.
 
 ```python

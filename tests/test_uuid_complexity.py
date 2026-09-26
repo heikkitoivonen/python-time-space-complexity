@@ -26,23 +26,23 @@ Measurement scope:
   input's cost. Braces, hyphens and a `urn:uuid:` prefix are asserted
   optional, and a string without 32 hex digits raises `ValueError`.
 * `uuid4()` is observed calling `os.urandom(16)` once through a recording
-  replacement. `uuid8()` with its blocks omitted returns the same UUID twice
-  after the same `random.seed()`, and with all three given returns the same
-  UUID without consulting `random` (3.14+).
+  replacement. `uuid8()` with its blocks omitted takes them from a recording
+  `random.getrandbits()` - 48, 12 and 62 bits - and with all three given returns
+  the same UUID without consulting `random` (3.14+).
 * `uuid1()` given a `node` succeeds with `getnode()` replaced by a function
   that raises; given only a `clock_seq` it takes its node from a replaced
   `getnode()`. `uuid6()` without a node does the same (3.14+). `getnode()`
   is observed with its private getter list replaced by one counting getter:
   one call on the first use, none on the second, the same value both times.
-  With that list empty the random fallback is asserted to set bit 40, the
-  multicast bit.
+  With that list empty the fallback is asserted to set bit 40, the multicast
+  bit, and to differ between two uncached calls.
 * Sort order: 20,000 `uuid7()` and 5,000 `uuid6()` values made in one
   process are already sorted (3.14+). With `time.time_ns()` replaced so the
   timestamp crosses a 2**32 boundary between two calls, `uuid1()` sorts the
   later value first and `uuid6()` the earlier. 1,000 `uuid4()` values are
   asserted not to be sorted.
-* Every `UUID` attribute on the page is a `property` of the class, the
-  instance has no `__dict__`, and `int` is stored. Text forms are 32, 36 and
+* Every `UUID` attribute on the page except the stored `int` and `is_safe`
+  slots is a `property` of the class, and the instance has no `__dict__`. Text forms are 32, 36 and
   45 characters and `bytes` 16; `bytes_le` reverses the first three fields;
   `fields` matches the six single-field properties; `version` is `None` for
   a non-RFC 4122 variant; a version 7 `time` is within a second of the clock
@@ -252,18 +252,22 @@ class TestConstantTimeGenerators:
         assert uuid.uuid7().version == 7  # type: ignore[attr-defined]
 
     @pytest.mark.skipif(sys.version_info < (3, 14), reason="uuid8 from 3.14")
-    def test_uuid8_fills_omitted_blocks_from_random(self) -> None:
-        state = random.getstate()
-        try:
-            random.seed(1234)
-            first = uuid.uuid8()  # type: ignore[attr-defined]
-            random.seed(1234)
-            second = uuid.uuid8()  # type: ignore[attr-defined]
-        finally:
-            random.setstate(state)
+    def test_uuid8_fills_omitted_blocks_from_random(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        draws = {48: 0xABCDEF012345, 12: 0xABC, 62: 0x0123456789ABCDEF & ((1 << 62) - 1)}
+        calls: list[int] = []
 
-        assert first == second
-        assert first.version == 8
+        def recording(bits: int) -> int:
+            calls.append(bits)
+            return draws[bits]
+
+        monkeypatch.setattr(random, "getrandbits", recording)
+
+        value = uuid.uuid8()  # type: ignore[attr-defined]
+        monkeypatch.undo()
+
+        assert calls == [48, 12, 62]
+        assert value == uuid.uuid8(draws[48], draws[12], draws[62])  # type: ignore[attr-defined]
+        assert value.version == 8
 
     @pytest.mark.skipif(sys.version_info < (3, 14), reason="uuid8 from 3.14")
     def test_uuid8_with_every_block_given_is_deterministic(
@@ -307,9 +311,12 @@ class TestGetnodeIsCached:
         monkeypatch.setattr(uuid, "_GETTERS", [])
 
         node = uuid.getnode()
+        monkeypatch.setattr(uuid, "_node", None)
+        other = uuid.getnode()
 
         assert 0 <= node < 1 << 48
         assert node & (1 << 40)
+        assert node != other  # two independent 47-bit draws
 
     def test_the_real_node_is_48_bits_and_stable(self) -> None:
         node = uuid.getnode()
