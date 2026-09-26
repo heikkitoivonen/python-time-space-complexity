@@ -535,7 +535,9 @@ class TestDictionaryLoading:
     dictionary on the `ZstdDict`.
 
     Raw-content dictionaries of random bytes, 8 KiB and 1 MiB, compress a
-    5-byte record; the gap is the load, since the record is fixed.
+    5-byte record; the gap is the load, since the record is fixed. The
+    decompressor's first use is timed on an 8 MiB dictionary, because digesting
+    raw content is one copy, and 1 MiB of it can cost as little as 20x a reuse.
     """
 
     SMALL = zstd.ZstdDict(random_bytes(8 * 1024), is_raw=True)
@@ -601,7 +603,8 @@ class TestDictionaryLoading:
 
     @pytest.mark.timing
     def test_a_decompressor_digests_a_dictionary_on_first_use(self) -> None:
-        fresh = [zstd.ZstdDict(self.LARGE_CONTENT, is_raw=True) for _ in range(5)]
+        content = random_bytes(8 * 1024 * 1024)
+        fresh = [zstd.ZstdDict(content, is_raw=True) for _ in range(3)]
         kept: list[Any] = []
 
         first = min(

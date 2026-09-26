@@ -22,7 +22,7 @@ Measurement scope:
   3x as much at 100,000 entries as at 1,000. `clear_history()` costs more than
   20x as much for 100x the entries.
 * `input()` on a pseudo-terminal: the fastest of 40 lines costs more than 5x as
-  much with 100,000 entries held as with 100, and less than 3x with automatic
+  much with 1,000,000 entries held as with 100, and less than 3x with automatic
   history turned off, which is the control showing the cost is the comparison
   with the newest entry. Typing "same", "same", "other", "same" stores
   "same", "other", "same"; with automatic history off nothing is stored.
@@ -649,17 +649,17 @@ class TestInputAddsEachLineOnce:
     @libedit_only
     @pytest.mark.timing
     def test_each_line_costs_the_history_length_on_libedit(self) -> None:
-        costs = [self.fastest_line(entries, auto=True) for entries in (100, 100_000)]
+        costs = [self.fastest_line(entries, auto=True) for entries in (100, 1_000_000)]
 
         ratio = costs[1] / costs[0]
-        assert ratio > 5, f"input() with 100 and 100,000 entries: {costs} ns, x{ratio:.2f}"
+        assert ratio > 5, f"input() with 100 and 1,000,000 entries: {costs} ns, x{ratio:.2f}"
 
     @pytest.mark.timing
     def test_without_automatic_history_it_does_not(self) -> None:
-        costs = [self.fastest_line(entries, auto=False) for entries in (100, 100_000)]
+        costs = [self.fastest_line(entries, auto=False) for entries in (100, 1_000_000)]
 
         ratio = costs[1] / costs[0]
-        assert ratio < 3, f"auto history off, 100 and 100,000 entries: {costs} ns, x{ratio:.2f}"
+        assert ratio < 3, f"auto history off, 100 and 1,000,000 entries: {costs} ns, x{ratio:.2f}"
 
 
 COMPLETER = """
