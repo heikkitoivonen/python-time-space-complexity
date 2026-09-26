@@ -1,269 +1,408 @@
-# Html Module
+# html Module Complexity
 
-The `html` module provides utilities for working with HTML content, including escaping and unescaping text.
+The `html` package escapes and unescapes text for HTML, parses HTML into callbacks with
+`html.parser.HTMLParser`, and ships the named character reference tables in `html.entities`.
+`escape()` and `unescape()` are linear in the string. The parser is a push parser: it
+builds no tree, calls one of your methods for each tag, text run, comment or declaration, and
+holds only the input it has not parsed yet, plus the text of the last start tag.
+
+`n` is the characters of the input: the string passed to `escape()` or `unescape()`, or all the
+HTML fed to one parser. `d` is the characters passed to one `feed()` call, and `b` is the
+characters a parser is holding unparsed from earlier calls - typically a tag, comment, script or
+character reference that was cut off at the end of a chunk. Parser bounds exclude the cost of your
+handler methods; the parser makes a number of handler calls linear in its input, and whatever
+they do is added on top. The entity tables have a fixed size, so a lookup in one is O(1).
 
 ## Complexity Reference
 
+### escape and unescape
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `escape(text)` | O(n) | O(n) | n = string length |
-| `unescape(text)` | O(n) | O(n) | n = string length |
-| `html.parser.HTMLParser()` | O(1) | O(1) | Parser construction |
-| `HTMLParser.feed(text)` | O(n) | O(1) | n = text length; extra space depends on handlers |
+| `html.escape(s, quote=True)` | O(n) | O(n) | Replaces `&`, `<` and `>`, and with `quote` both quote characters; the output is at most six times the input |
+| `html.unescape(s)` | O(n) | O(n) | HTML5 rules for named and numeric references; a string with no `&` is returned as the same object |
 
-## Common Operations
+### HTMLParser
 
-### Escaping HTML
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `html.parser.HTMLParser(*, convert_charrefs=True)` | O(1) | O(1) | Holds nothing until `feed()` |
+| `HTMLParser.feed(data)` | O(d + b) | O(d + b) | Parses what it can and keeps the unparsed tail; a document fed in one call costs O(n), and for one fed in chunks see *Feeding in Chunks* |
+| `HTMLParser.close()` | O(b) | O(b) | Parses whatever is still held as if the input ended there; call it once at the end |
+| `HTMLParser.reset()` | O(1) | O(1) | Discards anything held; the parser can take a new document |
+| `HTMLParser.getpos()` | O(1) | O(1) | `(line, offset)` of the construct being handled, kept up to date as the parser consumes input |
+| `HTMLParser.get_starttag_text()` | O(1) | O(1) | The source of the start tag parsed last, stored when it was parsed; `None` before the first, and a start tag cut off at the end of a chunk can reset it to `None` |
+| `HTMLParser.convert_charrefs` | O(1) | O(1) | When true, text arrives in `handle_data()` with references already converted; when false, they go to `handle_entityref()` and `handle_charref()`. Inside `script`, `style` and the like, references stay as text either way |
+| `HTMLParser.CDATA_CONTENT_ELEMENTS`, `HTMLParser.RCDATA_CONTENT_ELEMENTS` | O(1) | O(1) | Tag names whose content is not parsed for tags: `script`, `style` and similar arrive as raw text, and in `textarea` and `title` only references are recognised |
+
+### HTMLParser handlers
+
+Override these in a subclass. Each default does nothing, or in one case calls two others, so the
+cost of a handler is whatever your override does.
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `HTMLParser.handle_starttag(tag, attrs)` | O(1) | O(1) | `tag` is lower-cased; `attrs` is a list of `(name, value)` pairs with references in values converted |
+| `HTMLParser.handle_endtag(tag)` | O(1) | O(1) | Also called by the default `handle_startendtag()` |
+| `HTMLParser.handle_startendtag(tag, attrs)` | O(1) | O(1) | For `<br/>`-style tags; the default calls `handle_starttag()` then `handle_endtag()` |
+| `HTMLParser.handle_data(data)` | O(1) | O(1) | Text between tags; one run of text can arrive in several calls |
+| `HTMLParser.handle_entityref(name)`, `HTMLParser.handle_charref(name)` | O(1) | O(1) | Only when `convert_charrefs` is false |
+| `HTMLParser.handle_comment(data)` | O(1) | O(1) | The text inside `<!--` and `-->` |
+| `HTMLParser.handle_decl(decl)` | O(1) | O(1) | A doctype, without `<!` and `>` |
+| `HTMLParser.handle_pi(data)` | O(1) | O(1) | A processing instruction, without `<?` and `>` |
+| `HTMLParser.unknown_decl(data)` | O(1) | O(1) | A `<![CDATA[...]]>` section, passed as `CDATA[...` |
+
+### html.entities
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `html.entities.html5` | O(1) | O(1) | Every HTML5 named reference, keyed with its `;` and, where HTML5 allows it, without; what `unescape()` uses |
+| `html.entities.name2codepoint` | O(1) | O(1) | The HTML 4 entity names mapped to code points |
+| `html.entities.codepoint2name` | O(1) | O(1) | The reverse of `name2codepoint` |
+| `html.entities.entitydefs` | O(1) | O(1) | The HTML 4 entity names mapped to their characters |
+
+## Escaping and Unescaping
+
+### Escaping Text for HTML
+
+`escape()` is linear in the text and copies it once per character class it replaces. The default
+also escapes both quote characters, which is what makes the result safe inside an attribute
+value in quotes; `quote=False` is only for text between tags.
 
 ```python
 from html import escape
 
 text = '<script>alert("XSS")</script>'
 
-# O(n) where n = string length
-escaped = escape(text)
-# Returns: &lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;
+escaped = escape(text)  # O(n)
+assert escaped == '&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;'
 
-# With quote escaping - O(n)
-escaped_with_quotes = escape(text, quote=True)
-# Same result by default (quote=True)
-
-# Without quote escaping - O(n)
-no_quote = escape('Hello "World"', quote=False)
-# Returns: Hello "World"
+assert escape("it's") == 'it&#x27;s'  # O(n) - quote=True covers both quotes
+assert escape('Hello "World"', quote=False) == 'Hello "World"'  # O(n)
 ```
 
-### Unescaping HTML
+### Unescaping Character References
+
+`unescape()` follows the HTML5 rules, including names written without their `;` and numeric
+references outside the valid range. It checks for `&` first and returns the input itself when
+there is none, so there is nothing to gain by checking before calling it.
 
 ```python
 from html import unescape
 
 escaped = '&lt;p&gt;Hello &amp; goodbye&lt;/p&gt;'
+assert unescape(escaped) == '<p>Hello & goodbye</p>'  # O(n)
 
-# O(n) where n = string length
-unescaped = unescape(escaped)
-# Returns: <p>Hello & goodbye</p>
+assert unescape('&copy; &nbsp; &#169; &#x00A9;') == '© \xa0 © ©'
 
-# Common entities - O(n)
-entities = '&copy; &nbsp; &#169; &#x00A9;'
-result = unescape(entities)
-# Returns: ©  © ©
+# Names without their semicolon, as HTML5 allows for some of them
+assert unescape('&amp &copy2024') == '& ©2024'
+
+plain = 'no references here'
+assert unescape(plain) is plain  # O(n) scan for '&', no copy
 ```
 
-## Common Use Cases
+## Parsing HTML
 
-### Sanitizing User Input
+### Feeding a Document
 
-```python
-from html import escape
-
-def sanitize_for_html(user_input):
-    """Escape user input for safe HTML display - O(n)"""
-    # O(n) where n = input length
-    return escape(user_input)
-
-# Usage
-user_text = '<img src=x onerror="alert(1)">'
-safe = sanitize_for_html(user_text)
-# &lt;img src=x onerror=&quot;alert(1)&quot;&gt;
-
-# Safe to include in HTML
-html = f'<p>{safe}</p>'
-```
-
-### Parsing HTML
+`feed()` scans its input once and calls a handler for each construct it finds, so a document
+costs O(n) plus whatever the handlers do. Apart from the last start tag's text, nothing is kept
+once it has been handed to a handler: if you want a result, the handler has to store it.
 
 ```python
 from html.parser import HTMLParser
 
-class MyHTMLParser(HTMLParser):
-    """Extract links from HTML - O(n)"""
-    
+class LinkCollector(HTMLParser):
     def __init__(self):
         super().__init__()
         self.links = []
-    
-    def handle_starttag(self, tag, attrs):
-        """Called for opening tags - O(1) per tag"""
-        if tag == 'a':
-            for attr, value in attrs:
-                if attr == 'href':
-                    self.links.append(value)
 
-# Usage - O(n) where n = HTML length
-parser = MyHTMLParser()
-html = '''
+    def handle_starttag(self, tag, attrs):  # once per start tag
+        if tag == 'a':
+            self.links.extend(value for name, value in attrs if name == 'href')
+
+page = '''
 <html>
     <a href="/page1">Link 1</a>
-    <a href="/page2">Link 2</a>
+    <A HREF="/page2?a=1&amp;b=2">Link 2</A>
 </html>
 '''
-parser.feed(html)  # O(n)
-print(parser.links)  # ['/page1', '/page2']
+
+parser = LinkCollector()  # O(1)
+parser.feed(page)  # O(n)
+parser.close()  # O(b)
+assert parser.links == ['/page1', '/page2?a=1&b=2']  # tags lower-cased, references converted
 ```
 
-### Extracting Text from HTML
+### Feeding in Chunks
+
+A chunk can end in the middle of a tag. The parser keeps that unparsed tail, `b` characters of it,
+and parses it again together with the next chunk, so memory follows the longest construct left
+open rather than the document. On the releases in *Version Notes* a construct left open across many
+small chunks still costs O(n) in total; on earlier ones every call rescans the held tail, which
+makes that O(n²). `close()` treats whatever is still held as the end of the
+input. Always call it: until then the parser may be holding text back, and a handler may not
+have run for input that has already been fed.
 
 ```python
 from html.parser import HTMLParser
-from html import unescape
 
-class TextExtractor(HTMLParser):
-    """Extract plain text from HTML - O(n)"""
-    
+class Recorder(HTMLParser):
     def __init__(self):
         super().__init__()
-        self.text_parts = []
-        self.in_script = False
-        self.in_style = False
-    
-    def handle_starttag(self, tag, attrs):
-        """Track script/style tags - O(1)"""
-        if tag in ('script', 'style'):
-            self.in_script = tag == 'script'
-            self.in_style = tag == 'style'
-    
-    def handle_endtag(self, tag):
-        """O(1)"""
-        if tag in ('script', 'style'):
-            self.in_script = False
-            self.in_style = False
-    
-    def handle_data(self, data):
-        """Collect text - O(1) append, O(n) for data"""
-        if not self.in_script and not self.in_style:
-            # Strip whitespace - O(k) where k = data length
-            text = data.strip()
-            if text:
-                self.text_parts.append(text)
-    
-    def get_text(self):
-        """O(n) to join - n = total characters"""
-        return ' '.join(self.text_parts)
+        self.events = []
 
-# Usage - O(n) where n = HTML length
+    def handle_starttag(self, tag, attrs):
+        self.events.append(('start', tag, attrs))
+
+    def handle_data(self, data):
+        self.events.append(('data', data))
+
+parser = Recorder()
+parser.feed('<p>one</p><a hr')  # O(d + b) - the cut-off tag is held
+parser.feed('ef="/x">two')  # O(d + b)
+parser.close()  # O(b)
+
+assert parser.events == [
+    ('start', 'p', []),
+    ('data', 'one'),
+    ('start', 'a', [('href', '/x')]),
+    ('data', 'two'),
+]
+```
+
+### Character References in Text
+
+With `convert_charrefs=True`, the default, references in text are converted before
+`handle_data()` sees it, so they do not split the text. With `convert_charrefs=False`
+the text is split at every reference, and each reference is a separate handler call. Attribute
+values are converted either way.
+
+```python
+from html.parser import HTMLParser
+
+class Recorder(HTMLParser):
+    def __init__(self, **options):
+        super().__init__(**options)
+        self.events = []
+
+    def handle_data(self, data):
+        self.events.append(('data', data))
+
+    def handle_entityref(self, name):
+        self.events.append(('entity', name))
+
+    def handle_charref(self, name):
+        self.events.append(('char', name))
+
+converted = Recorder()
+converted.feed('<p>Fish &amp; chips &#169;</p>')
+converted.close()
+assert converted.events == [('data', 'Fish & chips ©')]
+
+raw = Recorder(convert_charrefs=False)
+raw.feed('<p>Fish &amp; chips &#169;</p>')
+raw.close()
+assert raw.events == [
+    ('data', 'Fish '), ('entity', 'amp'), ('data', ' chips '), ('char', '169'),
+]
+```
+
+### Script and Style Content
+
+Inside the elements named in `CDATA_CONTENT_ELEMENTS` the parser looks only for the matching end
+tag, so a `<` in a script is text, not a tag.
+
+```python
+from html.parser import HTMLParser
+
+class Recorder(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.events = []
+
+    def handle_starttag(self, tag, attrs):
+        self.events.append(('start', tag))
+
+    def handle_endtag(self, tag):
+        self.events.append(('end', tag))
+
+    def handle_data(self, data):
+        self.events.append(('data', data))
+
+parser = Recorder()
+parser.feed('<script>if (a<b) { x = "<b>"; }</script>')
+parser.close()
+
+assert parser.events == [
+    ('start', 'script'), ('data', 'if (a<b) { x = "<b>"; }'), ('end', 'script'),
+]
+assert 'script' in HTMLParser.CDATA_CONTENT_ELEMENTS
+assert 'title' in HTMLParser.RCDATA_CONTENT_ELEMENTS
+```
+
+### Comments, Declarations and Positions
+
+Every construct has its own handler, and `getpos()` and `get_starttag_text()` read values the
+parser already keeps, so asking for them inside a handler costs nothing extra.
+
+```python
+from html.parser import HTMLParser
+
+class Recorder(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.events = []
+
+    def handle_starttag(self, tag, attrs):
+        self.events.append(('start', tag, self.getpos(), self.get_starttag_text()))  # O(1)
+
+    def handle_endtag(self, tag):
+        self.events.append(('end', tag))
+
+    def handle_comment(self, data):
+        self.events.append(('comment', data))
+
+    def handle_decl(self, decl):
+        self.events.append(('decl', decl))
+
+    def handle_pi(self, data):
+        self.events.append(('pi', data))
+
+    def unknown_decl(self, data):
+        self.events.append(('unknown', data))
+
+parser = Recorder()
+parser.feed('<!DOCTYPE html>\n<?xml-stylesheet href="s.css"?>\n<!-- note -->\n')
+parser.feed('<IMG SRC="a.png"/><![CDATA[raw]]>')
+parser.close()
+
+assert parser.events == [
+    ('decl', 'DOCTYPE html'),
+    ('pi', 'xml-stylesheet href="s.css"?'),
+    ('comment', ' note '),
+    ('start', 'img', (4, 0), '<IMG SRC="a.png"/>'),  # handle_startendtag's default
+    ('end', 'img'),
+    ('unknown', 'CDATA[raw'),
+]
+
+parser.reset()  # O(1) - ready for another document
+assert parser.getpos() == (1, 0)
+```
+
+## Entity Tables
+
+`html.entities` is data. The tables are dictionaries built once at import, so every lookup is a
+dict lookup. `html5` is the complete HTML5 list; the other three cover only the HTML 4 names.
+
+```python
+from html.entities import codepoint2name, entitydefs, html5, name2codepoint
+
+assert html5['amp;'] == '&'  # O(1)
+assert html5['amp'] == '&'  # this name is also valid without its semicolon
+assert html5['NotEqualTilde;'] == '≂̸'  # some names map to two characters
+assert 'NotEqualTilde;' not in entitydefs  # HTML5-only names are not in the HTML 4 tables
+
+assert name2codepoint['copy'] == 0xA9  # O(1)
+assert codepoint2name[0xA9] == 'copy'  # O(1)
+assert entitydefs['copy'] == '©'  # O(1)
+```
+
+## Common Patterns
+
+### Extracting Text
+
+```python
+from html.parser import HTMLParser
+
+class TextExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.parts = []
+        self.hidden = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ('script', 'style'):
+            self.hidden += 1
+
+    def handle_endtag(self, tag):
+        if tag in ('script', 'style'):
+            self.hidden -= 1
+
+    def handle_data(self, data):
+        if not self.hidden and data.strip():
+            self.parts.append(' '.join(data.split()))  # O(length of the text)
+
+    def text(self):
+        return ' '.join(self.parts)  # O(length of the kept text)
+
 extractor = TextExtractor()
-html = '''
+extractor.feed('''
 <html>
     <head><title>Page</title></head>
     <body>
         <h1>Hello World</h1>
-        <p>This is a &nbsp; test</p>
+        <p>This is a &amp; test</p>
         <script>alert('hidden');</script>
     </body>
 </html>
-'''
-extractor.feed(html)  # O(n)
-text = extractor.get_text()  # O(k) where k = text length
-# "Page Hello World This is a test"
+''')  # O(n)
+extractor.close()
+assert extractor.text() == 'Page Hello World This is a & test'
 ```
 
 ### Building HTML Safely
 
+Escape each piece of untrusted text once, where it is inserted. Every `escape()` is linear in its
+own argument, so building the page is linear in everything that goes into it. Escaping keeps a
+URL from breaking out of its attribute, but does not check its scheme; a `javascript:` URL comes
+through unchanged.
+
 ```python
 from html import escape
 
-def build_html_page(title, content, links):
-    """Build HTML page with escaped content - O(n)"""
-    # O(n) for each escape where n = string length
-    safe_title = escape(title)
-    safe_content = escape(content)
-    
-    # O(k) to build link HTML where k = link count
-    link_html = ''.join(
-        f'<a href="{escape(url)}">{escape(text)}</a>'
-        for url, text in links
+def build_page(title, links):
+    items = ''.join(
+        f'<li><a href="{escape(url)}">{escape(label)}</a></li>'  # O(length of each piece)
+        for url, label in links
     )
-    
-    # O(total) to combine
-    return f'''
-    <html>
-        <head><title>{safe_title}</title></head>
-        <body>
-            <h1>{safe_title}</h1>
-            <p>{safe_content}</p>
-            <nav>{link_html}</nav>
-        </body>
-    </html>
-    '''
+    return f'<title>{escape(title)}</title><ul>{items}</ul>'
 
-# Usage - O(n) total where n = total characters
-html = build_html_page(
-    "My <Site>",
-    "User input & special chars",
-    [("/?search=test&q=1", "Search")]
+page = build_page('My <Site>', [('/?q=1&r="2"', 'Search & find')])
+assert page == (
+    '<title>My &lt;Site&gt;</title>'
+    '<ul><li><a href="/?q=1&amp;r=&quot;2&quot;">Search &amp; find</a></li></ul>'
 )
 ```
 
-## Performance Tips
+## Performance Best Practices
 
-### Batch Escaping
+✅ **Do**:
 
-```python
-from html import escape
+- Call `unescape()` unconditionally; it already returns a string with no `&` untouched
+- Feed a parser chunks as they arrive; it holds only the construct left open, not the document
+- Call `close()` after the last `feed()`, so held text is parsed as the end of the input
+- Store what you need inside the handlers: the parser keeps nothing it has handled but the last
+  start tag
 
-# Bad: Multiple escape calls
-html_parts = []
-for item in items:
-    html_parts.append(f'<li>{escape(item)}</li>')
-result = ''.join(html_parts)  # O(n) for each item
+❌ **Avoid**:
 
-# Good: Single escape with formatting
-html_parts = [f'<li>{escape(item)}</li>' for item in items]
-result = ''.join(html_parts)  # O(n) total
-```
-
-### Cache Escaped Strings
-
-```python
-from html import escape
-
-class HtmlBuilder:
-    """Cache escaped strings - O(1) lookup after escape"""
-    
-    def __init__(self):
-        self._escaped_cache = {}
-    
-    def get_escaped(self, text):
-        """O(n) first time, O(1) cached"""
-        if text not in self._escaped_cache:
-            # O(n) where n = text length
-            self._escaped_cache[text] = escape(text)
-        return self._escaped_cache[text]
-
-# Usage
-builder = HtmlBuilder()
-escaped = builder.get_escaped("Hello & Goodbye")  # O(n)
-escaped = builder.get_escaped("Hello & Goodbye")  # O(1) - cached
-```
-
-### Use unescape Sparingly
-
-```python
-from html import unescape
-
-# Bad: Unescape every lookup
-def get_title(attrs):
-    for name, value in attrs:
-        if name == 'title':
-            return unescape(value)  # O(n)
-
-# Good: Only unescape when needed
-def get_title_safe(attrs):
-    for name, value in attrs:
-        if name == 'title':
-            # Only unescape if it contains entities
-            if '&' in value:
-                return unescape(value)  # O(n)
-            return value  # O(1)
-```
+- Reading a whole file into one string just to feed it; the parser does not need it all at once
+- `convert_charrefs=False` unless you need the references themselves; it splits text into more
+  handler calls
 
 ## Version Notes
 
-- **Python 3.x**: `html.escape`, `html.unescape`, and `html.parser` are available
+- **Python 3.10.21, 3.11.16, 3.12.14, 3.13.15, 3.14.7+**: When `feed()` cannot parse anything
+  new, it waits for the held text to double before scanning it again, so feeding a construct that
+  stays open across many small chunks is O(n) in total. Earlier releases rescan it on every call,
+  which is O(n²) for that pattern.
+- **All Python 3**: `escape()` escapes quotes by default; pass `quote=False` only for text
+  between tags
 
-## Related Documentation
+## Related Modules
 
-- [Re Module](re.md) - Pattern matching for HTML
-- [Urllib Module](urllib.md) - URL handling
-- [Json Module](json.md) - Data serialization
+- **[xml](xml.md)** - Tree and event parsers for well-formed XML
+- **[urllib](urllib.md)** - Quoting URL components, which `escape()` does not do
+- **[re](re.md)** - Pattern matching, for text rather than markup
