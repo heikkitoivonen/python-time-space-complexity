@@ -42,13 +42,15 @@ Measurement scope:
   passed. `Profile.runctx()` returns the profiler and `Profile.run()`
   resolves names in `__main__`.
 * `print_stats()`, and `runctx()` through its `sort` argument, are asserted
-  to sort by both keys of a tuple on 3.13+ and to raise `KeyError` before
-  3.13; the boundary is
+  to accept a tuple of two keys on 3.13+, naming both in the report's
+  "Ordered by" heading, and to raise `KeyError` before 3.13; the row order
+  under the second key is not checked. The boundary is
   gh-69990, first tagged in v3.13.0 and not backported to 3.12.
 * `Profile` is asserted to have no `enable()` or `disable()`; `runcall()`
   returns the function's result, and a second `runcall()` on one instance is
   asserted to raise `AssertionError` for four pairs of first and second
-  calls.
+  calls. With `create_stats()` between them a second `runcall()` succeeds,
+  and the leaf's call count is the sum of both runs.
 * One thread, no nesting: a thread started inside `runcall()` leaves its
   target out of the table. Starting a run while a plain Python profile
   function or an enabled `cProfile.Profile` is installed raises
@@ -557,7 +559,8 @@ class TestReports:
 
 class TestOneRunPerProfiler:
     """`runcall` returns the function's result and is the only switch: there
-    is no `enable()`/`disable()`, and one instance takes one `runcall()`."""
+    is no `enable()`/`disable()`, and one instance takes a second `runcall()`
+    only after `create_stats()`, adding to the same totals."""
 
     def test_there_is_no_enable_or_disable(self) -> None:
         result = probe(
@@ -596,6 +599,20 @@ class TestOneRunPerProfiler:
         )
 
         assert result == [True, True, True, True]
+
+    def test_create_stats_between_runs_lets_the_totals_accumulate(self) -> None:
+        result = probe(
+            """
+            profiler = profile.Profile()
+            profiler.runcall(leaf)
+            profiler.create_stats()
+            profiler.runcall(leaf)
+            profiler.create_stats()
+            result = [stat[1] for key, stat in profiler.stats.items() if key[2] == "leaf"]
+            """
+        )
+
+        assert result == [2]
 
 
 class TestOneThreadNoNesting:

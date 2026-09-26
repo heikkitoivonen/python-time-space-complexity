@@ -13,7 +13,7 @@ Python; measure with `cProfile`.
 
 `c` is the calls the profiled code makes: calls of Python functions, each resumption of a
 generator, and calls of built-in functions and methods; each costs two events. `f` is the distinct
-functions among them, `e` the distinct caller-callee pairs, and `d` the deepest nesting of calls.
+functions among them, keyed by file, first line and name, `e` the distinct caller-callee pairs, and `d` the deepest nesting of calls.
 `m` is the argument to `calibrate()`. Every Time bound for a profiling run is overhead on top of
 what the profiled code costs unprofiled, and lookups in the profiler's table are treated as O(1).
 
@@ -30,8 +30,8 @@ what the profiled code costs unprofiled, and lookups in the profiler's table are
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `profile.Profile(timer=None, bias=None)` | O(1) | O(1) | Calls `timer` at construction to see what it returns, then twice per event; the default, `time.process_time`, counts CPU time, so sleeping and waiting on I/O do not show |
-| `Profile.runcall(func, /, *args, **kwargs)` | O(c) | O(f + e + d) | Returns what `func` returns; `Profile` has no `enable()` or `disable()`, so this is how to profile one call. A second `runcall()` on the same instance fails: use a new `Profile` per call |
+| `profile.Profile(timer=None, bias=None)` | O(1) | O(1) | Calls `timer` at construction to see what it returns, then twice per event; the default, `time.process_time`, counts the process's CPU time, so sleeping and waiting on I/O do not show, but CPU used meanwhile by other threads does |
+| `Profile.runcall(func, /, *args, **kwargs)` | O(c) | O(f + e + d) | Returns what `func` returns; `Profile` has no `enable()` or `disable()`, so this is how to profile one call. A second `runcall()` on the same instance fails unless `create_stats()` ran in between, and then the totals accumulate: use a new `Profile` per call to keep them apart |
 | `Profile.runctx(cmd, globals, locals)` | O(c) | O(f + e + d) | Runs `cmd` with `exec()`; returns the profiler |
 | `Profile.run(cmd)` | O(c) | O(f + e + d) | `runctx()` in `__main__`'s namespace |
 | `Profile.create_stats()` | O(f + e) | O(f + e) | Snapshots the table into `.stats`, one entry per function with its callers |
@@ -247,7 +247,7 @@ with tempfile.TemporaryDirectory() as directory:
 
 - Measure with `cProfile`; reach for `profile` when you need to subclass or change the profiler in Python
 - Profile one call with `runcall()` rather than a whole program, so c counts only the calls you care about
-- Create a new `Profile` for each `runcall()`
+- Create a new `Profile` for each `runcall()` whose report should stand alone
 - Calibrate once per machine and pass the result as `bias`, if you compare functions that make many short calls
 - Sort the report and read the top entries; the report is one line per function, not per call
 
