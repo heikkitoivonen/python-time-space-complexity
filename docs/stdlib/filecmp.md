@@ -1,446 +1,343 @@
 # filecmp Module Complexity
 
-The `filecmp` module provides tools for comparing files and directories, with shallow and deep comparison modes for detecting differences in content and attributes.
+The `filecmp` module compares files and directory trees in pure Python. A file comparison starts
+with two `os.stat` calls and reads the contents only when the stat signatures cannot decide it; a
+directory comparison lists, stats and compares nothing until you read one of its attributes.
+
+`n` is the size of one file in bytes, `s` is the bytes the content comparisons read (zero when
+every pair is decided by its stat signature), `f` is the names passed to `cmpfiles()`, `e` is the
+entries in the two listings of one directory pair, and `t` is the entries listed across every
+directory pair a call visits. Each `os.stat` call and each listed entry is priced at O(1), and the
+`ignore` and `hide` lists are treated as short: every listed name is checked against them by a
+list scan.
 
 ## Complexity Reference
 
+### Comparing files
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `cmp()` shallow | O(1) | O(1) | Compare file metadata only |
-| `cmp()` deep | O(n) | O(1) | n = file size, read all content |
-| `cmpfiles()` | O(k*n) | O(1) | k = files, n = avg file size |
-| `dircmp()` init | O(1) | O(1) | Create directory comparator |
-| `dircmp.report()` | O(k*n) | O(k) | k = files, n = avg size |
-| `dircmp.report_full_closure()` | O(k*d*n) | O(k*d) | Recursive, d = depth |
-| `clear_cache()` | O(1) | O(1) | Clear comparison cache |
-| `demo()` | O(1) | O(1) | Run module demo (I/O bound) |
+| `filecmp.cmp(f1, f2, shallow=True)` | O(n) | O(1) | O(1) with no read when either path is not a regular file, the sizes differ, or `shallow` is true and the signatures (type, size, mtime) match; otherwise both files are read block by block up to the first block that differs |
+| Repeating a `cmp()` whose files have not changed | O(1) | O(1) | Cached under both paths and both signatures until the cache fills, at about a hundred results, and is emptied; a rewrite that keeps the size and mtime is not seen |
+| `filecmp.cmpfiles(a, b, common, shallow=True)` | O(f + s) | O(f) | One `cmp()` per name; a name missing on either side goes to the third list |
+| `filecmp.clear_cache()` | O(1) | O(1) | Bounded by the cache's fixed maximum; needed after a rewrite that kept the size and mtime |
 
-## File Comparison
+### dircmp
 
-### Simple File Comparison
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `filecmp.dircmp(a, b, ignore=None, hide=None, *, shallow=True)` | O(1) | O(1) | Nothing is listed or stat'ed yet; `shallow` is Python 3.13+ |
+| `dircmp.left`, `dircmp.right` | O(1) | O(1) | The two paths as given |
+| `dircmp.left_list`, `dircmp.right_list` | O(e log e) | O(e) | Lists and sorts both directories, filtered by `hide` and `ignore` |
+| `dircmp.common`, `dircmp.left_only`, `dircmp.right_only` | O(e log e) | O(e) | Computed together from the listing |
+| `dircmp.common_dirs`, `dircmp.common_files`, `dircmp.common_funny` | O(e log e) | O(e) | Adds two `os.stat` calls per common name |
+| `dircmp.same_files`, `dircmp.diff_files`, `dircmp.funny_files` | O(e log e + s) | O(e) | Adds one `cmp()` per common file, with this object's `shallow` |
+| `dircmp.subdirs` | O(e log e) | O(e) | One new `dircmp` of the same class per common subdirectory; none of them lists anything yet |
+| `dircmp.report()` | O(e log e + s) | O(e) | Prints this directory pair only; `subdirs` is never touched |
+| `dircmp.report_partial_closure()` | O(t log t + s) | O(t) | This pair and each immediate common subdirectory pair |
+| `dircmp.report_full_closure()` | O(t log t + s) | O(t) | Every pair in the common tree, each kept in its parent's `subdirs`; a directory on one side only is not entered |
+| `filecmp.DEFAULT_IGNORES` | O(1) | O(1) | The names skipped when `ignore` is omitted |
+| `python -m filecmp [-r] dir1 dir2` | O(t log t + s) | O(t) | `report()`, or `report_full_closure()` with `-r`; always shallow |
 
-```python
-import filecmp
+Each `dircmp` attribute is computed on first access, together with the attributes it depends on,
+and stored: every later access is O(1). The bounds above include that dependency chain, so
+`same_files` on a fresh object lists, stats and compares.
 
-# Shallow comparison (metadata only) - O(1)
-# Compares size and modification time
-result = filecmp.cmp('file1.txt', 'file2.txt', shallow=True)
-print(f"Files match (shallow): {result}")
+## Comparing Files
 
-# Deep comparison (full content) - O(n)
-# Reads entire files for byte-by-byte comparison
-result = filecmp.cmp('file1.txt', 'file2.txt', shallow=False)
-print(f"Files match (deep): {result}")
-```
+### Shallow Comparison
 
-### Shallow vs Deep
-
-```python
-import filecmp
-import shutil
-import time
-
-# Create test files
-with open('original.txt', 'w') as f:
-    f.write('Test content')
-
-# Copy file
-shutil.copy2('original.txt', 'copy.txt')
-
-# Shallow comparison (checks size and mtime) - O(1)
-print(filecmp.cmp('original.txt', 'copy.txt', shallow=True))   # True
-
-# Modify copy
-time.sleep(1)
-with open('copy.txt', 'w') as f:
-    f.write('Different content')
-
-# Shallow still matches (same size, ignores time)
-print(filecmp.cmp('original.txt', 'copy.txt', shallow=True))   # True
-
-# Deep detects difference - O(n)
-print(filecmp.cmp('original.txt', 'copy.txt', shallow=False))  # False
-```
-
-## Directory Comparison
-
-### Compare Directories
-
-```python
-import filecmp
-
-# Create comparator - O(1)
-dcmp = filecmp.dircmp('dir1', 'dir2')
-
-# Get comparison results
-print(f"Same files: {dcmp.same_files}")       # Files with same content
-print(f"Different files: {dcmp.diff_files}")  # Files with different content
-print(f"Left only: {dcmp.left_only}")         # Files only in dir1
-print(f"Right only: {dcmp.right_only}")       # Files only in dir2
-print(f"Subdirs: {dcmp.subdirs}")             # Common subdirectories
-
-# Print report - O(k*n)
-dcmp.report()
-```
-
-### Detailed Report
-
-```python
-import filecmp
-
-# Compare directories - O(1) init
-dcmp = filecmp.dircmp('dir1', 'dir2')
-
-# Simple report - O(k*n)
-print("=== Directory Comparison Report ===")
-dcmp.report()
-
-# More detailed report - O(k*d*n)
-print("\n=== Full Closure Report ===")
-dcmp.report_full_closure()
-
-# Report shows:
-# - Files that are identical
-# - Files that differ
-# - Files only in left directory
-# - Files only in right directory
-```
-
-### Recursive Comparison
-
-```python
-import filecmp
-
-class RecursiveComparator:
-    """Recursively compare directory trees"""
-    
-    def __init__(self, dir1, dir2):
-        self.dir1 = dir1
-        self.dir2 = dir2
-    
-    # Recursively compare - O(k*d*n)
-    def compare_trees(self):
-        dcmp = filecmp.dircmp(self.dir1, self.dir2)
-        return self._gather_all_results(dcmp)
-    
-    # Helper to gather results recursively
-    def _gather_all_results(self, dcmp):
-        results = {
-            'same': dcmp.same_files,
-            'different': dcmp.diff_files,
-            'left_only': dcmp.left_only,
-            'right_only': dcmp.right_only,
-            'subdirs': {}
-        }
-        
-        # Recurse into subdirectories - O(d) depth
-        for subdir in dcmp.subdirs.values():
-            # Each subdir comparison - O(k*n)
-            results['subdirs'][subdir.get_rel()] = self._gather_all_results(subdir)
-        
-        return results
-
-# Usage
-comp = RecursiveComparator('backup1', 'backup2')
-results = comp.compare_trees()
-```
-
-## Use Cases
-
-### File Synchronization
-
-```python
-import filecmp
-import shutil
-import os
-
-class FileSync:
-    """Synchronize files between two directories"""
-    
-    def __init__(self, source, dest):
-        self.source = source
-        self.dest = dest
-    
-    # Sync files - O(k*n)
-    def sync(self):
-        dcmp = filecmp.dircmp(self.source, self.dest)
-        
-        # Copy files that are different - O(diff count)
-        for file in dcmp.diff_files:
-            src_path = os.path.join(self.source, file)
-            dst_path = os.path.join(self.dest, file)
-            print(f"Updating {dst_path}")
-            shutil.copy2(src_path, dst_path)
-        
-        # Copy files only in source - O(left_only count)
-        for file in dcmp.left_only:
-            src_path = os.path.join(self.source, file)
-            dst_path = os.path.join(self.dest, file)
-            print(f"Copying {dst_path}")
-            shutil.copy2(src_path, dst_path)
-        
-        # Remove files only in dest - O(right_only count)
-        for file in dcmp.right_only:
-            dst_path = os.path.join(self.dest, file)
-            print(f"Removing {dst_path}")
-            os.remove(dst_path)
-        
-        # Recurse to subdirectories - O(d) depth
-        for subdir in dcmp.subdirs:
-            sub_source = os.path.join(self.source, subdir)
-            sub_dest = os.path.join(self.dest, subdir)
-            
-            sub_sync = FileSync(sub_source, sub_dest)
-            sub_sync.sync()
-
-# Usage
-sync = FileSync('backup_source', 'backup_dest')
-sync.sync()
-```
-
-### Backup Verification
+`shallow=True` does not mean the contents are never read. It means that two files with the same
+type, size and mtime are taken to be equal without reading them. When the sizes match but the
+mtimes do not - a copy made without preserving timestamps, say - the contents are read exactly
+as with `shallow=False`. A size difference ends the comparison without a read in either mode.
 
 ```python
 import filecmp
 import os
+import pathlib
+import tempfile
 
-class BackupVerifier:
-    """Verify backup integrity"""
-    
-    def __init__(self, original, backup):
-        self.original = original
-        self.backup = backup
-    
-    # Verify backup - O(k*d*n)
-    def verify(self):
-        dcmp = filecmp.dircmp(self.original, self.backup)
-        
-        issues = {
-            'missing': dcmp.right_only,      # In backup but not original
-            'outdated': dcmp.diff_files,     # Different content
-            'extra': dcmp.left_only          # In original but not backup
-        }
-        
-        return issues
-    
-    # Get verification report
-    def report(self):
-        issues = self.verify()
-        
-        if not any(issues.values()):
-            print("✓ Backup is complete and up-to-date")
-        else:
-            if issues['missing']:
-                print(f"⚠ {len(issues['missing'])} unexpected files in backup")
-            if issues['outdated']:
-                print(f"⚠ {len(issues['outdated'])} files are outdated")
-            if issues['extra']:
-                print(f"✗ {len(issues['extra'])} files missing from backup")
-        
-        return issues
+with tempfile.TemporaryDirectory() as tmp:
+    a = pathlib.Path(tmp, 'a.txt')
+    b = pathlib.Path(tmp, 'b.txt')
+    a.write_bytes(b'hello')
+    b.write_bytes(b'HELLO')  # same size, different bytes
+    os.utime(a, (1_000_000, 1_000_000))
+    os.utime(b, (1_000_000, 1_000_000))
 
-# Usage
-verifier = BackupVerifier('/home/user/important', '/backup/important')
-issues = verifier.report()
+    # Same type, size and mtime: shallow trusts the signature and reads nothing
+    assert filecmp.cmp(a, b) is True                  # O(1) - two os.stat calls
+    assert filecmp.cmp(a, b, shallow=False) is False  # O(n) - reads both files
+
+    # Different mtimes: shallow has to read the contents after all
+    os.utime(b, (2_000_000, 2_000_000))
+    assert filecmp.cmp(a, b) is False                 # O(n)
+
+    # Different sizes are decided by the signature, whatever shallow says
+    b.write_bytes(b'HELLO!')
+    assert filecmp.cmp(a, b, shallow=False) is False  # O(1) - nothing read
 ```
 
-### Finding Duplicate Files
+### Deep Comparison and the Cache
+
+A content comparison reads both files in fixed-size blocks and stops at the first block that
+differs, so files that differ near the start are cheap and identical files cost their whole
+length. The result is cached under both paths and both stat signatures; the next `cmp()` of the
+same pair is a dictionary lookup until either signature changes. A rewrite that keeps both the
+size and the mtime therefore returns the cached answer, which is what `clear_cache()` is for.
 
 ```python
 import filecmp
 import os
+import pathlib
+import tempfile
 
-class DuplicateFinder:
-    """Find duplicate files in directories"""
-    
-    def __init__(self, *directories):
-        self.directories = directories
-    
-    # Find duplicates - O(k²*n) in worst case
-    def find_duplicates(self):
-        duplicates = []
-        
-        # Get all files from first directory
-        files1 = []
-        for root, dirs, files in os.walk(self.directories[0]):
-            for file in files:
-                files1.append(os.path.join(root, file))
-        
-        # Compare with other directories - O(k²*n)
-        for dir in self.directories[1:]:
-            for root, dirs, files in os.walk(dir):
-                for file in files:
-                    path2 = os.path.join(root, file)
-                    
-                    for path1 in files1:
-                        # Deep comparison - O(n)
-                        if filecmp.cmp(path1, path2, shallow=False):
-                            duplicates.append((path1, path2))
-        
-        return duplicates
+with tempfile.TemporaryDirectory() as tmp:
+    a = pathlib.Path(tmp, 'a.bin')
+    b = pathlib.Path(tmp, 'b.bin')
+    c = pathlib.Path(tmp, 'c.bin')
+    a.write_bytes(b'\0' * 1_000_000)
+    b.write_bytes(b'\1' + b'\0' * 999_999)
+    c.write_bytes(b'\0' * 1_000_000)
 
-# Usage
-finder = DuplicateFinder('~/Documents', '~/Downloads')
-dupes = finder.find_duplicates()
-for path1, path2 in dupes:
-    print(f"Duplicate: {path1} ≈ {path2}")
+    assert filecmp.cmp(a, b, shallow=False) is False  # O(1) - stops in the first block
+    assert filecmp.cmp(a, c, shallow=False) is True   # O(n) - identical files are read to the end
+    assert filecmp.cmp(a, c, shallow=False) is True   # O(1) - cached
+
+    # Rewrite c with the same size and restore its mtime: the signature is unchanged
+    before = c.stat()
+    c.write_bytes(b'\2' * 1_000_000)
+    os.utime(c, ns=(before.st_atime_ns, before.st_mtime_ns))
+    assert filecmp.cmp(a, c, shallow=False) is True   # O(1) - the stale cached answer
+
+    filecmp.clear_cache()  # O(1)
+    assert filecmp.cmp(a, c, shallow=False) is False  # O(1) - read again, differs at once
 ```
 
-### Directory Diff Report
+### Comparing Named Files
+
+`cmpfiles()` is `cmp()` in a loop over names you supply, relative to two directories. It lists
+nothing itself, and a name it cannot compare lands in the third list instead of raising.
 
 ```python
 import filecmp
 import os
+import tempfile
 
-def generate_diff_report(dir1, dir2, output_file=None):
-    """Generate detailed diff report - O(k*d*n)"""
-    
-    dcmp = filecmp.dircmp(dir1, dir2)
-    
-    lines = []
-    lines.append(f"Comparing: {dir1}")
-    lines.append(f"      with: {dir2}\n")
-    
-    # Recursive report function
-    def report_helper(dcmp, indent=''):
-        if dcmp.same_files:
-            lines.append(f"{indent}✓ Identical files ({len(dcmp.same_files)}):")
-            for file in dcmp.same_files[:5]:
-                lines.append(f"{indent}  - {file}")
-            if len(dcmp.same_files) > 5:
-                lines.append(f"{indent}  ... and {len(dcmp.same_files) - 5} more")
-        
-        if dcmp.diff_files:
-            lines.append(f"{indent}≠ Different files ({len(dcmp.diff_files)}):")
-            for file in dcmp.diff_files:
-                lines.append(f"{indent}  - {file}")
-        
-        if dcmp.left_only:
-            lines.append(f"{indent}← Left only ({len(dcmp.left_only)}):")
-            for file in dcmp.left_only:
-                lines.append(f"{indent}  - {file}")
-        
-        if dcmp.right_only:
-            lines.append(f"{indent}→ Right only ({len(dcmp.right_only)}):")
-            for file in dcmp.right_only:
-                lines.append(f"{indent}  - {file}")
-        
-        # Recurse to subdirs
-        for subdir in dcmp.subdirs:
-            lines.append(f"\n{indent}Subdir: {subdir}/")
-            report_helper(dcmp.subdirs[subdir], indent + '  ')
-    
-    report_helper(dcmp)
-    
-    report = '\n'.join(lines)
-    
-    if output_file:
-        with open(output_file, 'w') as f:
-            f.write(report)
-    
-    return report
+with tempfile.TemporaryDirectory() as left, tempfile.TemporaryDirectory() as right:
+    for root, text in ((left, 'one'), (right, 'one')):
+        with open(os.path.join(root, 'same.txt'), 'w') as f:
+            f.write(text)
+    for root, text in ((left, 'old'), (right, 'newer')):
+        with open(os.path.join(root, 'changed.txt'), 'w') as f:
+            f.write(text)
 
-# Usage
-report = generate_diff_report('dir1', 'dir2', 'diff_report.txt')
-print(report)
+    match, mismatch, errors = filecmp.cmpfiles(
+        left, right, ['same.txt', 'changed.txt', 'missing.txt']
+    )  # O(f + s)
+    assert match == ['same.txt']
+    assert mismatch == ['changed.txt']
+    assert errors == ['missing.txt']
 ```
 
-## Performance Characteristics
+## Comparing Directories
 
-### Time Complexity
-- **cmp() shallow**: O(1) - metadata only
-- **cmp() deep**: O(n) - read entire files
-- **dircmp**: O(k*n) where k = files, n = avg size
-- **report_full_closure**: O(k*d*n) where d = tree depth
+### Lazy Attributes
 
-### Space Complexity
-- **dircmp**: O(k*d) for storing file lists
-- **Recursive comparison**: O(d) call stack depth
-
-### Optimization Strategies
-
-```python
-import filecmp
-
-# Prefer shallow comparison when possible
-result = filecmp.cmp('file1', 'file2', shallow=True)  # Fast
-
-# For directory comparison, use shallow first
-dcmp = filecmp.dircmp('dir1', 'dir2')
-# Files already compared with shallow comparison
-
-# Only do deep compare on suspected differences
-for diff_file in dcmp.diff_files:
-    path1 = os.path.join(dcmp.left, diff_file)
-    path2 = os.path.join(dcmp.right, diff_file)
-    
-    # Verify with deep comparison
-    confirmed = filecmp.cmp(path1, path2, shallow=False)
-```
-
-## Common Issues
-
-### Symlinks and Special Files
+Building a `dircmp` records the two paths and nothing else, so it succeeds even for directories
+that do not exist. Each attribute does its work the first time it is read: the name lists need
+one `os.listdir` per side, the file and directory split needs two `os.stat` calls per common
+name, and `same_files` and `diff_files` need one `cmp()` per common file. Read only what you use.
 
 ```python
 import filecmp
 import os
+import tempfile
 
-# dircmp follows symlinks by default
-# May cause infinite recursion if circular
+def write(path, text):
+    with open(path, 'w') as f:
+        f.write(text)
 
-# Use shallow comparison for large files
-dcmp = filecmp.dircmp('dir1', 'dir2')  # O(1) - nothing is read yet
-# dircmp automatically uses shallow comparison
+with tempfile.TemporaryDirectory() as tmp:
+    left = os.path.join(tmp, 'left')
+    right = os.path.join(tmp, 'right')
+    for root in (left, right):
+        os.makedirs(os.path.join(root, 'sub'))
+        write(os.path.join(root, 'same.txt'), 'same')
+    write(os.path.join(left, 'changed.txt'), 'old')
+    write(os.path.join(right, 'changed.txt'), 'newer')
+    write(os.path.join(left, 'only_left.txt'), 'x')
 
-# For custom handling:
-def safe_compare(dir1, dir2):
-    dcmp = filecmp.dircmp(dir1, dir2)  # O(1)
-    
-    # Filter out symlinks if needed
-    # same_files is what costs: O(k) stat calls, k = files in the directory
-    same = [f for f in dcmp.same_files 
-            if not os.path.islink(os.path.join(dir1, f))]
-    
-    return same
+    comparison = filecmp.dircmp(left, right)          # O(1) - nothing read yet
+    assert comparison.left_only == ['only_left.txt']  # O(e log e) - lists both sides
+    assert comparison.right_only == []                # O(1) - computed with left_only
+    assert comparison.common_dirs == ['sub']          # O(e) - two os.stat per common name
+    assert comparison.same_files == ['same.txt']      # O(e + s) - one cmp() per common file
+    assert comparison.diff_files == ['changed.txt']   # O(1) - computed with same_files
+
+# Construction reads nothing, so a missing directory surfaces on first access
+lazy = filecmp.dircmp('/no/such/left', '/no/such/right')  # O(1)
+try:
+    lazy.left_list
+except FileNotFoundError:
+    pass
+else:
+    raise AssertionError('a missing directory was listed')
 ```
 
-## Best Practices
+### Recursing Into Subdirectories
 
-### Do's
-- Use shallow comparison by default (fast)
-- Use deep comparison when needed for verification
-- Cache dcmp objects for multiple operations
-- Handle symlinks carefully
-
-### Avoid's
-- Don't use deep comparison for large files unnecessarily
-- Don't ignore dircmp.subdirs for recursive comparison
-- Don't assume shallow comparison for all use cases
-- Don't follow symlinks blindly in recursive operations
-
-## Alternatives
+`subdirs` builds one `dircmp` per common subdirectory without listing any of them, so a
+recursive walk pays only for the levels and attributes it reads. `report()` covers one directory
+pair; `report_partial_closure()` adds the immediate common subdirectories and
+`report_full_closure()` the whole common tree. A directory that exists on one side only is
+reported by name and never entered.
 
 ```python
-# For more advanced comparison:
-# - Use external tools: diff, rsync
+import contextlib
+import filecmp
+import io
+import os
+import tempfile
 
-# For efficient large file comparison:
-import hashlib
+with tempfile.TemporaryDirectory() as tmp:
+    left = os.path.join(tmp, 'left')
+    right = os.path.join(tmp, 'right')
+    for root in (left, right):
+        os.makedirs(os.path.join(root, 'a', 'b'))
+    os.makedirs(os.path.join(left, 'left_tree', 'deep'))
+    with open(os.path.join(left, 'a', 'b', 'f.txt'), 'w') as f:
+        f.write('left')
+    with open(os.path.join(right, 'a', 'b', 'f.txt'), 'w') as f:
+        f.write('right!')
 
-def file_hash(path):
-    """Hash file for quick comparison"""
-    with open(path, 'rb') as f:
-        return hashlib.md5(f.read()).hexdigest()
+    comparison = filecmp.dircmp(left, right)
+    child = comparison.subdirs['a']  # O(e log e) - built, not yet listed
+    assert type(child) is filecmp.dircmp
+    assert child.right == os.path.join(right, 'a')
 
-# For structured data:
-import json
-# Compare JSON files semantically
+    one_level = io.StringIO()
+    with contextlib.redirect_stdout(one_level):
+        comparison.report()  # O(e log e + s) - this pair only
+    assert 'f.txt' not in one_level.getvalue()
+    assert "Only in {} : ['left_tree']".format(left) in one_level.getvalue()
+
+    whole_tree = io.StringIO()
+    with contextlib.redirect_stdout(whole_tree):
+        comparison.report_full_closure()  # O(t log t + s) - every common pair
+    assert "Differing files : ['f.txt']" in whole_tree.getvalue()
+    assert 'diff {}'.format(os.path.join(left, 'left_tree')) not in whole_tree.getvalue()
 ```
 
-## Related Documentation
+### Comparing Contents in a Directory Tree
 
-- [Difflib Module](difflib.md)
-- [Glob Module](glob.md)
-- [OS Module](os.md)
-- [Pathlib Module](pathlib.md)
+`dircmp` compares files the way `cmp()` does with its `shallow` setting. From Python 3.13 you can
+pass `shallow=False`, which reads every common file whose size matches; before that, the same
+result comes from `cmpfiles()` over `common_files`.
+
+```python
+import filecmp
+import os
+import sys
+import tempfile
+
+with tempfile.TemporaryDirectory() as left, tempfile.TemporaryDirectory() as right:
+    for root, text in ((left, 'hello'), (right, 'HELLO')):
+        path = os.path.join(root, 'f.txt')
+        with open(path, 'w') as f:
+            f.write(text)
+        os.utime(path, (1_000_000, 1_000_000))
+
+    # Same size and mtime: the default shallow comparison calls them equal
+    assert filecmp.dircmp(left, right).same_files == ['f.txt']  # O(e log e) - nothing read
+
+    if sys.version_info >= (3, 13):
+        deep = filecmp.dircmp(left, right, shallow=False)
+        assert deep.diff_files == ['f.txt']  # O(e log e + s)
+    else:
+        common = filecmp.dircmp(left, right).common_files
+        match, mismatch, errors = filecmp.cmpfiles(left, right, common, shallow=False)
+        assert mismatch == ['f.txt']  # O(f + s)
+```
+
+## Common Patterns
+
+### Listing Every Changed File
+
+```python
+import filecmp
+import os
+import tempfile
+
+def changed_files(comparison):
+    """Yield differing files across the common tree - O(t log t + s)."""
+    for name in comparison.diff_files:
+        yield os.path.join(comparison.left, name)
+    for sub in comparison.subdirs.values():
+        yield from changed_files(sub)
+
+with tempfile.TemporaryDirectory() as left, tempfile.TemporaryDirectory() as right:
+    for root, text in ((left, 'v1'), (right, 'v22')):
+        os.makedirs(os.path.join(root, 'pkg'))
+        with open(os.path.join(root, 'pkg', 'mod.py'), 'w') as f:
+            f.write(text)
+
+    found = list(changed_files(filecmp.dircmp(left, right)))
+    assert found == [os.path.join(left, 'pkg', 'mod.py')]
+```
+
+### Skipping Build Directories
+
+`ignore` removes names before anything is stat'ed or compared, so excluding a large generated
+directory saves its whole subtree. Passing `ignore` replaces `DEFAULT_IGNORES` rather than adding
+to it.
+
+```python
+import filecmp
+import os
+import tempfile
+
+with tempfile.TemporaryDirectory() as left, tempfile.TemporaryDirectory() as right:
+    for root in (left, right):
+        os.makedirs(os.path.join(root, 'build'))
+        os.makedirs(os.path.join(root, '.git'))
+
+    assert '.git' in filecmp.DEFAULT_IGNORES
+    assert filecmp.dircmp(left, right).common_dirs == ['build']
+
+    ignoring = filecmp.dircmp(left, right, ignore=filecmp.DEFAULT_IGNORES + ['build'])
+    assert ignoring.common_dirs == []  # O(e log e) - build is never stat'ed or entered
+```
+
+## Performance Best Practices
+
+✅ **Do**:
+
+- Preserve mtimes when copying (`shutil.copy2`), so shallow comparisons of the copy read nothing
+- Read only the `dircmp` attributes you need; `left_only` and `right_only` cost a listing, not a
+  stat or a read
+- Add large generated directories to `ignore`, so their subtrees are never entered
+- Call `clear_cache()` when a file may have been rewritten within the filesystem's mtime
+  resolution
+
+❌ **Avoid**:
+
+- Assuming `shallow=True` never reads: equal sizes with different mtimes read both files
+- Trusting a shallow match to prove equal contents: a same-size file with a matching mtime is
+  never read
+- `report_full_closure()` when only one level matters: it lists every common directory in the tree
+
+## Version Notes
+
+- **Python 3.13+**: `dircmp` accepts `shallow`; before that it always compares with
+  `shallow=True`
+- **All Python 3**: `shallow=True` still reads both files when their sizes match and their
+  signatures do not
+
+## Related Modules
+
+- **[difflib](difflib.md)** - what differs between two files, where `filecmp` only says whether
+- **[os](os.md)** - `os.stat` and `os.listdir`, the calls every comparison here is built from
+- **[shutil](shutil.md)** - `copy2` preserves the mtime that shallow comparison relies on
+- **[hashlib](hashlib.md)** - hash files once to compare many against each other
