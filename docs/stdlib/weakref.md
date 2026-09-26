@@ -103,7 +103,7 @@ callbacks and finalizer functions cost whatever they do, on top of the bounds he
 | `s.copy()` | O(n) | O(n) | |
 | `s.clear()` | O(n) | O(1) | |
 | `s.update(other)`, `s \|= other`, `s ^= other`, `s.symmetric_difference_update(other)` | O(m) | O(m) | |
-| `s -= other`, `s.difference_update(other)` | O(m) | O(1) | |
+| `s -= other`, `s.difference_update(other)` | O(m) | O(1); O(m) on 3.14+ when `other` is a `WeakSet` | Iterating a `WeakSet` operand copies it first, as below |
 | `s & other`, `s.intersection(other)`, `s.isdisjoint(other)` | O(m) | O(m) | Walks `other` and tests each item against `s`, so `s` may be as large as it likes |
 | `s &= other`, `s.intersection_update(other)` | O(n + m) | O(m) | Drops every element of `s` not in `other` |
 | `s \| other`, `s - other`, `s ^ other` and their named forms | O(n + m) | O(n + m) | A new `WeakSet` |
@@ -180,8 +180,8 @@ assert seen == [reference]  # the callback ran once, with the dead reference
 ### Proxies
 
 A proxy stands in for the object itself: attribute access, calls and operators are forwarded,
-each at the cost of the operation behind it. Once the referent is gone, every use raises
-`ReferenceError`.
+each at the cost of the operation behind it. Once the referent is gone, every use that reaches it -
+an attribute, a call, an operator - raises `ReferenceError`.
 
 ```python
 import gc

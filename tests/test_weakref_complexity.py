@@ -53,14 +53,17 @@ Measurement scope:
 * Iteration: on 3.14+ the traced peak of taking the first item from each
   container of 100,000 entries exceeds 1 MB; before 3.14 it stays under
   20 KB. Adding or removing an entry inside the loop raises `RuntimeError`
-  before 3.14; from 3.14 it does not, and the loop visits the five entries it
-  started with, for all three containers. An entry whose object is collected
+  before 3.14; from 3.14 it does not, and the loop visits exactly the five
+  entries it started with, compared by identity, for all three containers. An entry whose object is collected
   mid-loop is skipped without an error on every version.
 * `WeakSet`: `s & other` with `other` at 100 items costs under 3x as much for
   `s` at 100,000 as at 100; `s | other` and `s &= other` cost more than 30x
   as much over the same step in `s`; `s.issubset(other)` with `s` at 10 costs
   more than 30x as much for `other` at 100,000 as at 100, with the members of
-  `s` last in `other`; placed first, 3.12+ stops walking once all are found.
+  `s` last in `other`; placed first, on 3.12+ it costs under 3x as much, as
+  the walk stops once all are found. `s -= other` over a `WeakSet` of 100,000
+  peaks above 1 MB on 3.14+ and under 20 KB before; over a list of 100,000 it
+  stays under 20 KB on every version.
 * `WeakMethod` returns an equal but new bound method per call, `None` once the
   instance is collected, and calls its callback once; a plain `ref` to a
   bound method is dead after `gc.collect()`.
@@ -730,6 +733,13 @@ def _remove_last(container: Any, objects: list[Node]) -> None:
         container.pop(objects[-1], None)
 
 
+def _originals(name: str, objects: list[Node]) -> set[object]:
+    """What iterating the container built by `_containers(objects)` yields."""
+    if name == "WeakValueDictionary":
+        return set(range(len(objects)))
+    return set(objects)
+
+
 class TestIteration:
     """Iterating a weak container: O(n) time; O(n) space on 3.14+, which
     copies the underlying container first, and O(1) before."""
@@ -760,33 +770,35 @@ class TestIteration:
         objects = [Node() for _ in range(5)]
         extra = Node()
         for name, container in _containers(objects).items():
-            visited = 0
+            seen: list[object] = []
             try:
-                for _ in container:
-                    visited += 1
+                for item in container:
+                    seen.append(item)
                     _add_one(container, extra)
             except RuntimeError as error:
                 assert sys.version_info < (3, 14), f"{name} raised {error} on 3.14+"
                 assert "changed size during iteration" in str(error)
             else:
                 assert sys.version_info >= (3, 14), f"{name} allowed an addition before 3.14"
-                assert visited == 5, f"{name} visited {visited} of the 5 it started with"
+                assert len(seen) == 5, f"{name} visited {len(seen)} items"
+                assert set(seen) == _originals(name, objects), name
             assert len(container) == 6
 
     def test_removing_inside_the_loop(self) -> None:
         objects = [Node() for _ in range(5)]
         for name, container in _containers(objects).items():
-            visited = 0
+            seen: list[object] = []
             try:
-                for _ in container:
-                    visited += 1
+                for item in container:
+                    seen.append(item)
                     _remove_last(container, objects)
             except RuntimeError as error:
                 assert sys.version_info < (3, 14), f"{name} raised {error} on 3.14+"
                 assert "changed size during iteration" in str(error)
             else:
                 assert sys.version_info >= (3, 14), f"{name} allowed a removal before 3.14"
-                assert visited == 5, f"{name} visited {visited} of the 5 it started with"
+                assert len(seen) == 5, f"{name} visited {len(seen)} items"
+                assert set(seen) == _originals(name, objects), name
             assert len(container) == 4
 
     def test_an_object_dying_mid_loop_is_skipped(self) -> None:
@@ -879,6 +891,49 @@ class TestWeakSet:
         assert subject.issubset(large_other)
         ratio = large_ns / small_ns
         assert ratio > 30, f"1,000x the other operand cost only x{ratio:.1f} for issubset"
+
+    @pytest.mark.timing
+    @pytest.mark.skipif(sys.version_info < (3, 12), reason="the early exit starts in 3.12")
+    def test_issubset_stops_once_every_member_is_found(self) -> None:
+        members, subject = self._set(10)
+        small_other = members + [Node() for _ in range(90)]
+        large_other = members + [Node() for _ in range(99_990)]
+
+        small_ns = best_ns(lambda: subject.issubset(small_other), repeats=5)
+        large_ns = best_ns(lambda: subject.issubset(large_other), repeats=5)
+
+        assert subject.issubset(large_other)
+        ratio = large_ns / small_ns
+        assert ratio < 3, f"members first, 1,000x the other operand cost x{ratio:.1f}"
+
+    @pytest.mark.skipif(sys.version_info < (3, 14), reason="the snapshot starts in 3.14")
+    def test_difference_update_copies_a_weakset_operand(self) -> None:
+        members, other = self._set(100_000)
+        subject = weakref.WeakSet(members[:10])
+
+        peak = peak_bytes(lambda: subject.difference_update(other))
+
+        assert len(subject) == 0
+        assert peak > 1_000_000, f"a WeakSet of 100,000 peaked at {peak}"
+
+    @pytest.mark.skipif(sys.version_info >= (3, 14), reason="3.14+ copies the operand")
+    def test_difference_update_walks_a_weakset_operand_in_place(self) -> None:
+        members, other = self._set(100_000)
+        subject = weakref.WeakSet(members[:10])
+
+        peak = peak_bytes(lambda: subject.difference_update(other))
+
+        assert len(subject) == 0
+        assert peak < 20_000, f"a WeakSet of 100,000 peaked at {peak}"
+
+    def test_difference_update_walks_a_list_in_place(self) -> None:
+        members = [Node() for _ in range(100_000)]
+        subject = weakref.WeakSet(members[:10])
+
+        peak = peak_bytes(lambda: subject.difference_update(members))
+
+        assert len(subject) == 0
+        assert peak < 20_000, f"a list of 100,000 peaked at {peak}"
 
     def test_the_set_methods(self) -> None:
         a, b, c = Node(), Node(), Node()
