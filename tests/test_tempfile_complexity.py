@@ -26,15 +26,18 @@ Measurement scope:
   directory and `TEMP` at a real one makes two `os.open` calls, returns the
   second and leaves it empty; the next call, `gettempdirb()`, and an
   assignment to `tempfile.tempdir` followed by a call make none. `mkstemp()`
-  with `dir=None` and the cache cleared makes one probe open plus one create.
-* `TemporaryFile()` on Linux with `O_TMPFILE` draws no name and leaves the
+  with `dir=None`, the cache cleared and the same two candidates makes two
+  probe opens plus one create.
+* `TemporaryFile()` on Linux, where `tmp_path`'s filesystem accepts
+  `O_TMPFILE`, draws no name and leaves the
   directory empty while open; with `O_TMPFILE` disabled it draws one name and
   the directory is still empty while open, because the name is unlinked at
   once. `NamedTemporaryFile()` is visible in its directory while open and gone
   after `close()`; `delete=False` keeps it; `delete_on_close=False` (3.12+)
   keeps it through `close()` and removes it at the end of the `with` block.
 * Writing 8 MiB to a `NamedTemporaryFile` peaks under 256 KiB of traced
-  allocation; the same write to a `SpooledTemporaryFile` below its
+  allocation in binary mode and above 8 MiB in text mode, which encodes the
+  string first; the same binary write to a `SpooledTemporaryFile` below its
   `max_size` peaks above 8 MiB and creates no file.
 * `SpooledTemporaryFile` holds a write that leaves the position at exactly
   `max_size` and rolls over on the next byte; `max_size=0` holds 1 MiB
@@ -45,7 +48,8 @@ Measurement scope:
   and leaves under 1 MiB traced afterwards. A second `rollover()` keeps the
   same descriptor.
 * `SpooledTemporaryFile.writelines()` of 1,000 lines of 10,000 bytes with a
-  20,000-byte `max_size` peaks under 1 MiB on 3.12.10+, 3.13.3+ and 3.14, and
+  20,000-byte `max_size` peaks under 1 MiB, and has rolled over before the
+  fourth line is drawn, on 3.12.10+, 3.13.3+ and 3.14, and
   above the 10 MB total on 3.10, 3.11, 3.12.0-3.12.9 and 3.13.0-3.13.2.
   The two sides are guarded on `sys.version_info` and were run on 3.10.21,
   3.11.16, 3.12.7, 3.12.14, 3.13.11, 3.13.14, 3.14.2 and 3.14.7, which also
@@ -395,6 +399,10 @@ class TestTemporaryFileNeedsNoName:
     def test_o_tmpfile_draws_no_name(
         self, tmp_path: pathlib.Path, names: Callable[[list[str]], ScriptedNames]
     ) -> None:
+        try:
+            os.close(os.open(tmp_path, os.O_RDWR | os.O_TMPFILE))
+        except OSError:
+            pytest.skip("this filesystem does not support O_TMPFILE")
         scripted = names(["unused"])
 
         with tempfile.TemporaryFile(dir=tmp_path) as f:
@@ -439,6 +447,15 @@ class TestNamedTemporaryFileLivesOnDisk:
             assert os.path.getsize(f.name) == len(data)
 
         assert peak < 256 * 1024, f"an 8 MiB write peaked at {peak} bytes"
+
+    def test_a_text_write_holds_the_encoded_string(self, tmp_path: pathlib.Path) -> None:
+        data = "x" * (8 * MIB)
+        with tempfile.NamedTemporaryFile("w+", encoding="utf-8", dir=tmp_path) as f:
+            peak = peak_bytes(lambda: f.write(data))
+            f.flush()
+            assert os.path.getsize(f.name) == len(data)
+
+        assert peak > 8 * MIB, f"an 8 MiB text write peaked at only {peak} bytes"
 
     def test_the_path_is_visible_while_open_and_gone_after_close(
         self, tmp_path: pathlib.Path
@@ -534,7 +551,7 @@ class TestSpooledTemporaryFileRollsOver:
 
     @pytest.mark.parametrize("mode", ["w+b", "w+"])
     @pytest.mark.parametrize("writes", [1, 8_192])
-    def test_rollover_copies_everything_once_and_frees_it(
+    def test_rollover_keeps_the_data_and_frees_the_buffer(
         self, mode: str, writes: int, tmp_path: pathlib.Path
     ) -> None:
         payload: Any = b"x" * (8 * MIB) if "b" in mode else "x" * (8 * MIB)
@@ -579,25 +596,34 @@ class TestSpooledTemporaryFileRollsOver:
         not writelines_rolls_over_mid_iteration(), reason="3.12.10+, 3.13.3+ and 3.14"
     )
     def test_writelines_rolls_over_mid_iteration(self, tmp_path: pathlib.Path) -> None:
-        peak, size = self._writelines(tmp_path)
+        peak, size, rolled_by_fourth_line = self._writelines(tmp_path)
 
         assert size == 10_000_000
         assert peak < MIB, f"writelines of 10 MB peaked at {peak} bytes"
+        assert rolled_by_fourth_line, "the third line crossed max_size but did not roll over"
 
     @pytest.mark.skipif(writelines_rolls_over_mid_iteration(), reason="before 3.12.10 and 3.13.3")
     def test_older_writelines_holds_the_whole_iterable(self, tmp_path: pathlib.Path) -> None:
-        peak, size = self._writelines(tmp_path)
+        peak, size, _ = self._writelines(tmp_path)
 
         assert size == 10_000_000
         assert peak > 10_000_000, f"writelines of 10 MB peaked at only {peak} bytes"
 
     @staticmethod
-    def _writelines(tmp_path: pathlib.Path) -> tuple[int, int]:
+    def _writelines(tmp_path: pathlib.Path) -> tuple[int, int, bool]:
         line = b"y" * 10_000
+        rolled: list[bool] = []
         with tempfile.SpooledTemporaryFile(max_size=20_000, dir=str(tmp_path)) as spool:
-            peak = peak_bytes(lambda: spool.writelines(line for _ in range(1_000)))
+
+            def lines() -> Iterator[bytes]:
+                for index in range(1_000):
+                    if index == 3:
+                        rolled.append(spool.name is not None)
+                    yield line
+
+            peak = peak_bytes(lambda: spool.writelines(lines()))
             spool.flush()
-            return peak, os.fstat(spool.fileno()).st_size
+            return peak, os.fstat(spool.fileno()).st_size, rolled == [True]
 
     def test_reads_are_passed_through(self, tmp_path: pathlib.Path) -> None:
         with tempfile.SpooledTemporaryFile(max_size=100, mode="w+", dir=str(tmp_path)) as spool:

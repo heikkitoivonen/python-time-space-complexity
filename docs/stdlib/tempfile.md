@@ -30,7 +30,7 @@ first use in the process.
 |-----------|------|-------|-------|
 | `tempfile.NamedTemporaryFile(mode='w+b', buffering=-1, encoding=None, newline=None, suffix=None, prefix=None, dir=None, delete=True, *, errors=None, delete_on_close=True)` | O(r) | O(1) | Created as `mkstemp()` does; the data lives on disk, so memory is the file buffer |
 | `NamedTemporaryFile.name`, `NamedTemporaryFile.file` | O(1) | O(1) | The path, visible in the directory while the file is open, and the underlying file object |
-| Writing k bytes | O(k) | O(1) | Buffered file I/O |
+| Writing k bytes | O(k) | O(1) binary, O(k) text | Buffered file I/O; in text mode the string is encoded to bytes first |
 | Reading k bytes | O(k) | O(k) | The result is the only thing held |
 | `close()`, leaving the `with` block | O(1) | O(1) | One unlink when `delete=True`; with `delete_on_close=False` (Python 3.12+) closing keeps the file and leaving the `with` block removes it |
 
@@ -39,7 +39,7 @@ first use in the process.
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `tempfile.TemporaryFile(mode='w+b', buffering=-1, encoding=None, newline=None, suffix=None, prefix=None, dir=None, *, errors=None)` | O(r) | O(1) | On Linux, where the filesystem supports `O_TMPFILE`, no name is drawn at all; otherwise on POSIX the file is created under a name and unlinked at once. On Windows this is `NamedTemporaryFile` |
-| Reading and writing | O(k) | O(k) to read, O(1) to write | As for `NamedTemporaryFile`; there is no name to see |
+| Reading and writing | O(k) | O(k) to read; to write, O(1) binary and O(k) text | As for `NamedTemporaryFile`; on POSIX there is no name to see |
 
 ### SpooledTemporaryFile
 
@@ -47,7 +47,7 @@ first use in the process.
 |-----------|------|-------|-------|
 | `tempfile.SpooledTemporaryFile(max_size=0, mode='w+b', buffering=-1, encoding=None, newline=None, suffix=None, prefix=None, dir=None, *, errors=None)` | O(1) | O(1) | Starts as an in-memory buffer and creates no file |
 | `SpooledTemporaryFile.write(s)` | O(k) | O(k) in memory, O(1) once rolled over | The write that takes the position past `max_size` also pays `rollover()`, once; `max_size=0` never rolls over on its own |
-| `SpooledTemporaryFile.writelines(lines)` | O(n) | O(s + k) | Rolls over as soon as a line crosses `max_size`; 3.10, 3.11, 3.12.0-3.12.9 and 3.13.0-3.13.2 hold the whole iterable in memory first, O(n) |
+| `SpooledTemporaryFile.writelines(lines)` | O(n) | O(s + k) for a positive `max_size`, O(n) for `max_size=0` | k = the longest line. Rolls over as soon as a line crosses `max_size`; 3.10, 3.11, 3.12.0-3.12.9 and 3.13.0-3.13.2 hold the whole iterable in memory first, O(n) |
 | `SpooledTemporaryFile.rollover()` | O(r + n) | O(1) | Creates a `TemporaryFile`, copies the n held bytes to it and frees the in-memory buffer; does nothing once rolled over |
 | `SpooledTemporaryFile.fileno()` | O(r + n) first call, then O(1) | O(1) | Needs a real descriptor, so it forces `rollover()` |
 | `SpooledTemporaryFile.truncate(size=None)` | O(r + n) if `size > max_size`, else O(1) | O(1) | A size past `max_size` forces `rollover()` first |
@@ -78,7 +78,7 @@ first use in the process.
 ### Named vs Unnamed Files
 
 A `NamedTemporaryFile` has a path other code can open, and it is removed when it closes.
-A `TemporaryFile` has no path at all, which on Linux means it can skip naming altogether.
+On POSIX a `TemporaryFile` has no path at all, which on Linux means it can skip naming altogether.
 Neither holds its data in memory.
 
 ```python
@@ -87,7 +87,8 @@ import tempfile
 
 with tempfile.TemporaryDirectory() as workdir:
     with tempfile.NamedTemporaryFile(dir=workdir) as named:  # O(r)
-        named.write(b'x' * 100_000)  # O(k) time, O(1) memory - it goes to disk
+        payload = b'x' * 100_000
+        named.write(payload)  # O(k) time, O(1) more memory - it goes to disk
         named.flush()
         assert os.listdir(workdir) == [os.path.basename(named.name)]
         assert os.path.getsize(named.name) == 100_000
@@ -97,7 +98,8 @@ with tempfile.TemporaryDirectory() as workdir:
         unnamed.write(b'data')
         unnamed.seek(0)
         assert unnamed.read() == b'data'  # O(k)
-        assert os.listdir(workdir) == []  # nothing to see on POSIX, even while open
+        if os.name == 'posix':
+            assert os.listdir(workdir) == []  # nothing to see, even while open
 ```
 
 ### Keeping What Would Be Deleted
