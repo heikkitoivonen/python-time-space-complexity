@@ -25,7 +25,8 @@ unclassified runtime discoveries in a separate report section; `__all__` is
 supporting evidence for review, not automatic promotion to the actionable list.
 Only explicitly documented instance attributes supplement runtime inspection.
 Unavailable or unresolved documented APIs are listed separately. Constants,
-class dunders, individual codecs, and the audit's program exclusions still apply.
+class dunders, individual codecs, single-underscore modules such as `_thread`
+and `_tkinter`, and the audit's program exclusions still apply.
 A name mention is coverage evidence, not verification of a complexity claim.
 
 A manifest applies to its Python minor version. If no matching snapshot exists,

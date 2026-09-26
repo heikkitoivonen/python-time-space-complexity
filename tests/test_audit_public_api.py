@@ -41,6 +41,30 @@ def test_main_entry_points_are_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
     assert excluded == ["idlelib"]
 
 
+def test_single_underscore_modules_are_excluded(monkeypatch: pytest.MonkeyPatch) -> None:
+    apis = public_manifest(
+        {
+            "_thread": "module",
+            "_thread.allocate_lock": "function",
+            "_tkinter": "module",
+            "__future__": "module",
+            "__future__.annotations": "data",
+        }
+    )["apis"]
+    assert audit.is_private_module("_thread")
+    assert audit.is_private_module("_tkinter.sub")
+    assert not audit.is_private_module("__future__")
+    assert not audit.is_private_module("json._private")
+    monkeypatch.setattr(audit, "discover_modules", lambda: (["json"], []))
+
+    modules, excluded = audit.audited_modules(None, apis)
+
+    assert modules == ["__future__", "json"]
+    assert excluded == ["_thread", "_tkinter"]
+    unresolved = audit.unresolved_documented(apis, set(), {"__future__", "json"})
+    assert [item["name"] for item in unresolved] == ["__future__", "__future__.annotations"]
+
+
 class Example(Parent):
     annotated: str
 

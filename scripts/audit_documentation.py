@@ -262,6 +262,12 @@ CLASS_PAGES = {
 }
 
 
+def is_private_module(name: str) -> bool:
+    """A single-underscore top-level module such as ``_thread`` is an implementation module."""
+    top = name.split(".")[0]
+    return top.startswith("_") and not top.startswith("__")
+
+
 def is_codec_module(name: str) -> bool:
     """Individual codec implementations are outside the audit; retain alias metadata."""
     return name.startswith("encodings.") and name != "encodings.aliases"
@@ -889,6 +895,7 @@ def unresolved_documented(
             or "__main__" in name.split(".")
             or (entry["kind"] == "attribute" and name.rsplit(".", 1)[-1].isupper())
             or is_codec_module(name)
+            or is_private_module(name)
         ):
             continue
         if (
@@ -922,12 +929,17 @@ def audited_modules(
                 if entry["kind"] == "module" and name.split(".")[0] not in EXCLUDED_PACKAGES
             }
         )
-    excluded = sorted(set(excluded) | {name for name in discovered if is_codec_module(name)})
+    excluded = sorted(
+        set(excluded)
+        | {name for name in discovered if is_codec_module(name) or is_private_module(name)}
+    )
     excluded = [name for name in excluded if "__main__" not in name.split(".")]
     discovered = [
         name
         for name in discovered
-        if not is_codec_module(name) and "__main__" not in name.split(".")
+        if not is_codec_module(name)
+        and not is_private_module(name)
+        and "__main__" not in name.split(".")
     ]
     return discovered, excluded
 
@@ -1029,8 +1041,9 @@ def generate_api_report(
         "are reported separately and do not affect rankings; __all__ supplies review evidence only. "
         "Only explicitly documented instance fields are inventoried. Coverage means a name mention, "
         "not a validated complexity claim. Constants, class dunder members, individual encodings "
-        "codec modules, and listed programs are excluded. Unavailable and unresolved documented "
-        "APIs are reported separately; no constructors are executed.",
+        "codec modules, single-underscore modules such as _thread, and listed programs are "
+        "excluded. Unavailable and unresolved documented APIs are reported separately; no "
+        "constructors are executed.",
         "manifest": {key: value for key, value in manifest.items() if key != "apis"},
         "needs_classification": sorted(review, key=lambda item: item["name"]),
         "unresolved_documented": unresolved_documented(public_apis, seen_names, set(results)),
