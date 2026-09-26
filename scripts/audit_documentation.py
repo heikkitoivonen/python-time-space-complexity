@@ -612,9 +612,10 @@ def inspect_public_api(
     """Enumerate public bindings, inherited class members, enums, and fields.
 
     Public means a non-underscore binding from dir() or __all__; a single-underscore name
-    in __all__ counts only when the official inventory documents it. Re-exported
-    names are included, even when they may be implementation imports. Class dunder
-    members and constants are excluded; __import__ remains included as a builtin API.
+    in __all__ counts only when the official inventory documents it under the module's
+    own __name__. Re-exported names are included, even when they may be implementation
+    imports. Class dunder members and constants are excluded; __import__ remains included
+    as a builtin API.
     No API functions or constructors are called; descriptors are inspected statically.
     """
     items: list[dict[str, Any]] = []

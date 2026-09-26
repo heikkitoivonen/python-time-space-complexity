@@ -61,7 +61,9 @@ def test_single_underscore_modules_are_excluded(monkeypatch: pytest.MonkeyPatch)
 
     assert modules == ["__future__", "json"]
     assert excluded == ["_thread", "_tkinter"]
-    unresolved = audit.unresolved_documented(apis, set(), {"__future__", "json"})
+    unresolved = audit.unresolved_documented(
+        apis, set(), {"__future__", "json", "_thread", "_tkinter"}
+    )
     assert [item["name"] for item in unresolved] == ["__future__", "__future__.annotations"]
 
 
