@@ -1,463 +1,458 @@
 # contextlib Module Complexity
 
-The `contextlib` module provides utilities for working with context managers and the `with` statement, enabling resource management and cleanup.
+The `contextlib` module builds context managers: from a generator function, from a stack of
+callbacks assembled at run time, or ready-made for one job such as suppressing an exception or
+redirecting output. What it adds is a constant amount of work per entry, exit and registered
+callback; the work of setup and cleanup is whatever the code you hand it does.
+
+`k` is the callbacks registered on an `ExitStack` or `AsyncExitStack`, and `g` is the exceptions
+in an exception group, nested groups included. The work a callback, an `__enter__` or `__exit__`
+method, or a generator's code before and after its `yield` does of its own is priced O(1), and so
+is matching an exception against the few types given to `suppress()` and each `os.getcwd()` or
+`os.chdir()` call `chdir()` makes: the rows price what `contextlib` adds around that work.
 
 ## Complexity Reference
 
+### contextmanager and asynccontextmanager
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| Context manager entry | O(1) | O(1) | `__enter__()` call |
-| Context manager exit | O(1) | O(1) | `__exit__()` call |
-| `@contextmanager` | O(1) | O(1) | Decorator application |
-| `ExitStack` add | O(1) | O(1) | Register callback |
-| `ExitStack` exit all | O(n) | O(1) | LIFO order; n = registered callbacks |
-| `contextmanager` yield | O(1) | O(1) | Generator yield point |
-| `@asynccontextmanager` | O(1) | O(1) | Decorator application |
-| `AsyncExitStack` add | O(1) | O(1) | Register async callback |
-| `AsyncExitStack` exit all | O(n) | O(1) | LIFO order; n = registered callbacks |
-| `closing()` | O(1) | O(1) | Wrap object with close() |
-| `aclosing()` | O(1) | O(1) | Wrap async object with aclose() |
-| `nullcontext()` | O(1) | O(1) | No-op context manager |
-| `redirect_stdout()` | O(1) | O(1) | Replace sys.stdout |
-| `redirect_stderr()` | O(1) | O(1) | Replace sys.stderr |
-| `suppress()` | O(1) | O(1) | Suppress exceptions |
-| `chdir()` | O(1) | O(1) | Temporarily change working dir |
-| `ContextDecorator` | O(1) | O(1) | Base for context/decorator |
-| `AsyncContextDecorator` | O(1) | O(1) | Async base for context/decorator |
-| `AbstractContextManager` | O(1) | O(1) | ABC for contexts |
-| `AbstractAsyncContextManager` | O(1) | O(1) | ABC for async contexts |
+| `@contextlib.contextmanager`, `@contextlib.asynccontextmanager` | O(1) | O(1) | Wraps the generator function; nothing runs yet |
+| Calling the decorated function | O(1) | O(1) | Builds a new generator and its wrapper; the function body does not start |
+| Entering the `with` or `async with` | O(1) | O(1) | Runs the generator to its `yield` |
+| Leaving the `with` or `async with` | O(1) | O(1) | Resumes the generator, throwing in the exception if there is one. Each object is single use: a second `with` on it raises |
+| Using the returned object as a decorator | O(1) per call | O(1) | Builds a fresh generator for every call of the decorated function |
 
-## Context Managers Basics
+### ExitStack
 
-### Custom Context Manager Class
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `contextlib.ExitStack()` | O(1) | O(1) | An empty stack of callbacks |
+| `ExitStack.enter_context(cm)` | O(1) | O(1) | Calls `cm.__enter__()`, then pushes its `__exit__`; returns what `__enter__` returned |
+| `ExitStack.push(exit)` | O(1) | O(1) | Pushes an `__exit__`-style callable, or the `__exit__` of an object that has one; either can suppress the exception |
+| `ExitStack.callback(callback, /, *args, **kwds)` | O(1) | O(1) | Pushes a call that ignores the exception and cannot suppress it |
+| `ExitStack.pop_all()` | O(1) | O(1) | Moves the whole stack to a new `ExitStack` without copying it and leaves this one empty |
+| `ExitStack.close()`, leaving the `with` | O(k) | O(1) | Calls every callback once, last pushed first, and empties the stack; a callback that suppresses hides the exception from the ones below it. Space excludes exceptions the callbacks raise |
+| Unwinding when every exit raises while handling the exception before it | O(k²) | O(k) | A `@contextmanager` whose cleanup raises does this: each raise walks the context chain of the exception it is handling, which grows by one per exit |
+
+### AsyncExitStack
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `contextlib.AsyncExitStack()` | O(1) | O(1) | Takes synchronous and asynchronous callbacks on one stack |
+| `AsyncExitStack.enter_async_context(cm)` | O(1) | O(1) | Awaits `cm.__aenter__()`, then pushes its `__aexit__` |
+| `AsyncExitStack.push_async_exit(exit)` | O(1) | O(1) | As `push()`, for an `__aexit__`-style coroutine function or an object with `__aexit__` |
+| `AsyncExitStack.push_async_callback(callback, /, *args, **kwds)` | O(1) | O(1) | As `callback()`, awaiting the coroutine it returns |
+| `AsyncExitStack.enter_context(cm)`, `push(exit)`, `callback(...)`, `pop_all()` | O(1) | O(1) | The synchronous forms, as on `ExitStack` |
+| `AsyncExitStack.aclose()`, leaving the `async with` | O(k) | O(1) | As `ExitStack.close()`, awaiting the asynchronous callbacks; the same O(k²) when every exit raises while handling the exception before it |
+
+### Single-purpose context managers
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `contextlib.closing(thing)` | O(1) | O(1) | Calls `thing.close()` once on the way out, whether or not the block raised |
+| `contextlib.aclosing(thing)` | O(1) | O(1) | Python 3.10+; awaits `thing.aclose()` once on the way out |
+| `contextlib.nullcontext(enter_result=None)` | O(1) | O(1) | Returns `enter_result` and does nothing else; usable with `async with` from Python 3.10 |
+| `contextlib.suppress(*exceptions)` | O(1) | O(1) | An exception matching one of the types ends the block and execution continues after it |
+| Leaving `suppress` with an exception group | O(g) | O(g) | Python 3.12+: the group is split, the matching exceptions are dropped and the rest re-raised as a new group |
+| `contextlib.redirect_stdout(new_target)`, `contextlib.redirect_stderr(new_target)` | O(1) | O(1) | Replaces `sys.stdout` or `sys.stderr` for the block, for every thread in the process; the same object can be nested in itself |
+| `contextlib.chdir(path)` | O(1) | O(1) | Python 3.11+; changes the working directory of the whole process for the block; the same object can be nested in itself |
+
+### Base classes
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `contextlib.ContextDecorator`, `contextlib.AsyncContextDecorator` | O(1) per call | O(1) | A subclass instance used as a decorator wraps each call in `with` on that same instance. `AsyncContextDecorator` is Python 3.10+ |
+| `contextlib.AbstractContextManager`, `contextlib.AbstractAsyncContextManager` | O(1) | O(1) | `__enter__` and `__aenter__` return `self`; an `isinstance()` check looks for the methods through the class's MRO the first time and is cached per class after that |
+
+## Generator-Based Context Managers
+
+`@contextmanager` turns a generator into a context manager. The decorator itself does no work.
+Every call of the decorated function builds a new generator, which runs to its `yield` on entry
+and past it on exit, so a generator-based context manager is single use: build a new one for each
+`with`.
 
 ```python
-class FileManager:
-    """Custom context manager - O(1) per operation"""
-    
-    def __init__(self, filename, mode):
-        self.filename = filename
-        self.mode = mode
-        self.file = None
-    
-    # Entry - O(1)
-    def __enter__(self):
-        self.file = open(self.filename, self.mode)
-        return self.file
-    
-    # Exit - O(1)
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.file:
-            self.file.close()
-        return False  # Propagate exceptions
+from contextlib import contextmanager
 
-# Use context manager - O(1) per operation
-with FileManager("test.txt", "w") as f:
-    f.write("Hello")  # File closed automatically
+events = []
 
-print("File is closed")  # Guaranteed cleanup
+@contextmanager  # O(1) - wraps the function
+def tag(name):
+    events.append(f"open {name}")
+    try:
+        yield name
+    finally:
+        events.append(f"close {name}")
+
+manager = tag("a")  # O(1) - builds a generator; the body has not started
+assert events == []
+
+with manager as value:  # O(1) - runs to the yield
+    assert value == "a"
+    assert events == ["open a"]
+assert events == ["open a", "close a"]  # O(1) - resumed after the yield
+
+try:
+    with manager:  # the generator is spent
+        pass
+except AttributeError:
+    pass
+else:
+    raise AssertionError("a spent @contextmanager object was entered twice")
 ```
 
-### Protocol: Context Manager
+### Exceptions Inside the Block
+
+An exception raised in the block is thrown into the generator at the `yield`. The generator can
+catch it, which suppresses it, or let it through.
 
 ```python
+from contextlib import contextmanager
+
+@contextmanager
+def swallow(kind):
+    try:
+        yield
+    except kind:
+        pass
+
+with swallow(ZeroDivisionError):  # O(1) - the exception is thrown in at the yield
+    1 / 0
+
+try:
+    with swallow(ZeroDivisionError):
+        raise KeyError("missing")
+except KeyError as error:
+    assert error.args == ("missing",)
+else:
+    raise AssertionError("a KeyError was swallowed")
+```
+
+### As a Decorator
+
+The object a `@contextmanager` function returns can also decorate a function. Each call of the
+decorated function then builds a fresh generator, so the setup runs once per call.
+
+```python
+from contextlib import contextmanager
+
+calls = []
+
+@contextmanager
+def counted():
+    calls.append("enter")
+    yield
+
+@counted()
+def work(x):
+    return x * 2
+
+assert [work(n) for n in range(3)] == [0, 2, 4]  # O(1) per call
+assert calls == ["enter", "enter", "enter"]  # a new generator for every call
+```
+
+## Exit Stacks
+
+### Unwinding Order
+
+An `ExitStack` is a list of pending cleanups that grows at run time. Each registration is O(1);
+leaving the `with`, or calling `close()`, runs all k of them once, last registered first, as k
+nested `with` statements would.
+
+```python
+from contextlib import ExitStack, closing
+
+order = []
+
 class Resource:
-    """Implement context manager protocol"""
-    
     def __init__(self, name):
         self.name = name
-        self.is_open = False
-    
-    def __enter__(self):
-        """Called on 'with' statement - O(1)"""
-        print(f"Acquiring {self.name}")
-        self.is_open = True
-        return self
-    
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Called on exit - O(1)"""
-        print(f"Releasing {self.name}")
-        self.is_open = False
-        
-        # Handle exceptions if needed
-        if exc_type is not None:
-            print(f"Exception occurred: {exc_type.__name__}")
-        
-        return False  # Don't suppress exceptions
 
-# Usage - guaranteed cleanup
-with Resource("database") as resource:
-    print(f"Using {resource.name}")
+    def close(self):
+        order.append(self.name)
 
-# Output:
-# Acquiring database
-# Using database
-# Releasing database
+with ExitStack() as stack:  # O(1)
+    for name in ["a", "b", "c"]:
+        stack.enter_context(closing(Resource(name)))  # O(1) each
+    stack.callback(order.append, "callback")  # O(1)
+    assert order == []
+
+assert order == ["callback", "c", "b", "a"]  # O(k) - last registered first
 ```
 
-## contextmanager Decorator
+### Suppressing From the Stack
 
-### Simple Generator Context Manager
-
-```python
-from contextlib import contextmanager
-
-# Define with decorator - O(1)
-@contextmanager
-def timer(name):
-    """Simple timer context manager"""
-    import time
-    
-    # Setup - O(1)
-    print(f"Starting {name}")
-    start = time.time()
-    
-    try:
-        # Yield control - O(1)
-        yield
-    finally:
-        # Cleanup - O(1)
-        elapsed = time.time() - start
-        print(f"Finished {name}: {elapsed:.3f}s")
-
-# Use - O(1) per operation
-with timer("computation"):
-    total = sum(range(1000000))
-    
-# Output:
-# Starting computation
-# Finished computation: 0.001s
-```
-
-### Context Manager with Return Value
-
-```python
-from contextlib import contextmanager
-
-@contextmanager
-def database_connection(db_url):
-    """Context manager yielding resource"""
-    
-    # Setup - O(1)
-    print(f"Connecting to {db_url}")
-    connection = f"Connection to {db_url}"
-    
-    try:
-        # Yield resource - O(1)
-        yield connection
-    finally:
-        # Cleanup - O(1)
-        print(f"Closing connection")
-
-# Use with resource - O(1)
-with database_connection("postgresql://localhost") as conn:
-    print(f"Using {conn}")
-    # query_result = conn.execute("SELECT * FROM users")
-
-# Output:
-# Connecting to postgresql://localhost
-# Using Connection to postgresql://localhost
-# Closing connection
-```
-
-### Context Manager with Exception Handling
-
-```python
-from contextlib import contextmanager
-
-@contextmanager
-def error_handler(error_message):
-    """Catch exceptions in context"""
-    
-    try:
-        # Yield control - O(1)
-        yield
-    except Exception as e:
-        # Handle exception - O(1)
-        print(f"{error_message}: {type(e).__name__}")
-
-# Use with error handling - O(1)
-with error_handler("Operation failed"):
-    result = 1 / 0  # Will be caught
-
-print("Execution continues")
-
-# Output:
-# Operation failed: ZeroDivisionError
-# Execution continues
-```
-
-## ExitStack - Multiple Context Managers
-
-### Register Multiple Contexts
+`push()` registers an `__exit__`-style callable, which sees the exception and can suppress it by
+returning true. Callbacks below it in the stack then see no exception. `callback()` ignores the
+exception and cannot suppress it.
 
 ```python
 from contextlib import ExitStack
 
-# ExitStack - O(1) per add
-with ExitStack() as stack:
-    # Add file contexts - O(1) each
-    f1 = stack.enter_context(open("file1.txt", "w"))
-    f2 = stack.enter_context(open("file2.txt", "w"))
-    f3 = stack.enter_context(open("file3.txt", "w"))
-    
-    # Use all files - O(1) per operation
-    f1.write("File 1 content")
-    f2.write("File 2 content")
-    f3.write("File 3 content")
+seen = []
 
-# All files closed automatically - O(n) for n files
-print("All files closed")
-```
+def record(exc_type, exc, tb):
+    seen.append(exc_type)
+    return False
 
-### Conditional Context Management
-
-```python
-from contextlib import ExitStack
-
-def open_optional_file(filename=None, mode="r"):
-    """Open file only if filename provided"""
-    
-    stack = ExitStack()
-    files = []
-    
-    if filename:
-        # Conditionally add context - O(1)
-        f = stack.enter_context(open(filename, mode))
-        files.append(f)
-    
-    # Return both stack and files for cleanup
-    return stack, files
-
-# Use - O(1) per operation
-stack, files = open_optional_file("data.txt")
-with stack:
-    if files:
-        content = files[0].read()
-        print(content)
-
-# File closed on exit - O(1)
-```
-
-### Register Callbacks
-
-```python
-from contextlib import ExitStack
+def swallow(exc_type, exc, tb):
+    seen.append(exc_type)
+    return True  # suppress
 
 with ExitStack() as stack:
-    # Register callback - O(1) per callback
-    stack.callback(print, "Cleanup 3")
-    stack.callback(print, "Cleanup 2")
-    stack.callback(print, "Cleanup 1")
-    
-    print("Main context")
+    stack.push(record)  # O(1) - runs last
+    stack.push(swallow)  # O(1) - runs first
+    raise ValueError("handled by the stack")
 
-# Output (LIFO order):
-# Main context
-# Cleanup 1
-# Cleanup 2
-# Cleanup 3
+assert seen == [ValueError, None]  # the callback below the suppressor saw nothing
 ```
 
-## Suppress Context Manager
+### Transferring Ownership With pop_all()
 
-### Suppress Exceptions
+`pop_all()` hands the whole stack to a new `ExitStack` in O(1). The usual use is to acquire
+several resources and keep them only if every acquisition succeeded.
 
 ```python
+from contextlib import ExitStack
+
+closed = []
+
+def acquire(names):
+    with ExitStack() as stack:
+        for name in names:
+            if name == "bad":
+                raise OSError(name)
+            stack.callback(closed.append, name)  # O(1)
+        return stack.pop_all()  # O(1) - nothing is closed on the way out
+
+keeper = acquire(["a", "b"])
+assert closed == []
+keeper.close()  # O(k)
+assert closed == ["b", "a"]
+
+try:
+    acquire(["c", "bad"])
+except OSError:
+    assert closed == ["b", "a", "c"]  # a failed acquisition released what it held
+else:
+    raise AssertionError("acquire() did not raise")
+```
+
+### Exceptions During Unwinding
+
+When a cleanup raises, its exception replaces the one in flight. Unwinding stays O(k) when the
+cleanups that raise do so without handling the exception they are handed. It becomes O(k²) when
+each one raises while handling it - a `@contextmanager` whose `finally` raises is the common case -
+because every raise walks the context chain of the exception being handled, and here that chain
+holds every earlier cleanup's exception.
+
+```python
+from contextlib import ExitStack, contextmanager
+
+@contextmanager
+def fails_on_cleanup(n):
+    try:
+        yield
+    finally:
+        raise RuntimeError(n)
+
+try:
+    with ExitStack() as stack:
+        for n in range(3):
+            stack.enter_context(fails_on_cleanup(n))  # O(1)
+        raise KeyError("body")
+except RuntimeError as error:  # O(k²) for k failing cleanups
+    chain = []
+    while error is not None:
+        chain.append(error.args[0])
+        error = error.__context__
+    assert chain == [0, 1, 2, "body"]
+else:
+    raise AssertionError("the cleanups did not raise")
+```
+
+## Async Context Managers
+
+`@asynccontextmanager`, `AsyncExitStack`, `aclosing()` and `nullcontext()` mirror their
+synchronous forms with the same bounds. An `AsyncExitStack` takes both kinds of callback on one
+stack and unwinds them in one LIFO pass.
+
+```python
+import asyncio
+from contextlib import AsyncExitStack, aclosing, asynccontextmanager, nullcontext
+
+order = []
+
+@asynccontextmanager
+async def connection(name):
+    order.append(f"open {name}")
+    try:
+        yield name
+    finally:
+        order.append(f"close {name}")
+
+async def numbers():
+    try:
+        for n in range(10):
+            yield n
+    finally:
+        order.append("generator closed")
+
+async def main():
+    async with AsyncExitStack() as stack:  # O(1)
+        conn = await stack.enter_async_context(connection("db"))  # O(1)
+        stack.callback(order.append, "sync callback")  # O(1)
+        assert conn == "db"
+
+    async with aclosing(numbers()) as agen:  # O(1)
+        async for n in agen:
+            if n == 2:
+                break  # aclose() still runs on the way out
+
+    async with nullcontext("value") as value:  # O(1)
+        assert value == "value"
+
+asyncio.run(main())
+assert order == ["open db", "sync callback", "close db", "generator closed"]
+```
+
+## Suppressing Exceptions
+
+`suppress()` is `try`/`except`/`pass` as a context manager: a matching exception ends the block
+and execution resumes after it. From Python 3.12 it also accepts an exception group, splitting it
+in O(g): the matching exceptions are dropped, and any others are raised as a new group.
+
+```python
+import sys
 from contextlib import suppress
 
-# Suppress specific exception - O(1)
-with suppress(FileNotFoundError):
-    with open("nonexistent.txt") as f:
-        content = f.read()
+with suppress(KeyError, IndexError):  # O(1)
+    {}["missing"]
+    raise AssertionError("not reached")
 
-# No exception raised
-print("Execution continues despite FileNotFoundError")
+if sys.version_info >= (3, 12):
+    with suppress(ValueError):  # O(g) - every exception in the group matched
+        raise ExceptionGroup("all values", [ValueError(1), ValueError(2)])
 
-# Multiple exceptions - O(1)
-with suppress(ValueError, KeyError, AttributeError):
-    value = int("not a number")  # Suppressed
-```
-
-## Redirect Context Managers
-
-### Redirect Output
-
-```python
-from contextlib import redirect_stdout, redirect_stderr
-import io
-
-# Capture stdout - O(1) setup
-output = io.StringIO()
-with redirect_stdout(output):
-    print("This goes to StringIO")
-    print("Not to console")
-
-captured = output.getvalue()
-print(f"Captured: {captured}")
-
-# Capture stderr - O(1) setup
-errors = io.StringIO()
-with redirect_stderr(errors):
-    import sys
-    sys.stderr.write("Error message")
-
-print(f"Errors: {errors.getvalue()}")
-```
-
-## nullcontext - No-op Context
-
-### Placeholder Context Manager
-
-```python
-from contextlib import nullcontext
-
-# nullcontext - O(1), does nothing
-with nullcontext() as nothing:
-    print("Nothing is:", nothing)
-
-# Return value
-with nullcontext("default value") as value:
-    print("Value is:", value)
-
-# Conditional context manager
-def optional_context(condition, context_manager):
-    """Use context manager only if condition is true"""
-    if condition:
-        return context_manager
-    return nullcontext()
-
-# Usage
-config = {'debug': True}
-
-with optional_context(config.get('debug'), suppress(RuntimeError)):
-    if config['debug']:
-        raise RuntimeError("Debug error")
-```
-
-## Asyncio Context Managers
-
-### Async Context Manager
-
-```python
-from contextlib import asynccontextmanager
-import asyncio
-
-# Define async context manager - O(1)
-@asynccontextmanager
-async def async_timer(name):
-    """Async context manager"""
-    
-    # Setup - O(1)
-    print(f"Starting {name}")
-    import time
-    start = time.time()
-    
     try:
-        # Yield control - O(1)
-        yield
-    finally:
-        # Cleanup - O(1)
-        elapsed = time.time() - start
-        print(f"Finished {name}: {elapsed:.3f}s")
+        with suppress(ValueError):
+            raise ExceptionGroup("mixed", [ValueError(1), KeyError(2)])
+    except ExceptionGroup as group:
+        assert [type(e) for e in group.exceptions] == [KeyError]
+    else:
+        raise AssertionError("the KeyError was suppressed")
+```
 
-# Use async context - O(?) based on async operations
-async def main():
-    async with async_timer("async operation"):
-        await asyncio.sleep(0.1)
+## Redirecting Output and the Working Directory
 
-# asyncio.run(main())
+`redirect_stdout()`, `redirect_stderr()` and `chdir()` each swap one piece of process-wide state
+for the block and restore it after, in O(1). Process-wide means every thread sees the change, so
+none of them is a way to capture one thread's output or give one thread its own directory.
+
+```python
+import io
+import os
+import sys
+import tempfile
+from contextlib import redirect_stderr, redirect_stdout
+
+buffer = io.StringIO()
+with redirect_stdout(buffer):  # O(1) - swaps sys.stdout
+    print("captured")
+assert buffer.getvalue() == "captured\n"
+assert sys.stdout is sys.__stdout__
+
+errors = io.StringIO()
+with redirect_stderr(errors):  # O(1)
+    sys.stderr.write("warning\n")
+assert errors.getvalue() == "warning\n"
+
+if sys.version_info >= (3, 11):
+    from contextlib import chdir
+
+    start = os.getcwd()
+    with tempfile.TemporaryDirectory() as target:
+        with chdir(target):  # O(1) - one os.chdir() each way
+            assert os.path.samefile(os.getcwd(), target)
+        assert os.getcwd() == start
 ```
 
 ## Common Patterns
 
-### Resource Pool Management
+### A Variable Number of Files
+
+`ExitStack` is the way to hold n files open at once when n is only known at run time. Each file
+costs one registration, and all of them are closed even if a later `open()` fails.
 
 ```python
-from contextlib import contextmanager
+import os
+import tempfile
+from contextlib import ExitStack
 
-class ConnectionPool:
-    """Simple connection pool"""
-    
-    def __init__(self, size=5):
-        self.pool = [f"Connection-{i}" for i in range(size)]
-        self.available = set(self.pool)
-    
-    @contextmanager
-    def acquire(self):
-        """Acquire connection from pool - O(1) amortized"""
-        
-        # Get connection - O(1)
-        conn = self.available.pop()
-        
-        try:
-            yield conn
-        finally:
-            # Return to pool - O(1)
-            self.available.add(conn)
+with tempfile.TemporaryDirectory() as directory:
+    names = [os.path.join(directory, f"part{n}.txt") for n in range(3)]
+    for n, name in enumerate(names):
+        with open(name, "w") as f:
+            f.write(f"line {n}\n")
 
-# Use pool - O(1) per operation
-pool = ConnectionPool(3)
+    with ExitStack() as stack:
+        files = [stack.enter_context(open(name)) for name in names]  # O(1) each
+        merged = [f.readline() for f in files]
 
-with pool.acquire() as conn:
-    print(f"Using {conn}")
-    # Simulate work
-
-# Connection returned - O(1)
-print(f"Available: {len(pool.available)}")
+    assert merged == ["line 0\n", "line 1\n", "line 2\n"]
+    assert all(f.closed for f in files)  # O(k) on the way out
 ```
 
-### Temporary Changes
+### An Optional Context Manager
+
+`nullcontext()` stands in when a context manager is needed only some of the time, so the `with`
+statement does not have to be written twice.
 
 ```python
-from contextlib import contextmanager
-import sys
+import threading
+from contextlib import nullcontext
 
-@contextmanager
-def temporary_setting(obj, name, value):
-    """Temporarily change object attribute - O(1)"""
-    
-    # Save original - O(1)
-    old_value = getattr(obj, name)
-    setattr(obj, name, value)
-    
-    try:
-        yield
-    finally:
-        # Restore original - O(1)
-        setattr(obj, name, old_value)
+def update(counter, lock=None):
+    with lock if lock is not None else nullcontext():  # O(1)
+        counter["n"] += 1
 
-class Config:
-    debug = False
-
-# Use - O(1)
-with temporary_setting(Config, 'debug', True):
-    print(f"Debug: {Config.debug}")  # True
-
-print(f"Debug: {Config.debug}")  # False
+counter = {"n": 0}
+update(counter)
+update(counter, threading.Lock())
+assert counter == {"n": 2}
 ```
 
-## Performance Notes
+## Performance Best Practices
 
-### Time Complexity
-- **Context entry/exit**: O(1) for simple cases
-- **ExitStack operations**: O(1) per add, O(n) to exit all
-- **Multiple contexts**: O(n) total where n = number of contexts
+✅ **Do**:
 
-### Space Complexity
-- **Context manager**: O(1) for simple cases
-- **ExitStack**: O(n) for n registered callbacks/contexts
-- **Output redirection**: O(n) for captured output
+- Use `ExitStack` when the number of resources is only known at run time; each one is an O(1)
+  registration and unwinding is one O(k) pass
+- Use `pop_all()` to keep resources past the `with` only once every acquisition succeeded
+- Build a fresh `@contextmanager` object for each `with`; the generator inside is single use
+- Use `nullcontext()` rather than duplicating a block for the case with no context manager
 
-### Best Practices
-- Use context managers for resource cleanup
-- Use ExitStack for multiple resources
-- Use suppresses sparingly for expected errors
-- Use try/finally for custom cleanup
+❌ **Avoid**:
 
-## Related Documentation
+- Cleanups that routinely raise while handling the exception in flight, on a long stack - each
+  raise walks the chain the earlier ones built, which makes unwinding O(k²)
+- `redirect_stdout()`, `redirect_stderr()` or `chdir()` in threaded code - they change state for
+  every thread, not just the one inside the `with`
+- `suppress()` around more code than the one statement expected to fail - everything after the
+  failing line in the block is skipped
 
-- [IO Module](io.md)
-- [Builtins](../builtins/index.md)
-- [Typing Module](typing.md)
-- [Asyncio Module](asyncio.md)
+## Version Notes
+
+- **Python 3.10+**: Added `aclosing()` and `AsyncContextDecorator`; `nullcontext()` works with
+  `async with`
+- **Python 3.11+**: Added `chdir()`
+- **Python 3.12+**: `suppress()` handles exception groups
+
+## Related Modules
+
+- **[asyncio](asyncio.md)** - runs the `async with` forms on this page
+- **[io](io.md)** - `StringIO`, the usual target for `redirect_stdout()` and `redirect_stderr()`
+- **[os](os.md)** - `os.chdir()` and `os.getcwd()`, which `chdir()` wraps
+- **[tempfile](tempfile.md)** - temporary files and directories that are themselves context
+  managers
