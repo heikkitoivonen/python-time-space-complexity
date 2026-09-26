@@ -1,477 +1,693 @@
-"""Tests to verify documented time complexity of array module operations.
+"""Tests for docs/stdlib/array.md.
 
-A spot check of docs/stdlib/array.md against the interpreter: every row of
-its complexity table, plus the per-operation annotations in its code blocks.
-Inputs are large enough that the timed work dominates fixed overhead.
-For tobytes(), tests assert the exact output size, content, and independence
-from the source at two lengths and three item widths. These observations
-establish the copied output's O(n) space, not an upper bound on elapsed time.
-The O(n) time bound is source-backed: array_array_tobytes_impl passes
-length * itemsize to PyBytes_FromStringAndSize, which copies that buffer.
-See Modules/arraymodule.c and Objects/bytesobject.c on CPython's released
-3.10, 3.11, 3.12, 3.13 and 3.14 branches, for example:
-https://github.com/python/cpython/blob/3.12/Modules/arraymodule.c
-https://github.com/python/cpython/blob/3.12/Objects/bytesobject.c
-Allocator and memory-cache latency are not measured by the output checks.
+The page prices `array.array` as a list with packed storage: a contiguous,
+over-allocated buffer, so the end is cheap and the middle shifts, and every
+read builds a Python object from a stored value. Growth classes are settled
+by timing across a size step; space, laziness of copies, call counts and the
+buffer-management notes are settled by observation - traced allocation,
+`sys.getsizeof()`, identity, a counting `__eq__` and a recording file - which
+needs no tolerance.
 
-The memory section did not, and both tests for it were written against
-measurements rather than the page:
+Measurement scope:
 
-* an array is *larger* than a list below about a dozen elements, because its
-  header is 80 bytes against a list's 56. The page demonstrated the saving
-  with five elements
-* at useful sizes the page understates the saving by more than four times,
-  because `sys.getsizeof(list)` counts the pointers and not the int objects
-  they point at
+* Linear rows are timed at n = 20,000 and n = 2,000,000 (a 100x step) with
+  the fastest of several runs, and the ratio is asserted between 20 and
+  1,000, which excludes both O(1) (x1) and O(n^2) (x10,000). Constant rows
+  are timed at n = 1,000 and n = 1,000,000 and asserted under 3x. Setup is
+  outside the timed call; operations that mutate restore the size inside it
+  with an O(1) partner (append/pop at the end) or pair two O(n) shifts.
+  `extend()` is asserted O(k) by the same 100x step in k into an empty array,
+  and independent of n by extending a 1,000- and a 1,000,000-item array by
+  ten items and deleting them again, which reallocates neither time.
+* `a == b` for unequal lengths is timed like a constant row against equal
+  arrays, which are timed like a linear row.
+* `x in a`, `index()`, `remove()` and `count()` are counted with an object
+  whose `__eq__` records calls: a match at position 5 of 1,000 costs 6
+  comparisons for the first three and 1,000 for `count()`.
+* Reads building new objects: `a[0] is not a[0]` for a value outside the
+  small-int cache, and `tolist()` items are fresh objects. `sum()` over a
+  1,000,000-item `'q'` array is timed against the same list and asserted not
+  faster (over 0.9x the list's time).
+* `tofile()` writes an 8 MB array to a sink that keeps nothing with a traced
+  peak under 200 KB, against `tobytes()` over 8 MB. `fromfile()` is observed
+  to call `read()` once with k·itemsize, and to append 1,000 items before
+  raising `EOFError` when asked for 2,000.
+* `copy.deepcopy()` of a 1,000,000-item `'q'` array peaks under 1.1x the
+  8 MB buffer, so no per-item objects are made.
+* The buffer: 2,000 appends show more than one and far fewer than 2,000
+  distinct `getsizeof()` values; 900 `pop()` calls leave `getsizeof()`
+  unchanged while one `del a[10:]` shrinks it. `clear()` (3.13+) on 1,000
+  items returns `getsizeof()` to an empty array's. A live `memoryview` sees an item write and makes `append()`,
+  `pop()`, `extend()` and slice deletion raise `BufferError`.
+* `fromlist()` leaves the array unchanged on a bad item, `extend()` keeps the
+  items before it; `+=` and slice assignment reject a list, and `extend()`
+  and `+=` reject an array of another type code. Item assignment out of
+  range raises `OverflowError`. Slices are copies.
+* Item sizes: `'b'`/`'B'` 1, `'f'` 4, `'d'` 8, and the C-type minimums for
+  the other integer codes. The `'w'` code and `clear()` are asserted on
+  3.13+, and the `'u'` `DeprecationWarning` on 3.13+.
+* Memory against a list uses 10,000 ints from 1,000 up, so none is a cached
+  small int: `getsizeof()` of an `'i'` array is under the list's, the list's
+  reachable size is over twice its `getsizeof()`, and an array built from a
+  list holds at least len·itemsize bytes of payload.
+* Every fenced Python block runs in its own subprocess, and a mutated
+  assertion in one of them is asserted to fail.
+
+Not settled here:
+
+* That a reallocating call can move the items already there follows from
+  `array_resize()` calling `PyMem_Realloc`; whether it moves is the
+  allocator's choice and is not observed.
+* `clear()` and `memoryview()` are O(1) and `buffer_info()`, `typecode` and
+  `itemsize` are attribute reads, from Modules/arraymodule.c on the 3.10-3.14
+  release branches (`clear()` resizes to zero and frees the buffer; the
+  allocator's cost for that free is not measured).
+* `a < b` follows the same comparison loop as `==`, which is what is timed;
+  ordering comparisons are not timed separately.
+* `byteswap()`, `reverse()`, `tounicode()`, `fromunicode()` and `a * m` are
+  timed only in n (and not in m); the tounicode/fromunicode timings use `'w'`
+  on 3.13+ and skip the deprecated `'u'`.
+* Element comparison cost is priced O(1); arrays hold only numbers and
+  characters, so only a caller's custom `__eq__` can change that, and the
+  counting object above is the only such case exercised.
+* Item width is varied only by the itemsize checks; the timings use `'q'`,
+  `'i'` or `'d'` throughout.
 """
 
+from __future__ import annotations
+
 import array
-import math
+import copy
+import io
+import pathlib
+import re
+import subprocess
 import sys
+import textwrap
 import time
+import tracemalloc
+import warnings
 from collections.abc import Callable
 from typing import Any
 
 import pytest
 
+PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "array.md"
+EXPECTED_BLOCKS = 10
 
-def trimmed_mean(samples: list[float], trim_fraction: float = 0.1) -> float:
-    """Return the trimmed mean to reduce outlier impact."""
-    if not samples:
-        return 0.0
-    if trim_fraction <= 0:
-        return sum(samples) / len(samples)
-    k = int(len(samples) * trim_fraction)
-    if len(samples) - 2 * k <= 0:
-        return sum(samples) / len(samples)
-    samples = sorted(samples)
-    core = samples[k : len(samples) - k]
-    return sum(core) / len(core)
+SMALL = 20_000
+LARGE = 2_000_000
 
 
-def measure_time(func: Callable[[], Any], iterations: int = 100) -> float:
-    """Measure trimmed mean time for a function over multiple iterations."""
-    times: list[float] = []
-    for _ in range(iterations):
-        start = time.perf_counter()
+def best_ns(func: Callable[[], Any], repeats: int = 7, inner: int = 1) -> float:
+    """Fastest of `repeats` runs, in nanoseconds per call."""
+    best: float | None = None
+    for _ in range(repeats):
+        start = time.perf_counter_ns()
+        for _ in range(inner):
+            func()
+        elapsed = (time.perf_counter_ns() - start) / inner
+        best = elapsed if best is None else min(best, elapsed)
+    assert best is not None
+    return best
+
+
+def peak_bytes(func: Callable[[], Any]) -> int:
+    """Peak traced allocation while func runs."""
+    tracemalloc.start()
+    try:
         func()
-        times.append(time.perf_counter() - start)
-    return trimmed_mean(times)
+        return tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
 
 
-def is_constant_time(small_time: float, large_time: float, tolerance: float = 3.0) -> bool:
-    """Check if two times are within tolerance (suggesting O(1))."""
-    if small_time == 0:
-        return large_time < 1e-6
-    return large_time / small_time < tolerance
+class DiscardingSink:
+    """A binary file-like object that keeps nothing it is given."""
+
+    def write(self, data: bytes) -> int:
+        return len(data)
 
 
-def is_linear_time(
-    small_time: float,
-    large_time: float,
-    size_ratio: float,
-    tolerance: float = 3.0,
-) -> bool:
-    """Check if time scales linearly with size."""
-    if small_time == 0:
-        return True
-    return large_time / small_time < size_ratio * tolerance
+class CountingEq:
+    """Equal to one value; records every comparison made against it."""
+
+    def __init__(self, target: int) -> None:
+        self.target = target
+        self.calls = 0
+
+    def __eq__(self, other: object) -> bool:
+        self.calls += 1
+        return other == self.target
+
+    __hash__ = None  # type: ignore[assignment]
 
 
-def scales_with_size(small_time: float, large_time: float, size_ratio: float) -> bool:
-    """Check that time actually grew with size, roughly in proportion."""
-    if small_time == 0:
-        return False
-    ratio = large_time / small_time
-    return size_ratio / 3 < ratio < size_ratio * 3
+def _wide(n: int) -> array.array[int]:
+    return array.array("q", range(10**9, 10**9 + n))
 
 
-class TestArrayComplexity:
-    """Test array operation complexities as documented in docs/stdlib/array.md."""
+def _unicode(n: int) -> array.array[str]:
+    return array.array("w", "x" * n)  # pyright: ignore[reportArgumentType]
 
-    SMALL_SIZE = 10_000
-    LARGE_SIZE = 1_000_000
-    SIZE_RATIO = LARGE_SIZE / SMALL_SIZE
+
+# Each builder returns the operation to time on an n-item input.
+LINEAR: dict[str, Callable[[int], Callable[[], Any]]] = {
+    "array(typecode, list)": lambda n: (lambda src: lambda: array.array("q", src))(list(range(n))),
+    "array(typecode, iterator)": lambda n: lambda: array.array("q", iter(range(n))),
+    "extend(k items) into an empty array": (
+        lambda n: (lambda src: lambda: array.array("q").extend(src))(list(range(n)))
+    ),
+    "slice": lambda n: (lambda a: lambda: a[1:])(_wide(n)),
+    "x in a, missing": lambda n: (lambda a: lambda: -1 in a)(_wide(n)),
+    "index(last)": lambda n: (lambda a: lambda: a.index(a[-1]))(_wide(n)),
+    "count": lambda n: (lambda a: lambda: a.count(-1))(_wide(n)),
+    "== on equal arrays": lambda n: (lambda a, b: lambda: a == b)(_wide(n), _wide(n)),
+    "insert(0) + pop(0)": lambda n: (lambda a: lambda: (a.insert(0, 1), a.pop(0)))(_wide(n)),
+    "remove(last) + append": (
+        lambda n: (lambda a: lambda: (a.remove(a[-1]), a.append(10**9 + n - 1)))(_wide(n))
+    ),
+    "del a[0] + insert(0)": lambda n: (lambda a: lambda: (a.__delitem__(0), a.insert(0, 1)))(
+        _wide(n)
+    ),
+    "reverse": lambda n: (lambda a: a.reverse)(_wide(n)),
+    "byteswap": lambda n: (lambda a: a.byteswap)(_wide(n)),
+    "a + b": lambda n: (lambda a: lambda: a + a)(_wide(n)),
+    "a * 2": lambda n: (lambda a: lambda: a * 2)(_wide(n)),
+    "copy.copy": lambda n: (lambda a: lambda: copy.copy(a))(_wide(n)),
+    "copy.deepcopy": lambda n: (lambda a: lambda: copy.deepcopy(a))(_wide(n)),
+    "tolist": lambda n: (lambda a: a.tolist)(_wide(n)),
+    "fromlist": lambda n: (lambda src: lambda: array.array("q").fromlist(src))(list(range(n))),
+    "tobytes": lambda n: (lambda a: a.tobytes)(_wide(n)),
+    "frombytes": lambda n: (lambda raw: lambda: array.array("q").frombytes(raw))(
+        _wide(n).tobytes()
+    ),
+    "tofile": lambda n: (lambda a: lambda: a.tofile(DiscardingSink()))(_wide(n)),
+    "fromfile": lambda n: (lambda raw: lambda: array.array("q").fromfile(io.BytesIO(raw), n))(
+        _wide(n).tobytes()
+    ),
+}
+
+UNICODE_LINEAR: dict[str, Callable[[int], Callable[[], Any]]] = {
+    "tounicode": lambda n: (lambda a: a.tounicode)(_unicode(n)),
+    "fromunicode": lambda n: (lambda s: lambda: array.array("w").fromunicode(s))("x" * n),
+}
+
+CONSTANT: dict[str, Callable[[int], Callable[[], Any]]] = {
+    "a[i]": lambda n: (lambda a: lambda: a[n // 2])(_wide(n)),
+    "a[i] = x": lambda n: (lambda a: lambda: a.__setitem__(n // 2, 7))(_wide(n)),
+    "len": lambda n: (lambda a: lambda: len(a))(_wide(n)),
+    "append + pop()": lambda n: (lambda a: lambda: (a.append(1), a.pop()))(_wide(n)),
+    "extend(10) + del a[-10:]": (
+        lambda n: (lambda a, src: lambda: (a.extend(src), a.__delitem__(slice(-10, None))))(
+            _wide(n), list(range(10))
+        )
+    ),
+    "== on unequal lengths": lambda n: (lambda a, b: lambda: a == b)(_wide(n), _wide(n + 1)),
+    "memoryview": lambda n: (lambda a: lambda: memoryview(a).release())(_wide(n)),
+    "buffer_info": lambda n: (lambda a: a.buffer_info)(_wide(n)),
+}
+
+
+def _growth(builder: Callable[[int], Callable[[], Any]], small: int, large: int) -> float:
+    operations = [builder(small), builder(large)]
+    for operation in operations:
+        operation()
+    durations = [best_ns(operation, repeats=7, inner=3) for operation in operations]
+    return durations[1] / durations[0]
+
+
+class TestLinearRows:
+    """Every O(n) or O(k) row: 100x the items costs between x20 and x1,000,
+    which a constant (x1) and a quadratic (x10,000) both miss."""
 
     @pytest.mark.timing
-    def test_creation_is_on(self) -> None:
-        """array.array() should be O(n)."""
-        small_source = [0] * self.SMALL_SIZE
-        large_source = [0] * self.LARGE_SIZE
+    @pytest.mark.parametrize("name", list(LINEAR))
+    def test_a_hundred_times_the_items_costs_about_a_hundred_times(self, name: str) -> None:
+        ratio = _growth(LINEAR[name], SMALL, LARGE)
 
-        small_time = measure_time(lambda: array.array("i", small_source), iterations=10)
-        large_time = measure_time(lambda: array.array("i", large_source), iterations=10)
-
-        assert scales_with_size(small_time, large_time, self.SIZE_RATIO), (
-            f"array() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
-        )
+        assert 20 < ratio < 1_000, f"{name}: 100x the items cost x{ratio:.1f}"
 
     @pytest.mark.timing
-    def test_indexing_is_o1(self) -> None:
-        """Indexing should be O(1) - direct offset into the buffer."""
-        small = array.array("i", range(self.SMALL_SIZE))
-        large = array.array("i", range(self.LARGE_SIZE))
+    @pytest.mark.skipif(sys.version_info < (3, 13), reason="'w' was added in 3.13")
+    @pytest.mark.parametrize("name", list(UNICODE_LINEAR))
+    def test_the_unicode_conversions_are_linear(self, name: str) -> None:
+        ratio = _growth(UNICODE_LINEAR[name], SMALL, LARGE)
 
-        small_time = measure_time(lambda: small[self.SMALL_SIZE // 2])
-        large_time = measure_time(lambda: large[self.LARGE_SIZE // 2])
+        assert 20 < ratio < 1_000, f"{name}: 100x the characters cost x{ratio:.1f}"
 
-        assert is_constant_time(small_time, large_time), (
-            f"indexing appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
-        )
 
-    @pytest.mark.timing
-    def test_len_is_o1(self) -> None:
-        small = array.array("i", range(self.SMALL_SIZE))
-        large = array.array("i", range(self.LARGE_SIZE))
-
-        small_time = measure_time(lambda: len(small))
-        large_time = measure_time(lambda: len(large))
-
-        assert is_constant_time(small_time, large_time), (
-            f"len() appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
-        )
+class TestConstantRows:
+    """Every O(1) row, and `==` between arrays of different lengths: 1,000x
+    the items costs under x3."""
 
     @pytest.mark.timing
-    def test_append_is_o1_amortized(self) -> None:
-        """append() should be O(1) amortized."""
-        small = array.array("i", range(self.SMALL_SIZE))
-        large = array.array("i", range(self.LARGE_SIZE))
+    @pytest.mark.parametrize("name", list(CONSTANT))
+    def test_a_thousand_times_the_items_costs_the_same(self, name: str) -> None:
+        ratio = _growth(CONSTANT[name], 1_000, 1_000_000)
 
-        def append_to(target: array.array) -> None:
-            target.append(1)
-            target.pop()
+        assert ratio < 3, f"{name}: 1,000x the items cost x{ratio:.2f}"
 
-        small_time = measure_time(lambda: append_to(small))
-        large_time = measure_time(lambda: append_to(large))
 
-        assert is_constant_time(small_time, large_time), (
-            f"append() appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
-        )
+class TestSearchStopsAtTheFirstMatch:
+    """`x in a`, `index()` and `remove()` stop at the first match;
+    `count()` compares every item."""
 
-    def test_append_resizes_in_jumps(self) -> None:
-        """The table's "O(n) worst case when resizing" - the buffer grows in
-        steps, so most appends touch only a free slot."""
+    @staticmethod
+    def _values() -> array.array[int]:
+        return array.array("q", range(1_000))
+
+    def test_in_stops_at_the_match(self) -> None:
+        probe = CountingEq(5)
+
+        assert probe in self._values()
+        assert probe.calls == 6
+
+    def test_index_stops_at_the_match(self) -> None:
+        probe = CountingEq(5)
+
+        assert self._values().index(probe) == 5  # pyright: ignore[reportArgumentType]
+        assert probe.calls == 6
+
+    def test_remove_stops_at_the_match(self) -> None:
+        values = self._values()
+        probe = CountingEq(5)
+
+        values.remove(probe)  # pyright: ignore[reportArgumentType]
+
+        assert probe.calls == 6
+        assert len(values) == 999
+        assert 5 not in values
+
+    def test_count_compares_every_item(self) -> None:
+        probe = CountingEq(5)
+
+        assert self._values().count(probe) == 1  # pyright: ignore[reportArgumentType]
+        assert probe.calls == 1_000
+
+
+class TestReadsBuildObjects:
+    """`a[i]`, iteration and `tolist()` build a Python object from the stored
+    value each time; the array holds no objects."""
+
+    def test_each_read_is_a_new_object(self) -> None:
+        values = array.array("q", [10**12])
+
+        assert values[0] == 10**12
+        assert values[0] is not values[0]
+
+    @pytest.mark.timing
+    def test_reading_every_item_is_no_faster_than_from_a_list(self) -> None:
+        """The page's "the saving is in storage, not in element access": `sum()`
+        over a 1,000,000-item `'q'` array against the same values in a list.
+        Boxing each read made the array about 2x slower here; the assertion
+        only excludes the array being faster."""
+        values = list(range(10**9, 10**9 + 1_000_000))
+        packed = array.array("q", values)
+
+        list_ns = best_ns(lambda: sum(values), repeats=5)
+        array_ns = best_ns(lambda: sum(packed), repeats=5)
+
+        assert array_ns > list_ns * 0.9, f"array {array_ns:.0f}ns against list {list_ns:.0f}ns"
+
+    def test_tolist_builds_fresh_objects(self) -> None:
+        values = array.array("q", [10**12, 10**12])
+
+        first, second = values.tolist(), values.tolist()
+
+        assert first == second
+        assert first[0] is not second[0]
+
+    def test_a_slice_is_a_copy(self) -> None:
+        values = array.array("i", [1, 2, 3])
+
+        window = values[1:]
+        window[0] = 0
+
+        assert values.tolist() == [1, 2, 3]
+        assert type(window) is array.array
+
+
+class TestBufferGrowthAndShrinking:
+    """`append()` is O(1) amortized: the buffer grows in steps. Popping one
+    item at a time never shrinks it; one call removing a run does."""
+
+    def test_append_reallocates_occasionally(self) -> None:
         values = array.array("i")
         sizes: set[int] = set()
         for _ in range(2_000):
             values.append(0)
             sizes.add(sys.getsizeof(values))
 
-        assert 1 < len(sizes) < 2_000, (
-            f"expected occasional reallocation, saw {len(sizes)} distinct sizes"
-        )
+        assert 1 < len(sizes) < 200, f"{len(sizes)} distinct sizes over 2,000 appends"
 
-    @pytest.mark.timing
-    def test_extend_is_ok_not_on(self) -> None:
-        """extend() should be O(k) in what is added, not O(n) in the array."""
-        small = array.array("i", range(self.SMALL_SIZE))
-        large = array.array("i", range(self.LARGE_SIZE))
-        addition = [0] * 100
+    def test_popping_one_at_a_time_keeps_the_buffer(self) -> None:
+        values = array.array("i", range(1_000))
+        full = sys.getsizeof(values)
 
-        def extend_then_trim(target: array.array) -> None:
-            target.extend(addition)
-            del target[-100:]
+        for _ in range(900):
+            values.pop()
 
-        small_time = measure_time(lambda: extend_then_trim(small), iterations=50)
-        large_time = measure_time(lambda: extend_then_trim(large), iterations=50)
+        assert len(values) == 100
+        assert sys.getsizeof(values) == full
 
-        assert is_constant_time(small_time, large_time), (
-            f"extend() should not depend on the existing length: "
-            f"{small_time:.2e}s vs {large_time:.2e}s"
-        )
+    def test_deleting_a_run_shrinks_it(self) -> None:
+        values = array.array("i", range(1_000))
+        full = sys.getsizeof(values)
 
-    @pytest.mark.timing
-    def test_search_is_on(self) -> None:
-        """Search should be O(n) - linear scan."""
-        small = array.array("i", range(self.SMALL_SIZE))
-        large = array.array("i", range(self.LARGE_SIZE))
+        del values[10:]
 
-        small_time = measure_time(lambda: (self.SMALL_SIZE - 1) in small, iterations=20)
-        large_time = measure_time(lambda: (self.LARGE_SIZE - 1) in large, iterations=20)
+        assert sys.getsizeof(values) < full // 10
 
-        assert scales_with_size(small_time, large_time, self.SIZE_RATIO), (
-            f"membership doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
-        )
+    @pytest.mark.skipif(sys.version_info < (3, 13), reason="clear() was added in 3.13")
+    def test_clear_empties_it(self) -> None:
+        values = array.array("i", range(1_000))
 
-    @pytest.mark.timing
-    def test_index_is_on(self) -> None:
-        small = array.array("i", range(self.SMALL_SIZE))
-        large = array.array("i", range(self.LARGE_SIZE))
+        values.clear()  # pyright: ignore[reportAttributeAccessIssue]
 
-        small_time = measure_time(lambda: small.index(self.SMALL_SIZE - 1), iterations=20)
-        large_time = measure_time(lambda: large.index(self.LARGE_SIZE - 1), iterations=20)
-
-        assert scales_with_size(small_time, large_time, self.SIZE_RATIO), (
-            f"index() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
-        )
-
-    # Shifting the tail of a 10k array takes about two microseconds, which is
-    # close enough to timer noise that the ratio wandered out of band under
-    # full-suite load. These two use a bigger small case instead.
-    SHIFT_SMALL_SIZE = 100_000
-    SHIFT_SIZE_RATIO = LARGE_SIZE / SHIFT_SMALL_SIZE
-
-    @pytest.mark.timing
-    def test_insert_is_on(self) -> None:
-        """Insert should be O(n) - the tail shifts."""
-        small = array.array("i", range(self.SHIFT_SMALL_SIZE))
-        large = array.array("i", range(self.LARGE_SIZE))
-
-        def insert_then_remove(target: array.array) -> None:
-            target.insert(0, 1)
-            target.pop(0)
-
-        small_time = measure_time(lambda: insert_then_remove(small), iterations=20)
-        large_time = measure_time(lambda: insert_then_remove(large), iterations=20)
-
-        assert scales_with_size(small_time, large_time, self.SHIFT_SIZE_RATIO), (
-            f"insert() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
-        )
-
-    @pytest.mark.timing
-    def test_remove_is_on(self) -> None:
-        small = array.array("i", range(self.SMALL_SIZE))
-        large = array.array("i", range(self.LARGE_SIZE))
-
-        def remove_last_value(target: array.array, value: int) -> None:
-            target.remove(value)
-            target.append(value)
-
-        small_time = measure_time(
-            lambda: remove_last_value(small, self.SMALL_SIZE - 1), iterations=20
-        )
-        large_time = measure_time(
-            lambda: remove_last_value(large, self.LARGE_SIZE - 1), iterations=20
-        )
-
-        assert scales_with_size(small_time, large_time, self.SIZE_RATIO), (
-            f"remove() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
-        )
-
-    def test_typecodes_is_o1(self) -> None:
-        """typecodes is a module-level string, not computed."""
-        assert isinstance(array.typecodes, str)
-        assert set("bBhHiIlLqQfd") <= set(array.typecodes)
+        assert len(values) == 0
+        assert sys.getsizeof(values) == sys.getsizeof(array.array("i"))
 
 
-class TestPopPosition:
-    """docs/stdlib/array.md: "Pop - O(1) at end, O(n) elsewhere"."""
+class TestFilesAndBytes:
+    """`tofile()` writes in blocks, O(1) extra space; `tobytes()` copies the
+    whole buffer; `fromfile()` makes one `read()` and keeps a short read."""
 
-    SMALL_SIZE = 10_000
-    LARGE_SIZE = 1_000_000
-    SIZE_RATIO = LARGE_SIZE / SMALL_SIZE
+    SIZE = 1_000_000
 
-    @pytest.mark.timing
-    def test_pop_from_the_end_is_o1(self) -> None:
-        small = array.array("i", range(self.SMALL_SIZE))
-        large = array.array("i", range(self.LARGE_SIZE))
+    def test_tofile_needs_no_copy_of_the_array(self) -> None:
+        values = array.array("d", [0.5]) * self.SIZE
+        sink = DiscardingSink()
+        values.tofile(sink)  # warm
 
-        def pop_and_restore(target: array.array) -> None:
-            value = target.pop()
-            target.append(value)
+        peak = peak_bytes(lambda: values.tofile(sink))
 
-        small_time = measure_time(lambda: pop_and_restore(small))
-        large_time = measure_time(lambda: pop_and_restore(large))
+        assert peak < 200_000, f"tofile() of an 8 MB array peaked at {peak} bytes"
 
-        assert is_constant_time(small_time, large_time), (
-            f"pop() at the end appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
-        )
+    def test_tobytes_copies_the_whole_buffer(self) -> None:
+        values = array.array("d", [0.5]) * self.SIZE
 
-    @pytest.mark.timing
-    def test_pop_from_the_front_is_on(self) -> None:
-        # Same noise floor as insert above, so the same larger small case.
-        small_size = 100_000
-        small = array.array("i", range(small_size))
-        large = array.array("i", range(self.LARGE_SIZE))
+        peak = peak_bytes(values.tobytes)
 
-        def pop_front_and_restore(target: array.array) -> None:
-            value = target.pop(0)
-            target.insert(0, value)
+        assert peak > self.SIZE * values.itemsize, f"tobytes() peaked at only {peak} bytes"
 
-        small_time = measure_time(lambda: pop_front_and_restore(small), iterations=20)
-        large_time = measure_time(lambda: pop_front_and_restore(large), iterations=20)
+    def test_tofile_writes_every_byte(self) -> None:
+        values = array.array("i", range(100_000))
+        stream = io.BytesIO()
 
-        assert scales_with_size(small_time, large_time, self.LARGE_SIZE / small_size), (
-            f"pop(0) doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
-        )
+        values.tofile(stream)
 
+        assert stream.getvalue() == values.tobytes()
 
-class TestConversions:
-    """docs/stdlib/array.md prices every conversion at O(n)."""
+    def test_fromfile_makes_one_read_of_k_items(self) -> None:
+        raw = array.array("q", range(1_000)).tobytes()
+        requests: list[int] = []
 
-    SMALL_SIZE = 10_000
-    LARGE_SIZE = 1_000_000
-    SIZE_RATIO = LARGE_SIZE / SMALL_SIZE
+        class Recording(io.BytesIO):
+            def read(self, size: int | None = -1, /) -> bytes:
+                requests.append(-1 if size is None else size)
+                return super().read(size)
 
-    def _linear(self, small: Callable[[], Any], large: Callable[[], Any], label: str) -> None:
-        small_time = measure_time(small, iterations=10)
-        large_time = measure_time(large, iterations=10)
-        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
-            f"{label} doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
-        )
-        assert large_time > small_time * 10, (
-            f"{label} should scale with the array: {small_time:.2e}s vs {large_time:.2e}s"
-        )
+        values = array.array("q")
+        values.fromfile(Recording(raw), 1_000)
 
-    @pytest.mark.timing
-    def test_tolist_is_on(self) -> None:
-        small = array.array("i", range(self.SMALL_SIZE))
-        large = array.array("i", range(self.LARGE_SIZE))
-        self._linear(small.tolist, large.tolist, "tolist()")
+        assert requests == [8_000]
+        assert values.tolist() == list(range(1_000))
 
-    @pytest.mark.parametrize("typecode", ["B", "i", "d"])
-    @pytest.mark.parametrize("count", [1_024, 65_536])
-    def test_tobytes_copies_the_full_buffer(self, typecode: str, count: int) -> None:
-        """Output storage is length * itemsize plus a fixed bytes header.
+    def test_a_short_file_appends_what_it_had_then_raises(self) -> None:
+        stream = io.BytesIO(array.array("d", [0.5] * 1_000).tobytes())
+        values = array.array("d")
 
-        Distinct calls produce distinct copies, and source mutation leaves
-        both copies intact. The values repeat 0..3; other value patterns
-        and allocator performance are not varied.
-        """
-        source = array.array(typecode, [0, 1, 2, 3]) * (count // 4)
-        expected = bytes(memoryview(source))
+        with pytest.raises(EOFError):
+            values.fromfile(stream, 2_000)
 
-        result = source.tobytes()
-        another = source.tobytes()
+        assert len(values) == 1_000
 
-        assert type(result) is bytes
-        assert result == another == expected
-        assert result is not another
-        assert len(result) == count * source.itemsize
-        assert sys.getsizeof(result) == sys.getsizeof(b"") + count * source.itemsize
+    def test_frombytes_needs_whole_items(self) -> None:
+        with pytest.raises(ValueError, match="multiple of item size"):
+            array.array("i").frombytes(b"\x00" * 3)
 
-        source[0] = 7
-        source[count // 2] = 8
-        source[-1] = 9
-        assert bytes(memoryview(source)) != expected
-        assert result == another == expected
+    def test_round_trip_and_byteswap(self) -> None:
+        values = array.array("h", [1, 256])
+        restored = array.array("h")
+        assert values.tobytes()[:2] == (1).to_bytes(2, sys.byteorder), "native byte order"
 
-    @pytest.mark.timing
-    def test_frombytes_is_on(self) -> None:
-        small_bytes = array.array("i", range(self.SMALL_SIZE)).tobytes()
-        large_bytes = array.array("i", range(self.LARGE_SIZE)).tobytes()
-        self._linear(
-            lambda: array.array("i").frombytes(small_bytes),
-            lambda: array.array("i").frombytes(large_bytes),
-            "frombytes()",
-        )
+        restored.frombytes(values.tobytes())
+        assert restored == values
 
-    @pytest.mark.timing
-    def test_fromlist_is_on(self) -> None:
-        small_list = list(range(self.SMALL_SIZE))
-        large_list = list(range(self.LARGE_SIZE))
-        self._linear(
-            lambda: array.array("i").fromlist(small_list),
-            lambda: array.array("i").fromlist(large_list),
-            "fromlist()",
-        )
-
-    def test_round_trips_preserve_the_values(self) -> None:
-        source = array.array("i", range(100))
-        assert array.array("i", source.tolist()) == source
-
-        rebuilt = array.array("i")
-        rebuilt.frombytes(source.tobytes())
-        assert rebuilt == source
+        restored.byteswap()
+        assert restored.tolist() == [256, 1]
 
 
-class TestTypeCodesFixItemSize:
-    """docs/stdlib/array.md: the type code fixes the bytes per item, which is
-    what array buys over list.
+class TestCopies:
+    """`copy.copy()` and `copy.deepcopy()` are the same buffer copy: the items
+    are values, so there is nothing to recurse into."""
 
-    Moved here from tests/test_stdlib_claims.py now that the module has a
-    file of its own.
-    """
+    def test_deepcopy_allocates_only_the_buffer(self) -> None:
+        values = array.array("q", range(1_000_000))
+        buffer = len(values) * values.itemsize
+        copy.deepcopy(values)  # warm
 
-    def test_documented_item_sizes(self) -> None:
-        assert array.array("b").itemsize == 1
-        assert array.array("B").itemsize == 1
+        peak = peak_bytes(lambda: copy.deepcopy(values))
+
+        assert buffer < peak < buffer * 1.1, f"deepcopy of a {buffer}-byte buffer peaked at {peak}"
+
+    def test_both_copies_are_independent(self) -> None:
+        values = array.array("i", [1, 2, 3])
+
+        shallow, deep = copy.copy(values), copy.deepcopy(values)
+        values[0] = 9
+
+        assert shallow.tolist() == deep.tolist() == [1, 2, 3]
+
+
+class TestAddingItems:
+    """`extend()` converts one item at a time; `fromlist()` is all or
+    nothing; `+=` and slice assignment take only an array of the same code."""
+
+    def test_extend_keeps_items_before_a_bad_one(self) -> None:
+        values = array.array("i", [1])
+
+        with pytest.raises(TypeError):
+            values.extend([2, "x"])  # type: ignore[list-item]
+
+        assert values.tolist() == [1, 2]
+
+    def test_fromlist_keeps_nothing_on_a_bad_item(self) -> None:
+        values = array.array("i", [1])
+
+        with pytest.raises(TypeError):
+            values.fromlist([2, "x"])  # pyright: ignore[reportArgumentType]
+
+        assert values.tolist() == [1]
+
+    def test_fromlist_takes_only_a_list(self) -> None:
+        with pytest.raises(TypeError, match="must be list"):
+            array.array("i").fromlist((1, 2))  # type: ignore[arg-type]
+
+    def test_extend_takes_any_iterable_but_an_array_must_match(self) -> None:
+        values = array.array("i")
+
+        values.extend(range(3))
+        values.extend(array.array("i", [3]))
+
+        assert values.tolist() == [0, 1, 2, 3]
+        with pytest.raises(TypeError, match="same kind"):
+            values.extend(array.array("d", [1.0]))  # type: ignore[arg-type]
+
+    def test_inplace_add_needs_an_array_of_the_same_code(self) -> None:
+        values = array.array("i", [1])
+
+        values += array.array("i", [2])
+
+        assert values.tolist() == [1, 2]
+        with pytest.raises(TypeError, match="array"):
+            values += [3]  # type: ignore[operator]
+        with pytest.raises(TypeError):
+            values += array.array("d", [3.0])  # type: ignore[operator]
+
+    def test_slice_assignment_needs_an_array(self) -> None:
+        values = array.array("i", [1, 2, 3])
+
+        values[1:2] = array.array("i", [7, 8, 9])
+
+        assert values.tolist() == [1, 7, 8, 9, 3]
+        with pytest.raises(TypeError, match="can only assign array"):
+            values[0:1] = [5]  # type: ignore[call-overload]
+
+    def test_a_value_out_of_range_raises(self) -> None:
+        values = array.array("b", [0])
+
+        with pytest.raises(OverflowError):
+            values[0] = 128
+
+
+class TestMemoryview:
+    """`memoryview(a)` shares the buffer, and a live view blocks resizing."""
+
+    def test_the_view_shares_memory(self) -> None:
+        values = array.array("i", [1, 2, 3])
+        view = memoryview(values)
+
+        values[0] = 10
+
+        assert view[0] == 10
+        view.release()
+
+    @pytest.mark.parametrize(
+        "resize",
+        [
+            lambda a: a.append(4),
+            lambda a: a.pop(),
+            lambda a: a.extend([4]),
+            lambda a: a.__delitem__(slice(0, 1)),
+        ],
+        ids=["append", "pop", "extend", "del slice"],
+    )
+    def test_a_live_view_blocks_resizing(self, resize: Callable[[Any], Any]) -> None:
+        values = array.array("i", [1, 2, 3])
+        view = memoryview(values)
+
+        with pytest.raises(BufferError, match="exporting buffers"):
+            resize(values)
+
+        view.release()
+        resize(values)
+
+
+class TestTypeCodes:
+    """The type code fixes `itemsize`; the C integer codes fix only minimums."""
+
+    MINIMUMS = {"h": 2, "H": 2, "i": 2, "I": 2, "l": 4, "L": 4, "q": 8, "Q": 8}
+
+    def test_fixed_and_minimum_sizes(self) -> None:
+        assert array.array("b").itemsize == array.array("B").itemsize == 1
         assert array.array("f").itemsize == 4
         assert array.array("d").itemsize == 8
-        # The page says 'i' is 2-4 bytes, which is the C int it maps to.
-        assert 2 <= array.array("i").itemsize <= 4
-        assert 2 <= array.array("I").itemsize <= 4
+        for code, minimum in self.MINIMUMS.items():
+            assert array.array(code).itemsize >= minimum, code
 
-    def test_storage_follows_item_size(self) -> None:
-        count = 10_000
-        as_bytes = array.array("b", [0] * count)
-        as_doubles = array.array("d", [0.0] * count)
+    def test_typecodes_lists_the_numeric_codes(self) -> None:
+        assert set("bBhHiIlLqQfd") <= set(array.typecodes)
+        assert array.ArrayType is array.array
 
-        overhead = sys.getsizeof(array.array("b"))
-        bytes_payload = sys.getsizeof(as_bytes) - overhead
-        doubles_payload = sys.getsizeof(as_doubles) - overhead
+    def test_typecode_and_itemsize_are_fixed(self) -> None:
+        values = array.array("d", [1.0])
 
-        assert math.isclose(doubles_payload / bytes_payload, 8, rel_tol=0.1), (
-            f"a 'd' array should hold eight times the bytes of a 'b' array: "
-            f"{bytes_payload} vs {doubles_payload}"
-        )
+        values.extend([2.0] * 1_000)
 
-    def test_the_type_code_is_enforced(self) -> None:
-        values = array.array("i", [1, 2, 3])
-        try:
-            values.append(1.5)  # type: ignore[arg-type]
-        except TypeError:
-            pass
-        else:  # pragma: no cover - would mean array stopped being homogeneous
-            raise AssertionError("an int array should reject a float")
+        assert values.typecode == "d"
+        assert values.itemsize == 8
+
+    @pytest.mark.skipif(sys.version_info < (3, 13), reason="'w' was added in 3.13")
+    def test_w_is_a_four_byte_character(self) -> None:
+        values = _unicode(3)
+
+        assert "w" in array.typecodes
+        assert values.itemsize == 4
+        assert values.tounicode() == "xxx"
+        values.fromunicode("é")
+        assert values.tounicode() == "xxxé"
+
+    @pytest.mark.skipif(sys.version_info < (3, 13), reason="deprecated with a warning in 3.13")
+    def test_u_warns(self) -> None:
+        with pytest.warns(DeprecationWarning, match="'u' type code"):
+            array.array("u")
+
+    def test_unicode_conversions_need_a_unicode_array(self) -> None:
+        with pytest.raises(ValueError, match="unicode type arrays"):
+            array.array("i").tounicode()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            assert array.array("u", "ab").tounicode() == "ab"
 
 
-class TestMemoryFootprint:
-    """docs/stdlib/array.md's memory comparison.
+class TestMemoryAgainstAList:
+    """`getsizeof()` of a list counts pointers, not the objects they reach;
+    an array's counts its packed items."""
 
-    The page demonstrated "Array size: Smaller" with five elements. At that
-    size it is a coin flip, and below about a dozen the array is bigger.
-    """
+    VALUES = list(range(1_000, 11_000))
 
-    def test_an_array_is_larger_than_a_list_when_tiny(self) -> None:
-        one_list = list(range(1))
-        one_array = array.array("i", range(1))
-
-        assert sys.getsizeof(one_array) > sys.getsizeof(one_list), (
-            f"array pays a bigger header: list={sys.getsizeof(one_list)} "
-            f"array={sys.getsizeof(one_array)}"
-        )
-
-    def test_the_header_is_the_reason(self) -> None:
-        assert sys.getsizeof(array.array("i")) > sys.getsizeof([])
-
-    def test_the_saving_arrives_by_a_few_dozen_elements(self) -> None:
-        values = list(range(50))
-        assert sys.getsizeof(array.array("i", values)) < sys.getsizeof(values)
-
-    def test_small_ints_are_shared_so_deep_size_is_reachable_not_owned(self) -> None:
-        """Why the page calls it reachable deep size, not memory owned.
-
-        CPython caches the ints -5..256, so summing getsizeof over a list's
-        elements counts objects the list does not own. Over range(10_000)
-        that is 257 of them, about 2% - it does not move the conclusion, but
-        the total is reachable size rather than the list's own footprint.
-        """
-
-        def freshly_built(value: int) -> int:
-            """An int built at runtime, so identity shows whether it is cached."""
+    def test_the_values_are_distinct_objects(self) -> None:
+        def fresh(value: int) -> int:
             return int(str(value))
 
-        assert all(freshly_built(value) is value for value in range(0, 257)), (
-            "small ints are shared, so they are not the list's to own"
-        )
-        assert freshly_built(10_000) is not 10_000, (  # noqa: F632 - identity is the point
-            "outside the cache every element is a distinct 28-byte object"
+        assert fresh(1_000) is not fresh(1_000), "1,000 is outside the small-int cache"
+
+    def test_an_int_array_is_smaller_than_the_list_s_pointers(self) -> None:
+        packed = array.array("i", self.VALUES)
+
+        assert sys.getsizeof(packed) < sys.getsizeof(self.VALUES)
+
+    def test_getsizeof_leaves_out_the_list_s_objects(self) -> None:
+        shallow = sys.getsizeof(self.VALUES)
+        reachable = shallow + sum(sys.getsizeof(value) for value in self.VALUES)
+
+        assert reachable > 2 * shallow
+
+    def test_an_array_s_payload_is_its_items(self) -> None:
+        packed = array.array("i", self.VALUES)
+        payload = sys.getsizeof(packed) - sys.getsizeof(array.array("i"))
+
+        assert len(packed) * packed.itemsize <= payload < len(packed) * packed.itemsize * 1.1
+
+
+def _blocks() -> list[tuple[int, str]]:
+    """Every fenced python block on the page, with its 1-based line number."""
+    lines = PAGE.read_text(encoding="utf-8").splitlines()
+    found: list[tuple[int, str]] = []
+    index = 0
+    while index < len(lines):
+        if re.match(r"^\s*```python\s*$", lines[index]):
+            start = index + 1
+            end = start
+            while not re.match(r"^\s*```\s*$", lines[end]):
+                end += 1
+            found.append((start + 1, textwrap.dedent("\n".join(lines[start:end]))))
+            index = end
+        index += 1
+    return found
+
+
+def _run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
+    script = cwd / "block.py"
+    script.write_text(source, encoding="utf-8")
+    return subprocess.run(
+        [sys.executable, str(script)],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        stdin=subprocess.DEVNULL,
+        check=False,
+    )
+
+
+class TestDocumentedExamples:
+    """Each block runs in its own subprocess and asserts its own result."""
+
+    def test_the_page_has_the_expected_blocks(self) -> None:
+        assert len(_blocks()) == EXPECTED_BLOCKS
+
+    def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
+        failures: list[str] = []
+        ran = 0
+        for line, source in _blocks():
+            ran += 1
+            workdir = tmp_path / f"block{line}"
+            workdir.mkdir()
+            result = _run_block(source, workdir)
+            if result.returncode != 0:
+                failures.append(f"{PAGE.name}:{line}\n{result.stderr.strip()}")
+
+        assert ran == EXPECTED_BLOCKS
+        assert not failures, "\n\n".join(failures)
+
+    def test_the_runner_notices_a_broken_assertion(self, tmp_path: pathlib.Path) -> None:
+        line, source = next((n, s) for n, s in _blocks() if "sys.getsizeof(values) == full" in s)
+        mutated = source.replace(
+            "sys.getsizeof(values) == full", "sys.getsizeof(values) != full", 1
         )
 
-    def test_getsizeof_understates_the_saving(self) -> None:
-        """A list also pays for the int objects, which getsizeof omits."""
-        count = 10_000
-        # Above the small-int cache, so each element is a distinct object.
-        values = list(range(256, 256 + count))
-        packed = array.array("i", values)
-
-        shallow = sys.getsizeof(values)
-        deep = shallow + sum(sys.getsizeof(value) for value in values)
-        packed_size = sys.getsizeof(packed)
-
-        assert shallow / packed_size < 3, "the pointer-only comparison is about 2x"
-        assert deep / packed_size > 5, (
-            f"counting the int objects it is far more: shallow={shallow / packed_size:.1f}x "
-            f"deep={deep / packed_size:.1f}x"
-        )
+        assert mutated != source, f"the mutation matched nothing in {PAGE.name}:{line}"
+        assert _run_block(mutated, tmp_path).returncode != 0
