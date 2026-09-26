@@ -2,11 +2,11 @@
 
 The page prices a context as a persistent hash array mapped trie: a set copies
 one root-to-leaf path, a copy shares the whole trie, and a lookup walks one
-path. Path copying is settled by traced allocation, which steps up by a near
-constant amount each time the context grows 32-fold - the trie's branching
-factor - and so separates a logarithmic bound from both a constant and a linear
-one without a stopwatch. Copying is settled by a traced peak that stays flat
-at tens of thousands of variables. Lookups and `len()` have no allocation to
+path. Path copying is settled by traced allocation, which rises each time the
+context grows 32-fold - the trie's branching factor - yet stays under four times
+its smallest value across a 1,024-fold range, which excludes both a constant and
+a linear bound without a stopwatch. Copying is settled by a traced peak under
+1 KB at tens of thousands of variables. Lookups and `len()` have no allocation to
 observe, so they are timed over a 1,024-fold range, which excludes a linear scan
 but cannot tell log n from a constant. Behaviour rows are settled by
 observation.
@@ -44,7 +44,10 @@ Measurement scope:
   are asserted on 3.14. A default thread is asserted to start empty when
   `sys.flags.thread_inherit_context` is unset.
 * An asyncio task is observed to see the context as it was when the task was
-  created, not a set the parent makes afterwards.
+  created, not a set the parent makes afterwards, and a task given `context=`
+  to run in that context and set its variables there (3.11+).
+* The inheriting thread's own set is asserted to leave the caller's value in
+  place (3.14+).
 * Every fenced Python block runs in its own subprocess, and a mutated
   assertion in one of them is asserted to fail.
 
@@ -135,9 +138,9 @@ def sample(variables: tuple[ContextVar[int], ...], count: int = 15) -> tuple[Con
 class TestSetCopiesOnePath:
     """`ContextVar.set(value)` and `reset(token)` | O(log n) | O(log n).
 
-    The traced peak rises by a similar step at each 32-fold growth, which a
-    constant bound would not do and a copied mapping would outgrow by orders
-    of magnitude.
+    The traced peak rises at each 32-fold growth, which a constant bound would
+    not do, and stays under four times the smallest peak over 1,024-fold growth,
+    where a copied mapping would grow 1,024 times.
     """
 
     @staticmethod
@@ -523,11 +526,16 @@ class TestThreadsAndTasks:
             variable = ContextVar('variable', default='unset')
             variable.set('caller')
             seen = []
-            thread = threading.Thread(target=lambda: seen.append(variable.get()))
+            def target():
+                seen.append(variable.get())
+                variable.set('thread')
+                seen.append(variable.get())
+            thread = threading.Thread(target=target)
             thread.start()
             thread.join()
             assert sys.flags.thread_inherit_context == 1
-            assert seen == ['caller'], seen
+            assert seen == ['caller', 'thread'], seen
+            assert variable.get() == 'caller'
             """
         )
         result = subprocess.run(
@@ -550,6 +558,25 @@ class TestThreadsAndTasks:
             return await reader
 
         assert asyncio.run(main()) == "at creation"
+
+    @pytest.mark.skipif(sys.version_info < (3, 11), reason="create_task(context=) is 3.11+")
+    def test_a_task_given_a_context_runs_in_it(self) -> None:
+        variable: ContextVar[str] = ContextVar("variable", default="unset")
+        given = Context()
+        given.run(variable.set, "given")
+
+        async def write() -> str:
+            seen = variable.get()
+            variable.set("written")
+            return seen
+
+        async def main() -> str:
+            variable.set("caller")
+            options: dict[str, Any] = {"context": given}  # the keyword is 3.11+
+            return await asyncio.create_task(write(), **options)
+
+        assert asyncio.run(main()) == "given"
+        assert given[variable] == "written"
 
 
 async def _read(variable: ContextVar[str]) -> str:

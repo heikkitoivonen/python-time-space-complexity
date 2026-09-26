@@ -152,7 +152,7 @@ from contextvars import ContextVar
 request_id = ContextVar('request_id', default=None)  # once, at module level
 
 def log(message):
-    return f'[{request_id.get()}] {message}'  # O(log n)
+    return f'[{request_id.get()}] {message}'  # get() is O(log n)
 
 def handle(rid):
     token = request_id.set(rid)  # O(log n)
@@ -167,8 +167,9 @@ assert request_id.get() is None
 
 ### Asyncio Tasks
 
-Each task runs in a copy of the context that was current when it was created. The copy is O(1),
-so this costs the same however many variables are set.
+Each task runs in a copy of the context that was current when it was created, unless a `context`
+argument (3.11+) supplies one. The copy is O(1), so this costs the same however many variables
+are set.
 
 ```python
 import asyncio
@@ -192,8 +193,9 @@ asyncio.run(main())
 
 ### Threads
 
-Unless `sys.flags.thread_inherit_context` is set, a new thread starts in an empty context. To
-carry values across either way, run the thread's target in a copy of the caller's context.
+Unless `sys.flags.thread_inherit_context` is set or a `context` argument (3.14+) is passed, a new
+thread starts in an empty context. To carry values across either way, run the thread's target in
+a copy of the caller's context.
 
 ```python
 import sys
@@ -231,7 +233,8 @@ assert seen == {'bare': 'req-9' if inherits else None, 'carried': 'req-9'}
 
 - Creating variables inside a function that runs repeatedly: every new variable set in a
   long-lived context is a new key it keeps, so n grows with each call
-- Using `Context.run()` for isolation - it does not copy; run in `copy_context()` instead
+- Reusing one context with `Context.run()` when each call needs a fresh start - changes made by
+  earlier calls stay in it; run each call in a new `copy_context()` instead
 - Materialising `list(ctx.items())` just to read one variable - that is O(n) against O(log n)
 
 ## Version Notes
