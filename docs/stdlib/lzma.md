@@ -38,11 +38,11 @@ the input at every preset; the preset and `PRESET_EXTREME` change that amount, n
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `lzma.LZMADecompressor(format=FORMAT_AUTO, memlimit=None, filters=None)` | O(1) | O(1) | Allocates nothing for D until the stream header arrives |
+| `lzma.LZMADecompressor(format=FORMAT_AUTO, memlimit=None, filters=None)` | O(1); O(D) for `FORMAT_RAW` | O(1); O(D) for `FORMAT_RAW` | Allocates nothing for D until the stream header arrives. `FORMAT_RAW` has no header: its `filters` set D, allocated here |
 | `LZMADecompressor.decompress(data, max_length=-1)` | O(h + c + r) | O(h + c + r) | r ≤ `max_length` when it is set. The call that reads the header allocates O(D), or raises `LZMAError` if that exceeds `memlimit`. Input left unconsumed is copied and held for the next call. One stream only: a call after `eof` raises `EOFError` |
 | `LZMADecompressor.check` | O(1) | O(1) | `CHECK_UNKNOWN` until the header is read, then the stream's integrity check |
 | `LZMADecompressor.eof`, `LZMADecompressor.needs_input` | O(1) | O(1) | `needs_input` is `False` while `max_length` held back output |
-| `LZMADecompressor.unused_data` | O(1) | O(1) | Bytes after the end of the stream, copied when it is reached; `b''` before |
+| `LZMADecompressor.unused_data` | O(1) | O(1) | Bytes after the end of the stream, set when it is reached; `b''` before |
 
 ### LZMAFile
 

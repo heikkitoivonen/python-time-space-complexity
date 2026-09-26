@@ -18,7 +18,8 @@ Measurement scope:
   512 KiB at preset 0, between 8 MiB and 10 MiB at preset 6, between 64 MiB
   and 72 MiB at preset 9, and between 1 MiB and 1.5 MiB for a filter chain
   with `dict_size` 1 MiB. Building an `LZMADecompressor` peaks under 5 KB, and
-  a call given only the 12-byte stream header under 100 KB. With
+  a call given only the 12-byte stream header under 100 KB; building one for
+  `FORMAT_RAW` with `dict_size` 8 MiB peaks between 8 MiB and 12 MiB. With
   `memlimit=1 MiB` a preset-6 stream raises `LZMAError` and a preset-0 stream
   decodes.
 * Compressor working memory: building an `LZMACompressor` at preset 6 peaks
@@ -58,9 +59,10 @@ Measurement scope:
   with `needs_input` false. With `max_length=1000` on the 5,000,000-byte
   preset-0 compression of random data it peaks above 4 MB: the unconsumed
   input is copied and held. A call after `eof` raises `EOFError`;
-  `unused_data` is `b''` before `eof`, the trailing bytes after it, and the
-  same object on a second access. `check` is `CHECK_UNKNOWN` before the
-  header and the written check after it, `CHECK_NONE` for `FORMAT_ALONE`.
+  `unused_data` is `b''` before `eof`, including after half the stream, the
+  trailing bytes after it, and the same object on a second access. `check` is
+  `CHECK_UNKNOWN` after 11 bytes and the written check once the 12-byte
+  stream header is fed, before the rest; `CHECK_NONE` for `FORMAT_ALONE`.
 * `LZMAFile` and `open()` take nothing from a counting source when built for
   reading. On 4,000,000 random bytes compressed at preset 0, `read(1000)` and
   `peek()` each take at most one read buffer; within 250,000 bytes, a forward
@@ -262,6 +264,13 @@ class TestTheDictionarySetsTheMemory:
         assert header_only < 100_000, header_only
         assert rest > 64 * MIB, rest
         assert decompressor.eof
+
+    def test_a_raw_decompressor_allocates_d_when_built(self) -> None:
+        filters = [{"id": lzma.FILTER_LZMA2, "dict_size": 8 * MIB}]
+
+        peak = peak_bytes(lambda: lzma.LZMADecompressor(format=lzma.FORMAT_RAW, filters=filters))
+
+        assert 8 * MIB <= peak <= 12 * MIB, peak
 
     def test_memlimit_refuses_a_larger_dictionary(self) -> None:
         data = b"payload " * 1000
@@ -508,12 +517,17 @@ class TestStreamingDecompressor:
         with pytest.raises(EOFError, match="end of stream"):
             decompressor.decompress(b"more")
 
-    def test_unused_data_is_copied_at_the_end_of_the_stream(self) -> None:
+    def test_unused_data_is_set_at_the_end_of_the_stream(self) -> None:
+        stream = lzma.compress(b"data")
         decompressor = lzma.LZMADecompressor()
         assert decompressor.unused_data == b""
         assert decompressor.needs_input is True
 
-        decompressor.decompress(lzma.compress(b"data") + b"tail")
+        decompressor.decompress(stream[: len(stream) // 2])
+        assert not decompressor.eof
+        assert decompressor.unused_data == b""
+
+        decompressor.decompress(stream[len(stream) // 2 :] + b"tail")
 
         assert decompressor.unused_data == b"tail"
         assert decompressor.unused_data is decompressor.unused_data
@@ -523,8 +537,13 @@ class TestStreamingDecompressor:
         decompressor = lzma.LZMADecompressor()
         assert decompressor.check == lzma.CHECK_UNKNOWN
 
-        decompressor.decompress(stream)
+        decompressor.decompress(stream[:11])
+        assert decompressor.check == lzma.CHECK_UNKNOWN
+        decompressor.decompress(stream[11:12])
+        assert decompressor.check == lzma.CHECK_SHA256
 
+        decompressor.decompress(stream[12:])
+        assert decompressor.eof
         assert decompressor.check == lzma.CHECK_SHA256
         alone = lzma.LZMADecompressor(format=lzma.FORMAT_ALONE)
         alone.decompress(lzma.compress(b"data", format=lzma.FORMAT_ALONE))
