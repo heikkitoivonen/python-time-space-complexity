@@ -35,7 +35,8 @@ Measurement scope:
   event for the same n calls with a breakpoint elsewhere, and two when a
   breakpoint stops once midway. With a false-condition breakpoint inside
   `step()` it delivers all n call events; with one inside the loop, at least
-  n line events for it, against more than 2n on `'settrace'`.
+  n line events at that line, as `'settrace'` does, against more than 2n
+  line events in the loop on `'settrace'`.
 * Three `step` commands from the `set_trace()` stop, before a line that
   calls a function, end in that function; three `next` commands never stop
   in it.
@@ -53,8 +54,8 @@ Measurement scope:
   `ignore`, `condition` and `clear` by number are observed through the stop
   they cause or prevent. `clear` with no arguments, answered `y`, calls
   `clear_all_breaks()` once.
-* `interact` hands the console a namespace holding every global and local of
-  the frame, and assignments made in it do not reach the frame's locals.
+* `interact` hands the console a namespace whose names are exactly the
+  frame's globals and locals at that moment, and assignments made in it do not reach the frame's locals.
 * `post_mortem()` prints 40 more entries under `where` for a traceback 50
   recursive calls deep than for one 10 deep. On 3.13+, an exception with 30
   chained causes lists 31 under `exceptions`, and a chain of 1,005 lists
@@ -80,10 +81,15 @@ Not settled here:
   the `Bdb()` bound from that page.
 * The O(d·b) of `break` is the product of the frames walked, observed, and the
   O(b) `break_anywhere()` priced on the bdb page. `clear` with no arguments is
-  O(B·k) by `clear_all_breaks()`, also priced there; `clear bpnumber` is
+  O(B·k) by `clear_all_breaks()`, also priced there, and its O(B) space is the
+  list of live breakpoints `do_clear()` keeps to report; `clear bpnumber` is
   `clear_bpbynumber()`. `break function` for a name that does not evaluate in
   the current frame is resolved by `find_function()` scanning the source
-  file; that path is not priced or exercised.
+  file; the page leaves that path out of the bound, and it is not exercised.
+* `list`'s b factor is the `lineno in breaks` test `_print_lines()` makes
+  against the file's list of breakpoint lines, and `display` with no argument
+  listing the frame's x expressions is read from `do_display()`; only the n
+  lines printed and the displays evaluated at stops are observed.
 * `up` and `down` are O(1) and `p`, `pp` and `!` add only their expression by
   reading Lib/pdb.py: they index the stack list the stop built, and evaluate
   the expression once. That `exceptions number` rebuilds the stack for the
@@ -307,6 +313,8 @@ class CountingPdb(pdb.Pdb):
         name = frame.f_code.co_name
         if name in ('step', 'loop', 'caller') and event in ('call', 'line'):
             self.events[name + ':' + event] += 1
+            if event == 'line':
+                self.events[f'{name}:line+{frame.f_lineno - frame.f_code.co_firstlineno}'] += 1
         return super().trace_dispatch(frame, event, arg)
 
 
@@ -344,7 +352,9 @@ class TestWhatRunsTraced:
     raise events only in frames on the stack at the stop and in functions that
     could stop - from 3.14 those holding a breakpoint, before 3.14 every
     function in a file holding one. The monitoring backend raises each event
-    once per location until the next stop."""
+    once per location until the next stop, except that a function holding a
+    breakpoint raises a call event on every call and its breakpoint line an
+    event on every run."""
 
     CONFIGURATIONS: ClassVar[dict[str, tuple[str, str]]] = {
         "none": ("'continue\\n'", "{}"),
@@ -426,7 +436,8 @@ class TestWhatRunsTraced:
         monitoring = self.events(tmp_path, "monitoring-in-loop", count)
         settrace = self.events(tmp_path, "settrace-in-loop", count)
 
-        assert monitoring["loop:line"] >= count, monitoring
+        assert monitoring["loop:line+3"] >= count, monitoring
+        assert settrace["loop:line+3"] >= count, settrace
         assert settrace["loop:line"] > 2 * count, settrace
         assert monitoring["step:call"] == 1
         assert settrace["step:call"] == count
@@ -566,7 +577,7 @@ class TestEachStopReevaluatesDisplays:
 
 
 class TestListings:
-    """`list` | O(n) with 11 lines by default; `longlist` | O(n) over the
+    """`list` | O(n·b) with 11 lines by default; `longlist` | O(n) over the
     current function; `up` moves one frame."""
 
     SOURCE = """
@@ -731,6 +742,8 @@ class TestInteractCopiesTheNamespace:
 
     def fake_interact(self, banner=None, exitmsg=None):
         seen['names'] = sorted(self.locals)
+        frame = seen.pop('frame')
+        seen['expected'] = sorted({*frame.f_globals, *frame.f_locals})
         self.push('local_value = 99')
 
     code.InteractiveConsole.interact = fake_interact
@@ -738,11 +751,12 @@ class TestInteractCopiesTheNamespace:
 
     def frame_under_test():
         local_value = 1
+        seen['frame'] = sys._getframe()
         scripted('interact\\ncontinue\\n').set_trace()
         return local_value
 
     returned = frame_under_test()
-    emit({'returned': returned, 'names': seen['names']})
+    emit({'returned': returned, 'names': seen['names'], 'expected': seen['expected']})
     """
 
     def test_every_name_is_copied_and_assignments_stay_behind(self, tmp_path: pathlib.Path) -> None:
@@ -750,6 +764,7 @@ class TestInteractCopiesTheNamespace:
 
         assert result["returned"] == 1
         assert {"local_value", "global_value", "frame_under_test", "pdb"} <= set(result["names"])
+        assert result["names"] == result["expected"]
 
 
 class TestPostMortem:

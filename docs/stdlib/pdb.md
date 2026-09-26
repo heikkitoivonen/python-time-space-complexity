@@ -54,14 +54,15 @@ from 3.14 they, and `set_trace_async()`, build one only when no `Pdb` has run `s
 | Each stop | O(d + x) | O(d) | Builds the list of frames, then re-evaluates the current frame's `display` expressions |
 | `where`, `w`, `bt` | O(d) | O(d) | One entry per frame |
 | `up [count]`, `down [count]` | O(1) | O(1) | Moves through the list the stop built |
-| `list [first[, last]]`, `longlist`, `ll` | O(n) | O(n) | `list` prints 11 lines by default; `longlist` prints the whole current function |
+| `list [first[, last]]`, `longlist`, `ll` | O(n·b) | O(n) | `list` prints 11 lines by default; `longlist` prints the whole current function. Each line is looked up in the file's list of breakpoint lines |
 | `p expression`, `pp expression`, `!statement` | O(1) | O(1) | Plus the expression and its `repr()` |
-| `display [expression]`, `undisplay [expression]` | O(1) | O(1) | `display` evaluates once now, and again at every later stop in this frame |
+| `display expression`, `undisplay [expression]` | O(1) | O(1) | `display` evaluates once now, and again at every later stop in this frame |
+| `display` | O(x) | O(1) | Lists the current frame's expressions with their last values |
 | `interact` | O(g + l) | O(g + l) | g, l = names in the frame's globals and locals, copied into a new namespace: assignments there do not reach the frame |
 | `exceptions [number]` | O(d + e) | O(d + e) | 3.13+, post-mortem on an exception; listing is O(e), and choosing one rebuilds the stack for its traceback |
-| `break [[filename:]lineno \| function[, condition]]`, `tbreak ...` | O(d·b) | O(1) | During a stop, 3.12.9+ and 3.13.1+ re-check every frame so the breakpoint takes effect in functions already running; before, O(b). With no argument, `break` lists every breakpoint, O(B) |
+| `break [[filename:]lineno \| function[, condition]]`, `tbreak ...` | O(d·b) | O(1) | During a stop, 3.12.9+ and 3.13.1+ re-check every frame so the breakpoint takes effect in functions already running; before, O(b). With no argument, `break` lists every breakpoint, O(B). A `function` that does not evaluate in the current frame is looked up by reading its source file, which this bound leaves out |
 | `clear bpnumber [bpnumber ...]` | O(b + k) per number | O(1) | |
-| `clear` | O(B·k) | O(1) | Clears every breakpoint, walking every number ever assigned |
+| `clear` | O(B·k) | O(B) | Clears every breakpoint, walking every number ever assigned, and keeps a list of them to report |
 | `disable bpnumber`, `enable bpnumber`, `ignore bpnumber [count]`, `condition bpnumber [condition]` | O(1) per number | O(1) | Breakpoints are looked up by number |
 
 ### Constants and exceptions
