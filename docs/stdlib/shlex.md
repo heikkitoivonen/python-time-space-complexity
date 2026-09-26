@@ -1,296 +1,201 @@
-# Shlex Module
+# shlex Module Complexity
 
-The `shlex` module provides tools for writing simple syntactic analyzers and parsing shell-like syntax.
+The `shlex` module tokenizes shell-like text and quotes strings for a POSIX shell. The lexer is
+pure Python, reads one character at a time and stops once it has a token; `split()` runs it to the
+end and collects every token into a list, while `quote()` and `join()` go the other way.
+
+`n` is the characters in the input - the string passed to `split()`, `quote()`, `shlex()` or
+`push_source()`, all arguments together for `join()` - and `a` is the arguments `join()` is given.
+`k` is the characters in one token, and `Σk²` sums over the tokens produced. `c` is the characters
+one call reads, including the whitespace and comments it skips, and `m` is the longest comment line
+it skips. The lexer's character classes (`wordchars`, `whitespace`, `quotes`, `punctuation_chars`
+and the rest) are treated as fixed-size, and file names and line numbers are priced at O(1). The
+lexer bounds cover one source: popping an exhausted pushed source adds O(1) per source, and with
+`source` set a call may also read an inclusion's keyword and file-name tokens and the file it
+opens.
 
 ## Complexity Reference
 
+### Functions
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `split(string)` | O(n) | O(n) | n = string length |
-| `quote(string)` | O(n) | O(n) | n = string length |
-| `shlex()` | O(1) | O(1) | Create parser |
-| `get_token()` | O(k) | O(k) | k = token length |
+| `shlex.split(s, comments=False, posix=True)` | O(n + Σk²) | O(n) | Linear while tokens stay short; one n-character token is O(n²) |
+| `shlex.quote(s)` | O(n) | O(n) | Returns a non-empty `s` itself when every character is shell-safe; otherwise wraps it in single quotes |
+| `shlex.join(split_command)` | O(n + a) | O(n + a) | One `quote()` per argument, joined with spaces |
 
-## Common Operations
+### shlex
 
-### Simple String Splitting
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `shlex.shlex(instream=None, infile=None, posix=False, punctuation_chars=False)` | O(1); O(n) for a `str` | O(1); O(n) for a `str` | A stream is read lazily; a `str` is first copied into a `StringIO`. With no `instream` the lexer reads `sys.stdin` |
+| `shlex.get_token()` | O(c + k²) | O(k + m) | O(1) when a pushed-back token is waiting; a skipped comment is read as one line |
+| `shlex.read_token()` | O(c + k²) | O(k + m) | The raw read under `get_token()`, without pushback or source inclusion |
+| Iterating a `shlex` | O(c + k²) per token | O(k + m) per token | One `get_token()` per step, with its bounds; stops at `eof` |
+| `shlex.push_token(tok)` | O(1) | O(1) | `get_token()` returns the most recently pushed token first |
+| `shlex.push_source(newstream, newfile=None)` | O(1); O(n) for a `str` | O(1); O(n) for a `str` | Stacks the current stream, file name and line number; reading continues from `newstream` |
+| `shlex.pop_source()` | O(1) | O(1) | Closes the current stream and resumes the one below it; `get_token()` does this at the end of a pushed source |
+| `shlex.sourcehook(newfile)` | O(1) | O(1) | Opens `newfile`, relative to the current file's directory; `get_token()` calls it with the token after the `source` keyword. The open itself is not priced here |
+| `shlex.error_leader(infile=None, lineno=None)` | O(1) | O(1) | Formats `"file", line N: ` from the current file name and line |
+| `shlex.commenters`, `shlex.wordchars`, `shlex.whitespace`, `shlex.whitespace_split`, `shlex.quotes`, `shlex.escape`, `shlex.escapedquotes`, `shlex.punctuation_chars` | O(1) | O(1) | Settings consulted per input character; changing them changes the tokens, not the bound. `punctuation_chars` is read-only after construction |
+| `shlex.posix`, `shlex.eof`, `shlex.instream`, `shlex.infile`, `shlex.lineno`, `shlex.token`, `shlex.source`, `shlex.debug` | O(1) | O(1) | Lexer state; `eof` is `None` in POSIX mode and `''` otherwise |
 
-```python
-import shlex
+## Splitting Command Lines
 
-# O(n) where n = string length
-text = 'echo "Hello World" --flag value'
-
-# Smart split respecting quotes - O(n)
-tokens = shlex.split(text)
-# Returns: ['echo', 'Hello World', '--flag', 'value']
-
-# Compare to naive split - O(n) but loses quotes
-naive = text.split()
-# Returns: ['echo', '"Hello', 'World"', '--flag', 'value']
-```
-
-### Quoting Strings
-
-```python
-import shlex
-
-# O(n) where n = string length
-text = "Hello World"
-
-# O(n) - add shell quoting if needed
-quoted = shlex.quote(text)
-# Returns: "'Hello World'" on Unix
-
-# For use in shell commands
-cmd = f'echo {shlex.quote(text)}'
-# Safely executable as shell command
-```
-
-## Common Use Cases
-
-### Parsing Command-Line Arguments
+`split()` reads the whole string and returns every token, so it is linear while tokens stay short.
+The per-token cost is what breaks that: the lexer extends the token it is building
+one character at a time, and a k-character token costs O(k²), quoted or not.
 
 ```python
 import shlex
 
-def parse_command_line(command_str):
-    """Parse shell-like command - O(n)"""
-    # O(n) to split into tokens
-    tokens = shlex.split(command_str)
-    
-    if not tokens:
-        return None, []
-    
-    # O(1) to get command, O(k) for args where k = arg count
-    cmd = tokens[0]
-    args = tokens[1:]
-    
-    return cmd, args
+tokens = shlex.split('git commit -m "Initial commit"')  # O(n + Σk²)
+assert tokens == ['git', 'commit', '-m', 'Initial commit']
 
-# Usage - O(n)
-cmd, args = parse_command_line('git commit -m "Initial commit"')
-# cmd: 'git'
-# args: ['commit', '-m', 'Initial commit']
+# str.split is O(n) at any token length, but it does not understand quotes
+assert 'git commit -m "Initial commit"'.split()[3] == '"Initial'
+
+# One long token is the worst case: O(k²) for its k characters
+blob = 'x' * 1_000
+assert shlex.split(f'--data {blob}') == ['--data', blob]
 ```
 
-### Parsing Configuration Lines
+### Comments and Non-POSIX Mode
+
+`comments=True` skips from `#` to the end of the line; `posix=False` keeps quotes in the tokens and
+does not treat backslashes as escapes. Both change the tokens, not the cost.
+
+```python
+import shlex
+
+line = 'key "some value"  # trailing comment'
+assert shlex.split(line, comments=True) == ['key', 'some value']  # O(n + Σk²)
+assert shlex.split(line) == ['key', 'some value', '#', 'trailing', 'comment']
+assert shlex.split(r'a "b c" d\ e', posix=False) == ['a', '"b c"', 'd\\', 'e']
+```
+
+## Quoting Arguments
+
+`quote()` is linear in the string. A non-empty string made only of shell-safe characters comes
+back unchanged; anything else is wrapped in single quotes, with each embedded `'` spelled `'"'"'`.
+`join()` quotes every argument, so `split(join(args))` gives the arguments back.
+
+```python
+import shlex
+
+safe = 'file_name.txt'
+assert shlex.quote(safe) is safe  # O(n) - returned as is
+assert shlex.quote("it's here") == "'it'\"'\"'s here'"  # O(n)
+assert shlex.quote('') == "''"
+
+args = ['echo', 'Hello World', '$HOME', "it's"]
+command = shlex.join(args)  # O(n + a)
+assert command == "echo 'Hello World' '$HOME' 'it'\"'\"'s'"
+assert shlex.split(command) == args
+```
+
+## Driving the Lexer Directly
+
+### Reading Tokens One at a Time
+
+A `shlex` object stops reading once it has a token, so taking the first few tokens of a large
+stream costs what those calls read, not the stream. `push_token()` puts a token back for the next
+`get_token()` to return.
+
+```python
+import io
+import shlex
+
+stream = io.StringIO('run --fast target\n' * 10_000)
+lexer = shlex.shlex(stream, posix=True)  # O(1) - reads nothing yet
+lexer.whitespace_split = True
+
+assert lexer.get_token() == 'run'  # O(c + k²)
+assert stream.tell() < 10  # only the first token has been read
+
+lexer.push_token('again')  # O(1)
+assert lexer.get_token() == 'again'  # O(1) - the pushed token comes first
+assert lexer.get_token() == '--fast'
+```
+
+### Punctuation Characters
+
+With `punctuation_chars`, runs of those characters become tokens of their own, which is how a
+command line splits at `;`, `|` and `&&` without surrounding spaces.
+
+```python
+import shlex
+
+lexer = shlex.shlex('ls -l|wc -l; echo done&&exit', posix=True, punctuation_chars=True)
+tokens = list(lexer)  # O(n + Σk²)
+assert tokens == ['ls', '-l', '|', 'wc', '-l', ';', 'echo', 'done', '&&', 'exit']
+assert lexer.punctuation_chars == '();<>|&'
+```
+
+### Stacked Sources
+
+`push_source()` switches input to another stream and remembers where it was; when that stream runs
+out, `get_token()` pops back to the previous one. `error_leader()` names the current file and line
+for an error message.
+
+```python
+import shlex
+
+lexer = shlex.shlex('outer1 outer2', posix=True)
+assert lexer.get_token() == 'outer1'
+
+lexer.push_source('inner', 'included.txt')  # O(n) for a str source
+assert lexer.get_token() == 'inner'
+assert lexer.error_leader() == '"included.txt", line 1: '  # O(1)
+assert lexer.get_token() == 'outer2'  # the pushed source ran out and was popped
+assert lexer.infile is None
+assert lexer.get_token() is None  # eof in POSIX mode
+```
+
+## Common Patterns
+
+### Parsing a Config Line
 
 ```python
 import shlex
 
 def parse_config_line(line):
-    """Parse config file line - O(n)"""
-    # O(n) to tokenize
-    tokens = shlex.split(line, comments=True)
-    
+    tokens = shlex.split(line, comments=True)  # O(n + Σk²)
     if not tokens:
         return None, None
-    
-    # O(1) to extract key-value
-    key = tokens[0]
-    value = tokens[1] if len(tokens) > 1 else None
-    
-    return key, value
+    return tokens[0], tokens[1] if len(tokens) > 1 else None
 
-# Usage - O(n)
-line = 'database_url "postgresql://localhost/mydb"'
-key, value = parse_config_line(line)
-# key: 'database_url'
-# value: 'postgresql://localhost/mydb'
+assert parse_config_line('url "postgresql://localhost/db"  # main') == (
+    'url', 'postgresql://localhost/db'
+)
+assert parse_config_line('# only a comment') == (None, None)
 ```
 
-### Building Safe Shell Commands
+## Performance Best Practices
 
-```python
-import shlex
-import subprocess
+✅ **Do**:
 
-def run_command_safely(*args):
-    """Build and run safe shell command - O(n)"""
-    # O(n) where n = total arg length
-    # shlex.quote each argument - O(k) per arg
-    safe_args = [shlex.quote(str(arg)) for arg in args]
-    
-    # O(k) to join where k = arg count
-    command = ' '.join(safe_args)
-    
-    # Safe to execute - O(m) for subprocess
-    result = subprocess.run(command, shell=True, capture_output=True)
-    return result.stdout.decode()
+- Use `split()` for command lines and config lines, where tokens are short and the cost is linear
+- Give `shlex()` an open stream for large input: a `str` is copied into a `StringIO` first
+- Call `get_token()` or iterate the lexer when you need only the first few tokens; `split()` reads
+  everything
+- Build shell command strings with `join()` or `quote()` rather than by hand
 
-# Usage - O(n)
-output = run_command_safely('echo', 'Hello "World"', 'with $variables')
-# Safely escapes special characters
-```
+❌ **Avoid**:
 
-### Interactive Shell Parser
-
-```python
-import shlex
-
-class ShellParser:
-    """Parse interactive shell input - O(n) per line"""
-    
-    def __init__(self):
-        # O(1) - create parser
-        self.lexer = shlex.shlex(instream=None, posix=True)
-    
-    def parse_command(self, command_str):
-        """Parse command string - O(n)"""
-        # O(1) to set input
-        self.lexer.input(command_str)
-        
-        tokens = []
-        
-        # O(n) where n = string length, O(k) per token
-        while True:
-            token = self.lexer.get_token()  # O(k) where k = token length
-            if not token:
-                break
-            tokens.append(token)
-        
-        return tokens
-
-# Usage - O(n)
-parser = ShellParser()
-tokens = parser.parse_command('ls -la "/home/user/My Documents"')
-# ['ls', '-la', '/home/user/My Documents']
-```
-
-### Handling Different Quote Styles
-
-```python
-import shlex
-
-def parse_with_options(text, posix=True, comments=False):
-    """Parse with different behaviors - O(n)"""
-    # O(n) - posix mode handles backslashes differently
-    tokens = shlex.split(text, posix=posix, comments=comments)
-    
-    return tokens
-
-# Usage - O(n)
-posix_style = parse_with_options('echo "$VAR"')     # O(n)
-non_posix = parse_with_options('echo "$VAR"', posix=False)  # O(n)
-
-# Comments enabled - O(n)
-with_comment = parse_with_options('command arg1  # this is a comment', 
-                                   comments=True)
-```
-
-### Customizing Parser Behavior
-
-```python
-import shlex
-
-def parse_custom_syntax(text):
-    """Parse with custom syntax rules - O(n)"""
-    # O(1) - create custom parser
-    lexer = shlex.shlex(text, posix=True, punctuation_chars="|><;")
-    
-    # O(1) - customize behavior
-    lexer.whitespace_split = False  # Default - split on whitespace
-    lexer.wordchars += '@.-'  # Add to word characters
-    
-    tokens = []
-    
-    # O(n) to tokenize
-    while True:
-        token = lexer.get_token()  # O(k)
-        if not token:
-            break
-        tokens.append(token)
-    
-    return tokens
-
-# Usage - O(n)
-tokens = parse_custom_syntax('email@example.com | filter')
-```
-
-## Performance Tips
-
-### Cache Common Parse Results
-
-```python
-import shlex
-
-class CommandCache:
-    """Cache parsed commands - O(1) lookup"""
-    
-    def __init__(self):
-        self._cache = {}
-    
-    def get_tokens(self, command):
-        """Get tokens with caching - O(1) if cached"""
-        if command not in self._cache:
-            # O(n) first time where n = command length
-            self._cache[command] = shlex.split(command)
-        
-        # O(1) return cached
-        return self._cache[command]
-
-# Usage
-cache = CommandCache()
-tokens = cache.get_tokens('git commit -m "msg"')  # O(n)
-tokens = cache.get_tokens('git commit -m "msg"')  # O(1) - cached
-```
-
-### Batch Parsing
-
-```python
-import shlex
-
-def parse_multiple_commands(commands):
-    """Parse multiple commands efficiently - O(n)"""
-    # O(n) where n = total characters across all commands
-    return [shlex.split(cmd) for cmd in commands]
-
-# Usage - O(n)
-commands = [
-    'ls -la',
-    'grep pattern file.txt',
-    'sed "s/old/new/g" file'
-]
-parsed = parse_multiple_commands(commands)
-```
-
-### Use wordchars for Performance
-
-```python
-import shlex
-
-def efficient_parse(text, word_chars=None):
-    """Optimize parsing with custom word chars - O(n)"""
-    lexer = shlex.shlex(text)
-    
-    if word_chars:
-        # O(k) where k = number of extra chars
-        lexer.wordchars += word_chars
-    
-    # Now parsing is more efficient for those chars
-    tokens = []
-    while True:
-        token = lexer.get_token()
-        if not token:
-            break
-        tokens.append(token)
-    
-    return tokens
-
-# Usage - O(n)
-# Treats email addresses as single tokens
-tokens = efficient_parse('contact user@example.com', '@.')
-```
+- Passing long unbroken values - encoded blobs, huge paths - through `split()` or `shlex()`: each
+  token costs the square of its length
+- `str.split()` on shell text - linear at any token length, but wrong for quoted arguments
 
 ## Version Notes
 
-- **Python 2.6+**: Basic functionality
-- **Python 3.3+**: shlex.quote() available
-- **Python 3.x**: POSIX-like behavior when `posix=True`
+- **Python 3.12+**: `split(None)` raises `ValueError`; earlier versions emit a
+  `DeprecationWarning` and read `sys.stdin`
 
-## Related Documentation
+## Related Modules
 
-- [Subprocess Module](subprocess.md) - Running shell commands
-- [Argparse Module](argparse.md) - Argument parsing
-- [Re Module](re.md) - Regular expressions
+- **[subprocess](subprocess.md)** - takes the argument list `split()` produces, with no shell in
+  between
+- **[argparse](argparse.md)** - parses the argument list once it is split
+- **[cmd](cmd.md)** - line-oriented command interpreters, whose handlers receive the unsplit
+  argument string
