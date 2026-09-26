@@ -47,7 +47,10 @@ Measurement scope:
 * `Path.info` (3.14): four `exists`/`is_file`/`is_dir` queries make one stat
   call where the `Path` predicates make four, `is_symlink()` adds one lstat,
   the attribute is the same object on each access, and its answer survives the
-  file's deletion while a fresh `Path` stats again.
+  file's deletion while a fresh `Path` stats again. A path from `iterdir()`
+  answers `is_file()`, `is_dir()` and `is_symlink()` with no os-level stat
+  call, and still reports a file after it is deleted; `DirEntry`'s own
+  fallback stat, where the filesystem reports no type, is not counted.
 * `iterdir()` taking one item peaks over three times as much in a directory of
   1,600 entries as in one of 200, and lists the directory once; `list()` of
   the 1,600 peaks over 1.5 times what the first item does (x1.97 on 3.14). A missing
@@ -111,6 +114,9 @@ Not settled here:
   `ensure_different_files`, `ensure_distinct_paths` and `magic_open` appear in
   `dir(pathlib)` on 3.14 as imports from its private modules, and are not
   public API; `pathlib.types.PathInfo` is the public protocol.
+* The string work in `resolve()`, and in `is_mount()` on 3.12, is read from
+  `posixpath.realpath`: each component builds the path so far as a new
+  string, O(n·L) in all. Only the lstat count is measured.
 * Not varied: the filesystem type, symlink density inside `resolve()`, case
   sensitivity in globbing, and component length except where named.
 """
@@ -444,9 +450,14 @@ class TestJoiningCopiesTheSegments:
 
     def test_one_joinpath_call_builds_the_same_path(self) -> None:
         names = [f"d{index}" for index in range(100)]
+        grown = pathlib.PurePosixPath("/data")
+        for name in names:
+            grown = grown / name
 
-        assert self._grown(3) == pathlib.PurePosixPath("r/a/a/a")
-        assert pathlib.PurePosixPath("/data").joinpath(*names).parts[-1] == "d99"
+        joined = pathlib.PurePosixPath("/data").joinpath(*names)
+
+        assert joined == grown
+        assert str(joined) == str(grown) == "/data/" + "/".join(names)
 
     @pytest.mark.timing
     def test_a_long_right_operand_is_parsed_only_before_312(self) -> None:
@@ -607,6 +618,7 @@ class TestPureRowsWithVersionMarkers:
         deprecated = [w for w in caught if issubclass(w.category, DeprecationWarning)]
         assert bool(deprecated) is (sys.version_info >= (3, 14))
 
+    @POSIX_ONLY
     def test_path_as_uri_is_not(self) -> None:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
@@ -749,6 +761,7 @@ class TestOneSyscallPerPredicate:
 
         assert tmp_path.is_junction() is False  # type: ignore[attr-defined]
 
+    @POSIX_ONLY
     def test_is_mount_is_constant_except_on_312(self, tmp_path: pathlib.Path) -> None:
         """6 calls at any depth on 3.10 and 3.11, 2 on 3.13 and 3.14; on 3.12
         os.path.ismount resolves the parent, one lstat per component."""
@@ -770,6 +783,7 @@ class TestOneSyscallPerPredicate:
             assert shallow_calls == deep_calls, f"{shallow_calls} against {deep_calls}"
             assert deep_calls <= 8, f"is_mount made {deep_calls} stat calls"
 
+    @POSIX_ONLY
     def test_resolve_makes_one_lstat_per_component(self, tmp_path: pathlib.Path) -> None:
         shallow = tmp_path / "a"
         shallow.mkdir()
@@ -808,7 +822,7 @@ class TestModificationRowsAreOneSyscall:
         assert counter.counts["unlink"] == 1
         assert not target.exists()
 
-    @POSIX_ONLY
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux has no lchmod")
     def test_lchmod_cannot_be_exercised_on_a_symlink_here(self, tmp_path: pathlib.Path) -> None:
         """Why the lchmod row is recorded as unsettled rather than tested."""
         target = tmp_path / "f.txt"
@@ -860,6 +874,19 @@ class TestPathInfoCaches:
 
         assert info.exists(), "the cached answer survives the file"
         assert not pathlib.Path(str(target)).info.exists()  # type: ignore[attr-defined]
+
+    def test_an_iterdir_path_answers_from_its_directory_entry(self, tmp_path: pathlib.Path) -> None:
+        (tmp_path / "f.txt").touch()
+        (entry,) = tmp_path.iterdir()
+
+        with counting_syscalls() as counter:
+            answers = [entry.info.is_file(), entry.info.is_dir(), entry.info.is_symlink()]  # type: ignore[attr-defined]
+        entry.unlink()
+
+        assert answers == [True, False, False]
+        assert counter.stat_family == 0
+        assert entry.info.is_file(), "the directory entry, not a stat, answered"  # type: ignore[attr-defined]
+        assert not pathlib.Path(str(entry)).info.is_file()  # type: ignore[attr-defined]
 
     def test_the_protocol_is_public(self) -> None:
         import pathlib.types as types  # type: ignore[import-not-found]
@@ -957,9 +984,11 @@ class TestRecursiveGlobSpace:
     """`glob('**/' + pattern)`, `rglob(pattern)` | O(E) | O(w + P); O(A + Y)
     through 3.11.
 
-    Each test holds the other terms fixed and varies one: w, the queued path
-    length P, the matches already yielded (Y), and the listings on the branch
-    being scanned (A).
+    Each test sets out to vary one of w, the queued path length P, the matches
+    already yielded (Y), and the listings on the branch being scanned (A), but
+    the terms move together: widening a directory also adds retained matches
+    through 3.11, and deepening a chain lengthens both the listings on the
+    branch and every path yielded.
     """
 
     def test_rglob_is_glob_with_a_leading_double_star(self, tmp_path: pathlib.Path) -> None:
@@ -1047,7 +1076,7 @@ class TestRecursiveGlobSpace:
         (tmp_path / "a").mkdir()
         (tmp_path / "a" / "f.txt").touch()
 
-        found = {str(p.relative_to(tmp_path)) for p in tmp_path.glob("**")}
+        found = {p.relative_to(tmp_path).as_posix() for p in tmp_path.glob("**")}
 
         assert ("a/f.txt" in found) is (sys.version_info >= (3, 13)), found
         assert "a" in found
@@ -1080,8 +1109,10 @@ class TestWalkSpace:
         (wide / "d00000" / "leaf.txt").touch()
 
         visited = list(wide.walk())  # type: ignore[attr-defined]
+        directories = [directory for directory, _, _ in visited]
 
-        assert len(visited) == 21
+        assert len(directories) == len(set(directories)) == 21
+        assert set(directories) == {wide, *(p for p in wide.iterdir() if p.is_dir())}
         assert sum(len(files) for _, _, files in visited) == 1
 
 
@@ -1193,9 +1224,12 @@ class TestLinkAndRenameRows:
 
         other = tmp_path / "c.txt"
         other.write_text("other", encoding="utf-8")
+        other_inode = other.stat().st_ino
         other.replace(destination)
 
         assert destination.read_text(encoding="utf-8") == "other"
+        assert destination.stat().st_ino == other_inode, "a replace keeps the inode"
+        assert not other.exists()
 
 
 @pytest.mark.skipif(sys.version_info < (3, 14), reason="Path.copy() is 3.14+")

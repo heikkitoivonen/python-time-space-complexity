@@ -48,11 +48,11 @@ operation that needs it pays O(L) once.
 | `Path.cwd()`, `Path.home()` | O(L) | O(L) | L = length of the directory's path |
 | `Path.absolute()` | O(L) | O(L) | Joins onto the working directory; no stat |
 | `Path.expanduser()` | O(L) | O(L) | `~user` is looked up in the user database |
-| `Path.resolve(strict=False)` | O(L) | O(L) | One lstat per component; L includes every symlink target spliced into the path |
+| `Path.resolve(strict=False)` | O(n·L) | O(L) | One lstat per component, each on the path so far built as a new string; n and L include every symlink target spliced into the path |
 | `Path.stat()`, `Path.lstat()` | O(1) | O(1) | One syscall |
 | `Path.exists()`, `Path.is_file()`, `Path.is_dir()`, `Path.is_symlink()`, `Path.is_socket()`, `Path.is_fifo()`, `Path.is_block_device()`, `Path.is_char_device()` | O(1) | O(1) | One stat call each, an lstat for `is_symlink()`; the directory holding the path is not read |
 | `Path.is_junction()` | O(1) | O(1) | Python 3.12+; always `False` off Windows |
-| `Path.is_mount()` | O(1); O(L) on 3.12 | O(1) | Stats the path and its parent; 3.12 resolves the parent instead, one lstat per component |
+| `Path.is_mount()` | O(1); O(n·L) on 3.12 | O(1); O(L) on 3.12 | Stats the path and its parent; 3.12 resolves the parent instead, as `resolve()` does |
 | `Path.samefile(other)` | O(1) | O(1) | Two stat calls |
 | `Path.owner()`, `Path.group()` | O(1) | O(1) | One stat call plus a user- or group-database lookup |
 | `Path.info` | O(1) | O(1) | Python 3.14+; a `PathInfo` cached on the path, see below |
@@ -64,7 +64,7 @@ operation that needs it pays O(L) once.
 |-----------|------|-------|-------|
 | `Path.iterdir()` | O(w) | O(w) | The whole directory is read before the first item: when `iterdir()` is called from 3.13, at the first `next()` before |
 | `Path.glob(pattern)` | O(E) | O(w) | For a pattern without `**`; E counts every entry scanned, matching or not |
-| `Path.glob('**/' + pattern)`, `Path.rglob(pattern)` | O(E) | O(w + P); O(A + Y) through 3.11 | `rglob(pattern)` is `glob('**/' + pattern)`. Through 3.11 it holds the listing of every directory on the branch being scanned (A entries) and every path it has yielded (Y = their total length); bounds are for one `**` |
+| `Path.glob('**/' + pattern)`, `Path.rglob(pattern)` | O(E) | O(w + P); O(A + Y) through 3.11 | `rglob(pattern)` is `glob('**/' + pattern)`. Through 3.11 it holds the listing of every directory on the branch being scanned (A = the total length of those entries' paths) and every path it has yielded (Y = their total length); bounds are for one `**` |
 | `Path.walk(top_down=True, on_error=None, follow_symlinks=False)` | O(E) | O(w + P) | Python 3.12+; `top_down=False` also holds every ancestor's listing until its subtree is done |
 | `Path.mkdir(mode=0o777, parents=False, exist_ok=False)` | O(1); O(k·L) with `parents=True` | O(1); O(k·L) with `parents=True` | Recurses once per missing component, like `os.makedirs()` |
 | `Path.rmdir()` | O(1) | O(1) | The directory must be empty |
@@ -91,7 +91,7 @@ operation that needs it pays O(L) once.
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `pathlib.types`, `pathlib.types.PathInfo` | O(1) | O(1) | Python 3.14+; the protocol `Path.info` implements |
-| `PathInfo.exists()`, `PathInfo.is_dir()`, `PathInfo.is_file()` | O(1) | O(1) | At most one stat call, on the first query, shared by the three and kept for the object's life |
+| `PathInfo.exists()`, `PathInfo.is_dir()`, `PathInfo.is_file()` | O(1) | O(1) | At most one stat call, on the first query, shared by the three and kept for the object's life. A path from `iterdir()` answers `is_dir()` and `is_file()` from its directory entry instead |
 | `PathInfo.is_symlink()` | O(1) | O(1) | One lstat call, kept separately |
 
 ### Exceptions
@@ -111,7 +111,8 @@ is built and never inspected costs no more than holding its arguments.
 ```python
 from pathlib import PurePosixPath
 
-path = PurePosixPath('/' + 'a' * 100_000)  # O(L); O(1) from 3.12 - nothing is parsed yet
+source = '/' + 'a' * 100_000
+path = PurePosixPath(source)  # O(L); O(1) from 3.12 - nothing is parsed yet
 
 text = str(path)  # O(L) - builds the string; from 3.12 the deferred parse too
 assert str(path) is text  # O(1) - cached
@@ -238,9 +239,10 @@ with tempfile.TemporaryDirectory() as tmp:
 
 ### Path.info Caches the Answer (Python 3.14)
 
-`Path.info` takes one stat call on its first query and answers `exists()`, `is_file()` and
-`is_dir()` from it after that; `is_symlink()` takes one lstat, cached the same way. The cache lives
-as long as the `Path` object, so a long-lived `Path` whose file changes underneath it keeps
+On a `Path` you build, `Path.info` takes one stat call on its first query and answers `exists()`,
+`is_file()` and `is_dir()` from it after that; `is_symlink()` takes one lstat, cached the same way.
+A path yielded by `iterdir()` answers `is_file()`, `is_dir()` and `is_symlink()` from the directory
+entry it came from, which usually needs no call at all. The cache lives as long as the `Path` object, so a long-lived `Path` whose file changes underneath it keeps
 answering from the old stat. Build a fresh `Path` where that matters.
 
 ```python
@@ -288,8 +290,8 @@ with tempfile.TemporaryDirectory() as tmp:
 ### glob() Scans Entries, Not Matches
 
 `glob()` pays for every entry in every directory the pattern opens, whether or not it matches, and
-lists each directory whole before yielding from it. A pattern that finds one file in a directory of
-ten thousand still reads ten thousand names.
+lists each directory whole before yielding from it. A wildcard pattern that finds one file in a
+directory of ten thousand still reads ten thousand names.
 
 ```python
 import tempfile
@@ -325,11 +327,11 @@ with tempfile.TemporaryDirectory() as tmp:
     (base / 'a' / 'b' / 'y.py').touch()
     (base / 'z.txt').touch()
 
-    found = sorted(base.rglob('*.py'))  # O(E) - every entry in the tree
+    found = sorted(base.rglob('*.py'))  # O(E) - every entry in the tree, then the sort
     assert found == sorted(base.glob('**/*.py'))
     assert sorted(p.name for p in found) == ['x.py', 'y.py']
 
-    visited = [(d.name, sorted(files)) for d, _, files in base.walk()]  # O(E), 3.12+
+    visited = [(d.name, sorted(files)) for d, _, files in base.walk()]  # O(E) + sorts, 3.12+
     assert ('b', ['y.py']) in visited
 ```
 
