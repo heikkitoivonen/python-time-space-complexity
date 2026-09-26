@@ -27,9 +27,9 @@ Measurement scope:
   lines compile more than 5x the characters of 40 long ones, so the line
   count is a term of its own. A timing test pushes blocks of 25, 100 and 400
   lines a line at a time, where each 4x step costs more than 8x, and
-  compiles blocks of 400, 1,600 and 6,400 lines once with
-  `runsource(symbol='exec')`, where each 4x step costs less than 8x. The
-  block compiled once hands the compiler under 3c + 3 characters.
+  hands blocks of 400, 1,600 and 6,400 lines to one
+  `runsource(symbol='exec')` call each, where each 4x step costs less than
+  8x. That one call hands the compiler under 3c + 3 characters.
 * `resetbuffer()` empties the buffer; in a timing test, dropping 1,000,000
   distinct buffered lines costs more than 100x dropping 1,000.
 * `runsource()` returns `True` for incomplete input with nothing run,
@@ -40,9 +40,11 @@ Measurement scope:
   is not called; every other test restores the default hook first.
 * `showtraceback()`: a recursion 50 and 500 frames deep through one
   function prints output of the same length within 10 characters, because
-  the traceback collapses repeated lines, while the traced peak grows more
-  than 5x; through 50 and 500 distinct functions the output grows more
-  than 5x.
+  the traceback collapses repeated lines, while the traced peak of
+  `showtraceback()` alone, called inside the `except` block after the
+  traceback exists, grows more than 5x; through 50 and 500 distinct
+  functions the output grows more than 5x. The exception message and each
+  source line are held to a fixed length.
 * `showsyntaxerror()`: an offending line of 100,000 characters prints more
   than 50x the output of one of 100, and 1,000 valid lines before the error
   add under 50 characters.
@@ -248,7 +250,7 @@ class TestRunsourceReportsWhetherMoreIsNeeded:
         assert interp.runsource("a = = 1") is False
         assert "SyntaxError" in "".join(interp.output)
 
-    def test_a_whole_source_compiles_once_with_exec(self) -> None:
+    def test_one_exec_call_compiles_under_3c_characters(self) -> None:
         lines = block(400)
         source = "\n".join(lines) + "\n"
         interp = code.InteractiveInterpreter({})
@@ -445,10 +447,15 @@ class TestShowtracebackWalksEveryFrame:
     def test_collapsed_output_still_walks_every_frame(self) -> None:
         results = []
         for depth in (50, 500):
-            interp, fail = self.failing(depth, distinct=False)
-            fail()  # warm
-            peak = peak_bytes(fail)
-            results.append((peak, len(interp.output[-1])))
+            interp = Recorder({})
+            interp.runsource("def f(n):\n    if n: f(n - 1)\n    else: 1 / 0\n", symbol="exec")
+            peaks = []
+            for _ in range(2):  # the first pass warms the formatter
+                try:
+                    exec(f"f({depth})", interp.locals)
+                except ZeroDivisionError:
+                    peaks.append(peak_bytes(interp.showtraceback))
+            results.append((peaks[-1], len(interp.output[-1])))
 
         (small_peak, small_out), (large_peak, large_out) = results
         assert abs(large_out - small_out) < 10, f"output lengths {small_out}, {large_out}"
@@ -489,7 +496,7 @@ class TestShowsyntaxerrorFormatsOneLine:
         alone = self.shown("x = = 1")
         after = self.shown("y = 1\n" * 1_000 + "x = = 1")
 
-        assert len(after) - len(alone) < 50, (alone, after)
+        assert abs(len(after) - len(alone)) < 50, (alone, after)
 
 
 class TestWriteGoesToStderr:

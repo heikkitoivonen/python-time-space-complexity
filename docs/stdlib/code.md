@@ -10,10 +10,11 @@ A console does not compile incrementally. Every line pushed is appended to the b
 whole buffer is compiled again, so a block entered one line at a time costs more than the same
 source compiled once.
 
-`c` is the characters of the source handed to one compile - for a console, the whole buffered
-block - `b` is the lines in that block, `k` is the characters in one line, `f` is the frames in a
-traceback, and `x` is the cost of running the compiled code, which the caller controls. Compiling
-is priced as linear in `c`, and namespace lookups as O(1).
+`c` is the characters of the source handed to one `runsource()` - for a console, the whole
+buffered block - `b` is the lines in that block, `k` is the characters in one line, `f` is the
+frames in a traceback, and `x` is the cost of running the compiled code, which the caller
+controls. Compiling is priced as linear in `c`, and namespace lookups as O(1). Traceback bounds
+hold the exception message and each frame's source line to a fixed length.
 
 ## Complexity Reference
 
@@ -77,7 +78,8 @@ assert 'ZeroDivisionError' in interp.errors[-1]
 ### Whole Sources in One Compile
 
 With the default `symbol='single'`, `runsource()` takes one statement, as the prompt does. A source
-already known to be complete compiles once with `symbol='exec'`.
+already known to be complete goes through one `runsource()` call with `symbol='exec'`, which
+compiles it a fixed number of times rather than once per line.
 
 ```python
 import code
@@ -85,7 +87,7 @@ import code
 interp = code.InteractiveInterpreter({})
 source = "def square(n):\n    return n * n\n\nresult = square(12)\n"
 
-assert interp.runsource(source, symbol='exec') is False  # O(c) - one compile
+assert interp.runsource(source, symbol='exec') is False  # O(c) - one call
 assert interp.locals['result'] == 144
 ```
 
@@ -194,7 +196,8 @@ assert namespace['a'] == 1  # the line after exit() was never read
 ### An Embedded Console
 
 A subclass that overrides `raw_input()` and `write()` is a console with no terminal at all: input
-comes from the application, and output, tracebacks included, goes back to it.
+comes from the application, and the console's own output - tracebacks, syntax errors, banner and
+exit message - goes back to it. `print()` and echoed expression values still go to `sys.stdout`.
 
 ```python
 import code
@@ -225,7 +228,7 @@ assert any('IndexError' in chunk for chunk in console.output)
 
 ✅ **Do**:
 
-- Compile a known multi-line source once with `runsource(source, symbol='exec')`: O(c), not the
+- Hand a known multi-line source to one `runsource(source, symbol='exec')` call: O(c), not the
   O(b·c) of pushing it a line at a time
 - Supply `readfunc`, or override `raw_input()`, whenever input does not come from a person at a
   terminal
