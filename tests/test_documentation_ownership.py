@@ -64,6 +64,18 @@ def test_package_overviews_delegate_api_details(page: str, targets: list[str]) -
         assert (DOCS / target).is_file()
 
 
+def test_xml_parsers_expat_reexports_pyexpat() -> None:
+    """xml.md sends xml.parsers.expat readers to the pyexpat page: the package
+    module is a separate object whose parser API is pyexpat's own objects."""
+    import pyexpat
+    import xml.parsers.expat as expat
+
+    assert "`xml.parsers.expat`, which re-exports `pyexpat`" in (DOCS / "xml.md").read_text()
+    assert expat is not pyexpat
+    for name in ("ParserCreate", "ExpatError", "XMLParserType", "ErrorString", "errors", "model"):
+        assert getattr(expat, name) is getattr(pyexpat, name)
+
+
 def _blocks(page: str) -> list[tuple[int, str]]:
     text = (DOCS / page).read_text()
     return [

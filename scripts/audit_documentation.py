@@ -256,6 +256,9 @@ CLASS_PAGES = {
     "collections.namedtuple": "namedtuple",
     # A submodule whose page name is not its dotted module name.
     "concurrent.futures": "concurrent_futures",
+    "xml.parsers.expat": "pyexpat",
+    # Documented on the ElementTree page, not as a module of its own.
+    "xml.etree.ElementInclude": "xml.etree.elementtree",
 }
 
 

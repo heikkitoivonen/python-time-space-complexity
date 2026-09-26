@@ -131,10 +131,11 @@ def test_matching_scopes_members_and_detects_removed_names() -> None:
 def test_page_mapping(tmp_path: Path) -> None:
     stdlib = tmp_path / "docs" / "stdlib"
     stdlib.mkdir(parents=True)
-    for name in ("collections", "counter", "xml", "xml.dom", "cprofile"):
+    for name in ("collections", "counter", "xml", "xml.dom", "cprofile", "pyexpat"):
         (stdlib / f"{name}.md").touch()
     for name in ("concurrent", "concurrent_futures", "concurrent.interpreters"):
         (stdlib / f"{name}.md").touch()
+    (stdlib / "xml.etree.elementtree.md").touch()
     assert (
         audit.documentation_page(tmp_path, "collections", "collections.Counter.update")
         == stdlib / "counter.md"
@@ -143,6 +144,23 @@ def test_page_mapping(tmp_path: Path) -> None:
         audit.documentation_page(tmp_path, "xml.dom.minidom", "xml.dom.minidom.Node")
         == stdlib / "xml.dom.md"
     )
+    assert (
+        audit.documentation_page(tmp_path, "xml.parsers.expat", "xml.parsers.expat.ErrorString")
+        == stdlib / "pyexpat.md"
+    )
+    assert (
+        audit.documentation_page(
+            tmp_path, "xml.parsers.expat.errors", "xml.parsers.expat.errors.codes"
+        )
+        == stdlib / "pyexpat.md"
+    )
+    assert (
+        audit.documentation_page(
+            tmp_path, "xml.etree.ElementInclude", "xml.etree.ElementInclude.include"
+        )
+        == stdlib / "xml.etree.elementtree.md"
+    )
+    assert audit.documentation_page(tmp_path, "xml.parsers", "xml.parsers") == stdlib / "xml.md"
     assert (
         audit.documentation_page(tmp_path, "cProfile", "cProfile.Profile") == stdlib / "cprofile.md"
     )
