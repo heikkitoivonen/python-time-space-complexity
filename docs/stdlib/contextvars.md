@@ -1,428 +1,248 @@
 # contextvars Module Complexity
 
-The `contextvars` module provides context variables for managing state in concurrent and async code while maintaining isolation between execution contexts.
+The `contextvars` module gives each thread and each asyncio task its own values for shared
+variables. A `Context` is a read-only mapping from `ContextVar` objects to values, backed by an
+immutable hash array mapped trie (HAMT): setting a variable builds a new trie that shares
+everything but one path with the old one, so copying a context never copies its contents.
 
-## Classes & Functions
+`n` is the variables set in the context being read, written or copied. Keys are always
+`ContextVar` objects, which cannot be subclassed, so no user code runs during a lookup. Context
+equality compares values, and prices each comparison at O(1).
+
+## Complexity Reference
+
+### ContextVar
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `ContextVar(name)` | O(1) | O(1) | Create context variable |
-| `ContextVar.set(value)` | O(1) | O(1) | Returns token for reset |
-| `ContextVar.get()` | O(1) | O(1) | Returns default if not set |
-| `copy_context()` | O(n) | O(n) | Copy context, n = variable count |
-| `Context.run(fn, *args)` | O(1) | O(1) | Run function in context |
-| `Token` creation | O(1) | O(1) | Token returned by set() |
+| `contextvars.ContextVar(name, *, default)` | O(1) | O(1) | A variable set in a context stays a key there until a reset unsets it, so create variables once, at module level |
+| `ContextVar.get([default])` | O(log n) | O(1) | Falls back to `default`, then the variable's own default, then raises `LookupError` |
+| `ContextVar.set(value)` | O(log n) | O(log n) | Returns a `Token`; the mapping it replaces is left intact |
+| `ContextVar.reset(token)` | O(log n) | O(log n) | Only in the context the token came from, and only once |
+| `ContextVar.name` | O(1) | O(1) | Names do not identify variables: two variables with one name are two keys |
 
-## Creating Context Variables
+### Token
 
-### Time Complexity: O(1)
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `Token.var`, `Token.old_value` | O(1) | O(1) | `old_value` is `Token.MISSING` if the variable was unset |
+| `Token.MISSING` | O(1) | O(1) | Marker object |
+| `with var.set(value):` | O(log n) | O(log n) | Python 3.14+; resets the variable on exit |
 
-```python
-from contextvars import ContextVar
+### Context
 
-# Create variable: O(1)
-request_id = ContextVar('request_id')  # O(1)
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `contextvars.copy_context()` | O(1) | O(1) | Shares the current mapping; neither side sees the other's later sets |
+| `contextvars.Context()` | O(1) | O(1) | An empty context |
+| `Context.copy()` | O(1) | O(1) | Same as `copy_context()`, for any context |
+| `Context.run(callable, *args, **kwargs)` | O(1) + callable | O(1) + callable | Does not copy: sets made by the callable stay in the context. Raises `RuntimeError` if the context is already entered |
+| `ctx[var]`, `Context.get(var, default=None)`, `var in ctx` | O(log n) | O(1) | |
+| `len(ctx)` | O(1) | O(1) | The count is stored |
+| `iter(ctx)`, `Context.keys()`, `Context.values()`, `Context.items()` | O(1) to create, O(n) to exhaust | O(1) | One-shot iterators, not lists; the order is not the order the variables were set |
+| `ctx == other` | O(n log n) | O(1) | |
 
-# With default value: O(1)
-user_id = ContextVar('user_id', default=None)  # O(1)
+## Setting and Reading Variables
 
-# Each variable is a singleton
-# Multiple references to same name share state
-request_id2 = ContextVar('request_id')  # Different object, shares context value
-```
-
-### Space Complexity: O(1)
-
-```python
-from contextvars import ContextVar
-
-# Variable object is small: O(1)
-request_id = ContextVar('request_id')  # O(1) space
-```
-
-## Setting and Getting Values
-
-### Time Complexity: O(1)
+A set does not overwrite anything: it builds a new trie that copies the O(log n) path down to
+the variable's slot, and the `Token` it returns remembers the value it replaced.
 
 ```python
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 
 request_id = ContextVar('request_id')
+user = ContextVar('user', default='anonymous')
 
-# Set value in context: O(1)
-token = request_id.set('req-123')  # O(1)
+try:
+    request_id.get()  # O(log n)
+except LookupError:
+    pass
+else:
+    raise AssertionError('an unset variable with no default was read')
+assert request_id.get('none') == 'none'
+assert user.get() == 'anonymous'
 
-# Get value from context: O(1)
-current_id = request_id.get()  # O(1)
+token = request_id.set('req-1')  # O(log n)
+assert token.var is request_id and token.old_value is Token.MISSING
+assert request_id.get() == 'req-1'  # O(log n)
 
-# Get with default: O(1)
-default_id = request_id.get('no-id')  # O(1)
-
-# Reset to previous: O(1)
-request_id.reset(token)  # O(1)
+request_id.reset(token)  # O(log n) - back to unset
+assert request_id.get('none') == 'none'
 ```
 
-### Space Complexity: O(1)
+## Copying a Context
 
-```python
-from contextvars import ContextVar
-
-# Each set stores one value: O(1)
-request_id = ContextVar('request_id')
-request_id.set('req-1')  # O(1) space
-request_id.set('req-2')  # O(1) space (replaces)
-```
-
-## Context Copying
-
-### Time Complexity: O(n)
-
-Where n = number of context variables set.
+`copy_context()` takes a reference to the current mapping instead of duplicating it, so its cost
+does not depend on how many variables are set. The copy and the original then diverge one path
+at a time as either side sets variables.
 
 ```python
 from contextvars import ContextVar, copy_context
 
-request_id = ContextVar('request_id')
-user_id = ContextVar('user_id')
-session_id = ContextVar('session_id')
+setting = ContextVar('setting', default='default')
+setting.set('outer')
 
-# Set values: O(1) per set
-request_id.set('req-123')  # O(1)
-user_id.set('user-456')  # O(1)
-session_id.set('sess-789')  # O(1)
+ctx = copy_context()  # O(1), whatever n is
+assert ctx[setting] == 'outer'  # O(log n)
 
-# Copy context: O(n) where n = 3 variables
-ctx = copy_context()  # O(n)
-
-# Space: O(n) for copy
-# Copying is relatively cheap, O(n) where n is usually small
+ctx.run(setting.set, 'inner')  # O(log n) - changes the copy only
+assert ctx[setting] == 'inner'
+assert setting.get() == 'outer'
 ```
 
-### Space Complexity: O(n)
+## Running Code in a Context
+
+`Context.run()` switches the thread's current context for the duration of the call. It does not
+copy: anything the callable sets is still in the context afterwards, and a context can be entered
+by only one call at a time.
 
 ```python
-from contextvars import copy_context
+from contextvars import Context, ContextVar
 
-# Copying creates new context with all values
-ctx = copy_context()  # O(n) space for n variables
+counter = ContextVar('counter', default=0)
+ctx = Context()  # O(1) - empty
+
+def bump():
+    counter.set(counter.get() + 1)  # O(log n)
+    return counter.get()
+
+assert ctx.run(bump) == 1  # O(1) + bump
+assert ctx.run(bump) == 2  # the first call's set is still there
+assert counter.get() == 0  # the caller's context is untouched
+
+try:
+    ctx.run(ctx.run, bump)
+except RuntimeError as error:
+    assert 'already entered' in str(error)
+else:
+    raise AssertionError('a context was entered twice')
 ```
 
-## Running in Contexts
+## Inspecting a Context
 
-### Time Complexity: O(1)
-
-```python
-from contextvars import ContextVar, copy_context
-
-request_id = ContextVar('request_id')
-
-# Set in current context
-request_id.set('req-main')
-
-# Copy context: O(n)
-ctx = copy_context()  # O(n)
-
-# Run function in copied context: O(1) to switch
-def task():
-    current_id = request_id.get()  # O(1)
-    return current_id
-
-# Run in context: O(1) operation
-# (function execution time is separate)
-result = ctx.run(task)  # O(1) + function time
-```
-
-### Space Complexity: O(1) for switching
+A `Context` is a read-only mapping keyed by variables. `len()` is stored; iteration walks the
+trie lazily, so `keys()`, `values()` and `items()` are one-shot iterators rather than lists, in
+hash order rather than the order the variables were set.
 
 ```python
-from contextvars import copy_context
+from contextvars import Context, ContextVar
 
-# No additional space to switch contexts
-# O(1) operation
-ctx = copy_context()  # O(n) space for context
-result = ctx.run(some_function)  # O(1) switching space
+a = ContextVar('a')
+b = ContextVar('b')
+ctx = Context()
+ctx.run(a.set, 1)
+ctx.run(b.set, 2)
+
+assert len(ctx) == 2  # O(1)
+assert a in ctx and ctx.get(b) == 2  # O(log n)
+
+keys = ctx.keys()  # O(1) - nothing is walked yet
+assert set(keys) == {a, b}  # O(n)
+assert list(keys) == []  # already exhausted
+assert dict(ctx.items()) == {a: 1, b: 2}  # O(n)
 ```
 
 ## Common Patterns
 
-### Request Context in Web Applications
+### Request-Scoped Values
 
 ```python
 from contextvars import ContextVar
-from datetime import datetime
 
-# Define context variables
-request_id = ContextVar('request_id')
-user_id = ContextVar('user_id', default=None)
-request_time = ContextVar('request_time')
+request_id = ContextVar('request_id', default=None)  # once, at module level
 
-# In request handler
-def handle_request(request):
-    """Handle HTTP request."""
-    # Set context variables: O(1) each
-    request_id.set(request.id)  # O(1)
-    user_id.set(request.user_id)  # O(1)
-    request_time.set(datetime.now())  # O(1)
-    
-    # Call business logic
-    result = process_request(request)  # Can access context vars
-    
-    return result
+def log(message):
+    return f'[{request_id.get()}] {message}'  # O(log n)
 
-def process_request(request):
-    """Business logic that accesses context."""
-    # Get current request_id: O(1)
-    current_req_id = request_id.get()
-    
-    # Log with context
-    log(f"Processing {current_req_id}")
-    
-    # Call other functions that can access context
-    validate(request)  # Can use request_id without passing it
-    
-    return result
+def handle(rid):
+    token = request_id.set(rid)  # O(log n)
+    try:
+        return log('handled')
+    finally:
+        request_id.reset(token)  # O(log n)
 
-def validate(request):
-    """Access context variables implicitly."""
-    # Get from context without parameter passing: O(1)
-    req_id = request_id.get()
-    print(f"Validating {req_id}")
+assert handle('req-7') == '[req-7] handled'
+assert request_id.get() is None
 ```
 
-### Async Task Context
+### Asyncio Tasks
+
+Each task runs in a copy of the context that was current when it was created. The copy is O(1),
+so this costs the same however many variables are set.
 
 ```python
 import asyncio
 from contextvars import ContextVar
 
-task_id = ContextVar('task_id')
+task_name = ContextVar('task_name', default='main')
 
-async def process_task(task_data):
-    """Process async task."""
-    # Set context for this task: O(1)
-    task_id.set(task_data['id'])
-    
-    # Each await preserves context automatically
-    result = await fetch_data()  # Context preserved
-    
-    return process_result(result)  # Can access task_id: O(1)
-
-async def fetch_data():
-    """Access context in async function."""
-    # Context is inherited from caller: O(1)
-    current_task_id = task_id.get()
-    
-    # Async operations preserve context
-    await asyncio.sleep(1)
-    
-    return {"result": "data"}
+async def worker(name):
+    task_name.set(name)  # O(log n), in this task's copy only
+    await asyncio.sleep(0)
+    return task_name.get()
 
 async def main():
-    """Run multiple tasks with separate contexts."""
-    tasks = [
-        asyncio.create_task(process_task({"id": f"task-{i}"}))
-        for i in range(5)
-    ]
-    
-    # Each task has separate context automatically
-    results = await asyncio.gather(*tasks)  # O(n)
+    task_name.set('parent')
+    results = await asyncio.gather(worker('a'), worker('b'))
+    assert results == ['a', 'b']
+    assert task_name.get() == 'parent'
+
+asyncio.run(main())
 ```
 
-### Thread Context Isolation
+### Threads
+
+Unless `sys.flags.thread_inherit_context` is set, a new thread starts in an empty context. To
+carry values across either way, run the thread's target in a copy of the caller's context.
 
 ```python
-from contextvars import ContextVar
-from threading import Thread
-
-# Note: contextvars are isolated per thread/async task
-# Not inherited by default in threads
-request_id = ContextVar('request_id')
-
-def thread_worker(task_id):
-    """Worker function in thread."""
-    # Set in thread context: O(1)
-    # This does NOT affect main thread context
-    request_id.set(f"thread-{task_id}")
-    
-    # Get from thread context: O(1)
-    current_id = request_id.get()
-    print(f"Worker: {current_id}")
-
-def main():
-    """Main thread context."""
-    # Set in main: O(1)
-    request_id.set('main-thread')
-    
-    # Create and start thread
-    thread = Thread(target=thread_worker, args=(1,))
-    thread.start()
-    
-    # Main thread context unchanged: O(1) to get
-    current_id = request_id.get()
-    print(f"Main: {current_id}")  # Still 'main-thread'
-    
-    thread.join()
-```
-
-### Context Propagation to Threads
-
-```python
+import sys
+import threading
 from contextvars import ContextVar, copy_context
-from threading import Thread
 
-request_id = ContextVar('request_id')
+request_id = ContextVar('request_id', default=None)
+seen = {}
 
-def thread_worker(ctx, task_id):
-    """Worker runs in provided context."""
-    # Run in copied context: O(1) switch
-    def work():
-        # Now can access context: O(1)
-        current_id = request_id.get()
-        print(f"Worker {task_id}: {current_id}")
-        return f"result-{task_id}"
-    
-    return ctx.run(work)  # O(1) to switch context
+def worker(key):
+    seen[key] = request_id.get()
 
-def main():
-    """Set up context and run in thread."""
-    # Set main context: O(1)
-    request_id.set('main-request')
-    
-    # Copy context: O(n)
-    ctx = copy_context()
-    
-    # Pass context to thread
-    thread = Thread(target=thread_worker, args=(ctx, 1))
+request_id.set('req-9')
+
+bare = threading.Thread(target=worker, args=('bare',))
+carried = threading.Thread(target=copy_context().run, args=(worker, 'carried'))  # O(1) copy
+for thread in (bare, carried):
     thread.start()
     thread.join()
+
+inherits = getattr(sys.flags, 'thread_inherit_context', 0)
+assert seen == {'bare': 'req-9' if inherits else None, 'carried': 'req-9'}
 ```
 
-## Performance Characteristics
+## Performance Best Practices
 
-### Context Variable Access
+✅ **Do**:
 
-```python
-from contextvars import ContextVar
+- Create each `ContextVar` once, at module level
+- Pair every `set()` with a `reset()` in a `finally`, or on 3.14+ a `with` block, so a context
+  does not keep values it no longer needs
+- Copy a context whenever you need isolation: `copy_context()` is O(1)
 
-var = ContextVar('var')
+❌ **Avoid**:
 
-# Set is fast: O(1)
-var.set('value')  # O(1)
-
-# Get is fast: O(1)
-value = var.get()  # O(1)
-
-# No performance overhead vs global variable
-# (except for isolation benefit)
-```
-
-### Context Copying
-
-```python
-from contextvars import copy_context, ContextVar
-
-# Copying has cost: O(n)
-ctx = copy_context()  # O(n) where n = variables set
-
-# But only needed occasionally (not per operation)
-# Usually done once per request/task
-
-# Usually n is small (< 10 variables)
-# So O(n) is acceptable
-```
-
-### Best Practices
-
-```python
-from contextvars import ContextVar
-
-# Good: Create variables at module level
-request_id = ContextVar('request_id')
-user_id = ContextVar('user_id')  # O(1) at import time
-
-# Avoid: Creating variables in functions
-def handle_request():
-    # Creating in function: inefficient
-    temp_var = ContextVar('temp')  # O(1) but wasteful
-    temp_var.set('value')
-
-# Good: Set once per request/task
-def handle_request(request):
-    request_id.set(request.id)  # O(1)
-    # Don't set repeatedly
-
-# Avoid: Setting repeatedly in loop
-def process_items(items):
-    for item in items:
-        request_id.set(item.id)  # O(n) sets, inefficient
-        process(item)
-
-# Good: Copy context for new execution path
-async def task():
-    ctx = copy_context()  # O(n) once
-    result = ctx.run(function)  # O(1) to switch
-
-# Avoid: Copying context repeatedly
-for i in range(1000):
-    ctx = copy_context()  # O(n*1000) - wasteful!
-    ctx.run(function)
-```
-
-### Async vs Threading
-
-```python
-from contextvars import ContextVar
-import asyncio
-from threading import Thread
-
-var = ContextVar('var')
-
-async def async_task():
-    """Async tasks share context efficiently."""
-    var.set('value-1')
-    
-    # Create subtask: context inherited automatically
-    subtask = asyncio.create_task(async_subtask())
-    
-    result = await subtask
-    return result
-    # Total: O(1) context operations
-
-async def async_subtask():
-    """Access parent context: O(1)."""
-    value = var.get()  # O(1) - inherits from parent
-    return value
-
-def thread_task():
-    """Threads require explicit context passing."""
-    from contextvars import copy_context
-    
-    var.set('value-1')
-    
-    # Must copy context: O(n)
-    ctx = copy_context()
-    
-    # Pass to thread
-    thread = Thread(target=thread_subtask, args=(ctx,))
-    thread.start()
-    thread.join()
-    
-    # Total: O(n) for copying
-
-def thread_subtask(ctx):
-    """Must run in copied context."""
-    result = ctx.run(lambda: var.get())  # O(1) to access
-    return result
-```
+- Creating variables inside a function that runs repeatedly: every new variable set in a
+  long-lived context is a new key it keeps, so n grows with each call
+- Using `Context.run()` for isolation - it does not copy; run in `copy_context()` instead
+- Materialising `list(ctx.items())` just to read one variable - that is O(n) against O(log n)
 
 ## Version Notes
 
-- **Python 3.7+**: contextvars module introduced
-- **Python 3.11+**: Enhanced performance
-- **Python 3.13+**: Additional features
+- **Python 3.14+**: `Token` is a context manager, and `with var.set(value):` resets on exit
+- **Python 3.14+**: `threading.Thread` takes a `context` argument; with
+  `sys.flags.thread_inherit_context` set, the default on free-threaded builds, a new thread
+  starts in a copy of the caller's context instead of an empty one
 
-## Related Documentation
+## Related Modules
 
-- [asyncio Module](asyncio.md) - Async/await with context support
-- [threading Module](threading.md) - Threading (context not automatic)
-- [concurrent.futures Module](concurrent_futures.md) - Executors
+- **[asyncio](asyncio.md)** - every task and scheduled callback captures a context
+- **[threading](threading.md)** - each thread has its own current context
+- **[concurrent.futures](concurrent_futures.md)** - submit `copy_context().run` to carry values into a worker
