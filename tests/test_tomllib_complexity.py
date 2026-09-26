@@ -20,12 +20,14 @@ Measurement scope:
   tables nested 10, 30 and 90 deep, where each 3x step must cost under 5x
   (linear 3x, quadratic 9x).
 * One top-level dotted key: from 100 to 800 parts the traced peak grows more
-  than 20x (linear predicts 8x, quadratic 64x; x38 on 3.14.7), and in a
-  timing test from 100 to 900 parts time grows more than 20x (linear 9x,
-  quadratic 81x; x91 on 3.14.7).
+  than 20x and less than 200x (linear predicts 8x, quadratic 64x, cubic
+  512x; x38 to x46 on 3.14.7), and in a timing test from 100 to 900 parts
+  time grows more than 20x and less than 250x (linear 9x, quadratic 81x,
+  cubic 729x; x46 to x91 on 3.14.7).
 * A table header of 100 and of 800 parts over a fixed 2,000 keys, which moves
   the text by under 20%: with two-part keys the traced peak grows more than 3x
-  (x5.7 on 3.14.7), and with one-part keys time grows more than 3x (x6.8).
+  and less than 25x (x5.7 to x5.9 on 3.14.7), and with one-part keys time
+  does the same (x6.8 to x7.3); O(n·d) predicts 8x, a d² term 64x.
   Flat keys at 2,000 and 20,000 lines peak under 20x apart for 10x the text.
 * A key or table header one part over the recursion limit raises
   `RecursionError` on 3.11.16, 3.12.14, 3.13.14, 3.14.6 and later patch
@@ -240,8 +242,8 @@ class TestKeyDepthMultipliesTheCost:
 
         peaks = [peak_bytes(lambda: tomllib.loads(small)), peak_bytes(lambda: tomllib.loads(large))]
 
-        assert peaks[1] > peaks[0] * 20, (
-            f"8x the parts peaked at {peaks}; linear predicts 8x, quadratic 64x"
+        assert peaks[0] * 20 < peaks[1] < peaks[0] * 200, (
+            f"8x the parts peaked at {peaks}; linear predicts 8x, quadratic 64x, cubic 512x"
         )
 
     @pytest.mark.timing
@@ -254,7 +256,9 @@ class TestKeyDepthMultipliesTheCost:
         ]
         ratio = durations[1] / durations[0]
 
-        assert ratio > 20, f"9x the parts took {durations} ns, x{ratio:.1f}; linear predicts 9x"
+        assert 20 < ratio < 250, (
+            f"9x the parts took {durations} ns, x{ratio:.1f}; linear predicts 9x, quadratic 81x"
+        )
 
     def test_a_deep_header_multiplies_what_its_keys_allocate(self) -> None:
         shallow = self.under_header(100, "x{}.y = 1")
@@ -266,7 +270,9 @@ class TestKeyDepthMultipliesTheCost:
             peak_bytes(lambda: tomllib.loads(deep)),
         ]
 
-        assert peaks[1] > peaks[0] * 3, f"8x the header parts at one key count peaked at {peaks}"
+        assert peaks[0] * 3 < peaks[1] < peaks[0] * 25, (
+            f"8x the header parts at one key count peaked at {peaks}; O(n·d) predicts 8x"
+        )
 
     @pytest.mark.timing
     def test_a_deep_header_multiplies_what_its_keys_cost(self) -> None:
@@ -277,7 +283,7 @@ class TestKeyDepthMultipliesTheCost:
         durations = [best_ns(lambda: tomllib.loads(shallow)), best_ns(lambda: tomllib.loads(deep))]
         ratio = durations[1] / durations[0]
 
-        assert ratio > 3, (
+        assert 3 < ratio < 25, (
             f"8x the header parts under 2,000 plain keys took {durations} ns, x{ratio:.1f}"
         )
 
@@ -496,4 +502,6 @@ class TestDocumentedExamples:
         mutated = source.replace("'2e3', 'inf']", "'2e3']", 1)
 
         assert mutated != source, f"the mutation matched nothing in {PAGE.name}:{line}"
-        assert _run_block(mutated, tmp_path).returncode != 0
+        result = _run_block(mutated, tmp_path)
+        assert result.returncode != 0
+        assert "AssertionError" in result.stderr, result.stderr

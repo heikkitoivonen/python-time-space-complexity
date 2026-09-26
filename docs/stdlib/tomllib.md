@@ -19,7 +19,7 @@ long dotted key.
 |-----------|------|-------|-------|
 | `tomllib.loads(s, /, *, parse_float=float)` | O(n·d) | O(n·d) | O(n) for ordinary documents; nesting arrays and inline tables adds nothing beyond their characters |
 | `tomllib.load(fp, /, *, parse_float=float)` | O(n·d) | O(n·d) | Reads the whole binary file with one `read()`, decodes it as UTF-8, then parses it as `loads()` does; a text-mode file raises `TypeError` |
-| `parse_float` callback | O(f) per float | O(1) | f = one call's cost; called once per float value with its text as written, never for integers; returning a `dict` or `list` raises `ValueError` |
+| `parse_float` callback | O(f) per float | O(f) per float | f = one call's cost in time and space; called once per float value with its text as written, never for integers; returning a `dict` or `list` raises `ValueError` |
 
 ### TOMLDecodeError
 
@@ -216,7 +216,7 @@ assert config['log'] == {'level': 'debug'}  # 'file' went with the replaced tabl
 
 - **Python 3.11+**: `tomllib` added
 - **Python 3.11.16, 3.12.14, 3.13.14, 3.14.6+**: a key or table header with more dotted parts
-  than the recursion limit raises `RecursionError`
+  than the recursion limit in force when `tomllib` was imported raises `RecursionError`
 - **Python 3.14+**: `TOMLDecodeError` takes `msg`, `doc` and `pos`, and exposes them with
   `lineno` and `colno`; any other arguments are deprecated
 
