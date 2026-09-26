@@ -1,8 +1,8 @@
 # netrc Module Complexity
 
 The `netrc` module parses a `.netrc` file, the Unix format that stores login credentials per
-host, into a dictionary. Constructing a `netrc` object reads and parses the whole file once;
-every lookup afterwards is a dictionary lookup that never touches the file again.
+host, into a dictionary. Constructing a `netrc` object reads and parses the whole file, a second
+time in the locale encoding if it is not valid UTF-8; every lookup afterwards is a dictionary lookup that never touches the file again.
 
 `n` is the characters in the file, `t` is the characters in its longest token (a host name,
 login or password), and `r` is the characters in the text `repr()` rebuilds. Host-name hashing is
@@ -69,7 +69,8 @@ with tempfile.TemporaryDirectory() as directory:
     path = os.path.join(directory, 'credentials')
     with open(path, 'w', encoding='utf-8') as f:
         f.write('machine example.com login alice password s3cret\n')
-    assert netrc.netrc(path).authenticators('unknown.example') is None  # O(1)
+    rc = netrc.netrc(path)  # O(n)
+    assert rc.authenticators('unknown.example') is None  # O(1)
 
     with open(path, 'w', encoding='utf-8') as f:
         f.write('machine example.com login alice\nhost other.example\n')
@@ -105,7 +106,7 @@ assert rc.macros == {'init': ['cd /pub\n', 'binary\n']}  # O(1) to reach
 
 Only `netrc()` with no argument checks the file. On POSIX it rejects a `~/.netrc` that another
 user owns or that grants any permission to group or others; the same file passed by path is
-parsed without the check.
+parsed without the check. The example is for POSIX, where `HOME` decides what `~` means.
 
 ```python
 import netrc
@@ -127,7 +128,7 @@ with tempfile.TemporaryDirectory() as home:
     except netrc.NetrcParseError as error:
         assert 'too permissive' in str(error)
     else:
-        assert os.name != 'posix', 'a group-readable ~/.netrc was accepted'
+        raise AssertionError('a group-readable ~/.netrc was accepted')
     finally:
         if saved_home is None:
             del os.environ['HOME']

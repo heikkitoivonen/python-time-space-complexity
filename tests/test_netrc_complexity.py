@@ -19,11 +19,14 @@ Measurement scope:
 * The token term is then isolated at a fixed n of 400,000 characters: one
   400,000-character password against short machine entries whose longest
   token is under ten characters. On 3.11+ the long token must cost under 2x
-  the entries; on 3.10, whose shlex-based lexer copies the token on every
-  character, over 3x.
-* A `tracemalloc` peak over a 100,000-character password is over 100 KB and
-  under 100 times the peak for a 10,000-character one, so the space follows
-  the file and is not quadratic in it.
+  the entries. On 3.10, whose shlex-based lexer copies the token on every
+  character, a password of 400,000 characters must cost more than 24x one of
+  50,000 (linear predicts 8x, O(n·t) 64x; x50 to x55 on 3.10.21, where 3.14.7
+  takes x7.6 to x8.3).
+* A `tracemalloc` peak over a 500,000-character password is over 500 KB and
+  under 30 times the peak for a 50,000-character one (quadratic predicts
+  100x; x3.2 on 3.14.7, x6.6 on 3.12.14 and x8.1 on 3.10.21), so the space
+  follows the file and is not quadratic in it.
 * `authenticators()` over 100,000 hosts is a dict subclass that counts
   `__contains__` and `__getitem__`: a hit is one of each, a miss that falls
   back to `default` two and one, and a miss without `default` two and none. It
@@ -179,8 +182,9 @@ class TestParsingIsLinear:
         with tempfile.TemporaryDirectory() as directory:
             token = write(pathlib.Path(directory), SHAPES["long token"](400_000), "token")
             entries = write(pathlib.Path(directory), SHAPES["machines"](400_000), "entries")
+            netrc.netrc(str(token))
             netrc.netrc(str(entries))  # warm the page cache and the code objects
-            token_ns = best_ns(lambda: netrc.netrc(str(token)), repeats=1)
+            token_ns = best_ns(lambda: netrc.netrc(str(token)))
             entries_ns = best_ns(lambda: netrc.netrc(str(entries)))
         return token_ns / entries_ns
 
@@ -193,10 +197,15 @@ class TestParsingIsLinear:
 
     @pytest.mark.timing
     @before_311
-    def test_one_long_token_is_quadratic_on_310(self) -> None:
-        ratio = self.token_against_entries()
+    def test_one_long_token_is_quadratic_on_310(self, tmp_path: pathlib.Path) -> None:
+        short = str(write(tmp_path, SHAPES["long token"](50_000), "short"))
+        long = str(write(tmp_path, SHAPES["long token"](400_000), "long"))
+        netrc.netrc(short)
+        netrc.netrc(long)  # warm the page cache and the code objects
 
-        assert ratio > 3, f"one long token cost only x{ratio:.1f} the short entries at equal n"
+        ratio = best_ns(lambda: netrc.netrc(long)) / best_ns(lambda: netrc.netrc(short))
+
+        assert ratio > 24, f"8x the token cost x{ratio:.1f}; linear predicts 8x, O(n·t) 64x"
 
     def test_every_shape_parses(self, tmp_path: pathlib.Path) -> None:
         assert len(parse(tmp_path, SHAPES["machines"](10_000)).hosts) > 250
@@ -208,14 +217,14 @@ class TestParsingIsLinear:
         assert parse(tmp_path, SHAPES["quoted token"](1_000)).hosts["h"][2] == "x" * 1_000
 
     def test_the_peak_follows_the_file(self, tmp_path: pathlib.Path) -> None:
-        small = str(write(tmp_path, SHAPES["long token"](10_000), "small"))
-        large = str(write(tmp_path, SHAPES["long token"](100_000), "large"))
+        small = str(write(tmp_path, SHAPES["long token"](50_000), "small"))
+        large = str(write(tmp_path, SHAPES["long token"](500_000), "large"))
 
         small_peak = peak_bytes(lambda: netrc.netrc(small))
         large_peak = peak_bytes(lambda: netrc.netrc(large))
 
-        assert large_peak > 100_000, f"a 100,000-character token peaked at {large_peak}"
-        assert large_peak < small_peak * 100, f"peaks {small_peak} and {large_peak}"
+        assert large_peak > 500_000, f"a 500,000-character token peaked at {large_peak}"
+        assert large_peak < small_peak * 30, f"peaks {small_peak} and {large_peak}"
 
 
 class CountingDict(dict[str, Any]):
@@ -333,6 +342,7 @@ class TestTheHomeNetrcCheck:
     @pytest.fixture
     def home(self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> pathlib.Path:
         monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))  # what `~` reads on Windows
         assert os.path.expanduser("~") == str(tmp_path)
         return tmp_path
 
