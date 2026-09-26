@@ -1,189 +1,234 @@
 # pickle Module Complexity
 
-The `pickle` module serializes and deserializes Python objects into bytes, enabling object persistence and network transmission while maintaining Python semantics.
+The `pickle` module turns a graph of Python objects into bytes and back. Pickling walks the graph
+once, recording the objects it writes in a memo so that a shared or cyclic reference is written as
+a short back-reference. Both directions are linear in the pickle they produce or read. Pickling
+recurses once per level of nesting, so a structure nested deeply enough, such as a long linked
+list, raises `RecursionError`.
+
+`b` is the length of the pickle in bytes, which grows with the object references in the graph and
+with the characters, bytes and digits they carry; buffers handed out of band are not part of it.
+`m` is the entries in the memo: one for each distinct string, bytes object, container, class,
+function and instance written, and none for ints, floats, `None`, booleans or the empty tuple. `s` is the encoded size of the
+largest single string or int in the graph. The bounds exclude the user code pickling calls:
+`__reduce__`, `__getstate__`, `__setstate__`, a reducer, `persistent_id` or `find_class` adds its
+own cost, and a callable that rebuilds an object can allocate as much as it likes. Inserting a key
+while rebuilding a dict or set is treated as O(1). Unpickling bounds are for pickles this module
+wrote; a hand-crafted pickle can cost more, and can run arbitrary code anyway.
 
 ## Complexity Reference
 
+### Module functions
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `pickle.dumps(obj)` | O(n) | O(n) | Serialize to bytes, n = object size |
-| `pickle.loads(data)` | O(n) | O(n) | Deserialize from bytes, n = data size |
-| `dump()` to file | O(n) | O(n) | n = object size, requires memoization for object graph |
-| `load()` from file | O(n) | O(n) | n = object size, loads all |
-| Circular reference handling | O(n) | O(n) | Memoization tracks visited objects |
+| `pickle.dumps(obj, protocol=None, *, fix_imports=True, buffer_callback=None)` | O(b) | O(b) | The whole pickle is built as one `bytes` object |
+| `pickle.dump(obj, file, protocol=None, *, fix_imports=True, buffer_callback=None)` | O(b) | O(m + s) for protocol 4+; O(b) for protocols 0-3 | Protocol 4+ writes the pickle in frames of about 64 KB as it goes; protocols 0-3 hold all of it until the end |
+| `pickle.loads(data, /, *, fix_imports=True, encoding='ASCII', errors='strict', buffers=None)` | O(b) | O(b) | The rebuilt objects |
+| `pickle.load(file, *, fix_imports=True, encoding='ASCII', errors='strict', buffers=None)` | O(b) | O(b) | Stops after one pickle, so pickles written one after another come back from one `load()` each; `EOFError` at the end of the file |
 
-## Basic Pickling
+### Pickler
 
-### Simple Object Serialization
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `pickle.Pickler(file, protocol=None, *, fix_imports=True, buffer_callback=None)` | O(1) | O(1) | Needs only a `write()` method |
+| `Pickler.dump(obj)` | O(b) | As `pickle.dump` | The memo survives the call: an object this pickler has already written is written again as a back-reference, and stays alive until `clear_memo()` |
+| `Pickler.clear_memo()` | O(m) | O(1) | m = the most entries the memo has held; forgets every object written so far, so the next `dump()` is self-contained |
+| `Pickler.persistent_id(obj)` | O(1) per call | O(1) | Called once for every reference written, repeats and ints included; a non-`None` result is written in place of the object |
+| `Pickler.dispatch_table` | O(1) | O(1) | A per-pickler mapping from type to reduction function, used instead of `copyreg.dispatch_table` |
+| `Pickler.reducer_override(obj)` | O(1) per call | O(1) | Called once for each object not yet in the memo, except `None`, booleans and exact ints, floats, strings, bytes, bytearrays, lists, tuples, dicts, sets, frozensets and `PickleBuffer` objects |
+| `Pickler.fast` | O(1) | O(1) | Deprecated. Turns the memo off: a shared object is written once per reference, comes back as separate copies, and a cycle raises `ValueError` |
+
+### Unpickler
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `pickle.Unpickler(file, *, fix_imports=True, encoding='ASCII', errors='strict', buffers=None)` | O(1) | O(1) | Needs `read()` and `readline()` |
+| `Unpickler.load()` | O(b) | O(b) | As `pickle.load` |
+| `Unpickler.find_class(module, name)` | O(1) per call | O(1) | Called at most once for each distinct class or function the pickle names, not once per instance; imports `module` when it is not loaded yet |
+| `Unpickler.persistent_load(pid)` | O(1) per call | O(1) | Called once for each persistent ID in the pickle |
+
+### PickleBuffer
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `pickle.PickleBuffer(buffer)` | O(1) | O(1) | Wraps any buffer without copying it |
+| `PickleBuffer.raw()` | O(1) | O(1) | A `memoryview` of the same memory |
+| `PickleBuffer.release()` | O(1) | O(1) | Releases the underlying buffer; `raw()` then raises `ValueError` |
+| Pickling a `PickleBuffer` with `buffer_callback` (protocol 5) | O(1) | O(1) | When the callback returns a false value such as `None`, the buffer is handed to it instead of copied; `loads(..., buffers=...)` rebuilds from the objects passed in without copying them |
+| Pickling a `PickleBuffer` in band (protocol 5) | O(b) | O(b) | Copied into the pickle like `bytes`, so its bytes count in b; protocols below 5 raise `PicklingError` |
+
+### Constants and exceptions
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `pickle.HIGHEST_PROTOCOL` | O(1) | O(1) | 5 |
+| `pickle.DEFAULT_PROTOCOL` | O(1) | O(1) | 4 before Python 3.14, 5 from 3.14 |
+| `pickle.PickleError` | O(1) | O(1) | Base class of the two below |
+| `pickle.PicklingError` | O(1) | O(1) | Raised for a function or class that cannot be found by its qualified name, such as a lambda at module level; many unpicklable instances raise `TypeError` instead |
+| `pickle.UnpicklingError` | O(1) | O(1) | Raised for a corrupt pickle and by a `find_class` that refuses a name; a truncated pickle can raise `EOFError` instead |
+
+## Pickling and Unpickling
+
+### Round Trips
 
 ```python
 import pickle
 
-# Create object - O(1)
-data = {'name': 'Alice', 'age': 30, 'scores': [95, 87, 92]}
+data = {'name': 'Alice', 'scores': [95, 87, 92], 'tags': ('a', 'b')}
 
-# Serialize to bytes - O(n) where n = object size
-pickled = pickle.dumps(data)
-print(type(pickled))  # <class 'bytes'>
-print(len(pickled))   # Size varies by protocol and data
+pickled = pickle.dumps(data)      # O(b)
+assert isinstance(pickled, bytes)
 
-# Deserialize from bytes - O(n)
-restored = pickle.loads(pickled)
-print(restored)       # {'name': 'Alice', 'age': 30, 'scores': [95, 87, 92]}
+restored = pickle.loads(pickled)  # O(b)
+assert restored == data
+assert restored is not data
 ```
 
-### File Persistence
+### Files Hold One Pickle After Another
+
+`load()` reads one pickle and stops, so several objects written to the same file come back one
+`load()` at a time, and reading past the last one raises `EOFError`.
 
 ```python
+import os
 import pickle
+import tempfile
 
-# Serialize to file - O(n)
-data = [1, 2, 3, 4, 5]
-with open('data.pkl', 'wb') as f:
-    pickle.dump(data, f)  # O(n) streaming
+fd, path = tempfile.mkstemp()
+os.close(fd)
+try:
+    with open(path, 'wb') as f:
+        pickle.dump([1, 2, 3], f)      # O(b)
+        pickle.dump({'x': 1}, f)
 
-# Deserialize from file - O(n)
-with open('data.pkl', 'rb') as f:
-    restored = pickle.load(f)  # O(n) reads all
-    print(restored)  # [1, 2, 3, 4, 5]
+    with open(path, 'rb') as f:
+        assert pickle.load(f) == [1, 2, 3]  # O(b)
+        assert pickle.load(f) == {'x': 1}
+        try:
+            pickle.load(f)
+        except EOFError:
+            pass
+        else:
+            raise AssertionError('a third pickle was read from a two-pickle file')
+finally:
+    os.remove(path)
 ```
 
-## Pickle Protocols
+### dump() Streams From Protocol 4
 
-### Protocol Versions
+From protocol 4 the pickle is cut into frames of about 64 KB, and `dump()` writes each frame to
+the file as soon as it is full, so its memory is the memo rather than the output. Protocols 0-3
+have no frames: `dump()` builds the whole pickle and writes it once at the end, no better than
+`dumps()`. A string or int is still encoded whole, so one huge value costs its own size either way.
 
 ```python
 import pickle
 
-obj = {'a': 1, 'b': [2, 3, 4]}
+class CountingSink:
+    def __init__(self):
+        self.writes = []
 
-# Protocol 0 (ASCII, human-readable) - O(n)
-p0 = pickle.dumps(obj, protocol=0)
-print(len(p0))  # Often largest, but varies by object
+    def write(self, data):
+        self.writes.append(len(data))
+        return len(data)
 
-# Protocol 1 (Binary, old) - O(n)
-p1 = pickle.dumps(obj, protocol=1)
-print(len(p1))  # Often smaller than protocol 0
+numbers = list(range(100_000))
 
-# Protocol 2 (Binary, Python 2.3+) - O(n)
-p2 = pickle.dumps(obj, protocol=2)
-print(len(p2))  # Often smaller than protocol 1
+framed = CountingSink()
+pickle.dump(numbers, framed, protocol=5)  # O(b) time, O(m + s) memory
+assert len(framed.writes) > 1
+assert max(framed.writes) < 70_000
 
-# Protocol 3 (Binary, Python 3.0+) - O(n)
-p3 = pickle.dumps(obj, protocol=3)
-print(len(p3))  # Often smaller than protocol 2
-
-# Protocol 4 (Binary, Python 3.4+) - O(n)
-p4 = pickle.dumps(obj, protocol=4)
-print(len(p4))  # Often more compact for many objects
-
-# Protocol 5 (Binary, Python 3.8+) - O(n)
-p5 = pickle.dumps(obj, protocol=5)
-print(len(p5))  # Supports out-of-band buffers; size varies
+whole = CountingSink()
+pickle.dump(numbers, whole, protocol=2)   # O(b) time and memory
+assert len(whole.writes) == 1
+assert whole.writes[0] > 300_000
 ```
 
-### Default Protocol
+## The Memo
+
+### Shared and Cyclic References
+
+The pickler writes each memoized object once; every later reference to it is a back-reference of
+a few bytes. That keeps a shared object shared after the round trip, and it is what lets a cycle
+terminate.
 
 ```python
 import pickle
-import sys
 
-# Default protocol depends on Python version
-default = pickle.DEFAULT_PROTOCOL
-print(f"Default: {default}")  # 3, 4, or 5 depending on version
+text = 'x' * 10_000
+shared = pickle.dumps([text] * 100)  # O(b): the string is written once
+assert len(shared) < 11_000
 
-# Highest protocol available
-highest = pickle.HIGHEST_PROTOCOL
-print(f"Highest: {highest}")  # 5 in Python 3.8+
+restored = pickle.loads(shared)
+assert all(item is restored[0] for item in restored)
 
-# For compatibility, specify protocol explicitly
-data = {'key': 'value'}
-p_compat = pickle.dumps(data, protocol=3)  # Python 3.0+ compatible
+node = {'name': 'A'}
+node['self'] = node                  # a cycle
+again = pickle.loads(pickle.dumps(node))
+assert again['self'] is again
+```
+
+### Reusing a Pickler
+
+A `Pickler` keeps its memo between `dump()` calls. Writing the same object twice to one pickler
+costs a back-reference the second time, and the second pickle cannot be loaded on its own. The memo
+also keeps every object written alive. Call `clear_memo()` between unrelated objects.
+
+```python
+import io
+import pickle
+
+record = [str(i) for i in range(1_000)]
+buffer = io.BytesIO()
+pickler = pickle.Pickler(buffer)
+
+pickler.dump(record)        # O(b)
+first = buffer.tell()
+pickler.dump(record)        # a back-reference to the memo
+second = buffer.tell() - first
+assert second < 20 < first
+
+pickler.clear_memo()        # O(m)
+pickler.dump(record)        # written in full again
+third = buffer.tell() - first - second
+assert third == first
 ```
 
 ## Custom Serialization
 
 ### __getstate__ and __setstate__
 
+An instance is pickled as its class plus the state `__getstate__` returns, so the cost is the
+state's, and `__setstate__` receives it back on load.
+
 ```python
 import pickle
 
-class Person:
-    def __init__(self, name, age, password):
-        self.name = name
-        self.age = age
-        self.password = password  # Sensitive, don't pickle
-    
-    # Called during pickling - O(1)
+class Session:
+    def __init__(self, user, token):
+        self.user = user
+        self.token = token  # not worth persisting
+
     def __getstate__(self):
-        # Return what to pickle
-        state = self.__dict__.copy()
-        del state['password']  # Exclude password
+        state = self.__dict__.copy()  # O(attributes)
+        del state['token']
         return state
-    
-    # Called during unpickling - O(1)
+
     def __setstate__(self, state):
-        self.__dict__.update(state)
-        self.password = None  # Set default
+        self.__dict__.update(state)   # O(attributes)
+        self.token = None
 
-# Pickle - O(n)
-person = Person('Alice', 30, 'secret123')
-pickled = pickle.dumps(person)
-
-# Unpickle - O(n)
-restored = pickle.loads(pickled)
-print(restored.name)      # 'Alice'
-print(restored.password)  # None (not stored)
+restored = pickle.loads(pickle.dumps(Session('alice', 'secret')))  # O(b)
+assert restored.user == 'alice'
+assert restored.token is None
 ```
 
-### reduce() Method
+### __reduce__
 
-```python
-import pickle
-
-class CustomObject:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-    
-    # Called during pickling - O(1)
-    def __reduce__(self):
-        # Return (callable, args) to recreate object
-        return (CustomObject, (self.x, self.y))
-
-# Pickle - O(n)
-obj = CustomObject(10, 20)
-pickled = pickle.dumps(obj)
-
-# Unpickle - O(n)
-restored = pickle.loads(pickled)
-print(restored.x, restored.y)  # 10 20
-```
-
-## Complex Object Types
-
-### Circular References
-
-```python
-import pickle
-
-# Create circular reference
-node1 = {'name': 'A', 'next': None}
-node2 = {'name': 'B', 'next': None}
-node1['next'] = node2
-node2['next'] = node1  # Circular
-
-# Pickle handles with memoization - O(n)
-pickled = pickle.dumps(node1)
-
-# Unpickle reconstructs structure - O(n)
-restored = pickle.loads(pickled)
-print(restored['name'])           # 'A'
-print(restored['next']['name'])   # 'B'
-print(restored['next']['next'] is restored)  # True (circular preserved)
-```
-
-### Class Instances
+`__reduce__` returns a callable and its arguments. Unpickling calls that callable once per object
+written, not once per reference, and its cost is added to `loads()`.
 
 ```python
 import pickle
@@ -192,215 +237,227 @@ class Point:
     def __init__(self, x, y):
         self.x = x
         self.y = y
-    
-    def __repr__(self):
-        return f"Point({self.x}, {self.y})"
 
-# Pickle - O(n)
-p = Point(3, 4)
-pickled = pickle.dumps(p)
+    def __reduce__(self):
+        return (Point, (self.x, self.y))
 
-# Unpickle - O(n) (requires class accessible)
-restored = pickle.loads(pickled)
-print(restored)         # Point(3, 4)
-print(type(restored))   # <class '__main__.Point'>
+restored = pickle.loads(pickle.dumps(Point(3, 4)))  # O(b) plus one Point() call
+assert (restored.x, restored.y) == (3, 4)
 ```
 
-### Nested Objects
+### dispatch_table and reducer_override
+
+A `Pickler` can carry its own reductions without touching the class: `dispatch_table` maps a type
+to a reduction function for that pickler only, and `reducer_override` is asked about every object
+not yet in the memo that is not a plain built-in.
+
+```python
+import copyreg
+import io
+import pickle
+
+class Temperature:
+    def __init__(self, celsius):
+        self.celsius = celsius
+
+def reduce_temperature(t):
+    return (Temperature, (round(t.celsius, 1),))
+
+buffer = io.BytesIO()
+pickler = pickle.Pickler(buffer)
+pickler.dispatch_table = copyreg.dispatch_table.copy()  # O(entries), once
+pickler.dispatch_table[Temperature] = reduce_temperature
+pickler.dump(Temperature(21.456))
+
+assert pickle.loads(buffer.getvalue()).celsius == 21.5
+assert pickle.loads(pickle.dumps(Temperature(21.456))).celsius == 21.456
+
+class Rounding(pickle.Pickler):
+    def reducer_override(self, obj):
+        if isinstance(obj, Temperature):
+            return reduce_temperature(obj)
+        return NotImplemented
+
+buffer = io.BytesIO()
+Rounding(buffer).dump([Temperature(1.26), 7])
+assert pickle.loads(buffer.getvalue())[0].celsius == 1.3
+```
+
+## Persistent References
+
+`persistent_id` lets a pickle refer to objects that live elsewhere, such as rows in a database, by
+an ID instead of their contents. It is called for every reference the pickler writes, so it must
+be cheap; `persistent_load` is called once for each ID when the pickle is read.
+
+```python
+import io
+import pickle
+
+class Record:
+    def __init__(self, key):
+        self.key = key
+
+store = {'r1': Record('r1'), 'r2': Record('r2')}
+
+class ByKey(pickle.Pickler):
+    def persistent_id(self, obj):   # O(1), once per reference
+        if isinstance(obj, Record):
+            return obj.key
+        return None
+
+class FromStore(pickle.Unpickler):
+    def persistent_load(self, pid):  # O(1), once per ID
+        return store[pid]
+
+buffer = io.BytesIO()
+ByKey(buffer).dump({'owner': store['r1'], 'backup': store['r2']})
+
+restored = FromStore(io.BytesIO(buffer.getvalue())).load()
+assert restored['owner'] is store['r1']
+assert restored['backup'] is store['r2']
+```
+
+## Restricting What Loads
+
+!!! warning "Never unpickle untrusted data"
+    Unpickling can call any callable the pickle names, so loading a pickle from an untrusted source
+    can run arbitrary code. Overriding `find_class` narrows what a pickle can name, but it is not
+    a security boundary to rely on; use a data-only format such as JSON for untrusted input.
+
+`find_class` is called at most once for each distinct class or function a pickle names, not once
+per instance, so an allow-list check adds a constant per name.
+
+```python
+import io
+import pickle
+from collections import OrderedDict
+
+class AllowList(pickle.Unpickler):
+    allowed = {('collections', 'OrderedDict')}
+
+    def find_class(self, module, name):  # O(1), once per distinct global
+        if (module, name) in self.allowed:
+            return super().find_class(module, name)
+        raise pickle.UnpicklingError(f'forbidden: {module}.{name}')
+
+good = pickle.dumps([OrderedDict(a=1) for _ in range(100)])
+assert AllowList(io.BytesIO(good)).load()[99] == {'a': 1}
+
+bad = pickle.dumps(print)
+try:
+    AllowList(io.BytesIO(bad)).load()
+except pickle.UnpicklingError as error:
+    assert 'forbidden: builtins.print' in str(error)
+else:
+    raise AssertionError('a forbidden global was loaded')
+```
+
+## Out-of-Band Buffers
+
+With protocol 5, a `PickleBuffer` can travel out of band: when `buffer_callback` returns a false
+value, as `list.append` does, it keeps the buffer and the pickle gets no copy; `loads()` takes the
+buffers back through `buffers=`. The pickle stays a few bytes however large the buffer, and here the
+object handed to `loads()` is the one that comes back.
 
 ```python
 import pickle
 
-class Team:
-    def __init__(self, name, members):
-        self.name = name
-        self.members = members  # List of dicts
+payload = bytearray(1_000_000)
 
-# Pickle nested structure - O(n) in total object graph size
-team = Team('Team A', [
-    {'name': 'Alice', 'role': 'lead'},
-    {'name': 'Bob', 'role': 'dev'}
-])
+buffers = []
+data = pickle.dumps(pickle.PickleBuffer(payload), protocol=5,
+                    buffer_callback=buffers.append)  # O(1), no copy
+assert len(data) < 100
 
-pickled = pickle.dumps(team)
+restored = pickle.loads(data, buffers=[payload])  # O(1), no copy
+assert restored is payload
 
-# Unpickle - O(n) in total object graph size
-restored = pickle.loads(pickled)
-print(restored.name)       # 'Team A'
-print(restored.members[0]) # {'name': 'Alice', ...}
+in_band = pickle.dumps(pickle.PickleBuffer(payload), protocol=5)  # O(b), copied
+assert len(in_band) > 1_000_000
+
+view = pickle.PickleBuffer(payload)
+assert view.raw().nbytes == 1_000_000  # O(1)
+view.release()                         # O(1)
 ```
 
-## Performance and Size
+## Protocols
 
-### Protocol Comparison
+Every protocol is O(b); they differ in encoding, not in growth. Protocol 4 adds framing, which is
+what lets `dump()` stream, and protocol 5 adds out-of-band buffers.
 
 ```python
 import pickle
 import sys
 
-# Create test object
-test_data = {
-    'strings': ['a' * 100 for _ in range(10)],
-    'numbers': list(range(1000)),
-    'nested': [{'id': i, 'value': i**2} for i in range(100)]
-}
+assert pickle.HIGHEST_PROTOCOL == 5
+assert pickle.DEFAULT_PROTOCOL == (5 if sys.version_info >= (3, 14) else 4)
 
-# Compare sizes
-sizes = {}
+obj = {'a': 1, 'b': [2, 3, 4]}
 for protocol in range(pickle.HIGHEST_PROTOCOL + 1):
-    pickled = pickle.dumps(test_data, protocol=protocol)
-    sizes[protocol] = len(pickled)
-    print(f"Protocol {protocol}: {len(pickled)} bytes")
+    assert pickle.loads(pickle.dumps(obj, protocol=protocol)) == obj  # O(b)
 
-# Higher protocols typically produce smaller output
+# A reader on an older Python needs a protocol it knows
+assert pickle.dumps(obj, protocol=4)[1] == 4
 ```
 
-### Large Object Serialization
+## Common Patterns
+
+### An Append-Only Record File
 
 ```python
+import os
 import pickle
-import io
+import tempfile
 
-# Large list - O(n)
-large_list = list(range(1000000))
+fd, path = tempfile.mkstemp()
+os.close(fd)
+try:
+    for event in ({'id': 1}, {'id': 2}, {'id': 3}):
+        with open(path, 'ab') as f:
+            pickle.dump(event, f)  # O(b) per record
 
-# Method 1: dumps - creates bytes in memory - O(n) space
-data_bytes = pickle.dumps(large_list)  # Large memory usage
-
-# Method 2: dump to file - streams output - O(n) time, O(n) space for memoization
-with open('large.pkl', 'wb') as f:
-    pickle.dump(large_list, f)  # Much more memory efficient
-
-# Method 3: Pickler with file - O(n) time, O(n) space for memoization
-with open('large.pkl', 'wb') as f:
-    pickler = pickle.Pickler(f)
-    pickler.dump(large_list)
+    events = []
+    with open(path, 'rb') as f:
+        while True:
+            try:
+                events.append(pickle.load(f))  # O(b) per record
+            except EOFError:
+                break
+    assert [e['id'] for e in events] == [1, 2, 3]
+finally:
+    os.remove(path)
 ```
 
-## Unpickler Customization
+## Performance Best Practices
 
-### Custom Unpickler
+✅ **Do**:
 
-```python
-import pickle
+- Use `dump()` with protocol 4 or higher for a large graph; it writes frames as it goes instead of
+  holding the whole pickle
+- Call `clear_memo()` on a reused `Pickler` between unrelated objects, so each pickle loads on its
+  own
+- Hand large buffers out of band with protocol 5 and `buffer_callback` rather than copying them
+  into the pickle
+- Keep `persistent_id` cheap; it runs once for every reference, not once per distinct object
 
-# Version migration on unpickle
-class VersionedUnpickler(pickle.Unpickler):
-    def find_class(self, module, name):
-        # Intercept class loading - O(1)
-        if module == 'old_module':
-            module = 'new_module'
-        return super().find_class(module, name)
+❌ **Avoid**:
 
-# Usage
-data = b'...'  # Pickled data
-with open('old_data.pkl', 'rb') as f:
-    unpickler = VersionedUnpickler(f)
-    obj = unpickler.load()
-```
+- Unpickling data from an untrusted source
+- Expecting `dump()` with protocol 0-3 to save memory over `dumps()`; both hold the whole pickle
+- `Pickler.fast`: it drops the memo, so shared objects are duplicated and cycles fail
 
-## Security Considerations
+## Version Notes
 
-### Dangerous Unpickling
+- **Python 3.14+**: `DEFAULT_PROTOCOL` is 5 (it was 4)
+- **Python 3.14+**: Pickling a nested function or class raises `PicklingError`; earlier versions
+  raise `AttributeError`
+- **All Python 3**: Unpickling can run arbitrary code; never load an untrusted pickle
 
-```python
-import pickle
+## Related Modules
 
-# ⚠️ SECURITY RISK: Never unpickle untrusted data!
-# Pickle can execute arbitrary code during unpickling
-
-# Unsafe - could execute malicious code
-untrusted_data = b'...'  # From network/user
-# obj = pickle.loads(untrusted_data)  # DANGEROUS!
-
-# Safe: Use alternative formats for untrusted data
-import json
-safe_data = json.loads(untrusted_string)  # JSON is safe
-```
-
-### Restrict Classes
-
-```python
-import pickle
-import io
-
-class RestrictedUnpickler(pickle.Unpickler):
-    def find_class(self, module, name):
-        # Only allow specific classes - O(1)
-        if module == 'my_app' and name in ['SafeClass', 'Data']:
-            return super().find_class(module, name)
-        raise pickle.UnpicklingError(f"Forbidden: {module}.{name}")
-
-# Use restricted unpickler
-data = b'...'
-with io.BytesIO(data) as f:
-    unpickler = RestrictedUnpickler(f)
-    obj = unpickler.load()
-```
-
-## Pickle Alternatives
-
-### JSON (Safe Alternative)
-
-```python
-import json
-
-# JSON is safe but limited
-data = {'name': 'Alice', 'age': 30}
-
-# Serialize - O(n)
-json_str = json.dumps(data)
-
-# Deserialize - O(n)
-restored = json.loads(json_str)
-
-# Advantages:
-# - Human readable
-# - Language independent
-# - Safe (no code execution)
-# - Limited types (no custom classes)
-```
-
-## Performance Notes
-
-### Time Complexity
-- **dumps()**: O(n) where n = total size of object graph
-- **loads()**: O(n) where n = size of pickled data
-- **Circular reference handling**: O(n) with memoization
-
-### Space Complexity
-- **dumps()**: O(n) creates bytes representation
-- **loads()**: O(n) creates deserialized objects
-- **dump()/load()**: Streaming reduces memory for file I/O
-
-### Protocol Selection
-- **Protocol 0**: Slowest, largest, ASCII (rarely use)
-- **Protocol 1-2**: Legacy compatibility
-- **Protocol 3**: Default Python 3, good balance
-- **Protocol 4+**: More compact encoding (no compression), often faster for large objects
-
-## Best Practices
-
-### Do's
-- Use protocol 4+ for new code (Python 3.4+)
-- Implement __getstate__ for security/control
-- Use file I/O for large objects
-- Use json for inter-language data
-
-### Avoid's
-- Never unpickle untrusted data
-- Don't pickle sensitive data
-- Don't rely on pickle for long-term storage (fragile across versions)
-- Don't use pickle for inter-process communication across Python versions
-
-## Related Documentation
-
-- [JSON Module](json.md)
-- [Copy Module](copy.md)
-- [Shelve Module](shelve.md)
-- [CSV Module](csv.md)
-
-## Further Reading
-
-- [CPython Internals: pickle](https://zpoint.github.io/CPython-Internals/Modules/pickle/pickle.html){ target="_blank" rel="noopener" }:material-open-in-new: -
-  Deep dive into CPython's pickle implementation
+- **[copyreg](copyreg.md)** - The global reduction table `dispatch_table` overrides per pickler
+- **[pickletools](pickletools.md)** - Disassemble and optimize a pickle
+- **[shelve](shelve.md)** - A persistent dictionary of pickled values
+- **[copy](copy.md)** - Uses the same reduction protocol to copy in memory
+- **[json](json.md)** - A data-only format, safe for untrusted input
+- **[marshal](marshal.md)** - The interpreter's internal format for code objects
