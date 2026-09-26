@@ -38,11 +38,13 @@ Measurement scope:
   exception through `write()` and lets `SystemExit` propagate. With
   `sys.excepthook` replaced, the hook receives the exception and `write()`
   is not called; every other test restores the default hook first.
-* `showtraceback()`: a recursion 50 and 500 frames deep through one
+* `showtraceback()`: a recursion 50 and 3,000 frames deep through one
   function prints output of the same length within 10 characters, because
   the traceback collapses repeated lines, while the traced peak of
   `showtraceback()` alone, called inside the `except` block after the
-  traceback exists, grows more than 5x; through 50 and 500 distinct
+  traceback exists, grows more than 5x (about 40x measured on 3.12 and
+  3.14, which leaves room for allocations by other threads, such as a
+  test runner's, that tracemalloc also traces); through 50 and 500 distinct
   functions the output grows more than 5x. The exception message and each
   source line are held to a fixed length.
 * `showsyntaxerror()`: an offending line of 100,000 characters prints more
@@ -446,16 +448,21 @@ class TestShowtracebackWalksEveryFrame:
 
     def test_collapsed_output_still_walks_every_frame(self) -> None:
         results = []
-        for depth in (50, 500):
-            interp = Recorder({})
-            interp.runsource("def f(n):\n    if n: f(n - 1)\n    else: 1 / 0\n", symbol="exec")
-            peaks = []
-            for _ in range(2):  # the first pass warms the formatter
-                try:
-                    exec(f"f({depth})", interp.locals)
-                except ZeroDivisionError:
-                    peaks.append(peak_bytes(interp.showtraceback))
-            results.append((peaks[-1], len(interp.output[-1])))
+        limit = sys.getrecursionlimit()
+        sys.setrecursionlimit(max(limit, 10_000))
+        try:
+            for depth in (50, 3_000):
+                interp = Recorder({})
+                interp.runsource("def f(n):\n    if n: f(n - 1)\n    else: 1 / 0\n", symbol="exec")
+                peaks = []
+                for _ in range(2):  # the first pass warms the formatter
+                    try:
+                        exec(f"f({depth})", interp.locals)
+                    except ZeroDivisionError:
+                        peaks.append(peak_bytes(interp.showtraceback))
+                results.append((peaks[-1], len(interp.output[-1])))
+        finally:
+            sys.setrecursionlimit(limit)
 
         (small_peak, small_out), (large_peak, large_out) = results
         assert abs(large_out - small_out) < 10, f"output lengths {small_out}, {large_out}"

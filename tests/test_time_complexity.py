@@ -491,14 +491,14 @@ class TestStrptimeCache:
     def test_reusing_a_format_compiles_nothing_new(self, monkeypatch: pytest.MonkeyPatch) -> None:
         value, fmt = self.FORMATS[0]
         compiler = _strptime._TimeRE_cache
-        real = compiler.compile
+        real = _strptime.TimeRE.compile
         compiled_formats: list[str] = []
 
-        def counting(format: str) -> re.Pattern[str]:
+        def counting(self: _strptime.TimeRE, format: str) -> re.Pattern[str]:
             compiled_formats.append(format)
-            return real(format)
+            return real(self, format)
 
-        monkeypatch.setattr(compiler, "compile", counting)
+        monkeypatch.setattr(_strptime.TimeRE, "compile", counting)
         time.strptime(value, fmt)
         compiled = _strptime._regex_cache[fmt]
 
