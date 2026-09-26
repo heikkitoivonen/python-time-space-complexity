@@ -6,18 +6,20 @@ deltas or HTML. Everything rests on `SequenceMatcher`, which indexes its second 
 then searches the first for the longest matching blocks.
 
 The cost of that search depends on the shape of the input far more than on its length. Identical
-sequences, or sequences with nothing in common, are linear; changes at regular intervals make it
-quadratic; an element repeated throughout both sequences can make it cubic. `unified_diff()`,
-`context_diff()` and `ndiff()` are generators, but each runs the whole match before it yields its
-first line.
+sequences of distinct elements, or sequences with nothing in common, are linear; changes at
+regular intervals make it quadratic; an element repeated throughout both sequences can make it
+cubic. `unified_diff()`, `context_diff()` and `ndiff()` are generators, but each runs the whole
+match before it yields its first line.
 
 `A` is the length of the first sequence `a` and `B` the length of the second sequence `b`, counted
 in elements: characters for a string, lines for a list of lines. `k` is the matching blocks
-`get_matching_blocks()` returns, its closing sentinel included, `r` is the lines in one replaced
-block of an `ndiff`, `s` is the characters in both inputs together, `c` is the characters in one
-line, `p` is the possibilities given to `get_close_matches()`, `w` is the length of its word and
-`q` the length of its longest possibility. Hashing and comparing one element are treated as O(1);
-for lines that means the bounds count lines, not the characters inside them.
+`get_matching_blocks()` finds, its closing sentinel included; with `isjunk`, adjacent blocks it
+found separately are merged before the list is returned, so the list can be shorter than k. `r`
+is the lines in one replaced block of an `ndiff`, `s` is the characters in both inputs together,
+`c` is the characters in one line, `p` is the possibilities given to `get_close_matches()`, `w` is
+the length of its word and `q` the length of its longest possibility. Hashing and comparing one
+element are treated as O(1); for lines that means the bounds count lines, not the characters
+inside them.
 
 ## Complexity Reference
 
@@ -50,7 +52,7 @@ for lines that means the bounds count lines, not the characters inside them.
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `difflib.HtmlDiff(tabsize=8, wrapcolumn=None, linejunk=None, charjunk=IS_CHARACTER_JUNK)` | O(1) | O(1) | Stores the options |
-| `HtmlDiff.make_table(fromlines, tolines, fromdesc='', todesc='', context=False, numlines=5)` | As `ndiff()`, plus O(s) | O(s) | Runs `ndiff()` over the lines, then builds the whole table as one string |
+| `HtmlDiff.make_table(fromlines, tolines, fromdesc='', todesc='', context=False, numlines=5)` | As `ndiff()`, plus O(s) | O(s) | Runs `ndiff()` over the lines, then builds the whole table as one string. The O(s) terms assume `wrapcolumn=None` |
 | `HtmlDiff.make_file(fromlines, tolines, fromdesc='', todesc='', context=False, numlines=5, *, charset='utf-8')` | As `make_table()` | O(s) | `make_table()` wrapped in a complete HTML document |
 
 ### Diff functions
@@ -67,7 +69,7 @@ for lines that means the bounds count lines, not the characters inside them.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `difflib.get_close_matches(word, possibilities, n=3, cutoff=0.6)` | O(w + p·q) screened, O(p·q·w·min(q, w)) worst | O(w + q + p) | Indexes `word` once. A possibility the quick ratios reject costs O(q); one they pass costs a full match |
+| `difflib.get_close_matches(word, possibilities, n=3, cutoff=0.6)` | O(w + p·q) screened, O(p·q·w·min(q, w)) worst | O(w + q + p) | Indexes `word` once. A possibility the quick ratios reject costs O(q); one they pass costs a full match. `n` is treated as a constant |
 | `difflib.IS_LINE_JUNK(line)` | O(c) | O(c) | True for a blank line or one holding only `#` |
 | `difflib.IS_CHARACTER_JUNK(ch)` | O(1) | O(1) | True for a space or a tab |
 | `difflib.Match(a, b, size)`, `Match.a`, `Match.b`, `Match.size` | O(1) | O(1) | The named tuple `find_longest_match()` and `get_matching_blocks()` return |
@@ -104,10 +106,11 @@ assert (longest.a, longest.b, longest.size) == (0, 0, 2)
 of it again. Each search walks the range of `a` it was given, so the total depends on how many
 blocks there are and how they split the input:
 
-- **Identical sequences, or sequences sharing no element**: one search, O(A + B).
+- **Identical sequences of distinct elements with no junk, or sequences sharing no element**: one
+  search, O(A + B).
 - **No element repeats in `b`**: O(B + A·k) at worst. The bound is reached when the blocks are of
   similar length, as with a change every fifty lines, which is quadratic in the length of the
-  files. Blocks of varied length cost far less.
+  files.
 - **Elements repeated in both sequences**: a search walks every index entry of each element it
   meets, and the blocks can be found one at a time. That reaches O(A·B·min(A, B)), cubic, with
   the default `autojunk=True`.
@@ -345,8 +348,8 @@ assert [text for _, text in ranked] == [candidates[2], candidates[0]]
   in with `set_seq1()`, which keeps the index
 - Screen with `real_quick_ratio()` and `quick_ratio()` before `ratio()` when only a threshold
   matters
-- Pass `autojunk=False` when comparing characters of long text, or every character that makes up
-  more than 1% of `b` drops out of the index and `ratio()` can fall to zero
+- Pass `autojunk=False` when comparing characters of long text, or every character occurring more
+  than B/100 + 1 times in `b` drops out of the index and `ratio()` can fall to zero
 - Diff lines, not characters, for anything file-sized: there are far fewer of them, and distinct
   lines keep the match within O(B + A·k)
 

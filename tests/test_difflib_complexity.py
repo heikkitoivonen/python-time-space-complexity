@@ -25,7 +25,9 @@ Measurement scope:
   place.
 * Match work, counted as above: identical distinct sequences of 2,000 and
   20,000 elements cost exactly 2A in one call, and sequences sharing nothing
-  exactly A. With distinct elements and an edit every 1,000, 100 and 10
+  exactly A. Identical `range(2000)` sequences with every odd element junk
+  take 1,000 searches, and the merged result is one block and the sentinel.
+  With distinct elements and an edit every 1,000, 100 and 10
   positions of a 5,000-element sequence, each 10x in blocks costs more than 5x
   in work, and every count is within 2(B + A·k), k counting the sentinel. With
   an edit every fifty positions, 4x the length (2,000 to 8,000) costs more than
@@ -42,7 +44,7 @@ Measurement scope:
 * `find_longest_match()` walks one index entry per occurrence: a single-element
   `a` against 100 and 100,000 copies of it (`autojunk=False`) peaks more than
   100x higher at the larger size, and a match over distinct elements costs
-  exactly A in the work count.
+  exactly 2A in the work count: A positions scanned and A index entries.
 * The popularity threshold is asserted at its boundary for B = 200 (3 copies
   kept, 4 popular) and B = 1,000 (11 kept, 12 popular), and never below 200.
   `"x" + text` against `"y" + text` over 1,000 random lowercase letters scores
@@ -58,8 +60,9 @@ Measurement scope:
 * `ndiff()` line-pair comparisons are counted as `set_seq1()` calls, which
   also include one per matcher built. On 3.14+ a replaced block of r mutually similar
   lines takes at most 22r pairs, and 4x r costs under 6x. On 3.10–3.13 the same
-  shape costs more than 6x per doubling of r from 25 to 100 (cubic), and a
-  block of 50 dissimilar lines takes at least r² pairs. Streaming the delta of
+  shape costs more than 6x per doubling of r from 25 to 100 (cubic), and in a
+  block of 50 dissimilar lines every one of the r² line pairs is recorded
+  being set on a character matcher. Streaming the delta of
   a block of similar lines, 4x r (10 to 40) raises the traced peak by under
   1.5x on 3.14+ (2,000-character lines, where c dominates the O(B) line index)
   and by more than 2x on 3.10–3.13 (200-character lines).
@@ -375,6 +378,15 @@ class TestInputShapeSetsTheMatchCost:
     def test_sequences_sharing_nothing_are_linear(self, size: int) -> None:
         assert match_work(list(range(size)), list(range(size, 2 * size))) == size
 
+    def test_junk_blocks_found_separately_are_merged(self) -> None:
+        a = list(range(2_000))
+        matcher = CountingMatcher(lambda element: element % 2 == 1, a, list(a))
+
+        blocks = matcher.get_matching_blocks()
+
+        assert matcher.calls == 1_000
+        assert len(blocks) == 2
+
     def test_distinct_elements_cost_grows_with_blocks(self) -> None:
         size = 5_000
         works: list[int] = []
@@ -631,7 +643,22 @@ class TestNdiffReplacedBlocks:
 
     @pytest.mark.skipif(sys.version_info >= (3, 14), reason="exhaustive search before 3.14")
     def test_every_pair_is_compared_before_314(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        assert ndiff_pairs(50, similar=False, monkeypatch=monkeypatch) >= 50 * 50
+        seen: set[tuple[str, str]] = set()
+
+        class PairRecorder(SequenceMatcher[Any]):
+            def set_seq1(self, a: Sequence[Any]) -> None:
+                b = internal(self).b
+                if isinstance(a, str) and isinstance(b, str) and a and b:
+                    seen.add((a, b))
+                super().set_seq1(a)
+
+        old = [f"{index:04d} qwertyuiop\n" for index in range(50)]
+        new = [f"{index:04d} zxcvbnmasd\n" for index in range(50)]
+        monkeypatch.setattr(difflib, "SequenceMatcher", PairRecorder)
+
+        list(ndiff(old, new))
+
+        assert {(line, other) for line in old for other in new} <= seen
 
     @staticmethod
     def _peak_for(r: int, c: int) -> int:
@@ -728,13 +755,17 @@ class TestStringInputs:
     @pytest.mark.skipif(sys.version_info >= (3, 14), reason="accepted before 3.14")
     @pytest.mark.parametrize("function", [unified_diff, context_diff])
     def test_a_string_is_diffed_by_character(self, function: Callable[..., Iterator[str]]) -> None:
-        assert list(function("ab", "ac"))
+        lines = list(function("ab", "ac", lineterm=""))
+
+        changed = {"-b", "+c"} if function is unified_diff else {"! b", "! c"}
+        assert changed <= set(lines)
+        assert {" a", "  a"} & set(lines)
 
 
 class TestRestore:
     """`restore(delta, which)` | O(1) per delta line."""
 
-    def test_it_takes_one_delta_line_per_line_yielded(self) -> None:
+    def test_the_first_line_takes_one_delta_line(self) -> None:
         taken = [0]
 
         def delta() -> Iterator[str]:
