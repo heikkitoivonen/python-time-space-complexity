@@ -36,7 +36,8 @@ Measurement scope:
   s = 1,000 on 3.11+, and over 20x on 3.10, where the scan is naive.
   `rfind()` for `a`*(s/2) + `b` + `a`*(s/2) costs over 20x across the same
   step on every version, which is the O(r·s) worst case. On random bytes
-  both cost over 8x from 64 KiB to 1 MiB, the r term.
+  both cost over 8x and under 64x from 64 KiB to 1 MiB, the r term, where
+  quadratic growth would cost 256x.
 * `resize()` doubles a 256 MiB private anonymous map with every page touched
   in under a tenth of the time `bytes(mm)` takes to copy it, and keeps the
   contents; on a file it resizes the file too. Growing a shared anonymous
@@ -49,7 +50,8 @@ Measurement scope:
   `mm[i:j] = data` of the wrong length raises `IndexError`; `mm[i]` reads and
   writes `int`. `size()` raises `OSError` on Unix for anonymous memory and for
   `trackfd=False` (3.13+), and exceeds `len(mm)` for a map over part of a
-  file. Slicing leaves the position where it was. A `length` past the end
+  file. `length=0` maps the whole file at offset 0 and from `offset` to the
+  end otherwise. Slicing leaves the position where it was. A `length` past the end
   of the file raises `ValueError` on Unix, and an `offset` that is not a
   multiple of `ALLOCATIONGRANULARITY` raises `OSError`. `close()` and `resize()` raise `BufferError` under a live
   `memoryview`; `close()` leaves the file open. `ACCESS_COPY` writes and
@@ -64,8 +66,8 @@ Not settled here:
 
 * Disk and page-cache costs: the time to fault a page in from storage, and
   what `flush()` waits for, depend on the filesystem and device. `flush()` is
-  priced O(p) from its `msync(MS_SYNC)` call in Modules/mmapmodule.c and is
-  only observed to reach the file.
+  priced O(q), the pages of the range it passes to `msync(MS_SYNC)` in
+  Modules/mmapmodule.c, and is only observed to reach the file.
 * `madvise()`'s O(q) is the kernel's work for the option given; only that the
   call succeeds is observed.
 * `resize()` time is asserted only against a copy of the mapping. O(p) is
@@ -148,6 +150,12 @@ def anonymous(size: int, **kwargs: Any) -> mmap.mmap:
     if hasattr(mmap, "MADV_NOHUGEPAGE"):
         mm.madvise(mmap.MADV_NOHUGEPAGE)
     return mm
+
+
+def read_at(handle: Any, size: int) -> bytes:
+    """The first `size` bytes of the file behind `handle`, read past its buffer."""
+    os.lseek(handle.fileno(), 0, os.SEEK_SET)
+    return os.read(handle.fileno(), size)
 
 
 @pytest.fixture
@@ -234,6 +242,16 @@ class TestMappingIsLazy:
         with mmap.mmap(f.fileno(), 0) as mm:
             assert len(mm) == 10_000
 
+    def test_length_zero_with_an_offset_maps_the_rest(
+        self, file_of: Callable[[bytes], Any]
+    ) -> None:
+        offset = mmap.ALLOCATIONGRANULARITY
+        f = file_of(b"x" * offset + b"y" * 10_000)
+
+        with mmap.mmap(f.fileno(), 0, offset=offset) as mm:
+            assert len(mm) == 10_000
+            assert mm[:] == b"y" * 10_000
+
     @pytest.mark.skipif(sys.platform == "win32", reason="Windows grows the file instead")
     def test_a_length_past_the_end_of_the_file_raises(
         self, file_of: Callable[[bytes], Any]
@@ -292,7 +310,7 @@ class TestCloseReleasesTouchedPages:
 
         assert mm.closed
         assert not f.closed
-        assert os.pread(f.fileno(), 3, 0) == b"abc"
+        assert read_at(f, 3) == b"abc"
 
     def test_a_closed_map_refuses_further_calls(self) -> None:
         mm = mmap.mmap(-1, 10)
@@ -612,7 +630,7 @@ class TestSearching:
                 durations.append(best_ns(lambda s=search: s(b"ZZZZ", 0), repeats=5))  # type: ignore[misc]
 
         ratio = durations[1] / durations[0]
-        assert ratio > 8, f"{method}: 16x the range cost x{ratio:.2f} ({durations} ns)"
+        assert 8 < ratio < 64, f"{method}: 16x the range cost x{ratio:.2f} ({durations} ns)"
 
     def test_find_allocates_nothing(self) -> None:
         with mmap.mmap(-1, 16 * MIB) as mm:
@@ -745,7 +763,7 @@ class TestSizeResizeAndFlush:
             assert mm.flush() is None
             assert mm.flush(0, mmap.PAGESIZE) is None
 
-        assert os.pread(f.fileno(), 4, 0) == b"WXYZ"
+        assert read_at(f, 4) == b"WXYZ"
 
     def test_copy_on_write_never_reaches_the_file(self, file_of: Callable[[bytes], Any]) -> None:
         f = file_of(b"abcd" * 1024)
@@ -755,7 +773,7 @@ class TestSizeResizeAndFlush:
             mm.flush()
             assert mm[0:4] == b"WXYZ"
 
-        assert os.pread(f.fileno(), 4, 0) == b"abcd"
+        assert read_at(f, 4) == b"abcd"
 
     @pytest.mark.skipif(not hasattr(mmap.mmap, "madvise"), reason="no madvise() here")
     def test_madvise_accepts_its_options(self) -> None:

@@ -1,15 +1,16 @@
 # mmap Module Complexity
 
 The `mmap` module maps a file, or anonymous memory, into the process's address space and exposes
-it as a fixed-length byte buffer with a file-like position. By default mapping reads nothing: the
-first access to each page faults it in, from the page cache or the disk for a file and as zeros
+it as a byte buffer with a file-like position. By default mapping reads nothing: pages are
+faulted in as they are first accessed, from the page cache or the disk for a file and as zeros
 for anonymous memory, so the cost follows the bytes you touch rather than the length you map.
 
 `n` is the length of the mapping in bytes, `k` is the bytes a call returns, writes or copies,
 `l` is the bytes `readline()` returns, `r` is the bytes in a searched range, `s` is the length of
-the needle, and `p` is the pages of the mapping the process has touched. Bounds count bytes and
-pages in memory; a first touch adds one page fault per page, and reading a page from disk costs
-whatever the storage costs, which no row here prices. System calls that take no length, such as
+the needle, `p` is the pages of the mapping the process has touched, and `q` is the pages in the
+range a call names. Bounds count bytes and pages in memory; a first touch can add a page fault
+per page, and reading a page from disk costs whatever the storage costs, which no row here
+prices. System calls that take no length, such as
 `fstat()`, are priced O(1).
 
 ## Complexity Reference
@@ -18,7 +19,7 @@ whatever the storage costs, which no row here prices. System calls that take no 
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `mmap.mmap(fileno, length, flags=MAP_SHARED, prot=PROT_WRITE\|PROT_READ, access=ACCESS_DEFAULT, offset=0, *, trackfd=True)` | O(1) | O(1) | Unix. Touches no page, whatever the length, unless `flags` include `MAP_POPULATE`. `length=0` maps the whole file; a `length` past the end of the file raises `ValueError`. On macOS the file is first flushed to storage |
+| `mmap.mmap(fileno, length, flags=MAP_SHARED, prot=PROT_WRITE\|PROT_READ, access=ACCESS_DEFAULT, offset=0, *, trackfd=True)` | O(1) | O(1) | Unix. Touches no page, whatever the length, unless `flags` include `MAP_POPULATE`. `length=0` maps from `offset` to the end of the file; a `length` past the end of the file raises `ValueError`. On macOS the file is first flushed to storage |
 | `mmap.mmap(fileno, length, tagname=None, access=ACCESS_DEFAULT, offset=0)` | O(1) | O(1) | Windows. A `length` past the end of the file grows the file; `tagname` names the mapping so another map can share it |
 | `mmap.mmap(-1, length)` | O(1) | O(1) | Anonymous memory, zero-filled a page at a time as it is touched |
 | `mmap.close()`, leaving `with mmap.mmap(...)` | O(p) | O(1) | Unmaps every touched page; the file stays open. Raises `BufferError` while a buffer is exported |
@@ -57,8 +58,8 @@ whatever the storage costs, which no row here prices. System calls that take no 
 |-----------|------|-------|-------|
 | `mmap.size()` | O(1) | O(1) | The size of the file, which can exceed `len(mm)`. On Unix, raises `OSError` for anonymous memory and for a map built with `trackfd=False` |
 | `mmap.resize(newsize)` | O(p) | O(1) | Linux remaps without copying the bytes and resizes a mapped file to match. Windows copies anonymous memory, O(min(n, newsize)). Unix without `mremap()`, macOS included, raises `SystemError`. Linux cannot grow shared anonymous memory: Python 3.13+ raises `ValueError`, and earlier versions crash with `SIGBUS` when the new pages are touched |
-| `mmap.flush([offset[, size]])` | O(p) | O(1) | Writes the dirty pages in the range back to the file; on Unix it waits for the writes. Does nothing for `ACCESS_READ` and `ACCESS_COPY` |
-| `mmap.madvise(option[, start[, length]])` | O(q) | O(1) | q = pages in the advised range; what the kernel does with them depends on `option`. Unix only |
+| `mmap.flush([offset[, size]])` | O(q) | O(1) | Writes the file's dirty pages in the range back, whichever writer dirtied them; on Unix it waits for the writes. Does nothing for `ACCESS_READ` and `ACCESS_COPY` |
+| `mmap.madvise(option[, start[, length]])` | O(q) | O(1) | What the kernel does with them depends on `option`. Unix only |
 
 ### Constants and exceptions
 
@@ -74,8 +75,8 @@ whatever the storage costs, which no row here prices. System calls that take no 
 ## Mapping a File
 
 Building the map costs a fixed number of system calls whatever the file's length: no byte is read
-until you touch it. The mapped length is fixed for the life of the object, and `size()` asks the file, not the
-map.
+until you touch it. The mapped length changes only through `resize()`, and `size()` asks the file,
+not the map.
 
 ```python
 import mmap
@@ -88,7 +89,7 @@ with tempfile.TemporaryFile() as f:
     with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:  # O(1) - reads nothing
         assert len(mm) == 10_000  # O(1)
         assert mm.size() == 10_000  # O(1) - asks the file
-        assert mm[0] == ord('0')  # O(1) - the first touch faults one page in
+        assert mm[0] == ord('0')  # O(1) - the first touch faults its page in
 
     assert mm.closed  # leaving the block closed the map, not the file
     assert not f.closed
@@ -97,7 +98,7 @@ with tempfile.TemporaryFile() as f:
 ### Anonymous Memory
 
 Passing `-1` as the file descriptor maps zero-filled memory with no file behind it. It is still a
-fixed-length buffer, and on Unix `size()` has no file to ask.
+buffer of the length you ask for, and on Unix `size()` has no file to ask.
 
 ```python
 import mmap
@@ -226,15 +227,19 @@ with tempfile.TemporaryFile() as f:
     f.write(b'abcd' * 1024)
     f.flush()
 
+    def read_file_start():
+        os.lseek(f.fileno(), 0, os.SEEK_SET)  # the file itself, not f's buffer
+        return os.read(f.fileno(), 4)
+
     with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_COPY) as private:
         private[0:4] = b'WXYZ'  # O(k) - changes memory only
         private.flush()  # does nothing for ACCESS_COPY
-    assert os.pread(f.fileno(), 4, 0) == b'abcd'
+    assert read_file_start() == b'abcd'
 
     with mmap.mmap(f.fileno(), 0) as shared:
         shared[0:4] = b'WXYZ'  # O(k)
-        shared.flush()  # O(p) - writes the dirty page back
-        assert os.pread(f.fileno(), 4, 0) == b'WXYZ'
+        shared.flush()  # O(q) - writes the dirty page back
+        assert read_file_start() == b'WXYZ'
 
         if sys.platform == 'linux':
             shared.resize(8192)  # O(p) - no copy of the bytes
