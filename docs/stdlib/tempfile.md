@@ -1,313 +1,335 @@
-# Tempfile Module Complexity
+# tempfile Module Complexity
 
-The `tempfile` module provides utilities for creating and managing temporary files and directories, automatically cleaned up after use.
+The `tempfile` module creates files and directories that nobody else can have claimed first,
+and can remove them when you are done. Creating one is a loop: draw a random name, try to create
+it exclusively, and draw again if the name is taken. Everything after that is ordinary file I/O
+on the object you get back.
 
-## Common Operations
+`r` is the name attempts one creation makes: 1 unless randomly drawn names collide with entries
+already in the directory, and never more than `tempfile.TMP_MAX`. `c` is the candidate
+directories the first `gettempdir()` probes, `n` is the bytes (characters, in text mode) a file
+holds, `k` is the bytes one read or write moves, and `s` is a `SpooledTemporaryFile`'s
+`max_size`. `m` is the entries in a temporary directory's tree at cleanup, `d` its depth and `w`
+the entries in its largest directory. One filesystem call - a create, a stat, an unlink - is
+priced at O(1). A creation with `dir=None` also pays `gettempdir()`'s one-time probe on the
+first use in the process.
+
+## Complexity Reference
+
+### Creating files and directories
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `NamedTemporaryFile()` | O(r) | O(1) initial | r = name attempts (<= TMP_MAX) |
-| `TemporaryFile()` | O(r) | O(1) initial | r = name attempts (<= TMP_MAX) |
-| `TemporaryDirectory()` | O(r) | O(1) initial | r = name attempts (<= TMP_MAX) |
-| `mktemp()` | O(r) | O(1) | Generate temp name (deprecated) |
-| `mkdtemp()` | O(r) | O(1) | Create temp directory safely |
-| `gettempdir()` | O(1) | O(1) | Get system temp directory |
-| `gettempprefix()` | O(1) | O(1) | Get temp filename prefix |
+| `tempfile.mkstemp(suffix=None, prefix=None, dir=None, text=False)` | O(r) | O(1) | One exclusive `os.open` per attempt; returns an open descriptor and a path, both the caller's to close and remove |
+| `tempfile.mkdtemp(suffix=None, prefix=None, dir=None)` | O(r) | O(1) | One `os.mkdir` per attempt; the caller removes the directory |
+| `tempfile.mktemp(suffix='', prefix='tmp', dir=None)` | O(r) | O(1) | Deprecated and unsafe: one `lstat` per attempt and nothing is created, so the name can be taken before you use it |
 
-## Named Temporary Files
+### NamedTemporaryFile
 
-### NamedTemporaryFile()
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `tempfile.NamedTemporaryFile(mode='w+b', buffering=-1, encoding=None, newline=None, suffix=None, prefix=None, dir=None, delete=True, *, errors=None, delete_on_close=True)` | O(r) | O(1) | Created as `mkstemp()` does; the data lives on disk, so memory is the file buffer |
+| `NamedTemporaryFile.name`, `NamedTemporaryFile.file` | O(1) | O(1) | The path, visible in the directory while the file is open, and the underlying file object |
+| Writing k bytes | O(k) | O(1) | Buffered file I/O |
+| Reading k bytes | O(k) | O(k) | The result is the only thing held |
+| `close()`, leaving the `with` block | O(1) | O(1) | One unlink when `delete=True`; with `delete_on_close=False` (Python 3.12+) closing keeps the file and leaving the `with` block removes it |
 
-#### Time Complexity: O(r)
+### TemporaryFile
 
-Where r = number of name attempts (<= TMP_MAX).
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `tempfile.TemporaryFile(mode='w+b', buffering=-1, encoding=None, newline=None, suffix=None, prefix=None, dir=None, *, errors=None)` | O(r) | O(1) | On Linux, where the filesystem supports `O_TMPFILE`, no name is drawn at all; otherwise on POSIX the file is created under a name and unlinked at once. On Windows this is `NamedTemporaryFile` |
+| Reading and writing | O(k) | O(k) to read, O(1) to write | As for `NamedTemporaryFile`; there is no name to see |
+
+### SpooledTemporaryFile
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `tempfile.SpooledTemporaryFile(max_size=0, mode='w+b', buffering=-1, encoding=None, newline=None, suffix=None, prefix=None, dir=None, *, errors=None)` | O(1) | O(1) | Starts as an in-memory buffer and creates no file |
+| `SpooledTemporaryFile.write(s)` | O(k) | O(k) in memory, O(1) once rolled over | The write that takes the position past `max_size` also pays `rollover()`, once; `max_size=0` never rolls over on its own |
+| `SpooledTemporaryFile.writelines(lines)` | O(n) | O(s + k) | Rolls over as soon as a line crosses `max_size`; 3.10, 3.11, 3.12.0-3.12.9 and 3.13.0-3.13.2 hold the whole iterable in memory first, O(n) |
+| `SpooledTemporaryFile.rollover()` | O(r + n) | O(1) | Creates a `TemporaryFile`, copies the n held bytes to it and frees the in-memory buffer; does nothing once rolled over |
+| `SpooledTemporaryFile.fileno()` | O(r + n) first call, then O(1) | O(1) | Needs a real descriptor, so it forces `rollover()` |
+| `SpooledTemporaryFile.truncate(size=None)` | O(r + n) if `size > max_size`, else O(1) | O(1) | A size past `max_size` forces `rollover()` first |
+| `SpooledTemporaryFile.read(size)`, `read1()`, `readinto(b)`, `readinto1(b)`, `readline()`, `readlines()`, iterating | O(k) | O(k) | Passed to the in-memory buffer or the file, whichever holds the data; k = what is returned. `read1()` and the `readinto` pair are Python 3.11+ |
+| `SpooledTemporaryFile.seek()`, `tell()`, `flush()`, `close()`, `detach()`, `isatty()`, `readable()`, `seekable()`, `writable()` | O(1) | O(1) | Passed through as well; `detach()`, `readable()`, `seekable()` and `writable()` are Python 3.11+ |
+| `SpooledTemporaryFile.closed`, `mode`, `name`, `encoding`, `errors`, `newlines` | O(1) | O(1) | `name` is `None` until the file rolls over |
+
+### TemporaryDirectory
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `tempfile.TemporaryDirectory(suffix=None, prefix=None, dir=None, ignore_cleanup_errors=False, *, delete=True)` | O(r) | O(1) | `mkdtemp()` plus a finalizer that cleans up if the object is collected |
+| `TemporaryDirectory.name` | O(1) | O(1) | The path; `with` binds this string, not the object |
+| `TemporaryDirectory.cleanup()`, leaving the `with` block | O(m) | O(d·w) | `shutil.rmtree` over the tree; a `PermissionError` makes it reset permissions and retry, and `ignore_cleanup_errors=True` leaves what still cannot be removed instead of raising. A second call does nothing; `delete=False` (Python 3.12+) skips it on exit |
+
+### Locations and constants
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `tempfile.gettempdir()` | O(c) first call, then O(1) | O(c) first call, then O(1) | Probes `TMPDIR`, `TEMP`, `TMP`, the platform's usual directories and the working directory by creating and deleting a file in each, and caches the first that works |
+| `tempfile.gettempdirb()` | O(c) first call, then O(1) | O(c) first call, then O(1) | The same directory, and the same cache, as bytes |
+| `tempfile.gettempprefix()`, `tempfile.gettempprefixb()` | O(1) | O(1) | `'tmp'` and `b'tmp'` |
+| `tempfile.tempdir` | O(1) | O(1) | The cache itself; assign it before first use to skip the probe |
+| `tempfile.TMP_MAX` | O(1) | O(1) | The ceiling on r; exhausting it raises `FileExistsError` |
+
+## Creating Temporary Files
+
+### Named vs Unnamed Files
+
+A `NamedTemporaryFile` has a path other code can open, and it is removed when it closes.
+A `TemporaryFile` has no path at all, which on Linux means it can skip naming altogether.
+Neither holds its data in memory.
 
 ```python
-import tempfile
-
-# Create temporary file
-with tempfile.NamedTemporaryFile(mode='w', delete=True) as f:
-    f.write('temporary data')  # File exists during context
-    # File deleted on exit
-
-# File persists after context (delete=False)
-temp = tempfile.NamedTemporaryFile(delete=False)
-path = temp.name
-temp.close()
-# Must manually delete
 import os
-os.unlink(path)
+import tempfile
+
+with tempfile.TemporaryDirectory() as workdir:
+    with tempfile.NamedTemporaryFile(dir=workdir) as named:  # O(r)
+        named.write(b'x' * 100_000)  # O(k) time, O(1) memory - it goes to disk
+        named.flush()
+        assert os.listdir(workdir) == [os.path.basename(named.name)]
+        assert os.path.getsize(named.name) == 100_000
+    assert os.listdir(workdir) == []  # unlinked on exit - O(1)
+
+    with tempfile.TemporaryFile(dir=workdir) as unnamed:  # O(r), no name at all on Linux
+        unnamed.write(b'data')
+        unnamed.seek(0)
+        assert unnamed.read() == b'data'  # O(k)
+        assert os.listdir(workdir) == []  # nothing to see on POSIX, even while open
 ```
 
-#### Space Complexity: O(n)
+### Keeping What Would Be Deleted
 
-Where n = data size written to file.
+Three switches hand removal back to you. `delete=False` keeps a `NamedTemporaryFile` for good.
+`delete_on_close=False` keeps it through `close()`, so another opener can use the path, and
+removes it when the `with` block ends. `TemporaryDirectory(delete=False)` skips the cleanup on
+exit. The last two need Python 3.12.
+
+```python
+import os
+import tempfile
+
+with tempfile.TemporaryDirectory() as workdir:
+    with tempfile.NamedTemporaryFile('w', dir=workdir, delete_on_close=False) as f:
+        f.write('config')
+        f.close()  # O(1) - the file stays
+        with open(f.name) as reader:
+            assert reader.read() == 'config'
+    assert not os.path.exists(f.name)  # removed on exit
+
+    kept = tempfile.NamedTemporaryFile(dir=workdir, delete=False)  # O(r)
+    kept.close()
+    assert os.path.exists(kept.name)  # still there: removing it is your job
+    os.unlink(kept.name)  # O(1)
+
+    held = tempfile.TemporaryDirectory(dir=workdir, delete=False)  # O(r)
+    with held as name:
+        pass
+    assert os.path.isdir(name)  # left in place
+    held.cleanup()  # an explicit call still removes it
+    assert not os.path.exists(name)
+```
+
+### mkstemp and mkdtemp
+
+The low-level pair return what they made and forget about it. Both try names until one is free,
+so a crowded directory costs extra attempts, never a scan of what is already there.
+
+```python
+import os
+import tempfile
+
+workdir = tempfile.mkdtemp(prefix='job_')  # O(r)
+assert os.path.basename(workdir).startswith('job_')
+assert os.path.isabs(workdir)
+
+fd, path = tempfile.mkstemp(suffix='.txt', dir=workdir)  # O(r)
+os.write(fd, b'payload')
+os.close(fd)
+assert os.path.dirname(path) == workdir and path.endswith('.txt')
+
+os.unlink(path)  # nothing removes them for you
+os.rmdir(workdir)
+```
+
+### Why mktemp Is Unsafe
+
+`mktemp()` checks that a name is free and returns it without creating anything. Whatever
+creates the file later is racing every other process for that name; `mkstemp()` creates it in
+the same step that checks it.
+
+```python
+import os
+import tempfile
+
+with tempfile.TemporaryDirectory() as workdir:
+    name = tempfile.mktemp(dir=workdir)  # O(r) - one lstat per attempt, nothing created
+    assert not os.path.exists(name)
+
+    open(name, 'w').close()  # another process gets there first
+
+    try:
+        os.open(name, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        pass
+    else:
+        raise AssertionError('the name was still free')
+```
+
+## Spooling in Memory
+
+A `SpooledTemporaryFile` keeps what you write in memory until the position passes `max_size`.
+The write that crosses it calls `rollover()`, which creates a real temporary file and copies
+everything written so far into it - O(n) once - and from then on memory stays flat. With the
+default `max_size=0` it never rolls over on its own.
 
 ```python
 import tempfile
 
-# File storage
-with tempfile.NamedTemporaryFile() as f:
-    f.write(b'x' * 1000000)  # O(n) disk space
-```
+with tempfile.TemporaryDirectory() as workdir:
+    with tempfile.SpooledTemporaryFile(max_size=1_000, dir=workdir) as spool:  # O(1)
+        spool.write(b'x' * 1_000)  # O(k), held in memory
+        assert spool.name is None  # still no file
 
-## Unnamed Temporary Files
+        spool.write(b'y')  # past max_size: rollover() copies all 1,001 bytes - O(n)
+        assert spool.name is not None
 
-### TemporaryFile()
+        spool.seek(0)
+        assert spool.read() == b'x' * 1_000 + b'y'
 
-#### Time Complexity: O(r)
-
-Where r = number of name attempts (<= TMP_MAX).
-
-```python
-import tempfile
-
-# Unnamed temp file; uses O_TMPFILE when supported, otherwise creates and unlinks
-with tempfile.TemporaryFile(mode='w+') as f:
-    f.write('data')
-    f.seek(0)
-    content = f.read()  # O(n) read
-    # Auto-deleted
-
-# File-based fallback (e.g., when O_TMPFILE is unsupported)
-# Creation time still O(r) for name attempts
-temp = tempfile.TemporaryFile()
-temp.write(b'content')
-temp.close()
-```
-
-#### Space Complexity: O(n)
-
-```python
-import tempfile
-
-# Memory/disk storage for content
-with tempfile.TemporaryFile() as f:
-    f.write(b'x' * 1000000)  # O(n) space
+    with tempfile.SpooledTemporaryFile(dir=workdir) as unbounded:  # max_size=0
+        unbounded.write(b'z' * 100_000)
+        assert unbounded.name is None  # everything is still in memory
+        unbounded.fileno()  # O(n) - a descriptor forces rollover()
+        assert unbounded.name is not None
 ```
 
 ## Temporary Directories
 
-### TemporaryDirectory()
-
-#### Time Complexity: O(r)
-
-Where r = number of name attempts (<= TMP_MAX).
+`TemporaryDirectory` is `mkdtemp()` plus cleanup. Leaving the `with` block removes the whole
+tree with `shutil.rmtree`, so the exit costs what you put inside, and it runs even when the block
+raises.
 
 ```python
+import os
 import tempfile
-from pathlib import Path
 
-# Create temporary directory
-with tempfile.TemporaryDirectory() as tmpdir:
-    path = Path(tmpdir)
-    (path / 'file.txt').write_text('data')
-    # Directory and contents deleted on exit
+with tempfile.TemporaryDirectory() as parent:
+    with tempfile.TemporaryDirectory(dir=parent) as workdir:  # O(r)
+        for index in range(100):
+            with open(os.path.join(workdir, f'chunk{index}'), 'w') as f:
+                f.write('x')
+        os.mkdir(os.path.join(workdir, 'nested'))
+        assert len(os.listdir(workdir)) == 101
+    assert not os.path.exists(workdir)  # O(m) - all 101 entries removed
 
-# Create without context manager
-tmpdir = tempfile.mkdtemp()
-# Must manually clean up
-import shutil
-shutil.rmtree(tmpdir)
+    try:
+        with tempfile.TemporaryDirectory(dir=parent) as workdir:
+            open(os.path.join(workdir, 'partial'), 'w').close()
+            raise RuntimeError('job failed')
+    except RuntimeError:
+        pass
+    assert not os.path.exists(workdir)  # cleaned up anyway
 ```
 
-#### Space Complexity: O(d)
+## The Default Directory
 
-Where d = number and size of files in directory.
-
-```python
-import tempfile
-from pathlib import Path
-
-with tempfile.TemporaryDirectory() as tmpdir:
-    # Creates files
-    path = Path(tmpdir)
-    for i in range(100):
-        (path / f'file{i}.txt').write_text('content')  # O(d) space
-```
-
-## Name Generation
-
-### mkdtemp()
-
-#### Time Complexity: O(r)
-
-Where r = number of name attempts (<= TMP_MAX).
+`gettempdir()` works out where temporary files go by trying to create a file in each candidate
+directory in turn. It does that once per process and keeps the answer in `tempfile.tempdir`,
+which every later call - and every creation with `dir=None` - reads.
 
 ```python
+import os
 import tempfile
 
-# Create safe temporary directory
-tmpdir = tempfile.mkdtemp()
-# Must manually delete
+first = tempfile.gettempdir()  # O(c) the first time
+assert tempfile.tempdir == first  # the cached answer
+assert tempfile.gettempdir() == first  # O(1) afterwards
+assert tempfile.gettempdirb() == os.fsencode(first)  # the same cache, as bytes
 
-# With custom prefix
-tmpdir = tempfile.mkdtemp(prefix='myapp_')
-
-# With custom suffix
-tmpdir = tempfile.mkdtemp(suffix='_backup')
-```
-
-#### Space Complexity: O(1)
-
-```python
-import tempfile
-
-# Directory name stored
-tmpdir = tempfile.mkdtemp()  # O(1) extra memory
-```
-
-### gettempdir()
-
-#### Time Complexity: O(1)
-
-```python
-import tempfile
-
-# Get system temp directory
-temp_dir = tempfile.gettempdir()  # Returns '/tmp' or similar
-
-# Use for manual operations
-from pathlib import Path
-temp_path = Path(tempfile.gettempdir()) / 'myfile'
-```
-
-#### Space Complexity: O(1)
-
-```python
-import tempfile
-
-# Returns cached system value
-temp_dir = tempfile.gettempdir()  # O(1) space
+assert tempfile.gettempprefix() == 'tmp'  # O(1)
+assert tempfile.gettempprefixb() == b'tmp'
 ```
 
 ## Common Patterns
 
-### Safe Temporary File Processing
+### Replacing a File Atomically
+
+Write the new contents to a temporary file in the target's own directory, then rename it over
+the target. The rename is O(1), and on POSIX readers see either the old file or the new one,
+never half of it.
 
 ```python
-import tempfile
-from pathlib import Path
-
-# Read, process, replace original
-# Creating the file is O(r) in name attempts; the replace() below is O(1),
-# which is what makes this pattern atomic rather than a copy
-with tempfile.NamedTemporaryFile(mode='w', dir='.', delete=False) as tmp:
-    tmp_path = tmp.name
-    try:
-        # Write processed data
-        for line in process_data():
-            tmp.write(line)
-        # Replace original
-        Path(tmp_path).replace('original.txt')
-    except:
-        Path(tmp_path).unlink()
-        raise
-```
-
-### Temporary Directory for Multiple Files
-
-```python
-import tempfile
-from pathlib import Path
-
-# Work with multiple temporary files
-# O(r) to create the directory, then O(k) files to clean up on exit
-with tempfile.TemporaryDirectory() as tmpdir:
-    tmpdir = Path(tmpdir)
-    
-    # Create multiple files
-    for i in range(10):
-        (tmpdir / f'chunk_{i}.tmp').write_bytes(data[i])
-    
-    # Process all
-    for chunk_file in tmpdir.glob('chunk_*.tmp'):
-        process(chunk_file)
-    # All cleaned up
-```
-
-### Persistent Temporary File
-
-```python
-import tempfile
-from pathlib import Path
-
-# Create file that persists until deleted
-tmp = tempfile.NamedTemporaryFile(delete=False)  # O(r) name attempts
-path = tmp.name
-tmp.close()  # O(1) - delete=False means cleanup is now your job
-
-try:
-    # Use the file
-    Path(path).write_text('data')
-    process(path)
-finally:
-    # Clean up
-    Path(path).unlink()
-```
-
-## Performance Characteristics
-
-### Best Practices
-
-```python
-import tempfile
-
-# Good: Use context managers
-with tempfile.NamedTemporaryFile() as f:
-    f.write(data)  # Auto-cleanup
-
-# Good: TemporaryDirectory for collections
-with tempfile.TemporaryDirectory() as tmpdir:
-    # Create multiple files
-    pass  # All cleaned up
-
-# Avoid: Forgetting to cleanup
-tmp = tempfile.NamedTemporaryFile(delete=False)
-# File persists until manually deleted
-```
-
-### Memory Efficiency
-
-```python
-import tempfile
-
-# Good: Stream processing
-with tempfile.TemporaryFile() as f:
-    for chunk in large_data_generator():  # Process in chunks
-        f.write(chunk)
-    f.seek(0)
-    process(f)  # O(1) memory per chunk
-
-# Avoid: Loading all data
-import tempfile
-with tempfile.TemporaryFile() as f:
-    f.write(all_data)  # O(n) memory if all_data is loaded
-```
-
-## Platform-Specific Behavior
-
-```python
-import tempfile
 import os
+import tempfile
 
-# All platforms
-temp_dir = tempfile.gettempdir()  # O(1) after the first call - it caches
+with tempfile.TemporaryDirectory() as workdir:
+    target = os.path.join(workdir, 'settings.txt')
+    with open(target, 'w') as f:
+        f.write('old')
 
-# Platform-dependent defaults
-if os.name == 'nt':  # Windows
-    # Usually C:\Users\...\AppData\Local\Temp
-    pass
-else:  # Unix/Linux
-    # Usually /tmp
-    pass
+    with tempfile.NamedTemporaryFile('w', dir=workdir, delete=False) as tmp:  # O(r)
+        tmp.write('new')  # O(k)
+    os.replace(tmp.name, target)  # O(1) - same filesystem, so a rename
 
-# Explicit control
-tmpdir = tempfile.mkdtemp(dir='/custom/path')  # O(r) name attempts
+    with open(target) as f:
+        assert f.read() == 'new'
+    assert os.listdir(workdir) == ['settings.txt']
 ```
 
-## Related Documentation
+### Buffering Uploads of Unknown Size
 
-- [Pathlib Module](pathlib.md) - Object-oriented filesystem paths
-- [OS Module](os.md) - Low-level filesystem operations
-- [Shutil Module](shutil.md) - High-level file operations
+```python
+import tempfile
+
+chunks = [b'a' * 64_000 for _ in range(10)]
+
+with tempfile.TemporaryDirectory() as workdir:
+    # Small bodies stay in memory; large ones go to disk after one O(n) copy
+    with tempfile.SpooledTemporaryFile(max_size=256_000, dir=workdir) as body:
+        body.writelines(chunks)  # O(n) - rolls over once past max_size
+        assert body.name is not None
+        body.seek(0)
+        assert len(body.read()) == 640_000  # O(k)
+```
+
+## Performance Best Practices
+
+✅ **Do**:
+
+- Use `TemporaryFile` when nothing else needs the path: on Linux it skips naming entirely
+- Pick a `max_size` for `SpooledTemporaryFile`, so memory is capped and only large files pay the
+  rollover copy
+- Create the temporary file in the target's directory when you will rename it into place:
+  `os.replace()` is an O(1) rename only within one filesystem
+- Use a context manager, so cleanup runs even when the block raises
+
+❌ **Avoid**:
+
+- `mktemp()` - it returns a name another process can take before you create it
+- `SpooledTemporaryFile()` with the default `max_size=0` for data of unknown size - it never
+  leaves memory unless something forces `rollover()`
+
+## Version Notes
+
+- **Python 3.10+**: `TemporaryDirectory` accepts `ignore_cleanup_errors`
+- **Python 3.11+**: `SpooledTemporaryFile` implements the full `io.BufferedIOBase` or
+  `io.TextIOBase` interface, adding `read1()`, `readinto()`, `readinto1()`, `detach()`,
+  `readable()`, `seekable()` and `writable()`
+- **Python 3.12+**: `NamedTemporaryFile` accepts `delete_on_close`, `TemporaryDirectory`
+  accepts `delete`, and `mkdtemp()` always returns an absolute path
+- **Python 3.12.10+, 3.13.3+**: `SpooledTemporaryFile.writelines()` rolls over as soon as a
+  line crosses `max_size`; earlier 3.12 and 3.13 releases, and all of 3.10 and 3.11, hold the
+  whole iterable in memory before checking
+- **Python 3.13.13+, 3.14.4+**: `TMP_MAX` is 20, so a creation gives up after 20 collisions;
+  earlier releases use the platform's `os.TMP_MAX`, which is far larger
+- **All Python 3**: `mktemp()` is deprecated but issues no warning
+
+## Related Modules
+
+- **[shutil](shutil.md)** - `rmtree()`, which is what `TemporaryDirectory` cleanup costs
+- **[os](os.md)** - `os.open`, `os.replace` and the descriptor `mkstemp()` returns
+- **[io](io.md)** - `BytesIO`, the in-memory buffer a `SpooledTemporaryFile` starts as
+- **[pathlib](pathlib.md)** - wrapping the returned paths

@@ -12,7 +12,8 @@ proves it reads nothing at construction, and no tolerance is involved.
 docs/stdlib/array.md's claims live in tests/test_array_complexity.py,
 docs/stdlib/decimal.md's in tests/test_decimal_complexity.py,
 docs/stdlib/multiprocessing.md's in tests/test_multiprocessing_complexity.py,
-docs/stdlib/secrets.md's in tests/test_secrets_complexity.py and
+docs/stdlib/secrets.md's in tests/test_secrets_complexity.py,
+docs/stdlib/tempfile.md's in tests/test_tempfile_complexity.py and
 docs/stdlib/smtplib.md's in tests/test_smtplib_complexity.py, which cover
 those modules' tables as well.
 
@@ -35,7 +36,6 @@ import queue
 import sqlite3
 import struct
 import sys
-import tempfile
 import threading
 import time
 import unicodedata
@@ -393,38 +393,6 @@ class TestStructFormatCaching:
     def test_a_short_read_fails_before_unpacking(self) -> None:
         with pytest.raises(struct.error):
             struct.unpack("i", b"AB")
-
-
-class TestTempfileCachesTheDirectory:
-    """docs/stdlib/tempfile.md: gettempdir() is O(1) after the first call,
-    because it caches the search it had to do."""
-
-    @pytest.mark.timing
-    def test_the_first_lookup_is_the_expensive_one(self) -> None:
-        saved = tempfile.tempdir
-        try:
-            tempfile.tempdir = None
-            start = time.perf_counter()
-            tempfile.gettempdir()
-            first = time.perf_counter() - start
-
-            start = time.perf_counter()
-            tempfile.gettempdir()
-            cached = time.perf_counter() - start
-        finally:
-            tempfile.tempdir = saved
-
-        assert first > cached * 5, (
-            f"the search result is cached: first={first:.2e}s cached={cached:.2e}s"
-        )
-
-    def test_temporary_directory_cleans_up_every_file(self, tmp_path: Path) -> None:
-        with tempfile.TemporaryDirectory(dir=str(tmp_path)) as name:
-            directory = Path(name)
-            for index in range(10):
-                (directory / f"chunk{index}").write_text("x", encoding="utf-8")
-            assert len(list(directory.iterdir())) == 10
-        assert not directory.exists(), "cleanup is O(k) in the files created"
 
 
 @pytest.mark.skipif(sys.version_info < (3, 11), reason="tomllib is new in 3.11")
