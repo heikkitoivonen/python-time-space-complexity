@@ -27,13 +27,13 @@ Measurement scope:
 * Reads building new objects: `a[0] is not a[0]` for a value outside the
   small-int cache, and `tolist()` items are fresh objects. `sum()` over a
   1,000,000-item `'q'` array is timed against the same list and asserted not
-  faster (over 0.9x the list's time).
+  10% or more faster (over 0.9x the list's time).
 * `tofile()` writes an 8 MB array to a sink that keeps nothing with a traced
   peak under 200 KB, against `tobytes()` over 8 MB. `fromfile()` is observed
   to call `read()` once with k·itemsize, and to append 1,000 items before
   raising `EOFError` when asked for 2,000.
 * `copy.deepcopy()` of a 1,000,000-item `'q'` array peaks under 1.1x the
-  8 MB buffer, so no per-item objects are made.
+  8 MB buffer, so the copy holds no per-item objects.
 * The buffer: 2,000 appends show more than one and far fewer than 2,000
   distinct `getsizeof()` values; 900 `pop()` calls leave `getsizeof()`
   unchanged while one `del a[10:]` shrinks it. `clear()` (3.13+) on 1,000
@@ -42,7 +42,7 @@ Measurement scope:
 * `fromlist()` leaves the array unchanged on a bad item, `extend()` keeps the
   items before it; `+=` and slice assignment reject a list, and `extend()`
   and `+=` reject an array of another type code. Item assignment out of
-  range raises `OverflowError`. Slices are copies.
+  range of an integer type code raises `OverflowError`. Slices are copies.
 * Item sizes: `'b'`/`'B'` 1, `'f'` 4, `'d'` 8, and the C-type minimums for
   the other integer codes. The `'w'` code and `clear()` are asserted on
   3.13+, and the `'u'` `DeprecationWarning` on 3.13+.
@@ -301,7 +301,7 @@ class TestReadsBuildObjects:
         """The page's "the saving is in storage, not in element access": `sum()`
         over a 1,000,000-item `'q'` array against the same values in a list.
         Boxing each read made the array about 2x slower here; the assertion
-        only excludes the array being faster."""
+        only excludes the array being 10% or more faster."""
         values = list(range(10**9, 10**9 + 1_000_000))
         packed = array.array("q", values)
 

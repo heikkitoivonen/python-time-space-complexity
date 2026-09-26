@@ -4,7 +4,7 @@ The `array` module provides one mutable sequence type, `array.array`, that store
 packed C values of a single type chosen by a type code. The buffer is contiguous and
 over-allocated the way a list's is, so indexing, appending and shifting cost what they cost on a
 list. What changes is storage: each item takes `itemsize` bytes instead of a pointer plus a
-separate Python object, and each read builds a new Python object from the stored value.
+separate Python object, and each read converts the stored value to a Python object.
 
 `n` is the items in the array, `k` is the items in the other operand - the initializer, the
 iterable or array being added, the slice, the bytes or string being converted - and `i` is an
@@ -30,10 +30,10 @@ already there.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `a[i]` | O(1) | O(1) | Builds a new Python object from the stored value |
-| `a[i] = x` | O(1) | O(1) | A value outside the type code's range raises `OverflowError` |
+| `a[i]` | O(1) | O(1) | Converts the stored value to a Python object |
+| `a[i] = x` | O(1) | O(1) | For an integer type code, a value outside its range raises `OverflowError` |
 | `a[start:stop:step]` | O(k) | O(k) | k = items in the slice; a new array, not a view |
-| Iterating an `array` | O(1) per item | O(1) | Each step builds one Python object |
+| Iterating an `array` | O(1) per item | O(1) | Each step converts one stored value to a Python object |
 | `x in a`, `array.index(x[, start[, stop]])` | O(n) | O(1) | Stops at the first match |
 | `array.count(x)` | O(n) | O(1) | Always compares every item |
 | `a == b`, `a < b` | O(n) | O(1) | `==` between arrays of different lengths is O(1) |
@@ -61,7 +61,7 @@ already there.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `array.tolist()` | O(n) | O(n) | One new Python object per item |
+| `array.tolist()` | O(n) | O(n) | One Python object per item |
 | `array.fromlist(list)` | O(k) | O(k) | Accepts only a list; a bad item leaves the array unchanged |
 | `array.tobytes()` | O(n) | O(n) | A copy of the buffer |
 | `array.frombytes(buffer)` | O(k) | O(k) | The length must be a multiple of `itemsize` |
