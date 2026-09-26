@@ -60,7 +60,7 @@ for the default `'settrace'` backend.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `Bdb.set_break(filename, lineno, temporary=False, cond=None, funcname=None)` | O(b + d·b) | O(1) | Returns an error string for a line that does not exist; during a stop, 3.12+ also runs `break_anywhere()` on every frame of the stack |
+| `Bdb.set_break(filename, lineno, temporary=False, cond=None, funcname=None)` | O(b + d·b) | O(1) | Returns an error string for a line that does not exist; during a stop, 3.12.9+ and 3.13.1+ also run `break_anywhere()` on every frame of the stack |
 | `Bdb.clear_break(filename, lineno)` | O(b + k²) | O(k) | Each deletion shifts the rest of that line's list |
 | `Bdb.clear_bpbynumber(arg)` | O(b + k) | O(1) | |
 | `Bdb.clear_all_file_breaks(filename)` | O(b·k²) | O(1) | At a line holding several breakpoints, every second one survives in `Breakpoint.bplist` |
@@ -398,7 +398,7 @@ assert logger.seen == [0, 25, 50, 75]
   function in its file did
 - **Python 3.13+**: `set_trace()` stops at once, on the next instruction, rather than on the next
   line
-- **Python 3.12+**: `set_break()` during a stop re-checks every frame on the stack
+- **Python 3.12.9+ and 3.13.1+**: `set_break()` during a stop re-checks every frame on the stack
 
 ## Related Modules
 

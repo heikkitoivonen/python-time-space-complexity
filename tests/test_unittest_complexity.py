@@ -128,8 +128,8 @@ Measurement scope:
 
 Claims execution cannot settle here, and why:
 
-* That `difflib` sets the upper bound on a failed sequence comparison and that
-  it is quadratic in the worst case. The bound belongs to `difflib`, which has
+* That `difflib` sets the upper bound on a failed sequence comparison, and
+  what that bound is. The bound belongs to `difflib`, which has
   its own page; a test here would pin this page's rows to another module's
   implementation, and the inputs that reach the worst case are a property of
   that algorithm rather than of `unittest`.

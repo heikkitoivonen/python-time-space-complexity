@@ -134,7 +134,7 @@ rendered in full before anything is shortened.
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | A failed `assertEqual` on two scalars, or any `assertIn`, `assertTrue` or comparison failure | O(R) | O(R) | R = characters in the operands' representations, computed whole and then shortened. A failure over a large container therefore renders that container |
-| A failed `assertListEqual`, `assertTupleEqual`, `assertSequenceEqual` or `assertDictEqual` | O(L) or worse | O(L) | Both operands are pretty-printed, then diffed line by line. `difflib` sets the upper bound, and it is quadratic in the worst case. No size threshold skips this |
+| A failed `assertListEqual`, `assertTupleEqual`, `assertSequenceEqual` or `assertDictEqual` | O(L) or worse | O(L) | Both operands are pretty-printed, then diffed line by line. `difflib` sets the upper bound (see [difflib](difflib.md)). No size threshold skips this |
 | A failed `assertMultiLineEqual` | O(L) or worse | O(L) | The same diff, but skipped in favour of a plain message once either string exceeds 65,536 characters. This is the only automatic diff guard |
 | A failed `assertSetEqual` | O(e + R) | O(e + R) | Renders every element of both differences. It is the one comparison that never truncates, so `maxDiff` does not bound its message |
 | A failed `assertCountEqual` | O(e) or O(e·D), plus O(R) | O(e + R) | The same counting or pairwise scan as the passing path, then one line per element whose counts differ, each carrying that element's representation |

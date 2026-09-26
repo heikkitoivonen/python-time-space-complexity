@@ -53,9 +53,10 @@ Measurement scope:
   remove `trace_dispatch`.
 * `set_break()` compares the new line with each of b lines already set, for
   b of 10 and 1,000, returns an error string for a line past the end, and
-  leaves the whole file in `linecache`. On 3.12+, with `enterframe` set, it
-  calls `break_anywhere()` once per frame, 90 more times at depth 100 than at
-  depth 10; before 3.12 it calls it for none.
+  leaves the whole file in `linecache`. On 3.12.9+ and 3.13.1+, with
+  `enterframe` set, it calls `break_anywhere()` once per frame, 90 more times
+  at depth 100 than at depth 10; on 3.10, 3.11, 3.12.0-3.12.8 and 3.13.0 it
+  calls it for none.
 * `clear_break()` over k breakpoints at one line removes them from lists of
   length k, k - 1, ... 1, for k of 5 and 50. `deleteMe()` calls `remove()`
   once and leaves `None` at its number. `clear_all_file_breaks()` leaves the
@@ -905,7 +906,7 @@ class TestStepping:
 
 class TestSetBreak:
     """`Bdb.set_break(...)` | O(b + d·b): the new line is compared with the
-    file's b lines, and during a stop (3.12+) every frame is checked."""
+    file's b lines, and during a stop (3.12.9+, 3.13.1+) every frame is checked."""
 
     @pytest.mark.parametrize("lines", [10, 1_000])
     def test_the_new_line_is_compared_with_each_existing_one(self, lines: int) -> None:
@@ -954,7 +955,7 @@ class TestSetBreak:
         shallow = nested(10, set_at)
         deep = nested(100, set_at)
 
-        if sys.version_info >= (3, 12):
+        if sys.version_info >= (3, 13, 1) or (3, 12, 9) <= sys.version_info < (3, 13):
             assert deep - shallow == 90
         else:
             assert shallow == deep == 0
