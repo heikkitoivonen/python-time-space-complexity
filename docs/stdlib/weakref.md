@@ -1,317 +1,455 @@
-# weakref Module
+# weakref Module Complexity
 
-The `weakref` module provides utilities for creating weak references to objects, allowing garbage collection when objects are no longer strongly referenced.
+The `weakref` module refers to an object without keeping it alive. A weak reference, a proxy,
+a weak container entry and a finalizer each cost O(1) to make. The rest of their cost is paid
+when the referent dies: once per weak reference to it.
+
+`w` is the weak references to one referent - plain references, proxies, callback references,
+and one per weak-container entry or finalizer that names it. `n` is the entries in a weak
+container, and `m` is the items in the other operand of an update, comparison or set operation.
+Container bounds are average case, and every bound treats hashing and `==` on referents, keys
+and elements as O(1);
+callbacks and finalizer functions cost whatever they do, on top of the bounds here.
 
 ## Complexity Reference
 
+### ref
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `ref(obj)` | O(1) | O(1) | Create weak reference |
-| `proxy(obj)` | O(1) | O(1) | Create proxy object |
-| `getweakrefcount(obj)` | O(1) | O(1) | Count weak refs |
-| `getweakrefs(obj)` | O(n) | O(n) | n = weak refs |
-| `WeakKeyDictionary` operations | O(1) avg | O(n) | n = entries; O(n) worst case due to hash collisions |
-| `WeakValueDictionary` operations | O(1) avg | O(n) | n = entries; O(n) worst case due to hash collisions |
+| `weakref.ref(obj, callback=None)` | O(1) | O(1) | Without a callback, returns the object's existing plain reference if it has one; with a callback, a new reference every call. `TypeError` for objects that do not support weak references, such as `int`, `str`, `tuple` and `list` instances |
+| Calling a reference, `r()` | O(1) | O(1) | The referent, or `None` once it has been freed |
+| `r.__callback__` | O(1) | O(1) | The callback, or `None` |
+| `hash(r)` | O(1) | O(1) | Hashes the referent on the first call and caches the result; `TypeError` if the referent died before the reference was ever hashed |
+| `r1 == r2` | O(1) | O(1) | Compares the referents while both are alive, and the references by identity once either is dead |
+| `weakref.ReferenceType` | O(1) | O(1) | The reference class; `weakref.ref` is the same object |
 
-## Common Operations
+### proxy
 
-### Creating Weak References
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `weakref.proxy(obj, callback=None)` | O(1) | O(1) | Shared without a callback, the same way `ref` is |
+| An operation through a proxy | O(1) plus the operation | O(1) plus the operation | Forwarded to the referent; `ReferenceError` once it has been freed |
+| `weakref.ProxyType`, `weakref.CallableProxyType`, `weakref.ProxyTypes` | O(1) | O(1) | The proxy types, for `isinstance`; a callable referent gets a `CallableProxyType` |
+
+### Counting and listing references
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `weakref.getweakrefcount(obj)` | O(w) | O(1) | Walks the referent's list of weak references to count them |
+| `weakref.getweakrefs(obj)` | O(w) | O(w) | A new list of every weak reference and proxy to `obj` |
+| The referent dying | O(w) | O(w) | Clears every weak reference to it, then calls each reference's callback once |
+
+### WeakMethod
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `weakref.WeakMethod(meth, callback=None)` | O(1) | O(1) | Weak references to the instance and the function, so it lives as long as both do |
+| Calling a `WeakMethod` | O(1) | O(1) | A new bound method each call, or `None` once the instance or function has been freed |
+
+### finalize
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `weakref.finalize(obj, func, /, *args, **kwargs)` | O(1) | O(1) | One registry entry, which holds `func`, `args` and `kwargs` strongly until it runs or is detached |
+| Calling a `finalize` | O(1) plus `func` | O(1) | Runs `func` the first time, whether called or triggered by `obj` dying, and returns `None` after that |
+| `finalize.detach()`, `finalize.peek()` | O(1) | O(1) | `(obj, func, args, kwargs)` while alive, else `None`; `detach()` also stops it running |
+| `finalize.alive` | O(1) | O(1) | `False` once it has run or been detached |
+| `finalize.atexit` | O(1) | O(1) | Writable; finalizers still alive at exit with it true run then, newest first |
+
+### WeakKeyDictionary
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `weakref.WeakKeyDictionary(dict=None)` | O(m) | O(m) | m = items in `dict` |
+| `d[key]`, `d.get(key, default=None)`, `key in d` | O(1) | O(1) | |
+| `d[key] = value`, `d.setdefault(key, default=None)` | O(1) | O(1) | A new entry adds a callback reference to its key, so a key in several of these dictionaries has one reference per dictionary |
+| `del d[key]`, `d.pop(key[, default])`, `d.popitem()` | O(1) | O(1) | |
+| `len(d)` | O(1) | O(1) | |
+| Iterating `d`, `d.keys()`, `d.values()`, `d.items()` | O(n) | O(n) on 3.14+, O(1) before | Python 3.14+ copies the underlying dictionary when iteration starts |
+| `d.keyrefs()` | O(n) | O(n) | A list of weak references to the keys |
+| `d.copy()`, `copy.copy(d)` | O(n) | O(n) | Keys and values are shared with `d` |
+| `copy.deepcopy(d)` | O(n) plus copying the values | O(n) plus the copies | Values are deep-copied, keys are not |
+| `d.update(other)`, `d \|= other` | O(m) | O(m) | |
+| `d \| other` | O(n + m) | O(n + m) | |
+| An entry's key dying | O(1) | O(1) | Its callback removes the entry |
+
+### WeakValueDictionary
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `weakref.WeakValueDictionary(other=(), /, **kw)` | O(m) | O(m) | m = items in `other` and `kw` |
+| `d[key]`, `d.get(key, default=None)`, `key in d` | O(1) | O(1) | |
+| `d[key] = value`, `d.setdefault(key, default=None)` | O(1) | O(1) | Each entry holds its own callback reference to its value |
+| `del d[key]`, `d.pop(key[, default])`, `d.popitem()` | O(1) | O(1) | |
+| `len(d)` | O(1) | O(1) | |
+| Iterating `d`, `d.keys()`, `d.values()`, `d.items()`, `d.itervaluerefs()` | O(n) | O(n) on 3.14+, O(1) before | Python 3.14+ copies the underlying dictionary when iteration starts |
+| `d.valuerefs()` | O(n) | O(n) | A list of weak references to the values |
+| `d.copy()`, `copy.copy(d)` | O(n) | O(n) | |
+| `copy.deepcopy(d)` | O(n) plus copying the keys | O(n) plus the copies | Keys are deep-copied, values are not |
+| `d.update(other)`, `d \|= other` | O(m) | O(m) | |
+| `d \| other` | O(n + m) | O(n + m) | |
+| An entry's value dying | O(1) | O(1) | Its callback removes the entry |
+
+### WeakSet
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `weakref.WeakSet(data=None)` | O(m) | O(m) | m = items in `data` |
+| `s.add(item)` | O(1) | O(1) | Each element holds its own callback reference |
+| `item in s`, `s.discard(item)`, `s.remove(item)`, `s.pop()` | O(1) | O(1) | |
+| `len(s)` | O(1) | O(1) | |
+| Iterating `s` | O(n) | O(n) on 3.14+, O(1) before | Python 3.14+ copies the underlying set when iteration starts |
+| `s.copy()` | O(n) | O(n) | |
+| `s.clear()` | O(n) | O(1) | |
+| `s.update(other)`, `s \|= other`, `s ^= other`, `s.symmetric_difference_update(other)` | O(m) | O(m) | |
+| `s -= other`, `s.difference_update(other)` | O(m) | O(1) | |
+| `s & other`, `s.intersection(other)`, `s.isdisjoint(other)` | O(m) | O(m) | Walks `other` and tests each item against `s`, so `s` may be as large as it likes |
+| `s &= other`, `s.intersection_update(other)` | O(n + m) | O(m) | Drops every element of `s` not in `other` |
+| `s \| other`, `s - other`, `s ^ other` and their named forms | O(n + m) | O(n + m) | A new `WeakSet` |
+| `s <= other`, `s < other`, `s >= other`, `s > other`, `s == other`, `s.issubset(other)`, `s.issuperset(other)` | O(n + m) | O(m) | |
+| An element dying | O(1) | O(1) | Its callback removes it |
+
+## Weak References
+
+### Shared and Per-Callback References
+
+A reference without a callback is shared: asking for another returns the one the object already
+has. Every callback reference is a new object, and every entry in a weak container adds one,
+since each carries the callback that removes it. Those are what `w` counts.
 
 ```python
 import weakref
 
-class MyClass:
+class Node:
     pass
 
-obj = MyClass()
+node = Node()
 
-# O(1) - create weak reference
-weak_ref = weakref.ref(obj)
+first = weakref.ref(node)   # O(1)
+second = weakref.ref(node)  # O(1) - the same object again
+assert first is second
+assert first() is node      # O(1)
 
-# O(1) - dereference (get original object)
-original = weak_ref()
-if original is not None:
-    print("Object still exists")
-else:
-    print("Object was garbage collected")
+def on_death(reference):
+    pass
 
-# When obj is deleted, weak_ref() returns None
-del obj
-print(weak_ref())  # None
-```
+with_callback = weakref.ref(node, on_death)  # O(1) - always a new reference
+assert with_callback is not first
+assert with_callback.__callback__ is on_death
 
-### Creating Proxies
+registry = weakref.WeakSet()
+registry.add(node)  # O(1) - one more callback reference to node
+assert weakref.getweakrefcount(node) == 3  # O(w)
+assert len(weakref.getweakrefs(node)) == 3  # O(w)
 
-```python
-import weakref
-
-class MyClass:
-    def method(self):
-        return "Hello"
-
-obj = MyClass()
-
-# O(1) - create proxy
-proxy = weakref.proxy(obj)
-
-# Use like the original object
-result = proxy.method()  # O(1) lookup + O(n) method execution
-
-# After deletion, proxy raises ReferenceError
-del obj
 try:
-    proxy.method()  # Raises ReferenceError
-except ReferenceError:
-    print("Object was garbage collected")
+    weakref.ref(42)
+except TypeError as error:
+    assert 'cannot create weak reference' in str(error)
+else:
+    raise AssertionError('an int accepted a weak reference')
 ```
 
-### Callbacks on Object Deletion
+### When the Referent Dies
+
+Dying costs O(w): every weak reference is cleared, and each one's callback runs once. When that
+happens depends on the object. CPython frees an object as soon as its last strong reference goes,
+unless it is part of a reference cycle, which waits for the cycle collector. The examples here
+call `gc.collect()` so that they hold either way.
 
 ```python
+import gc
 import weakref
 
 class Resource:
+    pass
+
+resource = Resource()
+seen = []
+
+reference = weakref.ref(resource, seen.append)  # O(1)
+
+del resource
+gc.collect()
+
+assert reference() is None  # O(1)
+assert seen == [reference]  # the callback ran once, with the dead reference
+```
+
+### Proxies
+
+A proxy stands in for the object itself: attribute access, calls and operators are forwarded,
+each at the cost of the operation behind it. Once the referent is gone, every use raises
+`ReferenceError`.
+
+```python
+import gc
+import weakref
+
+class Account:
+    def __init__(self):
+        self.balance = 10
+
+    def deposit(self, amount):
+        self.balance += amount
+        return self.balance
+
+account = Account()
+view = weakref.proxy(account)  # O(1)
+assert weakref.proxy(account) is view  # shared, like ref()
+assert isinstance(view, weakref.ProxyTypes)
+
+assert view.deposit(5) == 15  # O(1) plus the method
+
+del account
+gc.collect()
+
+try:
+    view.balance
+except ReferenceError as error:
+    assert 'no longer exists' in str(error)
+else:
+    raise AssertionError('a dead proxy was used')
+```
+
+## Weak Containers
+
+### A Cache That Does Not Keep Values Alive
+
+A `WeakValueDictionary` looks up like a dictionary, but an entry disappears when nothing else
+holds its value. The key is held strongly, the value weakly.
+
+```python
+import gc
+import weakref
+
+class Image:
     def __init__(self, name):
         self.name = name
 
-def cleanup_callback(weak_ref):
-    """Called when object is garbage collected - O(1)"""
-    print("Resource was cleaned up!")
+cache = weakref.WeakValueDictionary()
 
-resource = Resource("data.txt")
+logo = Image('logo.png')
+cache['logo'] = logo  # O(1)
+assert cache['logo'] is logo  # O(1)
+assert 'logo' in cache  # O(1)
+assert len(cache) == 1  # O(1)
 
-# O(1) - create reference with callback
-weak_ref = weakref.ref(resource, cleanup_callback)
+del logo
+gc.collect()
 
-# When resource is deleted, callback is invoked - O(1)
-del resource  # Prints: "Resource was cleaned up!"
+assert 'logo' not in cache
+assert cache.get('logo') is None
+assert len(cache) == 0
 ```
 
-## Common Use Cases
+### Attaching Data Without Keeping Objects Alive
 
-### Caching with Automatic Cleanup
+A `WeakKeyDictionary` is the reverse: it holds its values strongly and its keys weakly. A value
+that refers back to its own key therefore keeps that key alive for as long as the dictionary
+lives.
 
 ```python
+import gc
 import weakref
 
-class CachedResource:
-    """Cache that auto-cleans when objects are GC'd"""
-    
-    def __init__(self):
-        self._cache = weakref.WeakValueDictionary()
-    
-    def register(self, key, obj):
-        """O(1) - add to cache"""
-        self._cache[key] = obj
-    
-    def get(self, key):
-        """O(1) - retrieve from cache"""
-        return self._cache.get(key)
-    
-    def size(self):
-        """O(1) - active entries only"""
-        # Dead entries auto-removed during iteration
-        return len(self._cache)
+class Widget:
+    pass
 
-# Usage
-cache = CachedResource()
-class Data:
-    def __init__(self, value):
-        self.value = value
+sizes = weakref.WeakKeyDictionary()
 
-obj1 = Data("value")
-cache.register("key1", obj1)
+button = Widget()
+sizes[button] = (80, 20)  # O(1)
+assert sizes[button] == (80, 20)  # O(1)
 
-retrieved = cache.get("key1")  # O(1)
-print(retrieved)  # {"data": "value"}
+del button
+gc.collect()
+assert len(sizes) == 0  # the entry went with its key
 
-del obj1
-print(cache.size())  # obj1 auto-removed - O(1)
+pinned = Widget()
+sizes[pinned] = [pinned]  # the value refers to the key
+del pinned
+gc.collect()
+assert len(sizes) == 1  # so the key never dies
 ```
 
-### Observing Object Lifecycle
+### Iterating a Weak Container
+
+Iteration visits the live entries, and one whose object dies in the middle of it is skipped
+without an error. From Python 3.14, iterating any of the three containers first copies its
+underlying dictionary or set, which costs O(n) memory at the first item; in return, the container
+can be changed inside the loop, which walks the entries it started with. Before 3.14, iteration
+holds O(1) extra memory, and adding or removing an entry inside the loop raises `RuntimeError`.
 
 ```python
+import sys
 import weakref
 
-class LifecycleObserver:
-    """Track object creation and destruction"""
-    
-    def __init__(self):
-        self._objects = {}
-        self._count = 0
-    
-    def register(self, obj):
-        """O(1) - track object"""
-        obj_id = id(obj)
-        
-        def on_delete(ref):
-            del self._objects[obj_id]
-            self._count -= 1
-        
-        weak_ref = weakref.ref(obj, on_delete)
-        self._objects[obj_id] = weak_ref
-        self._count += 1
-        return self._count
-    
-    def alive_count(self):
-        """O(1) - count alive objects"""
-        return self._count
+class Item:
+    pass
 
-# Usage
-observer = LifecycleObserver()
+items = [Item() for _ in range(3)]
+live = weakref.WeakKeyDictionary((item, index) for index, item in enumerate(items))
 
-obj1 = [1, 2, 3]
-obj2 = [4, 5, 6]
+assert sorted(live.values()) == [0, 1, 2]  # O(n)
+assert len(live.keyrefs()) == 3  # O(n)
 
-observer.register(obj1)  # O(1)
-observer.register(obj2)  # O(1)
-print(observer.alive_count())  # 2
-
-del obj1
-print(observer.alive_count())  # 1
+try:
+    for item in live:  # O(n) memory at the first item on 3.14+
+        live.pop(items[2], None)
+except RuntimeError:
+    assert sys.version_info < (3, 14)
+else:
+    assert sys.version_info >= (3, 14)
+assert len(live) == 2
 ```
 
-### Circular Reference Prevention
+### Tracking a Group of Objects
+
+`WeakSet` keeps membership without ownership. `&` walks only its right-hand operand, testing
+each item against the set, so the set being large does not slow it down.
 
 ```python
+import gc
+import weakref
+
+class Connection:
+    pass
+
+open_connections = weakref.WeakSet()
+connections = [Connection() for _ in range(4)]
+for connection in connections:
+    open_connections.add(connection)  # O(1)
+
+assert connections[0] in open_connections  # O(1)
+assert len(open_connections) == 4  # O(1)
+
+recent = connections[2:]
+assert set(open_connections & recent) == set(recent)  # O(m), m = len(recent)
+
+del connections
+gc.collect()
+assert set(open_connections) == set(recent)  # O(n)
+```
+
+## Bound Methods
+
+A plain reference to a bound method dies with the bound method, which is a temporary object built
+on attribute access. `WeakMethod` holds the instance and the function
+instead, and builds a new bound method each time it is called.
+
+```python
+import gc
+import weakref
+
+class Button:
+    def click(self):
+        return 'clicked'
+
+button = Button()
+
+plain = weakref.ref(button.click)
+gc.collect()
+assert plain() is None  # the temporary bound method has gone
+
+method = weakref.WeakMethod(button.click)  # O(1)
+assert method()() == 'clicked'  # O(1) to rebuild the bound method
+
+del button
+gc.collect()
+assert method() is None
+```
+
+## Finalizers
+
+`finalize` runs a function once, when the object dies, when the finalizer is called, or at
+interpreter exit, whichever comes first. The function and its arguments are held strongly, so
+they must not refer to the object, or it can never die.
+
+```python
+import gc
+import weakref
+
+class TempFile:
+    pass
+
+removed = []
+temp = TempFile()
+
+finalizer = weakref.finalize(temp, removed.append, 'temp.dat')  # O(1)
+assert finalizer.alive  # O(1)
+assert finalizer.peek()[1:3] == (removed.append, ('temp.dat',))  # O(1)
+assert finalizer.atexit is True
+
+del temp
+gc.collect()
+assert removed == ['temp.dat']  # ran once, on the object's death
+assert not finalizer.alive
+assert finalizer() is None  # later calls do nothing
+
+early = weakref.finalize(TempFile, removed.append, 'unused')
+assert early.detach()[2] == ('unused',)  # O(1) - it will not run now
+assert not early.alive
+```
+
+## Common Patterns
+
+### Back-References Without a Cycle
+
+A child that holds its parent strongly makes a cycle, which only the cycle collector can free.
+A weak back-reference leaves no cycle, so the parent is freed as soon as the last outside
+reference to it goes.
+
+```python
+import gc
 import weakref
 
 class Parent:
-    def __init__(self, name):
-        self.name = name
+    def __init__(self):
         self.children = []
-    
-    def add_child(self, child):
+
+    def add(self, child):
         self.children.append(child)
-        child.parent = weakref.ref(self)  # O(1) - weak reference
+        child.parent = weakref.ref(self)  # O(1) - no strong reference back
 
 class Child:
-    def __init__(self, name):
-        self.name = name
-        self.parent = None  # Will be weakref
-    
-    def get_parent(self):
-        """O(1) - dereference weak ref"""
-        if self.parent is None:
-            return None
-        parent = self.parent()
-        if parent is None:
-            print("Parent was garbage collected")
-        return parent
+    parent = None
 
-# No circular reference!
-parent = Parent("Dad")
-child = Child("Son")
-parent.add_child(child)  # O(1)
-
-print(child.get_parent().name)  # O(1) dereference
+parent = Parent()
+child = Child()
+parent.add(child)
+assert child.parent() is parent  # O(1)
 
 del parent
-print(child.get_parent())  # None (parent deleted)
+gc.collect()
+assert child.parent() is None
 ```
 
-### Registry Pattern
+## Performance Best Practices
 
-```python
-import weakref
+✅ **Do**:
 
-class Registry:
-    """Register objects and query them later - O(1) add/remove"""
-    
-    def __init__(self):
-        self._registry = weakref.WeakSet()
-    
-    def register(self, obj):
-        """O(1) - add to registry"""
-        self._registry.add(obj)
-    
-    def count(self):
-        """O(n) - count active objects where n = registered"""
-        # Dead objects auto-removed
-        return len(self._registry)
-    
-    def iterate_active(self):
-        """O(n) - iterate only live objects"""
-        for obj in self._registry:
-            yield obj
+- Use `WeakValueDictionary` for a cache whose values should not outlive their other users; a hit is O(1)
+- Use `WeakKeyDictionary` to attach data to objects you do not own, with values that do not refer back to their keys
+- Use `WeakMethod` for a bound-method callback; a plain `ref` to a bound method dies with the temporary bound method
+- Prefer `finalize` to a callback you manage by hand; it runs once, and runs even if you keep no reference to it
+- On 3.14+, expect iterating a large weak container to copy it first
 
-# Usage
-registry = Registry()
+❌ **Avoid**:
 
-obj1 = Data(1)
-obj2 = Data(2)
-obj3 = Data(3)
+- Calling `getweakrefcount()` in a loop over a heavily referenced object - each call is O(w)
+- Values in a `WeakKeyDictionary` that refer to their key, or a finalizer function or arguments that refer to its object - that object never dies
+- Relying on an object dying the moment its name is deleted; one in a reference cycle waits for the collector
 
-registry.register(obj1)  # O(1)
-registry.register(obj2)  # O(1)
-registry.register(obj3)  # O(1)
+## Version Notes
 
-print(f"Registered: {registry.count()}")  # O(1) = 3
+- **Python 3.14+**: Iterating a `WeakKeyDictionary`, `WeakValueDictionary` or `WeakSet` copies the underlying container first, O(n) memory, and adding or removing an entry during iteration no longer raises `RuntimeError`
+- **All Python 3**: When a referent dies depends on the interpreter; CPython frees one outside a reference cycle at once, and one inside a cycle when the cycle collector runs
 
-del obj2
-print(f"Registered: {registry.count()}")  # O(1) = 2
+## Related Modules
 
-for obj in registry.iterate_active():  # O(n) = 2 iterations
-    print(obj)
-```
-
-## Performance Tips
-
-### Use WeakKeyDictionary for Object-Based Keys
-
-```python
-import weakref
-
-# Bad: Strong references keep objects alive
-strong_cache = {}
-
-# Good: Weak references allow GC
-weak_cache = weakref.WeakKeyDictionary()
-
-class Key:
-    pass
-
-key = Key()
-weak_cache[key] = "value"  # O(1)
-
-# Object can be GC'd even with key in dict
-del key
-print(len(weak_cache))  # 0 - auto-cleaned
-```
-
-### Cache Query Without Keeping References
-
-```python
-import weakref
-
-class TransientCache:
-    """Query cache without holding references"""
-    
-    def __init__(self):
-        self._cache = weakref.WeakValueDictionary()
-    
-    def query(self, key):
-        """O(1) - may return None if GC'd"""
-        return self._cache.get(key)
-    
-    def query_exists(self, key):
-        """O(1) - check existence without strong ref"""
-        return key in self._cache
-
-# Usage
-cache = TransientCache()
-obj = Data("value")
-cache._cache["key"] = obj  # O(1)
-
-# Query without keeping obj alive
-data = cache.query("key")  # O(1)
-# obj might be GC'd here
-
-exists = cache.query_exists("key")  # O(1) - won't prevent GC
-```
-
-## Related Documentation
-
-- [gc Module](gc.md) - Garbage collection control
-- [Collections Module](collections.md) - OrderedDict alternatives
+- **[gc](gc.md)** - The cycle collector that frees objects in reference cycles, and with them their weak references
+- **[functools](functools.md)** - `singledispatch` keeps its dispatch cache in a `WeakKeyDictionary`
+- **[atexit](atexit.md)** - The exit hooks `finalize` registers with
+- **[copy](copy.md)** - `copy.deepcopy()` of the weak dictionaries copies only the strongly held side
