@@ -1,725 +1,626 @@
-"""Tests to verify documented complexity of reprlib.
+"""Tests for docs/stdlib/reprlib.md.
 
-Truncation does not make a call constant in either column. A truncated call
-still returns a string whose length grows with the configured limit, so its
-space is O(k) at best, and how much of the input it reads depends on which
-container it was handed.
+The page separates what the limits bound from what is read. Sequences and
+strings are read only as far as the limit; dicts and sets are sorted in full;
+an int is converted in full; and any type `Repr` has no method for is rendered
+by its own `repr()` before it is trimmed. Most of that is settled by
+observation - a counting `__repr__`, a counting `__lt__`, an exact output -
+and the space bounds by traced peak allocation, which separates an input-sized
+copy from a limit-sized one by orders of magnitude.
 
-Two families, two bounds:
+Measurement scope:
 
-* `repr_list`, `repr_tuple`, `repr_deque`, `repr_array` and `repr_str` pull
-  only k items, via `islice` or a direct slice, so a fixed k costs
-  O(min(n, k)) - no more once n exceeds k. TestReprTruncation measures a list
-  staying flat as n grows.
-* `repr_dict`, `repr_set` and `repr_frozenset` call `sorted()` on the *whole*
-  input before truncating the rendered output, so they are O(n log n)
-  regardless of the limit, and the same test measures a dict that does not
-  stay flat. One table row cannot describe both families.
+* Sequences: a list, tuple and deque of 10,000 counting elements call
+  `__repr__` exactly `k` times. Traced peaks for a list, tuple, deque and
+  array of 1,000 and 100,000 ints differ by under 3x, and one timing test
+  has a list of 200,000 cost under 10x a list of 200 at `maxlist=3`. A
+  string's peak at 1,000 and 1,000,000 characters differs by under 3x.
+* Dicts and sets: 1,000 keys with `maxdict=4` take at least 999
+  comparisons. Traced peaks for a dict, a set and a set of unorderable
+  elements grow more than 20x from 1,000 to 100,000 elements. Ascending
+  input takes exactly n-1 comparisons at 1,000 and 10,000; 10,000 shuffled
+  elements take more than 5x that and fewer than n log2 n. A comparison that
+  fails on its last call has paid every comparison of the full sort, and
+  the output is then in iteration order. A set at the depth where
+  `maxlevel` shows `{...}` is compared at least n-1 times; a dict there
+  is compared zero times.
+* `maxlevel`: counting elements nested below the depth limit are never
+  rendered, and the output is the documented `[...]` form.
+* Ints: at a fixed `maxlong`, 4,000 digits take more than 20x the time of
+  500 (linear predicts 8x, quadratic 64x), and the traced peak grows more
+  than 4x. The placeholder beyond `sys.get_int_max_str_digits()` is
+  asserted on 3.13.6+ and the `ValueError` before it, each guarded on
+  `sys.version_info`.
+* `repr_instance`: `bytes` and a `list` subclass have traced peaks that
+  grow more than 20x from 1,000 to 100,000 elements although the output
+  stays at `maxother` characters; a `__repr__` that raises gives
+  `<Type instance at 0x...>`.
+* Dispatch: a `list` subclass reaches `repr_instance`, a `Repr` subclass's
+  `repr_bytes` is found by name, and `repr1(x, 0)` shows only `fillvalue`.
+  `reprlib.repr` is bound to `reprlib.aRepr`, and changing `aRepr` changes
+  it.
+* `recursive_repr`: a cycle short-circuits to `fillvalue`, the in-progress
+  set holds one entry during a call and none after it, and a 50-node
+  acyclic chain renders all 50 nodes.
+* `Repr()` defaults are asserted; keyword construction and `indent` are
+  guarded on 3.12, `fillvalue` on 3.11.
+* Every fenced Python block runs in its own subprocess, and a mutated
+  assertion in one of them is asserted to fail.
 
-That `sorted()` materializes an n-element list before any truncation happens,
-as does the `list(x)` fallback it drops to when the elements are not
-orderable. Peak space is therefore O(n + k) and no output limit reduces it.
-Elapsed time cannot settle this - an implementation that sorted without
-allocating would time the same - so TestSortedContainersHoldTheWholeInput
-measures the allocation instead.
+Not settled here:
 
-The `list(x)` fallback is the one path with no ordering at all. It renders in
-iteration order, which for a set of hash-randomized elements differs between
-processes, so nothing about the sorted families may be called deterministic.
-See TestTheSortFallbackIsNotOrdered.
-
-`_possibly_sorted()` catches a comparison failure whenever it arrives, so a
-comparator that raises late has already paid for the whole sort, discards the
-ordering, and builds `list(x)` on top. O(n log n) is the bound; O(n) is the
-immediate-failure case, and both ends are tested.
-
-Timsort's adaptivity is the row's best case rather than a measurement
-artefact: an already-ascending input costs n-1 comparisons however late a
-comparison fails, so the row reads O(n) best and O(n log n) worst. Measuring
-the worst case needs shuffled elements - drawn from `range(n)` they enter a
-set in ascending order, where the sort looks linear. The page's own "Default
-Shorthand" example is built from `range(1000)` and is the O(n) shape;
-test_the_documented_dict_example_takes_the_linear_path pins the property that
-makes it so.
-
-The displayed outputs the examples claim: `maxstring` truncates *inside* the
-quotes, giving `'xxxxxxx...xxxxxxxx'`, and the default `maxdict` is 4, so the
-shorthand prints `{0: 0, 1: 1, 2: 4, 3: 9, ...}`.
-
-`recursive_repr()` was previously tested indirectly under
-tests/test_functools_complexity.py, because `functools.recursive_repr`
-happens to work too -- `functools.py` imports the name from `reprlib` for
-its own internal use (`partial.__repr__`). That import is not part of the
-documented functools API, so the test now uses the import the documentation
-actually recommends: `from reprlib import recursive_repr`.
+* The O(n log n) worst case for dicts and sets is Timsort's bound. The tests
+  bound one shuffled input under n log2 n comparisons; they do not search for
+  a worst input.
+* The quadratic int conversion is measured only within the default digit
+  limit of 4,300; above it, with the limit raised, CPython 3.12+ switches to
+  a subquadratic algorithm, which O(d²) still bounds.
+* Element hashing and comparison costs, and the cost of a user `__repr__`
+  beyond the characters it returns, are outside the bounds by definition.
+* `reprlib.aRepr.<attribute>` names reported by the API audit are the same
+  attributes as `Repr.<attribute>`, documented once.
 """
 
+from __future__ import annotations
+
+import collections
 import gc
-import io
 import math
-import os
+import pathlib
 import random
+import re
 import reprlib
 import subprocess
 import sys
 import textwrap
 import time
 import tracemalloc
+from array import array
 from collections.abc import Callable
-from pathlib import Path
-from reprlib import recursive_repr
 from typing import Any
 
 import pytest
 
-PROJECT_ROOT = Path(__file__).parent.parent
-REPRLIB_PAGE = PROJECT_ROOT / "docs" / "stdlib" / "reprlib.md"
+PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "reprlib.md"
+EXPECTED_BLOCKS = 8
 
 
-def best_time(func: Callable[[], Any], repeats: int = 5) -> float:
-    """Return the fastest of several runs, the least noisy estimate."""
-    times: list[float] = []
+def best_ns(func: Callable[[], Any], repeats: int = 7) -> float:
+    """Fastest of `repeats` runs, in nanoseconds."""
+    best: float | None = None
     for _ in range(repeats):
-        start = time.perf_counter()
+        start = time.perf_counter_ns()
         func()
-        times.append(time.perf_counter() - start)
-    return min(times)
+        elapsed = time.perf_counter_ns() - start
+        best = elapsed if best is None else min(best, elapsed)
+    assert best is not None
+    return best
+
+
+def peak_bytes(func: Callable[[], Any]) -> int:
+    """Peak traced allocation while func runs, above what was live before."""
+    gc.collect()
+    tracemalloc.start()
+    try:
+        base = tracemalloc.get_traced_memory()[0]
+        func()
+        return tracemalloc.get_traced_memory()[1] - base
+    finally:
+        tracemalloc.stop()
+
+
+class CountingRepr:
+    """An element that counts how often it is rendered."""
+
+    calls = 0
+
+    def __repr__(self) -> str:
+        CountingRepr.calls += 1
+        return "c"
+
+
+def counting_comparables(
+    size: int, *, ordered: bool, fail_after: float = math.inf
+) -> tuple[list[Any], dict[str, int]]:
+    """Hashable elements that count `__lt__` calls and raise past a threshold.
+
+    Each hashes to its value, so a set of them iterates in ascending order
+    whichever way they were drawn; a dict keeps the drawn order, which is
+    one ascending run when `ordered` and shuffled otherwise.
+    """
+    comparisons = {"n": 0}
+
+    class Counted:
+        def __init__(self, value: int) -> None:
+            self.value = value
+
+        def __hash__(self) -> int:
+            return hash(self.value)
+
+        def __repr__(self) -> str:
+            return f"c{self.value}"
+
+        def __lt__(self, other: Counted) -> bool:
+            comparisons["n"] += 1
+            if comparisons["n"] > fail_after:
+                raise TypeError("not orderable")
+            return self.value < other.value
+
+    values = list(range(size)) if ordered else random.Random(12345).sample(range(size), size)
+    return [Counted(value) for value in values], comparisons
+
+
+class TestModuleFunctions:
+    """`reprlib.repr(obj)` is the bound `repr` of `reprlib.aRepr`, so
+    changing `aRepr` changes it for every caller."""
+
+    def test_repr_is_bound_to_the_shared_instance(self) -> None:
+        assert reprlib.repr.__self__ is reprlib.aRepr  # type: ignore[attr-defined]
+
+    def test_changing_arepr_changes_reprlib_repr(self) -> None:
+        previous = reprlib.aRepr.maxlist
+        try:
+            reprlib.aRepr.maxlist = 2
+            assert reprlib.repr(list(range(10))) == "[0, 1, ...]"
+        finally:
+            reprlib.aRepr.maxlist = previous
+        assert reprlib.repr(list(range(10))) == "[0, 1, 2, 3, 4, 5, ...]"
 
 
 class TestRecursiveRepr:
-    """docs/stdlib/reprlib.md: `recursive_repr()` -- O(1), "short-circuits a
-    __repr__ call already in progress"."""
+    """`recursive_repr(fillvalue)` | O(1) per call plus the wrapped call, one
+    entry per call in progress; it bounds cycles, not depth."""
 
-    def test_short_circuits_a_reentrant_repr_call(self) -> None:
+    @staticmethod
+    def _node_class(*fill: str) -> type:
         class Node:
             def __init__(self) -> None:
-                self.child: Node | None = None
+                self.child: Any = None
 
-            @recursive_repr("<...>")
+            @reprlib.recursive_repr(*fill)
             def __repr__(self) -> str:
                 return f"Node({self.child!r})"
 
-        node = Node()
-        node.child = node  # a cycle: without protection this recurses forever
+        return Node
+
+    def test_a_cycle_returns_the_fillvalue(self) -> None:
+        node = self._node_class("<...>")()
+        node.child = node
 
         assert repr(node) == "Node(<...>)"
 
-    def test_a_non_reentrant_call_is_unaffected(self) -> None:
-        class Leaf:
-            @recursive_repr()
-            def __repr__(self) -> str:
-                return "Leaf()"
-
-        assert repr(Leaf()) == "Leaf()"
-
-    def test_the_fillvalue_defaults_to_ellipsis_style(self) -> None:
-        class Node:
-            def __init__(self) -> None:
-                self.child: Node | None = None
-
-            @recursive_repr()
-            def __repr__(self) -> str:
-                return f"Node({self.child!r})"
-
-        node = Node()
+    def test_the_fillvalue_defaults_to_an_ellipsis(self) -> None:
+        node = self._node_class()()
         node.child = node
 
         assert repr(node) == "Node(...)"
 
+    def test_one_entry_is_held_per_call_in_progress(self) -> None:
+        seen: list[int] = []
 
-class TestReprTruncation:
-    """The Truncation row, split by container family.
+        class Probe:
+            @reprlib.recursive_repr()
+            def __repr__(self) -> str:
+                seen.append(len(running))
+                return "Probe()"
 
-    The returned string's length tracks the limit rather than a constant, so
-    the output alone is O(k) on every path. Everything else diverges by
-    container type: only list/tuple/deque/array/str stop *reading* their
-    input at k. dict/set/frozenset sort the whole input first, so their time
-    tracks n regardless of the limit -- and so does their space, which
-    TestSortedContainersHoldTheWholeInput covers.
+        cells = Probe.__repr__.__closure__ or ()
+        running = next(cell.cell_contents for cell in cells if isinstance(cell.cell_contents, set))
+
+        assert repr(Probe()) == "Probe()"
+        assert seen == [1]
+        assert running == set()
+
+    def test_an_acyclic_chain_still_renders_to_the_end(self) -> None:
+        node_class = self._node_class()
+        head = node = node_class()
+        for _ in range(49):
+            node.child = node_class()
+            node = node.child
+
+        assert repr(head).count("Node(") == 50
+
+
+class TestRepr:
+    """The `Repr` rows: construction stores the limits, and `repr1()`
+    dispatches on the type's name."""
+
+    def test_defaults(self) -> None:
+        printer = reprlib.Repr()
+
+        assert (
+            printer.maxlevel,
+            printer.maxtuple,
+            printer.maxlist,
+            printer.maxarray,
+            printer.maxdict,
+            printer.maxset,
+            printer.maxfrozenset,
+            printer.maxdeque,
+            printer.maxstring,
+            printer.maxlong,
+            printer.maxother,
+        ) == (6, 6, 6, 5, 4, 6, 6, 6, 30, 40, 30)
+
+    @pytest.mark.skipif(sys.version_info < (3, 11), reason="fillvalue is 3.11+")
+    def test_fillvalue(self) -> None:
+        printer = reprlib.Repr()
+        assert printer.fillvalue == "..."  # type: ignore[attr-defined]
+        printer.fillvalue = "~"  # type: ignore[attr-defined]
+        printer.maxlist = 2
+        assert printer.repr([1, 2, 3]) == "[1, 2, ~]"
+
+    @pytest.mark.skipif(sys.version_info < (3, 12), reason="keyword limits are 3.12+")
+    def test_limits_are_keyword_arguments(self) -> None:
+        printer = reprlib.Repr(maxlist=2, maxstring=10)  # type: ignore[call-arg]
+
+        assert (printer.maxlist, printer.maxstring) == (2, 10)
+
+    @pytest.mark.skipif(sys.version_info >= (3, 12), reason="keyword limits are 3.12+")
+    def test_limits_are_not_keyword_arguments_before_312(self) -> None:
+        with pytest.raises(TypeError):
+            reprlib.Repr(maxlist=2)  # type: ignore[call-arg]
+
+    @pytest.mark.skipif(sys.version_info < (3, 12), reason="indent is 3.12+")
+    def test_indent_puts_each_element_on_its_own_line(self) -> None:
+        printer = reprlib.Repr()
+        assert printer.indent is None  # type: ignore[attr-defined]
+        printer.indent = 2  # type: ignore[attr-defined]
+
+        assert printer.repr([1, [2]]) == "[\n  1,\n  [\n    2,\n  ],\n]"
+
+    def test_repr_is_repr1_at_maxlevel(self) -> None:
+        printer = reprlib.Repr()
+        value = [[1, 2], "x" * 100]
+
+        assert printer.repr(value) == printer.repr1(value, printer.maxlevel)
+
+    def test_repr1_at_level_zero_shows_only_the_fillvalue(self) -> None:
+        assert reprlib.Repr().repr1(list(range(100)), 0) == "[...]"
+
+    def test_a_builtin_subclass_falls_back_to_repr_instance(self) -> None:
+        class Rows(list):
+            pass
+
+        reached: list[str] = []
+
+        class Recording(reprlib.Repr):
+            def repr_instance(self, x: Any, level: int) -> str:
+                reached.append(type(x).__name__)
+                return super().repr_instance(x, level)
+
+        Recording().repr(Rows([1, 2]))
+        assert reached == ["Rows"]
+
+        reached.clear()
+        Recording().repr([1.5])
+        assert reached == ["float"], "a plain list dispatches to repr_list"
+
+    def test_a_subclass_method_is_found_by_type_name(self) -> None:
+        class ShortBytes(reprlib.Repr):
+            def repr_bytes(self, obj: bytes, level: int) -> str:
+                return "bytes!"
+
+        assert ShortBytes().repr([b"abc"]) == "[bytes!]"
+
+
+class TestSequencesStopAtTheLimit:
+    """`repr_tuple`, `repr_list`, `repr_deque`, `repr_array` | O(min(n, k)).
+
+    Counting elements show exactly k are rendered; traced peaks show nothing
+    input-sized is copied, which is the half a counter cannot see.
     """
 
-    def test_maxlist_truncates_and_marks_it(self) -> None:
+    @pytest.mark.parametrize("build", [list, tuple, collections.deque])
+    def test_only_k_elements_are_rendered(self, build: Callable[[Any], Any]) -> None:
         printer = reprlib.Repr()
-        printer.maxlist = 3
+        printer.maxlist = printer.maxtuple = printer.maxdeque = 4
+        source = build(CountingRepr() for _ in range(10_000))
 
-        result = printer.repr(list(range(100)))
+        CountingRepr.calls = 0
+        printer.repr(source)
 
-        assert result == "[0, 1, 2, ...]"
+        assert CountingRepr.calls == 4
 
-    def test_maxstring_truncates_inside_the_quotes(self) -> None:
-        """The exact documented output -- the ellipsis lands inside the
-        quotes, not after the closing one."""
+    @pytest.mark.parametrize(
+        "build",
+        [list, tuple, collections.deque, lambda values: array("i", values)],
+        ids=["list", "tuple", "deque", "array"],
+    )
+    def test_peak_does_not_grow_with_n(self, build: Callable[[Any], Any]) -> None:
         printer = reprlib.Repr()
-        printer.maxstring = 20
+        small = build(range(1_000))
+        large = build(range(100_000))
 
-        result = printer.repr("x" * 1000)
+        small_peak = peak_bytes(lambda: printer.repr(small))
+        large_peak = peak_bytes(lambda: printer.repr(large))
 
-        assert result == "'xxxxxxx...xxxxxxxx'"
-
-    def test_a_short_value_is_not_truncated(self) -> None:
-        printer = reprlib.Repr()
-        printer.maxlist = 3
-
-        assert printer.repr([1, 2]) == "[1, 2]"
-
-    def test_the_output_length_tracks_the_limit(self) -> None:
-        """O(k) space: a larger limit produces a longer returned string,
-        not a fixed-size one."""
-        narrow, wide = reprlib.Repr(), reprlib.Repr()
-        narrow.maxstring = 20
-        wide.maxstring = 200
-        source = "x" * 10_000
-
-        assert len(wide.repr(source)) > len(narrow.repr(source)) * 5
+        assert large_peak < small_peak * 3, (
+            f"100x the input should hold nothing more: {small_peak:,}B vs {large_peak:,}B"
+        )
 
     @pytest.mark.timing
-    def test_list_time_does_not_grow_with_source_size_past_a_fixed_limit(self) -> None:
-        """O(min(n, k)): islice stops at maxlist regardless of n."""
+    def test_list_time_does_not_grow_with_n(self) -> None:
         printer = reprlib.Repr()
         printer.maxlist = 3
-
         small = list(range(200))
         large = list(range(200_000))
 
-        small_time = best_time(lambda: printer.repr(small))
-        large_time = best_time(lambda: printer.repr(large))
+        small_time = best_ns(lambda: printer.repr(small))
+        large_time = best_ns(lambda: printer.repr(large))
 
         assert large_time < small_time * 10, (
-            f"1,000x the source size should not cost noticeably more once a "
-            f"fixed maxlist bounds what is read: n=200 {small_time:.2e}s vs "
-            f"n=200,000 {large_time:.2e}s"
+            f"1,000x the list should cost about the same at a fixed maxlist: "
+            f"n=200 {small_time:,.0f}ns vs n=200,000 {large_time:,.0f}ns"
         )
 
-    @pytest.mark.timing
-    def test_string_time_does_not_grow_with_source_size_past_a_fixed_limit(self) -> None:
-        """O(min(n, k)): repr_str slices to maxstring before doing anything else."""
+
+class TestStringsSliceFirst:
+    """`repr_str` | O(min(n, k)): sliced to `maxstring` before quoting."""
+
+    def test_output(self) -> None:
         printer = reprlib.Repr()
         printer.maxstring = 20
 
-        small = "x" * 200
-        large = "x" * 2_000_000
+        assert printer.repr("x" * 1000) == "'xxxxxxx...xxxxxxxx'"
+        assert printer.repr("abc") == "'abc'"
 
-        small_time = best_time(lambda: printer.repr(small))
-        large_time = best_time(lambda: printer.repr(large))
-
-        assert large_time < small_time * 10, (
-            f"10,000x the source size should not cost noticeably more once "
-            f"a fixed maxstring bounds what is read: n=200 {small_time:.2e}s "
-            f"vs n=2,000,000 {large_time:.2e}s"
-        )
-
-    @pytest.mark.timing
-    def test_dict_time_grows_with_source_size_despite_the_same_fixed_limit(self) -> None:
-        """The contrasting O(n log n): sorted() sees the whole input first."""
+    def test_peak_does_not_grow_with_n(self) -> None:
         printer = reprlib.Repr()
-        printer.maxdict = 4
+        small = "x" * 1_000
+        large = "x" * 1_000_000
 
-        small = {i: i for i in range(200)}
-        large = {i: i for i in range(200_000)}
+        small_peak = peak_bytes(lambda: printer.repr(small))
+        large_peak = peak_bytes(lambda: printer.repr(large))
 
-        small_time = best_time(lambda: printer.repr(small))
-        large_time = best_time(lambda: printer.repr(large))
-
-        assert large_time > small_time * 20, (
-            f"1,000x the source size should cost far more even though "
-            f"maxdict is unchanged, because the whole dict is sorted before "
-            f"truncating the output: n=200 {small_time:.2e}s vs "
-            f"n=200,000 {large_time:.2e}s"
-        )
-
-    def test_default_repr_shorthand_matches_the_documented_output(self) -> None:
-        large_dict = {i: i**2 for i in range(1000)}
-
-        assert reprlib.repr(large_dict) == "{0: 0, 1: 1, 2: 4, 3: 9, ...}"
+        assert large_peak < small_peak * 3, f"{small_peak:,}B vs {large_peak:,}B"
 
 
-class TestSortedContainersHoldTheWholeInput:
-    """The dict/set/frozenset space bound: O(n + k), not O(k).
-
-    `_possibly_sorted()` calls `sorted(x)`, which materializes an n-element
-    list before anything is truncated -- and its
-    `except Exception: return list(x)` fallback, taken when the elements are
-    not orderable, materializes n as well. No output limit reduces it.
-
-    The elapsed-time tests above cannot catch this: a hypothetical
-    implementation that sorted lazily would be just as slow and hold
-    nothing. These measure the allocation itself.
-    """
+class TestDictsAndSetsSortEverything:
+    """`repr_dict`, `repr_set`, `repr_frozenset` | O(n log n), O(n) when
+    already ascending | O(n): every element is sorted before k are shown."""
 
     SMALL = 1_000
     LARGE = 100_000
 
-    @staticmethod
-    def _peak_bytes(func: Callable[[], Any]) -> int:
-        """Peak allocation *during* the call.
-
-        The sorted copy is released when repr() returns, so sampling after
-        the fact reports nothing -- the reading has to be the peak, not the
-        residue.
-        """
-        gc.collect()
-        tracemalloc.start()
-        try:
-            tracemalloc.reset_peak()
-            base = tracemalloc.get_traced_memory()[0]
-            func()
-            return tracemalloc.get_traced_memory()[1] - base
-        finally:
-            tracemalloc.stop()
-
-    def test_every_element_is_compared_not_just_the_limit(self) -> None:
-        """Exact, no tolerance: sorting n keys needs at least n-1 comparisons,
-        where touching only the k rendered ones would need a handful."""
-        comparisons = {"n": 0}
-
-        class Counted:
-            def __init__(self, value: int) -> None:
-                self.value = value
-
-            def __hash__(self) -> int:
-                return hash(self.value)
-
-            def __eq__(self, other: object) -> bool:
-                return isinstance(other, Counted) and self.value == other.value
-
-            def __lt__(self, other: "Counted") -> bool:
-                comparisons["n"] += 1
-                return self.value < other.value
-
-        printer = reprlib.Repr()
-        printer.maxdict = 4
-        source = {Counted(value): value for value in range(self.SMALL)}
-
-        printer.repr(source)
-
-        assert comparisons["n"] >= self.SMALL - 1, (
-            f"every key must reach the sort, not just the {printer.maxdict} "
-            f"rendered ones: {comparisons['n']} comparisons for n={self.SMALL}"
-        )
-
-    def test_peak_space_holds_the_whole_sorted_copy(self) -> None:
+    def test_every_key_is_compared(self) -> None:
+        elements, comparisons = counting_comparables(self.SMALL, ordered=False)
         printer = reprlib.Repr()
         printer.maxdict = 4
 
-        small = {value: value for value in range(self.SMALL)}
-        large = {value: value for value in range(self.LARGE)}
+        printer.repr(dict.fromkeys(elements, 0))
 
-        small_peak = self._peak_bytes(lambda: printer.repr(small))
-        large_peak = self._peak_bytes(lambda: printer.repr(large))
+        assert comparisons["n"] >= self.SMALL - 1
 
-        assert large_peak > small_peak * 20, (
-            f"a fixed maxdict of {printer.maxdict} bounds the returned "
-            f"string, not the sorted copy, so 100x the input should hold "
-            f"about 100x more: n={self.SMALL:,} {small_peak:,}B vs "
-            f"n={self.LARGE:,} {large_peak:,}B"
-        )
-
-    def test_a_set_pays_the_same_way(self) -> None:
+    @pytest.mark.parametrize(
+        "build",
+        [
+            lambda n: dict.fromkeys(range(n), 0),
+            lambda n: set(range(n)),
+            lambda n: frozenset(range(n)),
+        ],
+        ids=["dict", "set", "frozenset"],
+    )
+    def test_peak_grows_with_n(self, build: Callable[[int], Any]) -> None:
         printer = reprlib.Repr()
-        printer.maxset = 4
+        small = build(self.SMALL)
+        large = build(self.LARGE)
 
-        # Built outside the measured call: constructing the source scales
-        # with n by itself, and would carry this assertion even if repr()
-        # allocated nothing at all.
-        small = set(range(self.SMALL))
-        large = set(range(self.LARGE))
+        small_peak = peak_bytes(lambda: printer.repr(small))
+        large_peak = peak_bytes(lambda: printer.repr(large))
 
-        small_peak = self._peak_bytes(lambda: printer.repr(small))
-        large_peak = self._peak_bytes(lambda: printer.repr(large))
+        assert large_peak > small_peak * 20, f"{small_peak:,}B vs {large_peak:,}B"
 
-        assert large_peak > small_peak * 20, (
-            f"repr_set sorts through the same helper: n={self.SMALL:,} "
-            f"{small_peak:,}B vs n={self.LARGE:,} {large_peak:,}B"
-        )
-
-    def test_the_unsortable_fallback_materializes_everything_too(self) -> None:
-        """`except Exception: return list(x)` is not a cheaper path -- it
-        builds the same n-element list, just without ordering it."""
-
-        class Unsortable:
-            """Hashable but not orderable, so sorted() raises."""
-
+    def test_unorderable_elements_hold_everything_too(self) -> None:
+        class Unorderable:
             def __init__(self, value: int) -> None:
                 self.value = value
 
             def __hash__(self) -> int:
                 return hash(self.value)
 
-            def __repr__(self) -> str:
-                return f"U{self.value}"
-
         printer = reprlib.Repr()
-        printer.maxset = 3
+        small = {Unorderable(value) for value in range(self.SMALL)}
+        large = {Unorderable(value) for value in range(self.LARGE)}
 
-        small = {Unsortable(value) for value in range(self.SMALL)}
-        large = {Unsortable(value) for value in range(self.LARGE)}
+        small_peak = peak_bytes(lambda: printer.repr(small))
+        large_peak = peak_bytes(lambda: printer.repr(large))
 
-        with pytest.raises(TypeError):
-            # Unorderable by construction, which pyright is right about --
-            # that is the branch this test depends on reprlib taking.
-            sorted(small)  # type: ignore[reportArgumentType]
+        assert large_peak > small_peak * 20, f"{small_peak:,}B vs {large_peak:,}B"
 
-        assert printer.repr(small).endswith(", ...}"), "still renders, unsorted"
-
-        small_peak = self._peak_bytes(lambda: printer.repr(small))
-        large_peak = self._peak_bytes(lambda: printer.repr(large))
-
-        assert large_peak > small_peak * 20, (
-            f"the fallback holds n elements as well: n={self.SMALL:,} "
-            f"{small_peak:,}B vs n={self.LARGE:,} {large_peak:,}B"
-        )
-
-    def test_a_sequence_holds_nothing_extra(self) -> None:
-        """The contrast that makes the split rows worth having: islice never
-        builds a copy, so a list's peak does not move with n at all.
-
-        Both lists are built outside the measured call, for the same reason
-        the sorted cases are -- an earlier draft built them inside it and
-        failed here, having measured 4MB of `list(range(100_000))` rather
-        than anything repr() did.
-        """
-        printer = reprlib.Repr()
-        printer.maxlist = 4
-
-        small = list(range(self.SMALL))
-        large = list(range(self.LARGE))
-
-        small_peak = self._peak_bytes(lambda: printer.repr(small))
-        large_peak = self._peak_bytes(lambda: printer.repr(large))
-
-        assert large_peak < small_peak * 3, (
-            f"a list is read k items deep and copied not at all: "
-            f"n={self.SMALL:,} {small_peak:,}B vs n={self.LARGE:,} "
-            f"{large_peak:,}B"
-        )
-
-
-class TestTheSortFallbackIsNotOrdered:
-    """The dict/set/frozenset row: what a failed comparison leaves behind.
-
-    These attempt to sort, and a failed comparison leaves iteration order,
-    which for a set of hash-randomized elements varies from one process to
-    the next. Nothing here may be described as deterministic.
-
-    Two independent parameters decide the cost, and the tests below cross
-    them rather than sampling one point:
-
-    * The input's existing order decides between O(n) and O(n log n). Timsort
-      is adaptive, so an already-ascending input takes exactly n-1
-      comparisons however late a comparison fails.
-    * The failure position decides how much of that is paid before the
-      fallback discards it. `_possibly_sorted()` catches the exception
-      whenever it arrives, so a comparator raising on comparison one costs 1
-      while one raising late has already paid for the whole sort.
-
-    Measuring either on a single input shape gives an answer true only of
-    that shape.
-    """
-
-    class Unorderable:
-        """Hashable via a string, so hash randomization reaches it, with no
-        ordering at all."""
-
-        def __init__(self, name: str) -> None:
-            self.name = name
-
-        def __hash__(self) -> int:
-            return hash(self.name)
-
-        def __repr__(self) -> str:
-            return self.name
-
-    @staticmethod
-    def _counting_set(
-        size: int, raise_after: float, *, ordered: bool = False
-    ) -> tuple[set, dict[str, int]]:
-        """A set whose elements count comparisons and raise past a threshold.
-
-        `ordered` picks which end of the adaptive sort is being measured, and
-        it is the difference between the two documented bounds rather than a
-        detail: drawn from `range(size)` the values land in the set already
-        ascending, Timsort spots the single run and finishes in n-1
-        comparisons. A "the sort did super-linear work" assertion left on
-        that input silently measures the best case, which is how the first
-        draft of this test mismeasured the sort as linear.
-        """
-        comparisons = {"n": 0}
-
-        class Counted:
-            def __init__(self, value: int) -> None:
-                self.value = value
-
-            def __hash__(self) -> int:
-                return hash(self.value)
-
-            def __repr__(self) -> str:
-                return f"c{self.value}"
-
-            def __lt__(self, other: "Counted") -> bool:
-                comparisons["n"] += 1
-                if comparisons["n"] > raise_after:
-                    raise TypeError("not orderable")
-                return self.value < other.value
-
-        values = (
-            list(range(size)) if ordered else random.Random(12345).sample(range(10 * size), size)
-        )
-        return {Counted(value) for value in values}, comparisons
-
-    def test_an_already_ordered_input_sorts_in_linear_comparisons(self) -> None:
-        """The O(n) best case. Timsort is adaptive: it finds one run and
-        confirms it, which is exactly n-1 comparisons, at any n."""
-        printer = reprlib.Repr()
-        printer.maxset = 4
-
+    def test_ascending_input_takes_n_minus_one_comparisons(self) -> None:
         counts = []
         for size in (1_000, 10_000):
-            source, comparisons = self._counting_set(size, math.inf, ordered=True)
-            printer.repr(source)
+            elements, comparisons = counting_comparables(size, ordered=True)
+            reprlib.repr(set(elements))
             counts.append(comparisons["n"])
 
-        assert counts == [999, 9_999], f"one pass, no swaps: {counts}"
+        assert counts == [999, 9_999]
 
-    def test_a_scattered_input_is_the_superlinear_worst_case(self) -> None:
-        """The other end, and the contrast that makes the range meaningful:
-        the same n, merely in a different order, costs several times more."""
-        printer = reprlib.Repr()
-        printer.maxset = 4
+    def test_shuffled_input_costs_over_5x_ascending_and_under_n_log_n(self) -> None:
         size = 10_000
+        ordered, ordered_count = counting_comparables(size, ordered=True)
+        shuffled, shuffled_count = counting_comparables(size, ordered=False)
+        reprlib.repr(dict.fromkeys(ordered, 0))
+        reprlib.repr(dict.fromkeys(shuffled, 0))
 
-        ordered_source, ordered_comparisons = self._counting_set(size, math.inf, ordered=True)
-        scattered_source, scattered_comparisons = self._counting_set(size, math.inf)
-        printer.repr(ordered_source)
-        printer.repr(scattered_source)
+        assert shuffled_count["n"] > ordered_count["n"] * 5
+        assert shuffled_count["n"] < size * math.log2(size)
 
-        ordered = ordered_comparisons["n"]
-        scattered = scattered_comparisons["n"]
-
-        assert scattered > ordered * 5, (
-            f"scattered input should cost far more than the linear best "
-            f"case at the same n={size:,}: ordered={ordered:,} "
-            f"scattered={scattered:,}"
-        )
-        assert scattered < size * math.log2(size), (
-            f"and still sit under n log2 n: scattered={scattered:,} vs "
-            f"{size * math.log2(size):,.0f}"
-        )
-
-    def test_an_ordered_input_stays_linear_even_when_it_fails_late(self) -> None:
-        """Failure position and input order are separate parameters. A late
-        raise costs the whole sort -- but on ordered input the whole sort is
-        only n-1 comparisons, so this is still O(n)."""
-        printer = reprlib.Repr()
-        printer.maxset = 4
+    def test_a_late_failure_pays_the_whole_sort_then_uses_iteration_order(self) -> None:
+        """A dict keeps insertion order, so the shuffled keys reach sorted()
+        unsorted and the successful sort is superlinear."""
         size = 2_000
-
-        source, comparisons = self._counting_set(size, math.inf, ordered=True)
-        printer.repr(source)
+        elements, comparisons = counting_comparables(size, ordered=False)
+        reprlib.repr(dict.fromkeys(elements, 0))
         full = comparisons["n"]
 
-        source, comparisons = self._counting_set(size, full - 1, ordered=True)
-        printer.repr(source)
+        elements, comparisons = counting_comparables(size, ordered=False, fail_after=full - 1)
+        rendered = reprlib.repr(dict.fromkeys(elements, 0))
 
-        assert full == size - 1
-        assert comparisons["n"] == size - 1, (
-            f"a late failure on an ordered input pays the ordered price, not "
-            f"the n log n one: {comparisons['n']}"
-        )
-
-    def test_the_documented_dict_example_takes_the_linear_path(self) -> None:
-        """The page annotates its "Default Shorthand" example as O(n), which
-        holds only because those keys are already ascending. Pinned so the
-        annotation cannot quietly stop matching the example."""
-        large_dict = {i: i**2 for i in range(1000)}
-
-        assert list(large_dict) == sorted(large_dict), (
-            "sorted() receives the keys in iteration order; ascending order "
-            "is what puts this example on the adaptive n-1 path"
-        )
-
-    def test_an_immediate_failure_costs_a_single_comparison(self) -> None:
-        """Exact, no tolerance: one comparison whatever n is. This is the
-        cheap end of the fallback, not its bound."""
-        printer = reprlib.Repr()
-        printer.maxset = 4
-
-        counts = []
-        for size in (1_000, 100_000):
-            source, comparisons = self._counting_set(size, raise_after=0)
-            printer.repr(source)
-            counts.append(comparisons["n"])
-
-        assert counts == [1, 1], f"the first failure should end the sort: {counts}"
-
-    def test_a_late_failure_pays_for_the_entire_sort(self) -> None:
-        """The shape the O(n) fallback claim overlooked.
-
-        `_possibly_sorted()` catches the exception whenever it arrives, so a
-        comparator that survives until the sort's last comparison does all
-        Theta(n log n) of them, throws the ordering away, and builds
-        `list(x)` as well. Self-calibrating: the threshold comes from the
-        same input's successful sort, so nothing is hardcoded.
-        """
-        printer = reprlib.Repr()
-        printer.maxset = 4
-        size = 2_000
-
-        source, comparisons = self._counting_set(size, raise_after=math.inf)
-        sorted_render = printer.repr(source)
-        full = comparisons["n"]
-
-        source, comparisons = self._counting_set(size, raise_after=full - 1)
-        late_render = printer.repr(source)
-        late = comparisons["n"]
-
-        assert late == full, (
-            f"the sort should reach its final comparison before failing: {late} of {full}"
-        )
-        assert full > size * 2, (
-            f"a sort doing only O(n) comparisons would leave nothing for the "
-            f"fallback to waste: {full} comparisons for n={size:,}"
-        )
-        assert late_render != sorted_render, (
-            "and all of it is discarded -- the rendering must be the "
-            "unordered fallback, not the order those comparisons established"
-        )
-        assert late_render == "{" + ", ".join(repr(item) for item in list(source)[:4]) + ", ...}"
-
-    def test_the_fallback_renders_in_iteration_order(self) -> None:
-        """Not an arbitrary unspecified order -- exactly `list(x)`, which is
-        what makes it vary with the hash seed."""
-        printer = reprlib.Repr()
-        printer.maxset = 4
-
-        elements = {self.Unorderable(f"t{index}") for index in range(12)}
-        rendered = printer.repr(elements)
-        expected = ", ".join(repr(item) for item in list(elements)[:4])
-
+        assert full > size * 2
+        assert comparisons["n"] == full
+        expected = ", ".join(f"{item!r}: 0" for item in elements[:4])
         assert rendered == "{" + expected + ", ...}"
 
-    def test_the_fallback_order_differs_between_processes(self) -> None:
-        """The claim the word "deterministic" got wrong, shown directly.
+    def test_a_set_at_the_depth_limit_is_still_sorted(self) -> None:
+        elements, comparisons = counting_comparables(self.SMALL, ordered=True)
+        printer = reprlib.Repr()
+        printer.maxlevel = 1
 
-        Three seeds is enough: sampled over twelve, all twelve produced a
-        distinct ordering, so a coincidental three-way match is not a
-        realistic flake.
-        """
-        outputs = {self._render_under_seed(seed, orderable=False) for seed in ("1", "2", "3")}
+        assert printer.repr([set(elements)]) == "[{...}]"
+        assert comparisons["n"] >= self.SMALL - 1
 
-        assert len(outputs) > 1, (
-            f"an unordered fallback over hash-randomized elements should not "
-            f"render the same way in every process: {outputs}"
+    def test_a_dict_at_the_depth_limit_is_not(self) -> None:
+        elements, comparisons = counting_comparables(self.SMALL, ordered=True)
+        printer = reprlib.Repr()
+        printer.maxlevel = 1
+
+        assert printer.repr([dict.fromkeys(elements, 0)]) == "[{...}]"
+        assert comparisons["n"] == 0
+
+
+class TestMaxlevel:
+    """`Repr.maxlevel`: a container at that depth shows only `fillvalue`,
+    and its contents are not rendered."""
+
+    def test_contents_below_the_limit_are_not_rendered(self) -> None:
+        printer = reprlib.Repr()
+        printer.maxlevel = 2
+        CountingRepr.calls = 0
+
+        assert printer.repr([[[CountingRepr()] * 1_000]]) == "[[[...]]]"
+        assert CountingRepr.calls == 0
+
+
+class TestIntsConvertEveryDigit:
+    """`repr_int` | O(d²) | O(d): the whole decimal string is built before
+    `maxlong` trims it."""
+
+    def test_output_is_trimmed_to_maxlong(self) -> None:
+        big = 7**1000
+        shown = reprlib.repr(big)
+
+        assert len(shown) == 40
+        assert shown.startswith(str(big)[:18]) and shown.endswith(str(big)[-19:])
+
+    @pytest.mark.timing
+    def test_time_is_quadratic_in_digits(self) -> None:
+        small = 10**500 - 1
+        large = 10**4000 - 1
+
+        small_time = best_ns(lambda: reprlib.repr(small), repeats=21)
+        large_time = best_ns(lambda: reprlib.repr(large), repeats=21)
+
+        assert large_time > small_time * 20, (
+            f"8x the digits should cost far more than 8x at a fixed maxlong: "
+            f"d=500 {small_time:,.0f}ns vs d=4,000 {large_time:,.0f}ns"
         )
 
-    def test_a_successful_sort_is_stable_between_processes(self) -> None:
-        """The contrast, and the half of the claim that does hold: when the
-        elements are orderable, the sort makes the output reproducible."""
-        outputs = {self._render_under_seed(seed, orderable=True) for seed in ("1", "2", "3")}
+    def test_peak_grows_with_digits(self) -> None:
+        small = 10**500 - 1
+        large = 10**4000 - 1
 
-        assert len(outputs) == 1, (
-            f"a sorted rendering should not depend on the hash seed: {outputs}"
-        )
+        small_peak = peak_bytes(lambda: reprlib.repr(small))
+        large_peak = peak_bytes(lambda: reprlib.repr(large))
 
-    @staticmethod
-    def _render_under_seed(seed: str, *, orderable: bool) -> str:
-        """Render a set in a fresh interpreter under a given PYTHONHASHSEED.
+        assert large_peak > small_peak * 4, f"{small_peak:,}B vs {large_peak:,}B"
 
-        The seed only takes effect at startup, so this cannot be done
-        in-process.
-        """
-        script = textwrap.dedent(
-            """
-            import reprlib
+    @pytest.mark.skipif(sys.version_info < (3, 13, 6), reason="placeholder is 3.13.6+")
+    def test_beyond_the_digit_limit_is_a_placeholder(self) -> None:
+        huge = 10 ** (sys.get_int_max_str_digits() + 1)
 
-            class Unorderable:
-                def __init__(self, name):
-                    self.name = name
-                def __hash__(self):
-                    return hash(self.name)
-                def __repr__(self):
-                    return self.name
+        assert reprlib.repr(huge).startswith("<int instance with roughly")
 
-            printer = reprlib.Repr()
-            printer.maxset = 4
-            names = [f"t{i}" for i in range(12)]
-            elements = set(names) if ORDERABLE else {Unorderable(n) for n in names}
-            print(printer.repr(elements))
-            """
-        ).replace("ORDERABLE", str(orderable))
+    @pytest.mark.skipif(sys.version_info >= (3, 13, 6), reason="placeholder is 3.13.6+")
+    def test_beyond_the_digit_limit_raises_before_3136(self) -> None:
+        huge = 10 ** (sys.get_int_max_str_digits() + 1)
 
-        completed = subprocess.run(  # noqa: S603 - fixed argv, no shell
-            [sys.executable, "-c", script],
-            capture_output=True,
-            text=True,
-            check=True,
-            env={**os.environ, "PYTHONHASHSEED": seed},
-        )
-        return completed.stdout.strip()
+        with pytest.raises(ValueError, match="integer string conversion"):
+            reprlib.repr(huge)
 
 
-class TestDocumentedExamplesRun:
-    """Every Python block on docs/stdlib/reprlib.md must execute and print
-    exactly what its comments say -- which is how the wrong outputs above
-    were found in the first place."""
+class TestReprInstanceBuildsTheWholeRepr:
+    """`repr_instance` | O(r) | O(r): every type without a method, `bytes`
+    and subclasses of built-in types included."""
 
-    def _blocks(self) -> list[tuple[int, str]]:
-        blocks: list[tuple[int, str]] = []
-        inside = False
-        start = 0
-        body: list[str] = []
-        for number, line in enumerate(
-            REPRLIB_PAGE.read_text(encoding="utf-8").splitlines(), start=1
-        ):
-            if not inside and line.strip() == "```python":
-                inside, start, body = True, number, []
-            elif inside and line.strip() == "```":
-                blocks.append((start, "\n".join(body)))
-                inside = False
-            elif inside:
-                body.append(line)
-        return blocks
+    @pytest.mark.parametrize(
+        "build",
+        [bytes, lambda n: type("Rows", (list,), {})(range(n))],
+        ids=["bytes", "list-subclass"],
+    )
+    def test_peak_grows_with_the_full_repr(self, build: Callable[[int], Any]) -> None:
+        small = build(1_000)
+        large = build(100_000)
 
-    def _run(self, source: str, label: str) -> str:
-        captured, real_stdout = io.StringIO(), sys.stdout
-        try:
-            sys.stdout = captured
-            exec(  # noqa: S102 - executing the docs is the point
-                compile(source, f"reprlib.md:{label}", "exec"),
-                {"__name__": "__main__"},
-            )
-        finally:
-            sys.stdout = real_stdout
-        return captured.getvalue()
+        assert len(reprlib.repr(large)) == reprlib.aRepr.maxother
+        small_peak = peak_bytes(lambda: reprlib.repr(small))
+        large_peak = peak_bytes(lambda: reprlib.repr(large))
 
-    def test_the_page_has_examples_to_check(self) -> None:
-        assert len(self._blocks()) >= 3
+        assert large_peak > small_peak * 20, f"{small_peak:,}B vs {large_peak:,}B"
 
-    def test_every_example_executes(self) -> None:
+    def test_a_raising_repr_gives_a_placeholder(self) -> None:
+        class Broken:
+            def __repr__(self) -> str:
+                raise RuntimeError("no")
+
+        assert re.fullmatch(r"<Broken instance at 0x[0-9a-f]+>", reprlib.repr(Broken()))
+
+
+def _blocks() -> list[tuple[int, str]]:
+    """Every fenced python block on the page, with its 1-based line number."""
+    lines = PAGE.read_text(encoding="utf-8").splitlines()
+    found: list[tuple[int, str]] = []
+    index = 0
+    while index < len(lines):
+        if re.match(r"^\s*```python\s*$", lines[index]):
+            start = index + 1
+            end = start
+            while not re.match(r"^\s*```\s*$", lines[end]):
+                end += 1
+            found.append((start + 1, textwrap.dedent("\n".join(lines[start:end]))))
+            index = end
+        index += 1
+    return found
+
+
+def _run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
+    script = cwd / "block.py"
+    script.write_text(source, encoding="utf-8")
+    return subprocess.run(
+        [sys.executable, str(script)],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        stdin=subprocess.DEVNULL,
+        check=False,
+    )
+
+
+class TestDocumentedExamples:
+    """Each block runs in its own subprocess and asserts its own result."""
+
+    def test_the_page_has_the_expected_blocks(self) -> None:
+        assert len(_blocks()) == EXPECTED_BLOCKS
+
+    def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
-        for line_number, source in self._blocks():
-            try:
-                self._run(source, str(line_number))
-            except Exception as error:  # noqa: BLE001 - report, do not raise
-                failures.append(f"line {line_number}: {type(error).__name__}: {error}")
+        ran = 0
+        for line, source in _blocks():
+            ran += 1
+            workdir = tmp_path / f"block{line}"
+            workdir.mkdir()
+            result = _run_block(source, workdir)
+            if result.returncode != 0:
+                failures.append(f"{PAGE.name}:{line}\n{result.stderr.strip()}")
 
-        assert not failures, "examples on the page do not run:\n" + "\n".join(failures)
+        assert ran == EXPECTED_BLOCKS
+        assert not failures, "\n\n".join(failures)
 
-    def test_the_truncating_example_prints_what_the_page_says(self) -> None:
-        source = next(body for _, body in self._blocks() if "maxlist" in body)
+    def test_the_runner_notices_a_broken_assertion(self, tmp_path: pathlib.Path) -> None:
+        line, source = next((n, s) for n, s in _blocks() if "'[0, 1, 2, ...]'" in s)
+        mutated = source.replace("'[0, 1, 2, ...]'", "'[0, 1, ...]'", 1)
 
-        assert self._run(source, "truncating").splitlines() == [
-            "[0, 1, 2, ...]",
-            "'xxxxxxx...xxxxxxxx'",
-        ]
-
-    def test_the_default_shorthand_example_prints_what_the_page_says(self) -> None:
-        source = next(body for _, body in self._blocks() if "large_dict" in body)
-
-        assert self._run(source, "shorthand").splitlines() == [
-            "{0: 0, 1: 1, 2: 4, 3: 9, ...}",
-        ]
-
-    def test_the_recursive_guard_example_prints_what_the_page_says(self) -> None:
-        source = next(body for _, body in self._blocks() if "recursive_repr" in body)
-
-        assert self._run(source, "recursive-guard").splitlines() == ["Node(<...>)"]
+        assert mutated != source, f"the mutation matched nothing in {PAGE.name}:{line}"
+        assert _run_block(mutated, tmp_path).returncode != 0
