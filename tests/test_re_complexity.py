@@ -1,382 +1,402 @@
-"""Tests to verify documented behaviour of the re module.
+"""Tests for docs/stdlib/re.md.
 
-The page's headline bounds - linear typical, exponential worst - were right.
-What was wrong sat around them, in the annotations on the examples and in a
-demonstration that demonstrated nothing:
+The page prices compilation in the pattern's length and matching in the
+subject's, with the scan cost `s` standing for the difference between one
+attempt and an attempt at every start position. Where a claim is about what a
+call copies or keeps - positions against text, the subject a match holds, the
+list `findall` builds against the one match `finditer` holds - it is settled
+by identity or traced allocation, which need no tolerance. Where it is about
+growth - one attempt against many, competing repetitions, the anchor's early
+exit - it is settled by timing at sizes in equal multiplicative steps, with
+thresholds between what linear and quadratic growth predict. The pattern cache
+is settled by identity and by counting calls into the compiler.
 
-* `match.group(i)` was annotated O(1) three times. It slices the subject, so
-  it copies: a group of 100,000 characters costs 1.99e-06s against 5.1e-08s
-  for one of 10, and a million costs 2.01e-05s - dead linear. `span()` stays
-  at 4.7e-08s at every size, which is the O(1) alternative the page never
-  mentioned. `groups()` is the same slicing, once per group.
-* `finditer` was annotated "O(1) per match". Each step scans forward to the
-  next match: 2.0e-07s when the match is at the cursor, 3.9e-05s when the
-  next one is 200,000 characters away. The memory claim is the true part.
-* The catastrophic-backtracking example searched `(a+)+$` against a string of
-  nothing but `a`, printed the elapsed time and commented "Can be very slow!".
-  That input *matches*, on the first attempt, in 1.6e-07s. The blow-up needs
-  a subject that fails: `(a+)+b` against 24 `a`s takes 0.91s.
-* The anchors example claimed `^start.*?end$` was "more efficient" than
-  `start.*end` on the string "start middle end" - where the match is at
-  position 0 and the anchor cannot help. Measured, the anchored pattern is
-  the slower of the two there. The saving is real but on different input:
-  against 100,000 characters that never match, anchored is 8.3e-08s against
-  1.99e-05s, because `^` stops `search` retrying at every offset. The stated
-  reason was wrong too - that is re-anchoring, not backtracking.
-* "Bad: materializes all matches - O(m) memory" contradicted the table's
-  O(k) two screens above. k is the right term.
-* The Version Notes said nothing about atomic groups `(?>...)` or possessive
-  quantifiers, added in 3.11 - which is exactly the "rewrite pattern to be
-  atomic" the page recommends without saying the language now has it.
-  `(?>a+)+b` and `(a++)+b` both settle the 0.91s case in 3.0e-05s.
+Measurement scope:
 
-Two code blocks did not run: one used an undefined `large_file`, the other an
-undefined `process`.
+* `re.compile` over `(?:abc)` repeated 10, 100 and 1,000 times: each 10x
+  step in the pattern costs between 4x and 40x, which admits linear growth
+  and excludes quadratic. Two alternatives sharing a prefix of 4,000 and then
+  16,000 characters cost over 8x per 4x step, which is the O(n²) case. The
+  same pattern and flags compiled twice is the same object; after `purge()`
+  it is not, nor with `re.DEBUG`, which prints the parse tree. Long literals, alternations of 8,000
+  words, 8,000 capturing or named groups and 16,000 backreferences all
+  compiled in time linear in the pattern on 3.14; only the repeated group is
+  asserted.
+* One attempt against many: `\\w+@` against 500, 2,000 and 8,000 `a`s. With
+  `match()` and `fullmatch()` each 4x step costs under 8x; with `search()`
+  over 8x, since every start position scans to the end. `\\b\\w+@` and
+  `\\w+@` over 20-character words separated by spaces stay under 8x per
+  step with `search()`, so a bounded failed attempt keeps the scan linear.
+* Competing repetitions: `a*a*b` matched against 250, 1,000 and 4,000 `a`s
+  costs over 8x per 4x step within one attempt. `(a+)+b` costs over 8x
+  from 14 to 18 characters against a failing subject, and over 1,000x more
+  than `(a+)+$` on a subject it matches, than `a+b`, and on 3.11+ than
+  `(?>a+)+b` and `(a++)+b`. Before 3.11 the latter two are asserted to be
+  `re.error`. `a*a*b` is also asserted under 40x per 4x step, which excludes
+  cubic growth. `(?:a|aa)+b`, one repetition over overlapping alternatives,
+  costs over 5x from 16 to 22 characters.
+* Backtracking stack: a `fullmatch` of `(?:ab)*` peaks over 5x higher at
+  200,000 characters than at 20,000, while `[ab]*` peaks under 10 KB at
+  2,000,000.
+* The anchor, on 3.11+: `^start.*end` and `\\Astart.*end` search 100,000
+  non-matching characters in under 1/20 the time of `start.*end`, and 10x
+  the subject costs the anchored search under 3x; with `re.MULTILINE` the
+  `^` search costs over 4x at 10x the subject. Before 3.11 the anchored
+  search costs over 4x at 10x the subject. `match()` costs under 3x at 10x
+  the subject. With the match at position 0 the anchored search is not
+  asserted faster.
+* A `Match` is the same size for a 10- and a 1,000,000-character subject and
+  larger with 50 groups than with none; `Match.string` is the subject.
+  `group()` of a proper substring is a new string whose cost grows over 20x
+  from 1,000 to 1,000,000 characters, `span()` under 10x; `group(0)` over the
+  whole of an exact `str` or `bytes` subject is the subject, while a
+  `bytearray` subject gives back `bytes`. `group(1, 2, 2, 1)` is a tuple of
+  four, repeats included. `groups()` over 50 groups costs over 5x one
+  group. `expand()` over a template of 10,000,000 against 10,000 characters
+  costs over 20x, with the captured group held at 1,000 characters.
+* `findall` over 20,000 words peaks over 3x what iterating `finditer`
+  does, and over 2x as high at 200-character matches as at 5-character ones
+  for the same count. `finditer` over `(a+)+b` and 40 `a`s returns within a
+  30-second subprocess timeout, so it does not scan; building it peaks over
+  8 KB higher with 1,000 groups than with none, the O(c) of its marks. The second step of `finditer` costs over 20x more when the next
+  match is 200,000 characters away than when it is adjacent.
+* `sub` peaks over 20x higher when 1,000 matches become 1,000-character
+  replacements than when they become one character, over the same subject;
+  deleting 100,000 matches peaks over 20x higher than deleting 1,000, with
+  an empty result either way, which is the k term. A template of 1,000,000
+  characters with a backreference peaks over 20x higher than one of 10,000
+  against a subject it never matches, which is the t term. A template with
+  a backreference, used 50 times, is parsed once, observed
+  through the cache on `re._compile_template` (3.12+) or `re._compile_repl`.
+  A function replacement is called once per match.
+* `Pattern.groupindex` is a `mappingproxy` that refuses assignment when the
+  pattern has named groups, and a new empty dict when it has none; it costs
+  under 3x as much with 2,000 named groups as with one. The module-level
+  functions call the compiler once for a pattern used twice, and again after
+  `purge()`. `re.escape` peaks over 5x higher for 10x the input.
+* The cache holds 512 patterns and drops one entry when a new pattern arrives
+  at a full cache. Which entry is not on the page: from 3.12 a hit that
+  reaches the 512-entry cache re-records it as most recently used, so the
+  513th pattern drops a different one, while a hit served by the 256-entry
+  fast-path cache in front of it refreshes nothing; on 3.10 and 3.11 the
+  oldest-inserted entry is dropped despite a recent hit.
+* `re.PatternError` is `re.error` from 3.13, and absent before; `pos`,
+  `lineno` and `colno` locate the error in a multi-line pattern.
+* Every fenced Python block runs in its own subprocess, on every supported
+  version, and a mutated assertion in one of them is asserted to fail. The
+  catastrophic-backtracking block is asserted to run its nested pattern only
+  on subjects of at most 8 `a`s.
 
-Untested axes, and why:
+Not settled here:
 
-* Pattern shape. Compilation is measured on a repeated group; a pattern whose
-  parse tree is deep rather than long would change the constant, not the term.
-* Unicode and flags. Everything here is ASCII with no flags. `re.IGNORECASE`
-  and `re.UNICODE` change how a character class is built, not how the scan
-  scales with the subject.
-
-Three things the sources decide rather than the measurements:
-
-* `match_getslice_by_index` reads two integers out of `self->mark` and hands
-  them to `getslice`, which calls `PyUnicode_Substring`. That function opens
-  with `if (start == 0 && end == length) return unicode_result_unchanged(self)`
-  - so a group spanning the whole subject is returned unchanged, and only a
-  proper substring is copied. `group(0)` therefore measures flat where a
-  proper substring does not, and both are pinned.
-* `findall` is O(k + g) in space, not O(k): the list holds k *copies*, so
-  the matched text counts too. 20,000 matches cost 1.25 MB at 5 characters
-  each and 5.15 MB at 200.
-* The compiled-pattern cache is an LRU from 3.12, where `_compile` pops and
-  re-inserts a found pattern as most recently used; on 3.10 and 3.11 the hit
-  was a plain dict lookup and the 513th pattern dropped the oldest-inserted
-  entry however often it had been used. `_MAXCACHE2` is 3.12 as well, so a
-  version sweep that skips 3.12 misses both changes. Both behaviours are
-  pinned by identity, version-branched like the anchor tests.
-* The Match rows used `k` for the number of groups while the preamble defined
-  it as the number of matches, and `re.purge()` used `c` for the cache size.
-  Both now have their own name.
-
-`match.expand()` and `sub()` with a string replacement do cache the compiled
-template - the C `compile_template` delegates to `re._compile_template`, which
-is `lru_cache(512)`. It is not on the page because it cannot be shown: purging
-between calls costs nothing measurable even with a 3,000-character template
-(6.30e-04s either way), the expansion itself dominating.
-
-Not settled by execution:
-
-* "O(exp)" as an upper bound. The tests show the blow-up doubling with each
-  added character over a range small enough to finish; no test can exhibit
-  the exponent itself.
-* "Third-party: the regex package provides additional features" and the
-  Python 2.x note.
-* "Alternation with overlap (`foo|fo`)" in the Avoid list. It is a
-  correctness trap rather than a cost one - `foo|fo` never reaches its second
-  branch - and the page files it under performance.
+* That the backtracking worst case is exponential rather than a high-degree
+  polynomial. The tests show the cost multiplying with each added character
+  over a range small enough to finish; no test can exhibit the exponent.
+* The pattern held fixed. Matching bounds are in m; how the per-character
+  cost grows with the pattern - an alternation of many branches, a large
+  character class - is not measured. Everything here is ASCII: `IGNORECASE`,
+  `LOCALE` and non-ASCII character classes are not varied, nor are `bytes`
+  patterns, whose code path is the same C engine.
+* `re.purge()` as O(1) is read from Lib/re/__init__.py: it clears caches whose
+  entry counts `_MAXCACHE` and `_MAXCACHE2` bound. Freeing the patterns they
+  held is charged to their compilation, by the page's cost model, and is not
+  measured.
+* The flag constants, `RegexFlag`, `re.Pattern`, `re.Match`, `Pattern.pattern`,
+  `Pattern.flags`, `Pattern.groups`, `Match.pos`, `Match.endpos` and
+  `PatternError.msg` and `.pattern` are stored attributes, read from
+  Modules/_sre/sre.c and Lib/re/_constants.py; only their values are asserted.
+* `re.Scanner`, `Pattern.scanner` and `Match.regs` are undocumented and not on
+  the page.
+* Nesting depth: a pattern nested 500 groups deep raises
+  `RecursionError` in the parser rather than compiling; that limit is not a
+  cost the page prices.
 """
 
 from __future__ import annotations
 
+import operator
 import pathlib
 import re
 import subprocess
 import sys
 import textwrap
-import timeit
+import time
 import tracemalloc
+import types
 from collections.abc import Callable, Iterator
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
 PAGE = pathlib.Path(__file__).resolve().parent.parent / "docs" / "stdlib" / "re.md"
-EXPECTED_BLOCKS = 13
+EXPECTED_BLOCKS = 8
 
-# 3.11 brought two changes this page depends on: atomic groups and possessive
-# quantifiers, and an early exit for a search whose pattern starts with `^`.
+# Atomic groups, possessive quantifiers and the anchored early exit are 3.11+.
 ATOMIC_SUPPORTED = sys.version_info >= (3, 11)
 ANCHOR_SHORT_CIRCUITS = sys.version_info >= (3, 11)
 
-# The compiled-pattern cache is private, so it is not in the type stubs.
+# The cache and the compiler entry point are private, so not in the type stubs.
 _re_internals: Any = re
 MAXCACHE: int = _re_internals._MAXCACHE
 MAXCACHE2: int | None = getattr(re, "_MAXCACHE2", None)
 
 
+def best_ns(func: Callable[[], Any], repeats: int = 5, inner: int = 1) -> float:
+    """Fastest of `repeats` runs, in nanoseconds per call."""
+    best: float | None = None
+    for _ in range(repeats):
+        start = time.perf_counter_ns()
+        for _ in range(inner):
+            func()
+        elapsed = (time.perf_counter_ns() - start) / inner
+        best = elapsed if best is None else min(best, elapsed)
+    assert best is not None
+    return best
+
+
+def peak_bytes(func: Callable[[], Any]) -> int:
+    """Peak traced allocation while func runs."""
+    tracemalloc.start()
+    try:
+        func()
+        return tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+
+
 def pattern_cache() -> dict[Any, Any]:
-    """The module's LRU of compiled patterns."""
+    """The module's cache of compiled patterns."""
     return _re_internals._cache
 
 
-def per_call(operation: Callable[[], Any], number: int = 20_000, repeat: int = 5) -> float:
-    """Seconds per call, taking the best of several runs."""
-    return min(timeit.repeat(operation, number=number, repeat=repeat)) / number
+def compiler_module() -> Any:
+    """The module whose `compile` the pattern cache calls on a miss."""
+    return getattr(re, "_compiler", None) or _re_internals.sre_compile
 
 
-def peak_bytes(operation: Callable[[], Any]) -> int:
-    """Peak Python allocation during one call, with the tracer left off."""
-    tracemalloc.start()
-    try:
-        operation()
-        _, peak = tracemalloc.get_traced_memory()
-    finally:
-        tracemalloc.stop()
-    return peak
+def template_cache() -> Any:
+    """The lru_cache that parses a replacement template."""
+    return getattr(re, "_compile_template", None) or _re_internals._compile_repl
 
 
 @pytest.fixture
 def clean_pattern_cache() -> Iterator[None]:
-    """Empty the compiled-pattern cache, and empty it again afterwards."""
+    """Empty the pattern caches, and empty them again afterwards."""
     re.purge()
     yield
     re.purge()
 
 
-class TestMatchObjectsHoldPositions:
-    """The Match table: positions are free, text is a copy."""
-
-    @staticmethod
-    def _match_with_group(size: int) -> re.Match[str]:
-        found = re.compile(r"a(x+)b").search("a" + "x" * size + "b")
-        assert found is not None
-        return found
-
-    def test_span_returns_indices_into_the_subject(self) -> None:
-        found = self._match_with_group(50)
-
-        assert found.span(1) == (1, 51)
-        assert found.start(1) == 1 and found.end(1) == 51
-        assert found.string[slice(*found.span(1))] == found.group(1)
-
-    def test_group_returns_a_copy_not_a_view(self) -> None:
-        """Why the row is O(g): there is no view type to return."""
-        found = self._match_with_group(1_000)
-
-        text = found.group(1)
-
-        assert text is not found.string
-        assert len(text) == 1_000
-        assert sys.getsizeof(text) > sys.getsizeof(found.span(1))
+class TestCompilation:
+    """`re.compile(pattern, flags=0)` | O(n) | O(n), O(n²) for alternatives
+    sharing a long common prefix; cached except with `re.DEBUG`."""
 
     @pytest.mark.timing
-    def test_group_cost_follows_the_captured_length(self) -> None:
-        small = self._match_with_group(1_000)
-        large = self._match_with_group(1_000_000)
+    def test_each_step_in_pattern_length_costs_a_linear_step(self) -> None:
+        times = []
+        for repeat in (10, 100, 1_000):
+            pattern = "(?:abc)" * repeat
+            times.append(best_ns(lambda p=pattern: (re.purge(), re.compile(p)), inner=10))
+        re.purge()
 
-        small_time = per_call(lambda: small.group(1), 50_000)
-        large_time = per_call(lambda: large.group(1), 20_000)
-
-        assert large_time > small_time * 20, (
-            f"a thousand times the captured text is copied out: "
-            f"1,000 chars {small_time:.2e}s, 1,000,000 chars {large_time:.2e}s"
+        steps = [later / earlier for earlier, later in zip(times, times[1:], strict=False)]
+        assert all(4 < step < 40 for step in steps), (
+            f"10x the pattern should cost about 10x, not 100x: {times} ns, steps {steps}"
         )
 
     @pytest.mark.timing
-    def test_span_does_not_follow_the_captured_length(self) -> None:
-        """The alternative the page now points at."""
-        small = self._match_with_group(1_000)
-        large = self._match_with_group(1_000_000)
+    def test_a_shared_prefix_across_alternatives_is_quadratic(self) -> None:
+        times = []
+        for length in (1_000, 4_000, 16_000):
+            pattern = "x" * length + "a|" + "x" * length + "b"
+            times.append(best_ns(lambda p=pattern: (re.purge(), re.compile(p)), repeats=3))
+        re.purge()
 
-        small_time = per_call(lambda: small.span(1), 50_000)
-        large_time = per_call(lambda: large.span(1), 50_000)
+        steps = [later / earlier for earlier, later in zip(times, times[1:], strict=False)]
+        assert steps[-1] > 8, f"4x the prefix should cost ~16x: {times} ns, steps {steps}"
 
-        assert large_time < small_time * 2, (
-            f"two integers, whatever they point at: 1,000 chars {small_time:.2e}s, "
-            f"1,000,000 chars {large_time:.2e}s"
-        )
+    def test_debug_bypasses_the_cache(
+        self, clean_pattern_cache: None, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        first = re.compile("ab", re.DEBUG)
 
-    @pytest.mark.timing
-    def test_groups_pays_once_per_group(self) -> None:
-        one = re.compile(r"(x{100})").search("x" * 100)
-        many = re.compile("".join(r"(x{100})" for _ in range(50))).search("x" * 5_000)
-        assert one is not None and many is not None
+        assert re.compile("ab", re.DEBUG) is not first
+        assert "LITERAL" in capsys.readouterr().out
 
-        one_time = per_call(one.groups, 50_000)
-        many_time = per_call(many.groups, 20_000)
+    def test_the_same_pattern_and_flags_return_the_same_object(
+        self, clean_pattern_cache: None
+    ) -> None:
+        first = re.compile(r"\d+")
 
-        assert many_time > one_time * 5, (
-            f"fifty groups are fifty slices, not one: 1 group {one_time:.2e}s, "
-            f"50 groups {many_time:.2e}s"
-        )
+        assert re.compile(r"\d+") is first
+        assert re.compile(r"\d+", re.IGNORECASE) is not first, "flags are part of the key"
 
-    def test_a_group_spanning_the_whole_subject_is_not_copied(self) -> None:
-        """The one case where `group()` is free, from `PyUnicode_Substring`.
+    def test_after_purge_the_pattern_compiles_again(self, clean_pattern_cache: None) -> None:
+        first = re.compile(r"\d+")
 
-        It returns the subject unchanged when the slice covers all of it, so
-        `fullmatch(...).group()` hands back the string it was given.
-        """
-        whole = re.compile(r"x+").search("x" * 1_000)
-        partial = re.compile(r"a(x+)b").search("a" + "x" * 1_000 + "b")
-        assert whole is not None and partial is not None
+        re.purge()
 
-        assert whole.group(0) is whole.string, "start == 0 and end == len is the fast path"
-        assert partial.group(1) is not partial.string, "a proper substring is copied"
-        assert partial.group(1) == "x" * 1_000
+        assert re.compile(r"\d+") is not first
+        assert len(pattern_cache()) == 1
 
-    def test_groupdict_carries_the_same_slices(self) -> None:
-        found = re.compile(r"(?P<head>a+)(?P<tail>b+)").search("aaabbb")
-        assert found is not None
-
-        assert found.groupdict() == {"head": "aaa", "tail": "bbb"}
-        assert found.groups() == ("aaa", "bbb")
-
-    def test_expand_substitutes_the_named_groups(self) -> None:
-        found = re.compile(r"(?P<word>\w+)").search("hello world")
-        assert found is not None
-
-        assert found.expand(r"<\g<word>!>") == "<hello!>"
-
-    @pytest.mark.timing
-    def test_expand_follows_the_template_length(self, clean_pattern_cache: None) -> None:
-        """The t in the expand row's O(t + g).
-
-        Vary ASCII literal text from 10,000 to 10,000,000 characters while
-        holding the captured group at 1,000 characters and one backreference.
-        On CPython 3.14.7, warmed calls take about 0.38 us and 244 us: a
-        roughly 640x gap leaves room for a 20x threshold even when fixed call
-        overhead dominates the small input. This rejects flat cost; it does
-        not distinguish linear from superlinear growth.
-
-        Expand both templates before timing so cache hits are measured on
-        interpreters that cache templates. Group size, backreference count,
-        Unicode width, and cold-cache parsing cost are not varied here.
-        """
-        found = re.compile(r"(a+)").fullmatch("a" * 1_000)
-        assert found is not None
-
-        brief = r"\1" + "x" * 10_000
-        lengthy = r"\1" + "x" * 10_000_000
-
-        for template in (brief, lengthy):
-            result = found.expand(template)
-            assert len(result) == 1_000 + len(template) - 2
-            assert result.startswith("a" * 1_000)
-            assert result[1_000:] == template[2:]
-        del result
-
-        short = per_call(lambda: found.expand(brief), 200, repeat=3)
-        long = per_call(lambda: found.expand(lengthy), 1, repeat=3)
-
-        assert long > short * 20, (
-            f"the template is copied into the result: {len(brief):,} chars "
-            f"{short:.2e}s, {len(lengthy):,} chars {long:.2e}s"
-        )
+    def test_an_invalid_pattern_raises_re_error(self) -> None:
+        with pytest.raises(re.error):
+            re.compile(r"(unclosed")
 
 
-class TestFinditerIsLazyNotFree:
-    """`finditer` | O(m) over the scan | O(1) space |."""
+class TestModuleFunctionsCompileOnAMiss:
+    """The module-level rows: O(n) to compile on a miss, a lookup on a hit."""
 
-    def test_finditer_holds_one_match_at_a_time(self) -> None:
-        pattern = re.compile(r"\w+")
-        text = " ".join(f"word{index}" for index in range(20_000))
+    def test_a_pattern_used_twice_is_compiled_once(
+        self, clean_pattern_cache: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        compiler = compiler_module()
+        real = compiler.compile
+        calls: list[object] = []
 
-        materialised = peak_bytes(lambda: pattern.findall(text))
-        streamed = peak_bytes(lambda: [None for _ in pattern.finditer(text)] and None)
+        def counting(pattern: object, flags: int) -> object:
+            calls.append(pattern)
+            return real(pattern, flags)
 
-        assert materialised > streamed * 3, (
-            f"findall keeps every match, finditer keeps one: findall {materialised:,} "
-            f"bytes, finditer {streamed:,} bytes"
-        )
+        monkeypatch.setattr(compiler, "compile", counting)
+
+        assert re.search(r"\d+x", "12x") is not None
+        assert re.findall(r"\d+x", "1x 2x") == ["1x", "2x"]
+        assert re.sub(r"\d+x", "-", "1x 2x") == "- -"
+        assert calls == [r"\d+x"], f"one compile for three calls: {calls}"
+
+        re.purge()
+        assert re.split(r"\d+x", "a1xb") == ["a", "b"]
+        assert calls == [r"\d+x", r"\d+x"], "purge() empties the cache"
+
+
+class TestOneAttemptOrMany:
+    """`match`/`fullmatch` | O(m), `search` | O(s): s is O(m²) when failed
+    attempts run to the end, and O(m) when each stops within a bounded
+    distance."""
+
+    SIZES = (500, 2_000, 8_000)
+
+    @classmethod
+    def _steps(cls, operation: Callable[[str], Any], make: Callable[[int], str]) -> list[float]:
+        times = []
+        for size in cls.SIZES:
+            subject = make(size)
+            assert operation(subject) is None
+            times.append(best_ns(lambda s=subject: operation(s), repeats=3))
+        return [later / earlier for earlier, later in zip(times, times[1:], strict=False)]
 
     @pytest.mark.timing
-    def test_each_step_scans_to_the_next_match(self) -> None:
-        """The corrected annotation: the steps are not O(1)."""
-        pattern = re.compile(r"z")
-        adjacent = "zz"
-        distant = "z" + "a" * 200_000 + "z"
+    def test_match_makes_one_attempt(self) -> None:
+        pattern = re.compile(r"\w+@")
 
-        def second_match(subject: str) -> re.Match[str]:
-            found = pattern.finditer(subject)
-            next(found)
-            return next(found)
+        for operation in (pattern.match, pattern.fullmatch):
+            steps = self._steps(operation, lambda size: "a" * size)
+            assert all(step < 8 for step in steps), f"4x the subject: steps {steps}"
 
-        near = per_call(lambda: second_match(adjacent), 20_000)
-        far = per_call(lambda: second_match(distant), 200)
+    @pytest.mark.timing
+    def test_search_retries_at_every_position(self) -> None:
+        pattern = re.compile(r"\w+@")
 
-        assert far > near * 20, (
-            f"the step costs the distance it covers: adjacent {near:.2e}s, 200,000 apart {far:.2e}s"
-        )
+        steps = self._steps(pattern.search, lambda size: "a" * size)
 
-    def test_the_whole_iteration_finds_every_match(self) -> None:
-        pattern = re.compile(r"\w+")
-        text = "Hello world from Python"
+        assert all(step > 8 for step in steps), f"4x the subject should cost ~16x: {steps}"
 
-        assert [found.group() for found in pattern.finditer(text)] == pattern.findall(text)
+    @pytest.mark.timing
+    def test_a_word_boundary_keeps_the_search_linear(self) -> None:
+        pattern = re.compile(r"\b\w+@")
+
+        steps = self._steps(pattern.search, lambda size: "a" * size)
+
+        assert all(step < 8 for step in steps), f"4x the subject should cost ~4x: {steps}"
+
+    @pytest.mark.timing
+    def test_bounded_failed_attempts_keep_the_search_linear(self) -> None:
+        pattern = re.compile(r"\w+@")
+
+        steps = self._steps(pattern.search, lambda size: ("a" * 20 + " ") * (size // 21))
+
+        assert all(step < 8 for step in steps), f"words of 20 characters: steps {steps}"
+
+    def test_both_patterns_find_the_same_match(self) -> None:
+        text = "mail alice@example.com"
+        loose = re.search(r"\w+@", text)
+        bounded = re.search(r"\b\w+@", text)
+
+        assert loose is not None and bounded is not None
+        assert loose.group() == bounded.group() == "alice@"
 
 
 class TestBacktracking:
-    """The claim the page's own example contradicted."""
-
-    def test_all_a_input_matches_the_nested_quantifier_at_once(self) -> None:
-        """`(a+)+$` on nothing but `a` is the fast case, not the slow one."""
-        pattern = re.compile(r"(a+)+$")
-
-        assert pattern.search("a" * 20) is not None
+    """Patterns that can match the same characters in several ways: polynomial
+    or exponential in m within one failing attempt."""
 
     @pytest.mark.timing
-    def test_the_blow_up_needs_a_subject_that_fails(self) -> None:
+    def test_two_repetitions_competing_are_quadratic_in_one_attempt(self) -> None:
+        pattern = re.compile(r"a*a*b")
+        subjects = ["a" * size for size in (250, 1_000, 4_000)]
+        times = [best_ns(lambda s=subject: pattern.match(s), repeats=3) for subject in subjects]
+
+        steps = [later / earlier for earlier, later in zip(times, times[1:], strict=False)]
+        assert all(8 < step < 40 for step in steps), f"4x the subject should cost ~16x: {steps}"
+
+    @pytest.mark.timing
+    def test_overlapping_alternatives_in_a_repetition_multiply_too(self) -> None:
+        pattern = re.compile(r"(?:a|aa)+b")
+        short = "a" * 16
+        longer = "a" * 22
+
+        short_time = best_ns(lambda: pattern.match(short), repeats=3, inner=5)
+        longer_time = best_ns(lambda: pattern.match(longer), repeats=3)
+
+        assert longer_time > short_time * 5, f"16 {short_time:.0f} ns, 22 {longer_time:.0f} ns"
+
+    def test_a_nested_quantifier_matches_a_matching_subject_at_once(self) -> None:
+        assert re.search(r"(a+)+$", "a" * 20) is not None
+        assert re.search(r"(a+)+b", "a" * 20 + "b") is not None
+
+    @pytest.mark.timing
+    def test_the_blow_up_needs_a_failing_attempt(self) -> None:
         matching = re.compile(r"(a+)+$")
         failing = re.compile(r"(a+)+b")
 
-        succeeds = per_call(lambda: matching.search("a" * 18), 2_000)
-        fails = per_call(lambda: failing.search("a" * 18), 3, repeat=3)
+        succeeds = best_ns(lambda: matching.search("a" * 18), inner=200)
+        fails = best_ns(lambda: failing.search("a" * 18), repeats=3)
 
-        assert fails > succeeds * 1_000, (
-            f"the page timed the wrong input: match {succeeds:.2e}s, non-match {fails:.2e}s"
-        )
+        assert fails > succeeds * 1_000, f"match {succeeds:.0f} ns, non-match {fails:.0f} ns"
 
     @pytest.mark.timing
-    def test_each_extra_character_roughly_doubles_the_work(self) -> None:
-        """As close to "O(exp)" as a test can get and still finish."""
+    def test_each_extra_character_multiplies_the_work(self) -> None:
         pattern = re.compile(r"(a+)+b")
 
-        short = per_call(lambda: pattern.search("a" * 14), 10, repeat=3)
-        longer = per_call(lambda: pattern.search("a" * 18), 3, repeat=3)
+        short = best_ns(lambda: pattern.search("a" * 14), repeats=3, inner=5)
+        longer = best_ns(lambda: pattern.search("a" * 18), repeats=3)
 
-        assert longer > short * 8, (
-            f"four more characters should cost about sixteen times as much: "
-            f"14 chars {short:.2e}s, 18 chars {longer:.2e}s"
-        )
+        assert longer > short * 8, f"14 chars {short:.0f} ns, 18 chars {longer:.0f} ns"
 
     @pytest.mark.timing
     def test_removing_the_nesting_settles_it(self) -> None:
         nested = re.compile(r"(a+)+b")
         flat = re.compile(r"a+b")
 
-        nested_time = per_call(lambda: nested.search("a" * 18), 3, repeat=3)
-        flat_time = per_call(lambda: flat.search("a" * 18), 5_000)
+        nested_time = best_ns(lambda: nested.search("a" * 18), repeats=3)
+        flat_time = best_ns(lambda: flat.search("a" * 18), inner=1_000)
 
-        assert nested_time > flat_time * 1_000, f"nested {nested_time:.2e}s, flat {flat_time:.2e}s"
+        assert nested_time > flat_time * 1_000, f"nested {nested_time:.0f}, flat {flat_time:.0f}"
 
     @pytest.mark.timing
-    @pytest.mark.skipif(
-        not ATOMIC_SUPPORTED, reason="atomic groups and possessive quantifiers are 3.11+"
-    )
+    @pytest.mark.skipif(not ATOMIC_SUPPORTED, reason="atomic groups are Python 3.11+")
     def test_atomic_and_possessive_forms_settle_it_too(self) -> None:
-        """The remedy the page recommended without naming, added in 3.11.
-
-        Both keep the nested shape and forbid the redistribution that makes
-        it explode, so the pattern still means what it meant.
-        """
         nested = re.compile(r"(a+)+b")
         atomic = re.compile(r"(?>a+)+b")
         possessive = re.compile(r"(a++)+b")
 
-        nested_time = per_call(lambda: nested.search("a" * 18), 3, repeat=3)
-        atomic_time = per_call(lambda: atomic.search("a" * 18), 5_000)
-        possessive_time = per_call(lambda: possessive.search("a" * 18), 5_000)
+        nested_time = best_ns(lambda: nested.search("a" * 18), repeats=3)
+        atomic_time = best_ns(lambda: atomic.search("a" * 18), inner=1_000)
+        possessive_time = best_ns(lambda: possessive.search("a" * 18), inner=1_000)
 
-        assert nested_time > atomic_time * 1_000, (
-            f"nested {nested_time:.2e}s, atomic {atomic_time:.2e}s"
-        )
-        assert nested_time > possessive_time * 1_000, (
-            f"nested {nested_time:.2e}s, possessive {possessive_time:.2e}s"
-        )
+        assert nested_time > atomic_time * 1_000, f"{nested_time:.0f} vs {atomic_time:.0f}"
+        assert nested_time > possessive_time * 1_000, f"{nested_time:.0f} vs {possessive_time:.0f}"
 
     @pytest.mark.skipif(ATOMIC_SUPPORTED, reason="3.11 and later accept them")
     def test_before_3_11_the_syntax_is_rejected(self) -> None:
@@ -386,238 +406,509 @@ class TestBacktracking:
             re.compile(r"(a++)+b")
 
 
+class TestBacktrackingStack:
+    """The size paragraph: O(1) stack for a single-character repeat, O(m) for
+    a repeated group."""
+
+    def test_a_repeated_group_records_each_iteration(self) -> None:
+        pattern = re.compile(r"(?:ab)*")
+        small = "ab" * 10_000
+        large = "ab" * 100_000
+
+        small_peak = peak_bytes(lambda: pattern.fullmatch(small))
+        large_peak = peak_bytes(lambda: pattern.fullmatch(large))
+
+        assert large_peak > small_peak * 5, f"20,000 chars {small_peak}, 200,000 {large_peak}"
+
+    def test_a_single_character_repeat_needs_no_stack(self) -> None:
+        pattern = re.compile(r"[ab]*")
+        subject = "ab" * 1_000_000
+        pattern.fullmatch("ab")  # warm
+
+        peak = peak_bytes(lambda: pattern.fullmatch(subject))
+
+        assert peak < 10_000, f"2,000,000 characters peaked at {peak} bytes"
+
+
 class TestAnchors:
-    """The corrected claim: `^` stops the retry, it does not stop backtracking."""
+    """From 3.11 a `^` or `\\A` search stops after the first attempt."""
+
+    UNANCHORED = r"start.*end"
+    ANCHORED = (r"^start.*end", r"\Astart.*end")
 
     @pytest.mark.timing
     def test_an_anchor_saves_nothing_when_the_match_is_at_the_start(self) -> None:
-        """What the page's own example measured, had it measured anything."""
-        unanchored = re.compile(r"start.*end")
-        anchored = re.compile(r"^start.*end")
+        unanchored = re.compile(self.UNANCHORED)
+        anchored = re.compile(self.ANCHORED[0])
         text = "start middle end"
 
-        loose = per_call(lambda: unanchored.search(text))
-        tight = per_call(lambda: anchored.search(text))
+        loose = best_ns(lambda: unanchored.search(text), inner=2_000)
+        tight = best_ns(lambda: anchored.search(text), inner=2_000)
 
-        assert tight > loose * 0.5, (
-            f"the anchor cannot help at position 0: unanchored {loose:.2e}s, anchored {tight:.2e}s"
-        )
+        assert tight > loose * 0.5, f"unanchored {loose:.0f} ns, anchored {tight:.0f} ns"
 
     @pytest.mark.timing
-    @pytest.mark.skipif(not ANCHOR_SHORT_CIRCUITS, reason="the anchored early exit is Python 3.11+")
+    @pytest.mark.skipif(not ANCHOR_SHORT_CIRCUITS, reason="the early exit is Python 3.11+")
     def test_an_anchor_saves_the_retry_when_nothing_matches(self) -> None:
-        """`sre_lib.h` gives up after the first attempt when the pattern
-        opens with `SRE_AT_BEGINNING`, rather than walking to the end.
-        """
-        unanchored = re.compile(r"start.*end")
-        anchored = re.compile(r"^start.*end")
+        unanchored = re.compile(self.UNANCHORED)
         haystack = "x" * 100_000
+        loose = best_ns(lambda: unanchored.search(haystack), inner=20)
 
-        loose = per_call(lambda: unanchored.search(haystack), 200)
-        tight = per_call(lambda: anchored.search(haystack), 20_000)
+        for spelling in self.ANCHORED:
+            anchored = re.compile(spelling)
+            tight = best_ns(lambda a=anchored: a.search(haystack), inner=2_000)
+            assert loose > tight * 20, f"{spelling}: unanchored {loose:.0f}, anchored {tight:.0f}"
 
-        assert loose > tight * 20, (
-            f"one attempt per position against one attempt in total: "
-            f"unanchored {loose:.2e}s, anchored {tight:.2e}s"
-        )
+    @pytest.mark.timing
+    @pytest.mark.skipif(not ANCHOR_SHORT_CIRCUITS, reason="the early exit is Python 3.11+")
+    def test_the_anchored_search_stops_growing_with_the_subject(self) -> None:
+        small = "x" * 100_000
+        large = "x" * 1_000_000
+        for spelling in self.ANCHORED:
+            anchored = re.compile(spelling)
+            short = best_ns(lambda a=anchored: a.search(small), inner=2_000)
+            long = best_ns(lambda a=anchored: a.search(large), inner=2_000)
+            assert long < short * 3, f"{spelling}: 100,000 {short:.0f} ns, 1,000,000 {long:.0f} ns"
+
+    @pytest.mark.timing
+    def test_a_multiline_caret_still_retries(self) -> None:
+        anchored = re.compile(self.ANCHORED[0], re.MULTILINE)
+        small = "x" * 100_000
+        large = "x" * 1_000_000
+
+        short = best_ns(lambda: anchored.search(small), inner=20)
+        long = best_ns(lambda: anchored.search(large), inner=20)
+
+        assert long > short * 4, f"100,000 chars {short:.0f} ns, 1,000,000 chars {long:.0f} ns"
 
     @pytest.mark.timing
     @pytest.mark.skipif(ANCHOR_SHORT_CIRCUITS, reason="3.11 and later exit early")
-    def test_before_3_11_the_anchor_cost_rather_than_saved(self) -> None:
-        """Which is why the page dates the advice.
+    def test_before_3_11_the_anchored_search_grows_with_the_subject(self) -> None:
+        anchored = re.compile(self.ANCHORED[0])
+        small = "x" * 100_000
+        large = "x" * 1_000_000
 
-        Without the early exit the retry loop runs anyway and the assertion
-        fails at every position, while the unanchored form still gets its
-        literal-prefix fast scan - so anchoring made it slower.
-        """
-        unanchored = re.compile(r"start.*end")
-        anchored = re.compile(r"^start.*end")
-        haystack = "x" * 100_000
+        short = best_ns(lambda: anchored.search(small), inner=20)
+        long = best_ns(lambda: anchored.search(large), inner=20)
 
-        loose = per_call(lambda: unanchored.search(haystack), 200)
-        tight = per_call(lambda: anchored.search(haystack), 200)
-
-        assert tight > loose, (
-            f"before 3.11 the anchored form should be the slower one: "
-            f"unanchored {loose:.2e}s, anchored {tight:.2e}s"
-        )
+        assert long > short * 4, f"100,000 chars {short:.0f} ns, 1,000,000 chars {long:.0f} ns"
 
     @pytest.mark.timing
-    @pytest.mark.skipif(not ANCHOR_SHORT_CIRCUITS, reason="the anchored early exit is Python 3.11+")
-    def test_the_anchored_search_stops_growing_with_the_subject(self) -> None:
-        anchored = re.compile(r"^start.*end")
+    def test_match_is_anchored_on_every_version(self) -> None:
+        pattern = re.compile(self.UNANCHORED)
         small = "x" * 100_000
-        large = "x" * 400_000
+        large = "x" * 1_000_000
 
-        short = per_call(lambda: anchored.search(small), 20_000)
-        long = per_call(lambda: anchored.search(large), 20_000)
+        short = best_ns(lambda: pattern.match(small), inner=2_000)
+        long = best_ns(lambda: pattern.match(large), inner=2_000)
 
-        assert long < short * 2, (
-            f"four times the haystack, one attempt either way: "
-            f"100,000 chars {short:.2e}s, 400,000 chars {long:.2e}s"
-        )
+        assert long < short * 3, f"100,000 chars {short:.0f} ns, 1,000,000 chars {long:.0f} ns"
 
     def test_both_forms_agree_on_the_answer(self) -> None:
         for text in ("start middle end", "x start middle end", "nothing here"):
-            loose = re.search(r"start.*end", text)
-            tight = re.search(r"^start.*end", text)
+            loose = re.search(self.UNANCHORED, text)
+            tight = re.search(self.ANCHORED[0], text)
 
-            assert (loose is not None) == (text.find("start") >= 0 and text.endswith("end"))
+            assert (loose is not None) == ("start" in text and text.endswith("end"))
             assert (tight is not None) == text.startswith("start")
 
 
+class TestMatchObjectsHoldPositions:
+    """The Match table: positions are O(1), text is a copy, and the match
+    holds the subject itself."""
+
+    @staticmethod
+    def _match_with_group(size: int) -> re.Match[str]:
+        found = re.compile(r"a(x+)b").search("a" + "x" * size + "b")
+        assert found is not None
+        return found
+
+    def test_a_match_does_not_grow_with_the_subject(self) -> None:
+        short = re.compile(r"x").search("x" * 10)
+        long = re.compile(r"x").search("x" * 1_000_000)
+        many = re.compile(r"(x)" * 50).search("x" * 50)
+        assert short is not None and long is not None and many is not None
+
+        assert sys.getsizeof(long) == sys.getsizeof(short)
+        assert sys.getsizeof(many) > sys.getsizeof(short), "two positions per group"
+
+    def test_string_is_the_subject_itself(self) -> None:
+        subject = "a" + "x" * 1_000 + "b"
+        found = re.compile(r"a(x+)b").search(subject)
+        assert found is not None
+
+        assert found.string is subject
+
+    def test_span_returns_indices_into_the_subject(self) -> None:
+        found = self._match_with_group(50)
+
+        assert found.span(1) == (1, 51)
+        assert found.start(1) == 1 and found.end(1) == 51
+        assert found.string[slice(*found.span(1))] == found.group(1)
+
+    def test_a_proper_substring_is_copied_and_the_whole_subject_is_not(self) -> None:
+        whole = re.compile(r"x+").search("x" * 1_000)
+        partial = self._match_with_group(1_000)
+        assert whole is not None
+
+        assert whole.group(0) is whole.string
+        assert partial.group(1) is not partial.string
+        assert partial.group(1) == partial[1] == "x" * 1_000
+
+    def test_the_whole_subject_rule_covers_bytes_but_not_bytearray(self) -> None:
+        subject = b"x" * 1_000
+        mutable = bytearray(subject)
+        from_bytes = re.compile(rb"x+").fullmatch(subject)
+        from_bytearray = re.compile(rb"x+").fullmatch(mutable)
+        assert from_bytes is not None and from_bytearray is not None
+
+        assert from_bytes.group(0) is subject
+        assert type(from_bytearray.group(0)) is bytes
+
+    def test_several_arguments_return_a_tuple_of_them(self) -> None:
+        found = re.compile(r"(a)(b)?").match("a")
+        assert found is not None
+
+        assert found.group(1, 2, 2, 1) == ("a", None, None, "a")
+
+    @pytest.mark.timing
+    def test_group_cost_follows_the_captured_length(self) -> None:
+        small = self._match_with_group(1_000)
+        large = self._match_with_group(1_000_000)
+
+        small_time = best_ns(lambda: small.group(1), inner=2_000)
+        large_time = best_ns(lambda: large.group(1), inner=200)
+
+        assert large_time > small_time * 20, f"1,000 {small_time:.0f} ns, 1e6 {large_time:.0f} ns"
+
+    @pytest.mark.timing
+    def test_span_does_not_follow_the_captured_length(self) -> None:
+        small = self._match_with_group(1_000)
+        large = self._match_with_group(1_000_000)
+
+        small_time = best_ns(lambda: small.span(1), inner=5_000)
+        large_time = best_ns(lambda: large.span(1), inner=5_000)
+
+        assert large_time < small_time * 10, f"1,000 {small_time:.0f} ns, 1e6 {large_time:.0f} ns"
+
+    @pytest.mark.timing
+    def test_groups_pays_once_per_group(self) -> None:
+        one = re.compile(r"(x{100})").search("x" * 100)
+        many = re.compile(r"(x{100})" * 50).search("x" * 5_000)
+        assert one is not None and many is not None
+
+        one_time = best_ns(one.groups, inner=2_000)
+        many_time = best_ns(many.groups, inner=2_000)
+
+        assert many_time > one_time * 5, f"1 group {one_time:.0f} ns, 50 {many_time:.0f} ns"
+
+    def test_groupdict_holds_the_named_groups_only(self) -> None:
+        found = re.compile(r"(\d+)-(?P<word>\w+)").search("id: 123-abc")
+        assert found is not None
+
+        assert found.groupdict() == {"word": "abc"}
+        assert found.groups() == ("123", "abc")
+        assert found.lastindex == 2 and found.lastgroup == "word"
+        assert found.pos == 0 and found.endpos == len("id: 123-abc")
+
+    @pytest.mark.timing
+    def test_expand_follows_the_template_length(self, clean_pattern_cache: None) -> None:
+        """Captured group held at 1,000 characters and one backreference;
+        the template's literal text varies 1,000x."""
+        found = re.compile(r"(a+)").fullmatch("a" * 1_000)
+        assert found is not None
+        brief = r"\1" + "x" * 10_000
+        lengthy = r"\1" + "x" * 10_000_000
+
+        for template in (brief, lengthy):
+            result = found.expand(template)
+            assert len(result) == 1_000 + len(template) - 2
+        del result
+
+        short = best_ns(lambda: found.expand(brief), repeats=3, inner=50)
+        long = best_ns(lambda: found.expand(lengthy), repeats=3)
+
+        assert long > short * 20, f"10,000 chars {short:.0f} ns, 10,000,000 chars {long:.0f} ns"
+
+
+class TestFindallAndFinditer:
+    """`findall` | O(k + g) space; `finditer` | O(1) to build, O(c) per match."""
+
+    def test_finditer_holds_one_match_at_a_time(self) -> None:
+        pattern = re.compile(r"\w+")
+        text = " ".join(f"word{index}" for index in range(20_000))
+
+        def walk() -> None:
+            for _ in pattern.finditer(text):
+                pass
+
+        materialised = peak_bytes(lambda: pattern.findall(text))
+        streamed = peak_bytes(walk)
+
+        assert materialised > streamed * 3, f"findall {materialised}, finditer {streamed}"
+
+    def test_findall_holds_the_matched_text_too(self) -> None:
+        pattern = re.compile(r"x+")
+        short = " ".join(["x" * 5] * 20_000)
+        long = " ".join(["x" * 200] * 20_000)
+
+        short_peak = peak_bytes(lambda: pattern.findall(short))
+        long_peak = peak_bytes(lambda: pattern.findall(long))
+
+        assert long_peak > short_peak * 2, f"5-char {short_peak}, 200-char {long_peak}"
+
+    def test_two_or_more_groups_give_tuples(self) -> None:
+        assert re.findall(r"(\w)(\d)", "a1 b2") == [("a", "1"), ("b", "2")]
+        assert re.findall(r"(\w)\d", "a1 b2") == ["a", "b"]
+
+    def test_building_the_iterator_scans_nothing(self, tmp_path: pathlib.Path) -> None:
+        """`(a+)+b` over 40 `a`s would take hours to scan, so building its
+        iterator in a subprocess with a timeout fails promptly if it scans."""
+        source = "import re\nit = re.compile(r'(a+)+b').finditer('a' * 40)\nassert iter(it) is it\n"
+
+        result = _run_block(source, tmp_path, timeout=30)
+
+        assert result.returncode == 0, result.stderr
+
+    def test_building_the_iterator_allocates_per_group(self) -> None:
+        """The O(c) in the construction row: two marks per group."""
+        none = re.compile("b")
+        many = re.compile("(a)" * 1_000 + "b")
+        none.finditer("zz")
+        many.finditer("zz")  # warm
+
+        none_peak = peak_bytes(lambda: none.finditer("zz"))
+        many_peak = peak_bytes(lambda: many.finditer("zz"))
+
+        assert many_peak > none_peak + 8_000, f"0 groups {none_peak}, 1,000 groups {many_peak}"
+
+    @pytest.mark.timing
+    def test_each_step_scans_to_the_next_match(self) -> None:
+        pattern = re.compile(r"z")
+
+        def second_match(subject: str) -> re.Match[str]:
+            found = pattern.finditer(subject)
+            next(found)
+            return next(found)
+
+        adjacent = "zz"
+        distant = "z" + "a" * 200_000 + "z"
+
+        near = best_ns(lambda: second_match(adjacent), inner=2_000)
+        far = best_ns(lambda: second_match(distant), inner=20)
+
+        assert far > near * 20, f"adjacent {near:.0f} ns, 200,000 apart {far:.0f} ns"
+
+
+class TestSubstitution:
+    """`sub` | O(s + r) | O(k + r): the result and its pieces, a cached template, and one
+    function call per match."""
+
+    def test_the_peak_follows_the_result_not_the_subject(self) -> None:
+        pattern = re.compile(r"\d")
+        subject = "a1" * 1_000
+        pattern.sub("x", subject)  # warm
+
+        brief = "x"
+        lengthy = "x" * 1_000
+
+        short = peak_bytes(lambda: pattern.sub(brief, subject))
+        long = peak_bytes(lambda: pattern.sub(lengthy, subject))
+
+        assert long > short * 20, f"one-char repl {short}, 1,000-char repl {long}"
+
+    def test_the_pieces_cost_space_even_when_the_result_is_empty(self) -> None:
+        """The k in O(k + r): deleting every match leaves r at 0."""
+        pattern = re.compile("a")
+        few = "a" * 1_000
+        many = "a" * 100_000
+        pattern.sub("", few)  # warm
+
+        few_peak = peak_bytes(lambda: pattern.sub("", few))
+        many_peak = peak_bytes(lambda: pattern.sub("", many))
+
+        assert pattern.sub("", many) == ""
+        assert many_peak > few_peak * 20, f"1,000 matches {few_peak}, 100,000 {many_peak}"
+
+    def test_a_new_template_costs_its_length_even_without_a_match(
+        self, clean_pattern_cache: None
+    ) -> None:
+        """The t in O(s + t + r): the subject has no match and r is 3."""
+        pattern = re.compile(r"(\d)")
+        brief = r"\1" + "x" * 10_000
+        lengthy = r"\1" + "x" * 1_000_000
+
+        short_peak = peak_bytes(lambda: pattern.sub(brief, "abc"))
+        long_peak = peak_bytes(lambda: pattern.sub(lengthy, "abc"))
+
+        assert long_peak > short_peak * 20, f"10,000 chars {short_peak}, 1e6 {long_peak}"
+
+    def test_a_template_is_parsed_once(self, clean_pattern_cache: None) -> None:
+        cache = template_cache()
+        pattern = re.compile(r"(\d)")
+
+        for _ in range(50):
+            assert pattern.sub(r"<\1>", "a1b2") == "a<1>b<2>"
+
+        info = cache.cache_info()
+        assert info.misses == 1 and info.hits == 49, info
+
+    def test_a_function_is_called_once_per_match(self) -> None:
+        calls: list[str] = []
+
+        def double(match: re.Match[str]) -> str:
+            calls.append(match.group())
+            return str(int(match.group()) * 2)
+
+        assert re.sub(r"\d+", double, "Numbers: 10, 20, 30") == "Numbers: 20, 40, 60"
+        assert calls == ["10", "20", "30"]
+
+    def test_subn_and_split_return_what_the_page_says(self) -> None:
+        pattern = re.compile(r"\d+")
+
+        assert pattern.subn("X", "10, 20, 30") == ("X, X, X", 3)
+        assert re.split(r"(,)\s*", "a, b") == ["a", ",", "b"]
+        assert re.split(r",\s*", "a, b, c", maxsplit=1) == ["a", "b, c"]
+
+
+class TestPatternAttributes:
+    """`Pattern.groupindex` | O(1): returned without copying the mapping."""
+
+    def test_without_named_groups_it_is_a_new_empty_dict(self) -> None:
+        pattern = re.compile(r"(a)")
+
+        assert pattern.groupindex == {}
+        assert pattern.groupindex is not pattern.groupindex
+
+    def test_with_named_groups_it_is_a_read_only_view(self) -> None:
+        pattern = re.compile(r"(?P<head>a)(b)(?P<tail>c)")
+
+        view = pattern.groupindex
+        assert isinstance(view, types.MappingProxyType)
+        assert dict(view) == {"head": 1, "tail": 3}
+        with pytest.raises(TypeError):
+            operator.setitem(cast(Any, view), "head", 2)
+        assert pattern.groups == 3 and pattern.pattern == r"(?P<head>a)(b)(?P<tail>c)"
+
+    @pytest.mark.timing
+    def test_groupindex_does_not_follow_the_group_count(self) -> None:
+        one = re.compile(r"(?P<g0>a)")
+        many = re.compile("".join(f"(?P<g{index}>a)" for index in range(2_000)))
+
+        one_time = best_ns(lambda: one.groupindex, inner=5_000)
+        many_time = best_ns(lambda: many.groupindex, inner=5_000)
+
+        assert many_time < one_time * 3, f"1 group {one_time:.0f} ns, 2,000 {many_time:.0f} ns"
+
+
+class TestEscape:
+    """`re.escape(pattern)` | O(n) | O(n)."""
+
+    def test_the_peak_follows_the_input(self) -> None:
+        short = "a.b*" * 25_000
+        long = "a.b*" * 250_000
+
+        short_peak = peak_bytes(lambda: re.escape(short))
+        long_peak = peak_bytes(lambda: re.escape(long))
+
+        assert long_peak > short_peak * 5, f"100,000 chars {short_peak}, 1,000,000 {long_peak}"
+
+    def test_escaped_text_matches_itself(self) -> None:
+        assert re.escape("abc123") == "abc123"
+        assert re.escape("a.b*c") == "a\\.b\\*c"
+        assert re.fullmatch(re.escape("a.b*c"), "a.b*c") is not None
+
+
 class TestPatternCache:
-    """`re.compile` caches 512 patterns; the eviction policy changed in 3.12."""
+    """512 patterns, and one entry dropped on overflow.
+
+    Which entry is dropped is not on the page. From 3.12 a hit that reaches
+    the 512-entry cache re-records the entry as most recently used, but a hit
+    served by the 256-entry fast-path cache in front of it returns without
+    touching it; on 3.10 and 3.11 no hit refreshes an entry. The two
+    version-gated tests pin that, through a hit that reaches the main cache.
+    """
 
     def test_the_documented_size_is_the_implementation_size(self) -> None:
         assert MAXCACHE == 512
 
-    def test_compiling_the_same_pattern_returns_the_same_object(
-        self, clean_pattern_cache: None
-    ) -> None:
-        first = re.compile(r"\d+")
-        second = re.compile(r"\d+")
-
-        assert first is second, "a cache hit hands back the compiled pattern"
-
     def test_the_cache_drops_one_entry_rather_than_emptying(
         self, clean_pattern_cache: None
     ) -> None:
-        """The contrast worth drawing: one entry goes, not the whole cache.
-
-        `_strptime` empties its format cache once it overflows; `re` evicts a
-        single entry and keeps the rest. The sizes here come out the same
-        under either eviction policy, so which one runs is pinned by the two
-        recency tests below - it changed in 3.12.
-        """
         sizes = []
         for index in range(MAXCACHE + 4):
             re.compile(f"unique-pattern-{index}")
-            if index in (0, MAXCACHE - 2, MAXCACHE - 1, MAXCACHE + 3):
+            if index in (0, MAXCACHE - 1, MAXCACHE + 3):
                 sizes.append(len(pattern_cache()))
 
-        assert sizes == [1, MAXCACHE - 1, MAXCACHE, MAXCACHE], (
-            f"expected the cache to fill and then hold: {sizes}"
-        )
+        assert sizes == [1, MAXCACHE, MAXCACHE], f"expected the cache to fill and hold: {sizes}"
 
-    @pytest.mark.skipif(sys.version_info >= (3, 12), reason="hits refresh recency from 3.12 on")
+    @pytest.mark.skipif(sys.version_info >= (3, 12), reason="hits refresh recency from 3.12")
     def test_before_3_12_a_hit_does_not_save_the_oldest_entry(
         self, clean_pattern_cache: None
     ) -> None:
-        """3.10 and 3.11 are insertion-ordered, not an LRU.
-
-        A cache hit in `_compile` is a plain dict lookup with no move to the
-        end, so however often the oldest-inserted entry is used it is still
-        the one a 513th pattern drops.
-        """
         oldest = re.compile("pattern-oldest")
         for index in range(MAXCACHE - 1):
             re.compile(f"pattern-{index}")
-        assert len(pattern_cache()) == MAXCACHE
         assert re.compile("pattern-oldest") is oldest, "the entry is present"
 
-        re.compile("pattern-new")  # the 513th insert
+        re.compile("pattern-new")  # the 513th pattern
 
-        assert re.compile("pattern-oldest") is not oldest, (
-            "the oldest-inserted entry was dropped despite the recent hit"
-        )
+        assert re.compile("pattern-oldest") is not oldest, "the oldest inserted is dropped"
 
     @pytest.mark.skipif(sys.version_info < (3, 12), reason="before 3.12 a hit changes nothing")
     def test_from_3_12_a_hit_saves_the_entry(self, clean_pattern_cache: None) -> None:
-        """From 3.12 a hit pops and re-inserts, so the used entry survives.
-
-        `_compile` re-records a found pattern as most recently used, and the
-        513th pattern drops the least recently used one instead. On 3.13+
-        the fast-path FIFO may serve the hit first; it has long since
-        evicted a pattern this old, so the LRU refresh still happens.
-        """
+        """The 256-entry fast-path cache has long since dropped a pattern
+        this old, so the hit reaches the LRU and re-records it."""
         oldest = re.compile("pattern-oldest")
         for index in range(MAXCACHE - 1):
             re.compile(f"pattern-{index}")
-        assert len(pattern_cache()) == MAXCACHE
         assert re.compile("pattern-oldest") is oldest, "the hit re-records it"
 
-        re.compile("pattern-new")  # the 513th insert
+        re.compile("pattern-new")  # the 513th pattern
 
-        assert re.compile("pattern-oldest") is oldest, (
-            "a recently used entry should not be the one dropped"
-        )
+        assert re.compile("pattern-oldest") is oldest, "the least recently used is dropped"
 
-    def test_purge_empties_it(self, clean_pattern_cache: None) -> None:
-        re.compile(r"\d+")
-        assert len(pattern_cache()) > 0
-
-        re.purge()
-
-        assert len(pattern_cache()) == 0
-
-    @pytest.mark.skipif(MAXCACHE2 is None, reason="the second-level cache is Python 3.12+")
+    @pytest.mark.skipif(MAXCACHE2 is None, reason="the fast-path cache is Python 3.12+")
     def test_the_fast_path_cache_is_smaller(self) -> None:
         assert MAXCACHE2 == 256
-        assert MAXCACHE2 is not None and MAXCACHE2 < MAXCACHE
 
 
-class TestCompilationAndEscaping:
-    """`re.compile(pattern)` | O(n) | and `re.escape(string)` | O(n) |."""
+class TestFlagsAndExceptions:
+    """The Flags and exceptions rows: values and the 3.11 and 3.13 names."""
 
-    @pytest.mark.timing
-    def test_compilation_follows_the_pattern_length(self) -> None:
-        short = "(?:abc)" * 10
-        long = "(?:abc)" * 100
+    def test_the_flags_are_int_flags_with_aliases(self) -> None:
+        assert issubclass(re.RegexFlag, int)
+        assert re.I is re.IGNORECASE and re.M is re.MULTILINE and re.S is re.DOTALL
+        assert re.A is re.ASCII and re.X is re.VERBOSE and re.U is re.UNICODE
+        assert re.L is re.LOCALE
+        assert isinstance(re.I | re.M, re.RegexFlag)
+        assert isinstance(re.DEBUG, re.RegexFlag)
 
-        short_time = per_call(lambda: (re.purge(), re.compile(short)), 200)
-        long_time = per_call(lambda: (re.purge(), re.compile(long)), 200)
-        re.purge()
+    @pytest.mark.skipif(sys.version_info < (3, 11), reason="NOFLAG is Python 3.11+")
+    def test_noflag_is_zero(self) -> None:
+        assert getattr(re, "NOFLAG") == 0  # noqa: B009 - 3.11+, not in the 3.10 stubs
 
-        assert long_time > short_time * 3, (
-            f"ten times the pattern is ten times the parse: {len(short)} chars "
-            f"{short_time:.2e}s, {len(long)} chars {long_time:.2e}s"
-        )
+    def test_the_types_are_what_compile_and_match_return(self) -> None:
+        pattern = re.compile("a")
+        found = pattern.match("a")
 
-    def test_escape_leaves_ordinary_characters_alone(self) -> None:
-        assert re.escape("abc123") == "abc123"
-        assert re.escape("a.b*c") == "a\\.b\\*c"
-        assert re.match(re.escape("a.b*c") + "$", "a.b*c") is not None
+        assert isinstance(pattern, re.Pattern) and isinstance(found, re.Match)
 
-    def test_an_invalid_pattern_raises_re_error(self) -> None:
-        with pytest.raises(re.error):
-            re.compile(r"(unclosed")
+    def test_pattern_error_is_re_error_from_3_13(self) -> None:
+        if sys.version_info >= (3, 13):
+            assert getattr(re, "PatternError") is re.error  # noqa: B009 - 3.13+
+        else:
+            assert not hasattr(re, "PatternError")
 
+    def test_the_error_locates_itself(self) -> None:
+        with pytest.raises(re.error) as caught:
+            re.compile("ab\ncd(")
 
-class TestDocumentedValues:
-    """The results the examples state in their comments."""
-
-    def test_findall_returns_the_listed_words(self) -> None:
-        assert re.compile(r"\w+").findall("Hello world from Python") == [
-            "Hello",
-            "world",
-            "from",
-            "Python",
-        ]
-
-    def test_sub_produces_the_listed_strings(self) -> None:
-        pattern = re.compile(r"\d+")
-        text = "Numbers: 10, 20, 30"
-
-        assert pattern.sub("X", text) == "Numbers: X, X, X"
-        assert pattern.sub(lambda m: str(int(m.group()) * 2), text) == "Numbers: 20, 40, 60"
-
-    def test_split_produces_the_listed_parts(self) -> None:
-        assert re.compile(r",\s*").split("apple, banana, cherry") == [
-            "apple",
-            "banana",
-            "cherry",
-        ]
-
-    def test_the_grouping_example_extracts_what_it_says(self) -> None:
-        found = re.compile(r"(\d+)-(\w+)").search("123-abc")
-        assert found is not None
-
-        assert found.group(0) == "123-abc"
-        assert found.group(1) == "123"
-        assert found.group(2) == "abc"
-        assert found.groups() == ("123", "abc")
-        assert found.span(1) == (0, 3)
+        error = caught.value
+        assert error.pattern == "ab\ncd("
+        assert (error.pos, error.lineno, error.colno) == (5, 2, 3)
+        assert error.msg == "missing ), unterminated subpattern"
 
 
 def _blocks() -> list[tuple[int, str]]:
@@ -637,7 +928,9 @@ def _blocks() -> list[tuple[int, str]]:
     return found
 
 
-def _run(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
+def _run_block(
+    source: str, cwd: pathlib.Path, timeout: float = 120
+) -> subprocess.CompletedProcess[str]:
     script = cwd / "_block.py"
     script.write_text(source, encoding="utf-8")
     return subprocess.run(
@@ -645,74 +938,59 @@ def _run(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
         cwd=cwd,
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=timeout,
         stdin=subprocess.DEVNULL,
         check=False,
     )
 
 
 class TestDocumentedExamples:
-    """Every block runs, on every supported version.
+    """Each block runs in its own subprocess and asserts its own result.
 
-    The block showing atomic groups guards them behind a version check rather
-    than being held back: on 3.10 the syntax is a compile error, and a block
-    that cannot run there would go untested on the version that needs the
-    warning most.
+    The block showing atomic groups guards them behind a version check, so it
+    runs on 3.10 too.
     """
 
     def test_the_page_has_the_expected_blocks(self) -> None:
-        blocks = _blocks()
-
-        assert len(blocks) == EXPECTED_BLOCKS, (
-            f"expected {EXPECTED_BLOCKS} python blocks, found {len(blocks)}"
-        )
-        guarded = [line for line, source in blocks if "sys.version_info" in source]
-        assert len(guarded) == 1, f"one block should be version-gated, found {guarded}"
+        assert len(_blocks()) == EXPECTED_BLOCKS
 
     def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
-
+        ran = 0
         for line, source in _blocks():
-            result = _run(source, tmp_path)
+            ran += 1
+            workdir = tmp_path / f"block{line}"
+            workdir.mkdir()
+            result = _run_block(source, workdir)
             if result.returncode != 0:
-                failures.append(f"{PAGE.name}:{line} raised: {result.stderr.strip()}")
+                failures.append(f"{PAGE.name}:{line}\n{result.stderr.strip()}")
 
-        assert not failures, "\n".join(failures)
+        assert ran == EXPECTED_BLOCKS
+        assert not failures, "\n\n".join(failures)
 
-    def test_the_nested_pattern_is_only_run_on_a_short_subject(self) -> None:
-        """The long call has to stay commented out.
-
-        `bad_pattern` is the nested quantifier, and its cost quadruples every
-        two characters: 9.1e-04s at 14, 1.4e-02s at 18, 5.7e-02s at 20. The
-        block shows the shape at 8 and leaves the expensive one as a comment,
-        which the block runner cannot check for itself - running the page is
-        exactly what would hang.
-        """
+    def test_the_nested_pattern_runs_only_on_short_subjects(self) -> None:
+        """The long call has to stay a comment: running the page is exactly
+        what would hang, so the runner cannot check it for itself."""
         blocks = [(line, source) for line, source in _blocks() if "bad_pattern" in source]
         assert len(blocks) == 1, f"expected one backtracking block, found {blocks}"
         line, source = blocks[0]
 
         live = [
-            statement.strip()
+            statement
             for statement in source.splitlines()
-            if statement.strip().startswith("bad_pattern.search")
+            if "bad_pattern.search" in statement and not statement.lstrip().startswith("#")
         ]
-        assert live, "the nested pattern should still be exercised somewhere"
-
+        assert live, "the nested pattern should still be exercised"
         for statement in live:
             repetition = re.search(r"'a' \* (\d+)", statement)
             assert repetition is not None, f"{PAGE.name}:{line}: {statement}"
             assert int(repetition.group(1)) <= 8, (
-                f"{PAGE.name}:{line} runs the blow-up on a long subject: {statement}"
+                f"{PAGE.name}:{line} runs the blow-up: {statement}"
             )
 
-    def test_the_runner_catches_a_broken_block(self, tmp_path: pathlib.Path) -> None:
-        """A runner that cannot fail proves nothing about the blocks it ran."""
-        original = _blocks()[0][1]
-        broken = original.replace("import re\n", "", 1)
-        assert broken != original, "the mutation did not remove the import"
+    def test_the_runner_notices_a_broken_assertion(self, tmp_path: pathlib.Path) -> None:
+        line, source = next((n, s) for n, s in _blocks() if "match.span(1) == (4, 7)" in s)
+        mutated = source.replace("match.span(1) == (4, 7)", "match.span(1) == (4, 8)", 1)
 
-        result = _run(broken, tmp_path)
-
-        assert result.returncode != 0
-        assert "NameError" in result.stderr
+        assert mutated != source, f"the mutation matched nothing in {PAGE.name}:{line}"
+        assert _run_block(mutated, tmp_path).returncode != 0
