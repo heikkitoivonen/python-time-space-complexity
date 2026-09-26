@@ -17,8 +17,7 @@ Measurement scope:
   Building the first importer over 2,000 and 20,000 one-byte members peaks
   more than 5x apart, and the cached directory holds an entry per member.
   Over ten members of 1 MB and ten of one byte, the peaks are within 2x of
-  each other and under 1 MB, below one member's size, so member data is not
-  read.
+  each other and under 1 MB, below one member's size, and no member is read.
 * A `find_spec()` miss and `is_package()` make at most five probes of the
   directory and read no member, at 10 entries and at 10,000 alike. A
   `find_spec()` hit on a module or package reads its member once and, for a
@@ -252,6 +251,7 @@ class TestTheDirectoryIsReadOncePerArchive:
 
         assert max(peaks) < 1_000_000, f"ten 1 MB members against ten 1-byte ones: {peaks}"
         assert peaks[0] < peaks[1] * 2, f"ten 1 MB members against ten 1-byte ones: {peaks}"
+        assert calls.member == 0
 
 
 class TestLookupsAreNameProbes:
@@ -328,7 +328,8 @@ class TestLookupsAreNameProbes:
 
 class TestMembersAreReadEveryTime:
     """`get_code`, `get_filename`, `get_source`, `get_data` | O(b) | O(b): each
-    call reads its member from disk, and a `.py` member is compiled each time."""
+    call reads its member from disk, and `get_code` and `get_filename` compile a
+    `.py` member each time."""
 
     def test_get_code_and_get_filename_read_and_compile_on_every_call(
         self, tmp_path: pathlib.Path, calls: Calls
@@ -342,7 +343,8 @@ class TestMembersAreReadEveryTime:
         assert (calls.member, calls.compiled) == (2, 2)
 
         assert importer.get_filename("mod") == os.path.join(archive, "mod.py")
-        assert (calls.member, calls.compiled) == (3, 3)
+        assert importer.get_filename("mod") == os.path.join(archive, "mod.py")
+        assert (calls.member, calls.compiled) == (4, 4)
         assert pathlib.Path(archive).read_bytes() == before, "the archive was modified"
 
     def test_bytecode_beside_the_source_is_not_compiled(

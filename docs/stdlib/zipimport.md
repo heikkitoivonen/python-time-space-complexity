@@ -59,7 +59,7 @@ with tempfile.TemporaryDirectory() as tmp:
     with zipfile.ZipFile(archive, 'w') as zf:
         zf.writestr('greeting.py', 'MESSAGE = "hello"\n')
 
-    sys.path.insert(0, archive)  # O(1) - nothing is read yet
+    sys.path.insert(0, archive)  # nothing is read yet
     try:
         import greeting  # O(n) once for the directory, then O(b) twice for the member
 
@@ -150,7 +150,8 @@ with tempfile.TemporaryDirectory() as tmp:
 ### Refreshing After the Archive Changes
 
 The directory is read once per archive path, so an importer does not see members added after it
-was built. `invalidate_caches()` drops the cached directory, and the next lookup reads it again.
+was built. `invalidate_caches()` drops the cached directory, and the next lookup reads it again; on
+Python 3.10-3.12 `invalidate_caches()` rereads it itself.
 
 ```python
 import os
@@ -169,7 +170,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     assert importer.find_spec('second') is None  # the cached directory is unchanged
     importer.invalidate_caches()  # O(1); O(n) on Python 3.10-3.12
-    assert importer.find_spec('second') is not None  # O(n) to reread, then O(b)
+    assert importer.find_spec('second') is not None  # O(n) to reread on 3.13+, then O(b)
 ```
 
 ## Performance Best Practices
