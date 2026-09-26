@@ -47,9 +47,11 @@ Measurement scope:
   callers, and never builds the callee map. `print_callees()` builds a map
   holding e entries on its first call and reuses the same object on the
   second; `strip_dirs()` clears it, `add()` does not, and the callees printed
-  after `add()` miss the merged call.
+  after `add()` miss the merged call, while the function the merge added
+  prints with an empty callee list.
 * `get_stats_profile()` returns one `FunctionProfile` per function name, in
-  sort order; two functions named alike in different files leave one entry.
+  sort order; two functions named alike in different files leave one entry,
+  the later one in that order.
   `ncalls` is `'3/1'` for three calls of which one was primitive.
 * `SortKey` has the nine members the page lists, and `SortKey('ncalls')` is
   `SortKey.CALLS`. `str(SortKey.TIME)` is `'time'` from 3.11 and
@@ -589,6 +591,13 @@ class TestCallGraph:
         assert "(leaf)" in stream.getvalue()
         assert "(other)" not in stream.getvalue(), "the cached callee map was refreshed"
 
+        stream.seek(0)
+        stream.truncate()
+        stats.print_callees()
+        added = [line for line in stream.getvalue().splitlines() if "(other)" in line]
+
+        assert len(added) == 1 and "->" in added[0] and added[0].rstrip().endswith("->"), added
+
         stats.strip_dirs()
         stream.seek(0)
         stream.truncate()
@@ -625,6 +634,8 @@ class TestStatsProfile:
 
         assert len(stats.stats) == 2  # type: ignore[attr-defined]
         assert list(profile.func_profiles) == ["run"]
+        survivor = profile.func_profiles["run"]
+        assert (survivor.file_name, survivor.ncalls) == ("/b/two.py", "2")
 
     def test_recursive_calls_read_total_over_primitive(self) -> None:
         stats = make_stats({LEAF: (1, 3, 0.3, 0.3, {})})

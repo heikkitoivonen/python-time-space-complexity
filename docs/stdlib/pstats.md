@@ -17,7 +17,7 @@ pattern's own cost is not in the bounds.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `pstats.Stats(*filenames_or_profiles, stream=None)` | O(f + e) | O(f + e) | Loads the first argument and `add()`s the rest; a profiler is snapshotted with its `create_stats()`. With no arguments it starts empty |
+| `pstats.Stats(*filenames_or_profiles, stream=None)` | O(f + e) | O(f + e) | For one argument. Loads the first argument and `add()`s the rest, each at `add()`'s cost; a profiler is snapshotted with its `create_stats()`. With no arguments it starts empty |
 | `Stats.add(*filenames_or_profiles)` | O(f₂ + e₂ + e) per profile | O(f₂ + e₂ + e) | A filename or profiler is loaded first. A function both profiles share gets a new caller dictionary holding both sets of callers, so a merge can copy every existing edge. Drops the sort order |
 | `Stats.dump_stats(filename)` | O(f + e) | O(f + e) | Writes the marshal file that `Stats(filename)` loads |
 | `Stats.strip_dirs()` | O(f + e) | O(f + e) | Rebuilds every key and caller dictionary without directories. Entries that then collide are merged, each merge copying the survivor's callers, so g colliding entries with distinct callers cost O(g²). Drops the sort order |
@@ -25,7 +25,7 @@ pattern's own cost is not in the bounds.
 | `Stats.reverse_order()` | O(f) | O(1) | Reverses the sorted list in place; does nothing before `sort_stats()` |
 | `Stats.print_stats(*restrictions)` | O(f) | O(f) | Copies the ordered list, then applies each restriction in turn: a string is a regex searched in every remaining name, an int keeps that many, a float in [0, 1) that fraction |
 | `Stats.print_callers(*restrictions)` | O(f + Σ c log c) | O(f + c) | Selects as `print_stats()` does; each printed function's callers are sorted before printing |
-| `Stats.print_callees(*restrictions)` | O(f + e + Σ c log c) first call, O(f + Σ c log c) after | O(f + e) | The first call inverts the caller graph and caches it. `strip_dirs()` clears that cache and `add()` does not, so callees printed after `add()` omit the merged calls |
+| `Stats.print_callees(*restrictions)` | O(f + e + Σ c log c) first call, O(f + Σ c log c) after | O(f + e) | The first call inverts the caller graph and caches it. `strip_dirs()` clears that cache and `add()` does not, so callees printed after `add()` omit the merged calls, and a function the merge added prints with none |
 | `Stats.get_stats_profile()` | O(f) | O(f) | Builds a `FunctionProfile` for every function, in sort order, into a dict keyed by bare function name, so same-named functions in different files overwrite each other |
 
 ### SortKey
