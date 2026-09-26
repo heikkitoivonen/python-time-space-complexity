@@ -24,6 +24,8 @@ Measurement scope:
 * `shorten()` at width 20 and `wrap(max_lines=1)` at width 70 have traced
   peaks that grow more than 5x and less than 20x from 10,000 to 100,000
   characters while their output stays within one line.
+  A `TextWrapper` subclass recording `_split()` shows `max_lines=1` over
+  100,000 characters splits all 25,000 chunks in one call.
 * `dedent()` and `indent()` over 12-character lines: each 10x step from
   10,000 to 1,000,000 characters costs under 30x (quadratic predicts 100x),
   and their peaks grow more than 5x and less than 20x per step. The m·p
@@ -240,6 +242,21 @@ class TestTruncationSplitsTheWholeText:
 
         assert len(textwrap.wrap(large, 70, max_lines=1)) == 1
         assert peaks[0] * 5 < peaks[1] < peaks[0] * 20, f"10x the text at max_lines=1: {peaks}"
+
+    def test_max_lines_splits_every_word_before_building_a_line(self) -> None:
+        text = words(100_000)
+        split_sizes: list[int] = []
+
+        class CountingWrapper(textwrap.TextWrapper):
+            def _split(self, text: str) -> list[str]:
+                chunks = super()._split(text)
+                split_sizes.append(len(chunks))
+                return chunks
+
+        lines = CountingWrapper(width=70, max_lines=1).wrap(text)
+
+        assert len(lines) == 1
+        assert split_sizes == [2 * (100_000 // 8)], "one chunk per word and per space"
 
     @pytest.mark.parametrize("width", [12, 20, 40, 100])
     def test_shorten_fits_the_width(self, width: int) -> None:

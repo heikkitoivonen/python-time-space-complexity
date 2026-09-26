@@ -125,7 +125,7 @@ assert textwrap.wrap(text, width=15, max_lines=2) == ['The quick brown', 'fox ju
 ### dedent
 
 `dedent()` finds the longest run of spaces and tabs that starts every line, ignoring lines of only
-spaces and tabs, and removes it. Tabs and spaces are different characters here, so a tab-indented line and a
+spaces and tabs (from Python 3.14, lines of only whitespace of any kind), and removes it. Tabs and spaces are different characters here, so a tab-indented line and a
 space-indented one share no margin.
 
 ```python
@@ -220,6 +220,7 @@ assert block == '    Usage: tool [options]\n    Reads its input and writes a rep
 
 - **Python 3.3+**: Added `indent()` and `TextWrapper.tabsize`
 - **Python 3.4+**: Added `shorten()`, `TextWrapper.max_lines` and `TextWrapper.placeholder`
+- **Python 3.14+**: `dedent()` blanks and ignores a line of any whitespace, such as `\r`, not only spaces and tabs
 
 ## Related Modules
 
