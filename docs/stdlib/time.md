@@ -47,7 +47,7 @@ consulting the timezone rules that `localtime()`, `mktime()` and `tzset()` rely 
 | `time.mktime(t)` | O(1) | O(1) | A local `struct_time` back to a timestamp |
 | `time.asctime([t])`, `time.ctime([secs])` | O(1) | O(1) | 24 characters for any four-digit year |
 | `time.strftime(format[, t])` | O(f) | O(f) | Output grows with the format: each directive expands to a bounded number of characters |
-| `time.strptime(string[, format])` | O(n) | O(n) | Each format is compiled once, O(f), and cached; the cache is small and is cleared wholesale when full |
+| `time.strptime(string[, format])` | O(n) | O(n) | Each format is compiled once and cached; the cache is small and is cleared wholesale when full |
 
 ### struct_time
 
@@ -177,7 +177,7 @@ import time
 lines = ["2026-01-30 08:00", "2026-01-30 09:15", "2026-01-31 17:45"]
 fmt = "%Y-%m-%d %H:%M"
 
-hours = [time.strptime(line, fmt).tm_hour for line in lines]  # O(f) once, then O(n) each
+hours = [time.strptime(line, fmt).tm_hour for line in lines]  # compiled once, then O(n) each
 assert hours == [8, 9, 17]
 
 try:
@@ -225,12 +225,9 @@ assert elapsed_ns >= 0
 import time
 
 deadline = time.monotonic() + 0.05  # O(1) - unaffected if the system clock is set
-polls = 0
 while time.monotonic() < deadline:
-    polls += 1
     time.sleep(0.01)  # O(1) CPU per wait
 
-assert polls >= 1
 assert time.monotonic() >= deadline
 ```
 

@@ -18,13 +18,15 @@ Measurement scope:
   character - for `%c`, `%Y`, `%%` and literal text, in the C locale.
 * `strptime()` is timed on inputs of 10,000, 100,000 and 1,000,000 literal
   characters plus a year, with the format already cached: every 10x step
-  costs more than 4x and less than 40x. The O(f) compile is separated from the
+  costs more than 4x and less than 40x. The compile is separated from the
   O(n) match by padding the format with whitespace, which compiles to one
   `\\s+` and so leaves the input fixed at seven characters: from 100 to
   100,000 format characters a cached call stays within 3x, and a call after
-  clearing the cache grows more than 20x.
-* The cache is observed in `_strptime._regex_cache`. A reused format is the
-  same compiled object after 50 calls; the seventh distinct format leaves one
+  clearing the cache grows more than 20x. That is a lower bound on the
+  compile only: its upper bound is not priced by the page.
+* The cache is observed in `_strptime._regex_cache`. A reused format is
+  compiled once over 51 calls, counted on `_strptime._TimeRE_cache.compile`,
+  and stays the same compiled object; the seventh distinct format leaves one
   entry rather than six, so the cache is emptied rather than evicted; seven
   formats used in rotation for 70 calls find their format missing on every
   call; and `datetime.datetime.strptime()` fills the same dictionary.
@@ -37,15 +39,17 @@ Measurement scope:
   is charged under 50 ms of `thread_time()` and `process_time()` advances by
   at least 0.2 s, so the first counts only its own thread and the second the
   whole process.
-* `time_ns()` keeping precision is asserted through `math.ulp(time.time())`
-  exceeding one nanosecond, which holds for any timestamp after 1970-04.
+* Each `_ns` clock is asserted to return an int, and a float timestamp's
+  spacing, `math.ulp(time.time())`, to exceed one nanosecond, which holds for
+  any timestamp after 1970-04. That the int carries the clock's nanoseconds
+  is read from the official documentation.
   `monotonic()` is asserted non-decreasing over 1,000 reads and reported
   monotonic and not adjustable by `get_clock_info()`.
 * `struct_time` is asserted to have nine indexable items for timestamps 0,
   1e9 and 2e9, eleven named fields, `tm_zone` and `tm_gmtoff` outside the
   tuple, and to accept nine to eleven items and reject eight and twelve.
-  `asctime()` and `ctime()` are 24 characters across four-digit years, 21 for
-  year 1 and 25 for year 10,000.
+  `asctime()` and `ctime()` are 24 characters across four-digit years, and
+  `asctime()` 21 for year 1 and 25 for year 10,000.
 * On Linux, every Unix-only name the page lists is asserted present, and
   every `CLOCK_*` id present is read through `clock_gettime()`.
 * Every fenced Python block runs in its own subprocess and working directory,
@@ -85,6 +89,7 @@ from __future__ import annotations
 import _strptime
 import datetime
 import math
+import os
 import pathlib
 import re
 import subprocess
@@ -410,7 +415,7 @@ class TestStrftimeFollowsItsFormat:
 
 
 class TestStrptimeFollowsItsInput:
-    """`time.strptime(string[, format])` | O(n) | O(n), with the O(f) compile
+    """`time.strptime(string[, format])` | O(n) | O(n), with the compile
     paid once per format."""
 
     @pytest.fixture(autouse=True)
@@ -483,14 +488,25 @@ class TestStrptimeCache:
         yield
         _strptime._regex_cache.clear()
 
-    def test_reusing_a_format_compiles_nothing_new(self) -> None:
+    def test_reusing_a_format_compiles_nothing_new(self, monkeypatch: pytest.MonkeyPatch) -> None:
         value, fmt = self.FORMATS[0]
+        compiler = _strptime._TimeRE_cache
+        real = compiler.compile
+        compiled_formats: list[str] = []
+
+        def counting(format: str) -> re.Pattern[str]:
+            compiled_formats.append(format)
+            return real(format)
+
+        monkeypatch.setattr(compiler, "compile", counting)
         time.strptime(value, fmt)
         compiled = _strptime._regex_cache[fmt]
 
         for _ in range(50):
             time.strptime(value, fmt)
 
+        assert _strptime._TimeRE_cache is compiler
+        assert compiled_formats == [fmt]
         assert _strptime._regex_cache[fmt] is compiled
         assert len(_strptime._regex_cache) == 1
 
@@ -543,10 +559,22 @@ class TestTimezoneAttributes:
 
     def test_tzset_refreshes_the_attributes(self) -> None:
         require("tzset")
-        time.tzset()
+        saved = os.environ.get("TZ")
+        try:
+            os.environ["TZ"] = "UTC0"
+            time.tzset()
+            assert (time.timezone, time.daylight, time.tzname) == (0, 0, ("UTC", "UTC"))
 
-        assert isinstance(time.timezone, int)
-        assert len(time.tzname) == 2
+            os.environ["TZ"] = "EST+05EDT,M3.2.0,M11.1.0"
+            time.tzset()
+            assert (time.timezone, time.altzone, time.daylight) == (18_000, 14_400, 1)
+            assert time.tzname == ("EST", "EDT")
+        finally:
+            if saved is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = saved
+            time.tzset()
 
 
 def _blocks() -> list[tuple[int, str]]:
