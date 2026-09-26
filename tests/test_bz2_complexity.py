@@ -365,7 +365,7 @@ class TestStreamingDecompressor:
         with pytest.raises(EOFError, match="already reached"):
             decompressor.decompress(b"more")
 
-    def test_unused_data_is_copied_at_the_end_of_the_stream(self) -> None:
+    def test_unused_data_holds_the_tail_once_the_stream_ends(self) -> None:
         decompressor = bz2.BZ2Decompressor()
         assert decompressor.unused_data == b""
         assert decompressor.needs_input is True
@@ -608,4 +608,6 @@ class TestDocumentedExamples:
         mutated = source.replace("assert total == 10_000_000", "assert total == 9_999_999", 1)
 
         assert mutated != source, f"the mutation matched nothing in {PAGE.name}:{line}"
-        assert _run_block(mutated, tmp_path).returncode != 0
+        result = _run_block(mutated, tmp_path)
+        assert result.returncode != 0
+        assert "AssertionError" in result.stderr
