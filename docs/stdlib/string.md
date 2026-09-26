@@ -1,276 +1,382 @@
-# String Module Complexity
+# string Module Complexity
 
-The `string` module provides string constants and utilities for string formatting and templating.
+The `string` module holds the ASCII character-class constants, `capwords()`, and two ways of
+filling text with values: `$`-style `Template` substitution and `Formatter`, a subclassable
+Python version of `str.format()`. From Python 3.14 its `string.templatelib` submodule holds the types that
+t-string literals evaluate to. Nothing here caches a parse: `Template` and `Formatter` walk the
+string again on every call.
 
-## Common Operations
+`n` is the characters in the input string (the template, the format string, or the text being
+processed), `p` is its placeholders (replacement fields, or interpolations for a t-string), `u` is
+its distinct placeholder names, `k` is the characters in one field name, `v` is the characters all substituted values produce as text, and
+`w` is the characters one value produces. `a` is the arguments passed to a
+`templatelib.Template`. Mapping lookups and attribute access are O(1), and a `$` placeholder
+name counts as O(1) to copy or compare; producing a value's text (`str()`, `repr()`, `format()`)
+is priced by the characters it produces.
+
+## Complexity Reference
+
+### Constants
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `string.ascii_letters` | O(1) | O(1) | Constant access |
-| `string.digits` | O(1) | O(1) | Constant access |
-| `Formatter.format()` | O(n) | O(n) | Format string |
-| `Template.substitute()` | O(n) | O(n) | Template substitution |
-| `capwords(string)` | O(n) | O(n) | Capitalize each word; splits on whitespace |
+| `string.ascii_letters`, `string.ascii_lowercase`, `string.ascii_uppercase` | O(1) | O(1) | Module-level `str` objects of fixed length |
+| `string.digits`, `string.hexdigits`, `string.octdigits` | O(1) | O(1) | Module-level `str` objects of fixed length |
+| `string.punctuation`, `string.whitespace`, `string.printable` | O(1) | O(1) | `printable` is digits, letters, punctuation and whitespace together |
 
-## String Constants
+### capwords
 
-### Predefined Constants
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `string.capwords(s, sep=None)` | O(n) | O(n) | Splits, capitalizes each word and joins; with `sep=None` runs of whitespace become one space and the ends are stripped |
 
-#### Time Complexity: O(1)
+### Template
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `string.Template(template)` | O(1) | O(1) | Stores the string; nothing is parsed until a method runs |
+| `Template.substitute(mapping={}, /, **kwds)` | O(n + v) | O(n + v) | Scans the whole template on every call; raises `KeyError` for a missing name and `ValueError` for a malformed placeholder; keywords take precedence over `mapping` |
+| `Template.safe_substitute(mapping={}, /, **kwds)` | O(n + v) | O(n + v) | Leaves missing and malformed placeholders in the result instead of raising |
+| `Template.is_valid()` | O(n) | O(1) | Python 3.11+; `False` if any placeholder is malformed |
+| `Template.get_identifiers()` | O(n + p·u) | O(u) | Python 3.11+; names in first-seen order, each checked against a list of the names already found |
+| `Template.template` | O(1) | O(1) | The string passed in; reassigning it changes what the next call scans |
+| `Template.delimiter`, `Template.idpattern`, `Template.braceidpattern`, `Template.flags` | O(1) | O(1) | Class attributes a subclass overrides; they are compiled into its `pattern` when the subclass is defined |
+| `Template.pattern` | O(1) | O(1) | The compiled regular expression, shared by every instance of the class; no call recompiles it |
+
+### Formatter
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `string.Formatter()` | O(1) | O(1) | Holds no state; subclass it to override the methods below |
+| `Formatter.format(format_string, /, *args, **kwargs)` | O(n + v) | O(n + v) | Does what `str.format()` does, but the loop over fields runs in Python rather than C, so it is the slower of the two |
+| `Formatter.vformat(format_string, args, kwargs)` | O(n + v) | O(n + v) | What `format()` calls; collects the arguments used and passes them to `check_unused_args()` once |
+| `Formatter.parse(format_string)` | O(1) | O(1) | Returns a lazy iterator; walking it is O(n) in total, and a malformed field raises only when reached |
+| `Formatter.get_field(field_name, args, kwargs)` | O(k) | O(k) | One lookup per `.name` or `[index]` in the field name |
+| `Formatter.get_value(key, args, kwargs)` | O(1) | O(1) | `args[key]` for an integer key, `kwargs[key]` otherwise |
+| `Formatter.convert_field(value, conversion)` | O(w) | O(w) | `str()`, `repr()` or `ascii()` for `!s`, `!r`, `!a`; O(1) with no conversion, when the value is returned as it is |
+| `Formatter.format_field(value, format_spec)` | O(w) | O(w) | `format(value, format_spec)` |
+| `Formatter.check_unused_args(used_args, args, kwargs)` | O(1) | O(1) | Does nothing unless overridden |
+
+### templatelib (Python 3.14+)
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| Evaluating a t-string literal `t"..."` | O(p) | O(p) | Evaluates every expression; the interpolated values are neither converted nor formatted, though fields nested in a format spec are |
+| `string.templatelib.Template(*args)` | O(a) | O(a) | When strings and interpolations alternate, as a literal produces them; consecutive strings are joined one concatenation at a time, which is quadratic in the number of strings joined |
+| `templatelib.Template.strings`, `templatelib.Template.interpolations` | O(1) | O(1) | Tuples stored on the template, the same object on every access |
+| `templatelib.Template.values` | O(p) | O(p) | Built from the interpolations on every access |
+| Iterating a `templatelib.Template` | O(p) | O(1) | Strings and interpolations in order, empty strings skipped |
+| `templatelib.Template + templatelib.Template` | O(p) | O(p) | Copies both operands' parts into a new template, plus the characters of the two strings that meet; adding a `str` raises `TypeError` |
+| `string.templatelib.Interpolation(value, expression='', conversion=None, format_spec='')` | O(1) | O(1) | Stores its arguments |
+| `Interpolation.value`, `Interpolation.expression`, `Interpolation.conversion`, `Interpolation.format_spec` | O(1) | O(1) | Stored attributes |
+| `string.templatelib.convert(obj, /, conversion)` | O(w) | O(w) | `str()`, `repr()` or `ascii()` for `'s'`, `'r'`, `'a'`; `obj` unchanged for `None` |
+
+## Character Constants
+
+The constants are ordinary strings of fixed length, so reading one is O(1) and testing a character
+against one is O(1) too. Filtering text by them is a single O(n) pass.
 
 ```python
+import secrets
 import string
 
-# Access constants: O(1)
-letters = string.ascii_letters  # All letters
-lowercase = string.ascii_lowercase  # a-z
-uppercase = string.ascii_uppercase  # A-Z
-digits = string.digits  # 0-9
-hex_digits = string.hexdigits  # 0-9a-fA-F
-octdigits = string.octdigits  # 0-7
-punctuation = string.punctuation  # !"#$%&...
+assert string.hexdigits == string.digits + 'abcdefABCDEF'
+assert string.printable == (
+    string.digits + string.ascii_letters + string.punctuation + string.whitespace
+)
 
-# Generate character set: O(1)
-valid_chars = string.ascii_letters + string.digits
-# 'abcdefghijklmnopqrstuvwxyzABC...0123456789'
+text = 'abc123def456'
+digits = ''.join(c for c in text if c in string.digits)  # O(n)
+letters = ''.join(c for c in text if c in string.ascii_letters)  # O(n)
+assert (digits, letters) == ('123456', 'abcdef')
+
+# secrets, not random, for anything that guards access
+alphabet = string.ascii_letters + string.digits
+token = ''.join(secrets.choice(alphabet) for _ in range(16))  # O(length)
+assert len(token) == 16 and set(token) <= set(alphabet)
 ```
 
-#### Space Complexity: O(1)
+## Capitalizing Words
+
+`capwords()` is `split()`, `capitalize()` on each word, and `join()`: three linear passes. Unlike
+`str.title()`, which starts a new word after any uncased character such as an apostrophe, it
+capitalizes only what follows the separator.
 
 ```python
-import string
+from string import capwords
 
-letters = string.ascii_letters  # O(1) - constants
-```
+assert capwords('  hello   wORLD ') == 'Hello World'  # O(n) - whitespace collapses
+assert capwords("don't stop") == "Don't Stop"
+assert "don't stop".title() == "Don'T Stop"
 
-## String Formatting
-
-### Formatter Class
-
-#### Time Complexity: O(n)
-
-Where n = length of format string.
-
-```python
-from string import Formatter
-
-# Create formatter: O(1)
-fmt = Formatter()
-
-# Format string: O(n) where n = string length
-result = fmt.format('{0} {1}', 'Hello', 'World')  # O(n)
-
-# Parse format string: O(n)
-parsed = fmt.parse('{name}: {value:.2f}')  # O(n)
-
-# Format with kwargs: O(n)
-result = fmt.format_map({'x': 10, 'y': 20})  # O(n)
-```
-
-#### Space Complexity: O(n)
-
-```python
-from string import Formatter
-
-fmt = Formatter()
-result = fmt.format('{0} {1}', 'a', 'b')  # O(n) for result
+# An explicit separator is kept as it is, empty words included
+assert capwords('hello--world', sep='-') == 'Hello--World'  # O(n)
 ```
 
 ## Template Strings
 
-### Template Substitution
+### Substitution Scans Every Call
 
-#### Time Complexity: O(n)
-
-```python
-from string import Template
-
-# Create template: O(n) to parse
-template = Template('$name is $age years old')
-
-# Substitute: O(n) where n = template length
-result = template.substitute(name='Alice', age=30)  # O(n)
-
-# Safe substitute (no error on missing): O(n)
-result = template.safe_substitute(
-    name='Bob'  # age missing
-)  # O(n) - returns 'Bob is $age years old'
-```
-
-#### Space Complexity: O(n)
+Building a `Template` stores the string and nothing else. Each `substitute()` or
+`safe_substitute()` scans the whole template with the class's compiled pattern, so reusing one
+`Template` object saves no parsing: the pattern is the only thing shared between calls.
 
 ```python
 from string import Template
 
-template = Template('Hello $name')  # O(n)
-result = template.substitute(name='World')  # O(n)
+template = Template('$name is $age years old')  # O(1) - nothing is parsed yet
+
+assert template.substitute(name='Alice', age=30) == 'Alice is 30 years old'  # O(n + v)
+assert template.substitute({'name': 'Bob', 'age': 25}) == 'Bob is 25 years old'  # O(n + v)
+
+# Keywords take precedence over the mapping
+assert template.substitute({'name': 'Bob', 'age': 25}, age=26) == 'Bob is 26 years old'
+
+# The next call scans whatever the template now holds
+template.template = 'Hi $name'
+assert template.substitute(name='Cara') == 'Hi Cara'
 ```
 
-## Practical Functions
+### Missing and Malformed Placeholders
 
-### capwords()
-
-#### Time Complexity: O(n)
+`substitute()` raises at the first placeholder it cannot fill; `safe_substitute()` copies it into
+the result and carries on. `$$` is a literal `$` in both.
 
 ```python
-from string import capwords
+from string import Template
 
-# Capitalize words: O(n)
-text = 'hello world python'
-capitalized = capwords(text)  # O(n) = 'Hello World Python'
+template = Template('Total: $$${amount} for $item')
 
-# With separator: O(n)
-text = 'hello-world-python'
-result = capwords(text, sep='-')  # O(n)
+assert template.safe_substitute(amount='29.99') == 'Total: $29.99 for $item'  # O(n + v)
+
+try:
+    template.substitute(amount='29.99')
+except KeyError as error:
+    assert error.args == ('item',)
+else:
+    raise AssertionError('a missing name was substituted')
+
+try:
+    Template('costs $ 5').substitute()
+except ValueError as error:
+    assert 'Invalid placeholder' in str(error)
+else:
+    raise AssertionError('a bare $ was accepted')
 ```
 
-#### Space Complexity: O(n)
+### Checking and Listing Placeholders
+
+`is_valid()` and `get_identifiers()` (Python 3.11+) scan the template the way `substitute()` does,
+without substituting. `get_identifiers()` checks each name against a list of those already found,
+so a template with thousands of distinct names costs quadratic time; a dictionary keyed by name
+keeps the same first-seen order in one pass.
 
 ```python
-from string import capwords
+from string import Template
 
-result = capwords('hello world')  # O(n) for result string
+template = Template('$user logged in from $host; ${user} again')
+
+assert template.is_valid()  # O(n)
+assert not Template('costs $ 5').is_valid()
+assert template.get_identifiers() == ['user', 'host']  # O(n + p·u)
+
+# The same names in O(n + p), for templates with many distinct names
+names = dict.fromkeys(
+    match['named'] or match['braced']
+    for match in Template.pattern.finditer(template.template)
+    if match['named'] or match['braced']
+)
+assert list(names) == ['user', 'host']
+```
+
+### Custom Delimiters
+
+A subclass changes the syntax through class attributes. They are compiled into the subclass's
+`pattern` once, when the class statement runs, and every instance and call then shares it.
+
+```python
+import re
+from string import Template
+
+class PercentTemplate(Template):
+    delimiter = '%'
+
+assert isinstance(PercentTemplate.pattern, re.Pattern)  # compiled with the class
+assert PercentTemplate('%who owes %%5').substitute(who='Bob') == 'Bob owes %5'  # O(n + v)
+```
+
+## Formatter
+
+### Formatter vs str.format
+
+`Formatter` produces what `str.format()` produces, through the same C parser, but walks the fields
+in a Python loop and calls a method per step. Before Python 3.14 it also rejects an unnumbered
+field that goes on to an attribute or index, such as `{.real}`, which `str.format()` accepts. That loop makes it the slower choice when you need
+nothing but the output; its reason to exist is subclassing, where overriding one method changes
+how every field is looked up, converted or formatted.
+
+```python
+from string import Formatter
+
+formatter = Formatter()  # O(1)
+assert formatter.format('{0} {1}', 'Hello', 'World') == 'Hello World'  # O(n + v)
+assert formatter.format('{name}: {value:.2f}', name='Price', value=19.99) == 'Price: 19.99'
+assert formatter.vformat('{x}-{y}', (), {'x': 1, 'y': 2}) == '1-2'  # O(n + v)
+
+class Defaulting(Formatter):
+    def get_value(self, key, args, kwargs):  # O(1) per field
+        if isinstance(key, str):
+            return kwargs.get(key, '?')
+        return super().get_value(key, args, kwargs)
+
+assert Defaulting().format('{a} and {b}', a=1) == '1 and ?'
+```
+
+### Walking a Format String
+
+`parse()` returns an iterator, not a list: each step yields one
+`(literal_text, field_name, format_spec, conversion)` tuple, and a malformed field raises only when
+iteration reaches it.
+
+```python
+from string import Formatter
+
+formatter = Formatter()
+pieces = list(formatter.parse('{name}: {value:.2f}!'))  # O(n) to exhaust
+assert pieces == [('', 'name', '', None), (': ', 'value', '.2f', None), ('!', None, None, None)]
+
+steps = formatter.parse('fine {0} then {')  # O(1) - nothing is parsed yet
+assert next(steps) == ('fine ', '0', '', None)
+try:
+    next(steps)
+except ValueError as error:
+    assert "Single '{'" in str(error)
+else:
+    raise AssertionError('a lone brace was parsed')
+
+# The hooks format() goes through, one call per field
+point = complex(3, 4)
+assert formatter.get_field('0.imag', (point,), {}) == (4.0, 0)  # O(k)
+assert formatter.convert_field('x', 'r') == "'x'"  # O(w)
+assert formatter.format_field(3.14159, '.2f') == '3.14'  # O(w)
+```
+
+## Template String Literals
+
+A t-string literal (Python 3.14+) evaluates its expressions immediately but does not convert or
+format the interpolated values; only fields nested in a format spec are formatted. The result is a `string.templatelib.Template` holding the literal strings and one
+`Interpolation` per field. Rendering it is up to the code that receives it, which is where the
+O(v) cost of producing text is paid.
+
+```python
+from string.templatelib import Interpolation, Template, convert
+
+name, width = 'Ada', 6
+template = t'Hello {name!r:>{width}}!'  # O(p) - name is not converted or formatted yet
+
+assert template.strings == ('Hello ', '!')  # O(1)
+assert template.values == ('Ada',)  # O(p) - a new tuple each time
+field = template.interpolations[0]
+assert (field.expression, field.conversion, field.format_spec) == ('name', 'r', '>6')
+
+def render(template):
+    parts = []
+    for item in template:  # O(p)
+        if isinstance(item, Interpolation):
+            value = convert(item.value, item.conversion)  # O(w)
+            parts.append(format(value, item.format_spec))  # O(w)
+        else:
+            parts.append(item)
+    return ''.join(parts)
+
+assert render(template) == "Hello  'Ada'!"  # O(n + v)
+
+# Built by hand, strings and interpolations alternate
+built = Template('x = ', Interpolation(42, 'x'), '')  # O(a)
+assert render(built) == 'x = 42'
+```
+
+### Combining Templates
+
+`+` builds a new template from both operands' parts, so it costs the size of the result, and it
+accepts only another template. Growing one template with `+=` in a loop therefore copies
+everything accumulated so far on each step. Collect the parts in a list and build the template once
+instead, alternating strings and interpolations so no strings need joining.
+
+```python
+from string.templatelib import Interpolation, Template
+
+greeting = t'Hi {"Ada"}' + t', from {"Bob"}'  # O(p)
+assert greeting.strings == ('Hi ', ', from ', '')
+
+try:
+    greeting + '!'
+except TypeError as error:
+    assert 'can only concatenate' in str(error)
+else:
+    raise AssertionError('a str was added to a Template')
+
+parts = []
+for index in range(3):
+    parts += [f'item {index}: ', Interpolation(index, 'index')]
+listing = Template(*parts)  # O(a) - once, not per item
+assert listing.values == (0, 1, 2)
 ```
 
 ## Common Patterns
 
-### Generate Valid Characters
-
-```python
-import string
-
-def is_valid_identifier(char_set):
-    """Check character validity: O(1)"""
-    valid = string.ascii_letters + string.digits + '_'  # O(1)
-    return all(c in valid for c in char_set)  # O(n)
-
-# Usage
-if is_valid_identifier('my_var123'):
-    print("Valid")
-```
-
-### Template-Based Formatting
+### Filling a Message Template
 
 ```python
 from string import Template
 
-def generate_email(user_data):
-    """Generate email from template: O(n)"""
-    template = Template('''
-Dear $name,
-Thank you for your purchase of $item.
-Total: $${amount}
-    ''')  # O(n) template creation
-    
-    return template.substitute(**user_data)  # O(n)
+MESSAGE = Template('Dear $name,\nThank you for buying $item.\nTotal: $$${amount}\n')
 
-# Usage
-result = generate_email({
-    'name': 'Alice',
-    'item': 'Book',
-    'amount': '29.99'
-})
+def render_message(fields):
+    return MESSAGE.substitute(fields)  # O(n + v)
+
+text = render_message({'name': 'Alice', 'item': 'Book', 'amount': '29.99'})
+assert text.endswith('Total: $29.99\n')
 ```
 
-### Random String Generation
+### Substituting Settings Into a Config File
 
 ```python
-import string
-import random
-
-def generate_password(length=12):
-    """Generate random password: O(n)"""
-    chars = string.ascii_letters + string.digits + string.punctuation
-    return ''.join(random.choice(chars) for _ in range(length))  # O(n)
-
-# Usage
-password = generate_password(16)  # O(16)
-```
-
-### Filter by Character Class
-
-```python
-import string
-
-def extract_digits(text):
-    """Extract digits: O(n)"""
-    return ''.join(c for c in text if c in string.digits)  # O(n)
-
-def extract_letters(text):
-    """Extract letters: O(n)"""
-    return ''.join(c for c in text if c in string.ascii_letters)  # O(n)
-
-# Usage
-text = 'abc123def456'
-digits = extract_digits(text)  # O(n) = '123456'
-letters = extract_letters(text)  # O(n) = 'abcdef'
-```
-
-### Configuration File Parsing
-
-```python
+import io
 from string import Template
-import os
 
-def load_config(template_file, values):
-    """Load and substitute config: O(n)"""
-    with open(template_file) as f:
-        template_text = f.read()  # O(n) read
-    
-    template = Template(template_text)  # O(n) parse
-    return template.safe_substitute(values)  # O(n) substitute
+source = io.StringIO('host = $HOST\nport = ${PORT}\nkeep = $UNSET\n')
+settings = {'HOST': 'localhost', 'PORT': 8080}
+
+config = Template(source.read()).safe_substitute(settings)  # O(n + v)
+assert config == 'host = localhost\nport = 8080\nkeep = $UNSET\n'
 ```
 
-## Formatter vs Template
+## Performance Best Practices
 
-### Comparison
+✅ **Do**:
 
-```python
-from string import Formatter, Template
+- Use `str.format()` when you need only the output; keep `Formatter` for overriding its methods
+- Build a t-string template from a list of alternating strings and interpolations in one call
+- Collect distinct names with a dictionary over `Template.pattern.finditer()` when a template has
+  thousands of them
 
-# Formatter (powerful, complex)
-fmt = Formatter()
-result = fmt.format('{name}: {value:.2f}', name='Price', value=19.99)
-# More features, format specs
+❌ **Avoid**:
 
-# Template (simple, safer)
-tmpl = Template('$name: ${value}')
-result = tmpl.substitute(name='Price', value='$19.99')
-# Safer with user input
-
-# Both O(n) complexity
-```
-
-## Performance Characteristics
-
-### Best Practices
-
-```python
-import string
-
-# Good: Cache character sets
-valid_chars = set(string.ascii_letters + string.digits)  # O(n) once
-for char in user_input:  # O(m)
-    if char in valid_chars:  # O(1) with set
-
-# Good: Use Template for user input
-template = Template('Hello $name')  # Safer than f-strings
-
-# Avoid: String concatenation
-result = ''
-for i in range(100):
-    result += string.ascii_letters[i % 26]  # O(n^2)!
-
-# Better: Use join
-result = ''.join(string.ascii_letters[i % 26] for i in range(100))  # O(n)
-```
+- Expecting a reused `Template` or `Formatter` to skip parsing: every call scans the string again
+- `get_identifiers()` on templates with thousands of distinct names, which is quadratic in them
+- `+=` on a `templatelib.Template` in a loop, which copies everything accumulated on each step
+- Passing long runs of consecutive strings to `templatelib.Template()`; join them first
 
 ## Version Notes
 
-- **Python 3.x**: Full string module support
-- **Python 3.3+**: Formatter improvements
+- **Python 3.11+**: Added `Template.is_valid()` and `Template.get_identifiers()`
+- **Python 3.14+**: Added `string.templatelib` and t-string literals
+- **Python 3.14+**: `Formatter` accepts `{.name}` and `{[index]}` in automatically numbered fields, as `str.format()` does; earlier versions raise `KeyError`
 
-## Related Documentation
+## Related Modules
 
-- [Textwrap Module](textwrap.md) - Text wrapping
-- [Re Module](re.md) - Regular expressions
+- **[str](../builtins/str.md)** - `str.format()`, `str.title()` and the string methods these build on
+- **[re](re.md)** - the regular expressions `Template.pattern` is compiled with
+- **[textwrap](textwrap.md)** - wrapping and indenting text once it is filled in
+- **[secrets](secrets.md)** - choosing random characters from these constants for tokens
