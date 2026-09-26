@@ -22,7 +22,9 @@ Measurement scope:
   calls of under 70,000 bytes each. 200,000 distinct strings peak more than 5x
   higher than 20,000, which is the memo. A 10,000,000-character ASCII string
   and a 10,000,000-byte int each peak over 5 MB, and 10,000,000 bytes under
-  100 KB, under protocol 5.
+  100 KB, under protocol 5. 1,000 bytearrays of 10,000 bytes peak over 8 MB
+  under protocol 4, which keeps a `bytes` copy of each, and under 1 MB under
+  protocol 5.
   `dumps()` of 1,000,000 ints peaks above the length of its result, and
   `loads()` of 200,000 strings peaks more than 5x higher than 20,000.
 * `load()` is asserted to return two pickles written one after another, from
@@ -46,7 +48,9 @@ Measurement scope:
   floats, strings, bytes, bytearrays, lists, tuples, dicts, sets, frozensets
   and `PickleBuffer` objects; a `list` subclass instance is passed to it
   once, and its int element never. `find_class` is called the same number of times for
-  100 and for 1,000 instances of one class, under protocols 0 and 5.
+  100 and for 1,000 instances of one class, under protocols 0 and 5, with no
+  name repeated; a pickle written with `Pickler.fast` names the class once per
+  instance.
   `dispatch_table` is asserted to change one pickler's output and not
   `pickle.dumps()`'s.
 * `Pickler.fast`: 100 references to one 1,000-character string produce a
@@ -276,6 +280,15 @@ class TestDumpHoldsTheMemoFromProtocol4:
         assert text_peak > 5_000_000, f"a 10 MB string peaked at {text_peak}"
         assert number_peak > 5_000_000, f"a 10 MB int peaked at {number_peak}"
         assert blob_peak < 100_000, f"10 MB of bytes peaked at {blob_peak}"
+
+    def test_protocol_4_keeps_a_bytes_copy_of_every_bytearray(self) -> None:
+        arrays = [bytearray(10_000) for _ in range(1_000)]
+
+        four = peak_bytes(lambda: pickle.dump(arrays, NullSink(), protocol=4))
+        five = peak_bytes(lambda: pickle.dump(arrays, NullSink(), protocol=5))
+
+        assert four > 8_000_000, f"1,000 10 KB bytearrays at protocol 4 peaked at {four}"
+        assert five < 1_000_000, f"1,000 10 KB bytearrays at protocol 5 peaked at {five}"
 
     def test_dumps_holds_the_whole_pickle(self) -> None:
         result: list[bytes] = []
@@ -567,8 +580,18 @@ class TestHooksAreCalledPerReferenceOrPerObject:
         many = self.find_class_calls(pickle.dumps([Point(i) for i in range(1_000)], protocol))
 
         assert few == many
-        assert len(few) <= 3
+        assert len(few) == len(set(few)) <= 3, few
         assert (Point.__module__, "Point") in few
+
+    def test_fast_mode_names_a_class_once_per_instance(self) -> None:
+        buffer = io.BytesIO()
+        pickler = pickle.Pickler(buffer, protocol=5)
+        pickler.fast = True
+        pickler.dump([Point(i) for i in range(100)])
+
+        calls = self.find_class_calls(buffer.getvalue())
+
+        assert calls.count((Point.__module__, "Point")) == 100
 
 
 class TestPickleBuffer:

@@ -23,7 +23,7 @@ wrote; a hand-crafted pickle can cost more, and can run arbitrary code anyway.
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `pickle.dumps(obj, protocol=None, *, fix_imports=True, buffer_callback=None)` | O(b) | O(b) | The whole pickle is built as one `bytes` object |
-| `pickle.dump(obj, file, protocol=None, *, fix_imports=True, buffer_callback=None)` | O(b) | O(m + s) for protocol 4+; O(b) for protocols 0-3 | Protocol 4+ writes the pickle in frames of about 64 KB as it goes; protocols 0-3 hold all of it until the end |
+| `pickle.dump(obj, file, protocol=None, *, fix_imports=True, buffer_callback=None)` | O(b) | O(m + s) for protocol 4+; O(b) for protocols 0-3 | Protocol 4+ writes the pickle in frames of about 64 KB as it goes; protocols 0-3 hold all of it until the end. At protocol 4 each `bytearray` is copied to a `bytes` object that the memo keeps to the end, so their sizes add to the space |
 | `pickle.loads(data, /, *, fix_imports=True, encoding='ASCII', errors='strict', buffers=None)` | O(b) | O(b) | The rebuilt objects |
 | `pickle.load(file, *, fix_imports=True, encoding='ASCII', errors='strict', buffers=None)` | O(b) | O(b) | Stops after one pickle, so pickles written one after another come back from one `load()` each; `EOFError` at the end of the file |
 
@@ -45,7 +45,7 @@ wrote; a hand-crafted pickle can cost more, and can run arbitrary code anyway.
 |-----------|------|-------|-------|
 | `pickle.Unpickler(file, *, fix_imports=True, encoding='ASCII', errors='strict', buffers=None)` | O(1) | O(1) | Needs `read()` and `readline()` |
 | `Unpickler.load()` | O(b) | O(b) | As `pickle.load` |
-| `Unpickler.find_class(module, name)` | O(1) per call | O(1) | Called at most once for each distinct class or function the pickle names, not once per instance; imports `module` when it is not loaded yet |
+| `Unpickler.find_class(module, name)` | O(1) per call | O(1) | Called at most once for each distinct class or function the pickle names, not once per instance, unless it was written with `Pickler.fast`; imports `module` when it is not loaded yet |
 | `Unpickler.persistent_load(pid)` | O(1) per call | O(1) | Called once for each persistent ID in the pickle |
 
 ### PickleBuffer
@@ -325,7 +325,8 @@ assert restored['backup'] is store['r2']
     a security boundary to rely on; use a data-only format such as JSON for untrusted input.
 
 `find_class` is called at most once for each distinct class or function a pickle names, not once
-per instance, so an allow-list check adds a constant per name.
+per instance (unless the pickle was written with `Pickler.fast`), so an allow-list check adds a
+constant per name.
 
 ```python
 import io
