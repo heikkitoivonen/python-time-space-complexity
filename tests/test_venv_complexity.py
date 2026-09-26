@@ -58,11 +58,11 @@ Measurement scope:
   before 3.13 the keyword raises `TypeError` and `main()` writes none.
 * The environment's interpreter, run by path with no activation, reports the
   environment as `sys.prefix` and the running interpreter's `sys.base_prefix`.
-  The installed `activate` script names the environment directory and sets
-  `PATH`.
-* Every fenced Python block runs in its own subprocess and working directory,
-  which is asserted empty afterwards, and a mutated assertion in one of them
-  is asserted to fail.
+  Sourcing the installed `activate` script in bash puts the environment's
+  `bin` directory in front of the `PATH` it was given.
+* Every fenced Python block runs in its own subprocess, working directory and
+  `TMPDIR`, both asserted empty afterwards, and a mutated assertion in one of
+  them is asserted to fail.
 
 Not settled here:
 
@@ -615,10 +615,21 @@ class TestUsingAnEnvironmentWithoutActivating:
         env = tmp_path / "env"
         venv.create(env, symlinks=True)
 
-        script = (env / "bin" / "activate").read_text(encoding="utf-8")
+        bash = shutil.which("bash")
+        if bash is None:
+            pytest.skip("bash is needed to source the activate script")
 
-        assert str(env) in script
-        assert re.search(r"^\s*PATH=", script, re.M)
+        output = subprocess.run(
+            [bash, "-c", '. "$1" && printf "%s\\n" "$PATH"', "bash", str(env / "bin" / "activate")],
+            capture_output=True,
+            text=True,
+            check=True,
+            env={**os.environ, "PATH": "/usr/bin:/bin"},
+        ).stdout
+
+        first, _, rest = output.strip().partition(os.pathsep)
+        assert os.path.realpath(first) == os.path.realpath(env / "bin")
+        assert rest == "/usr/bin:/bin"
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows environment layout")
@@ -658,7 +669,9 @@ def _blocks() -> list[tuple[int, str]]:
     return found
 
 
-def _run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
+def _run_block(
+    source: str, cwd: pathlib.Path, tmp: pathlib.Path
+) -> subprocess.CompletedProcess[str]:
     script = cwd.parent / f"{cwd.name}.py"
     script.write_text(source, encoding="utf-8")
     return subprocess.run(
@@ -668,16 +681,16 @@ def _run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[st
         text=True,
         timeout=120,
         stdin=subprocess.DEVNULL,
-        env={**os.environ, "TMPDIR": str(cwd.parent), "TEMP": str(cwd.parent)},
+        env={**os.environ, "TMPDIR": str(tmp), "TEMP": str(tmp)},
         check=False,
     )
 
 
 @POSIX_ONLY
 class TestDocumentedExamples:
-    """Each block runs in its own subprocess with an empty working directory,
-    which must still be empty afterwards: no example leaves an environment
-    behind. The blocks use the POSIX `bin` layout."""
+    """Each block runs in its own subprocess with an empty working directory
+    and an empty temporary directory, both of which must still be empty
+    afterwards: no example leaves an environment behind. The blocks use the POSIX `bin` layout."""
 
     def test_the_page_has_the_expected_blocks(self) -> None:
         assert len(_blocks()) == EXPECTED_BLOCKS
@@ -689,11 +702,13 @@ class TestDocumentedExamples:
             ran += 1
             workdir = tmp_path / f"block{line}"
             workdir.mkdir()
-            result = _run_block(source, workdir)
+            tmp = tmp_path / f"tmp{line}"
+            tmp.mkdir()
+            result = _run_block(source, workdir, tmp)
             if result.returncode != 0:
                 failures.append(f"{PAGE.name}:{line}\n{result.stderr.strip()}")
-            elif os.listdir(workdir):
-                failures.append(f"{PAGE.name}:{line} left {os.listdir(workdir)}")
+            elif os.listdir(workdir) or os.listdir(tmp):
+                failures.append(f"{PAGE.name}:{line} left {os.listdir(workdir) + os.listdir(tmp)}")
 
         assert ran == EXPECTED_BLOCKS
         assert not failures, "\n\n".join(failures)
@@ -704,6 +719,8 @@ class TestDocumentedExamples:
         mutated = source.replace(target, target.replace("assert not", "assert"), 1)
         workdir = tmp_path / "mutated"
         workdir.mkdir()
+        tmp = tmp_path / "mutated-tmp"
+        tmp.mkdir()
 
         assert mutated != source, f"the mutation matched nothing in {PAGE.name}:{line}"
-        assert _run_block(mutated, workdir).returncode != 0
+        assert _run_block(mutated, workdir, tmp).returncode != 0
