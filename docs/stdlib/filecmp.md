@@ -233,8 +233,9 @@ with tempfile.TemporaryDirectory() as tmp:
 ### Comparing Contents in a Directory Tree
 
 `dircmp` compares files the way `cmp()` does with its `shallow` setting. From Python 3.13 you can
-pass `shallow=False`, which reads every common file whose size matches; before that, the same
-result comes from `cmpfiles()` over `common_files`.
+pass `shallow=False`, which compares the contents of every common file whose size matches,
+through the same cache as `cmp()`; before that, the same result comes from `cmpfiles()` over
+`common_files`.
 
 ```python
 import filecmp
@@ -272,10 +273,12 @@ import tempfile
 
 def changed_files(comparison):
     """Yield differing files across the common tree - O(t log t + s)."""
-    for name in comparison.diff_files:
-        yield os.path.join(comparison.left, name)
-    for sub in comparison.subdirs.values():
-        yield from changed_files(sub)
+    pending = [comparison]
+    while pending:
+        current = pending.pop()
+        for name in current.diff_files:
+            yield os.path.join(current.left, name)
+        pending.extend(reversed(list(current.subdirs.values())))
 
 with tempfile.TemporaryDirectory() as left, tempfile.TemporaryDirectory() as right:
     for root, text in ((left, 'v1'), (right, 'v22')):
@@ -323,7 +326,8 @@ with tempfile.TemporaryDirectory() as left, tempfile.TemporaryDirectory() as rig
 
 ❌ **Avoid**:
 
-- Assuming `shallow=True` never reads: equal sizes with different mtimes read both files
+- Assuming `shallow=True` never reads: equal sizes with different mtimes read both files unless
+  the cache already holds the pair
 - Trusting a shallow match to prove equal contents: a same-size file with a matching mtime is
   never read
 - `report_full_closure()` when only one level matters: it lists every common directory in the tree
@@ -332,8 +336,8 @@ with tempfile.TemporaryDirectory() as left, tempfile.TemporaryDirectory() as rig
 
 - **Python 3.13+**: `dircmp` accepts `shallow`; before that it always compares with
   `shallow=True`
-- **All Python 3**: `shallow=True` still reads both files when their sizes match and their
-  signatures do not
+- **All Python 3**: `shallow=True` still reads both files when their sizes match, their
+  signatures do not, and the cache does not hold the pair
 
 ## Related Modules
 

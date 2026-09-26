@@ -184,13 +184,14 @@ class TestShallowTrustsTheSignature:
 
     @pytest.mark.parametrize("shallow", [True, False])
     def test_different_sizes_read_nothing(
-        self, tmp_path: pathlib.Path, reads: ReadCounter, shallow: bool
+        self, tmp_path: pathlib.Path, reads: ReadCounter, stats: CallCounter, shallow: bool
     ) -> None:
         a = write(tmp_path / "a", b"x" * MB)
         b = write(tmp_path / "b", b"x" * (MB + 1))
+        stats.calls = 0
 
         assert filecmp.cmp(a, b, shallow=shallow) is False
-        assert reads.opened == 0
+        assert (reads.opened, stats.calls) == (0, 2)
 
     def test_shallow_reads_when_only_the_mtime_differs(
         self, tmp_path: pathlib.Path, reads: ReadCounter
@@ -411,7 +412,7 @@ class TestDircmpIsLazy:
         assert comparison.common_funny == []
         assert stats.calls == 2 * 50
 
-    def test_same_files_adds_one_cmp_per_common_file(
+    def test_same_files_stats_each_common_file_twice(
         self, tmp_path: pathlib.Path, stats: CallCounter, listings: CallCounter
     ) -> None:
         left, right = make_pair(tmp_path, files=40, dirs=10)
