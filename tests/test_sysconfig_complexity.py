@@ -4,8 +4,8 @@ The page splits the module in two: configuration variables are loaded once and
 then served from one shared dictionary, while install paths are expanded afresh
 on every call from all of those variables. Both halves are settled by growing
 the live configuration cache by 100,000 entries and watching what moves: a
-cached read allocates nothing either way, and an expansion's traced peak grows
-with the cache. Identity checks settle which accessors hand back module state
+cached read peaks under 1 KB in the grown cache, and an expansion's traced peak
+grows with the cache. Identity checks settle which accessors hand back module state
 rather than a copy, and call counters settle the file-reading rows.
 
 Measurement scope:
@@ -39,6 +39,9 @@ Measurement scope:
   has the keys `prefix`, `home` and `user`. `is_python_build()` is asserted
   to call `os.path.isfile()` at most twice. `get_platform()` is asserted to
   start with `linux-` on Linux.
+* With `sys.prefix` moved, `get_config_vars()` returns a new dictionary whose
+  `base` is the moved one on 3.12.8+ and 3.13.1+, and the same dictionary
+  before those releases.
 * `get_config_var('SO')` is `None` on 3.11+ and equals `EXT_SUFFIX` on 3.10.
 * Every fenced Python block runs in its own subprocess, so no block sees
   another's first-call load, and a mutated assertion in one of them is
@@ -57,10 +60,9 @@ Not settled here:
 * In a source-tree build, `get_makefile_filename()` and
   `get_config_h_filename()` join a fixed directory and are O(1). No test runs
   from a source tree.
-* On 3.12.8+ and 3.13.1+, `get_config_vars()` rebuilds its cache when
-  `sys.prefix` no longer matches it. The page makes no claim about
-  invalidation, and no test changes `sys.prefix` before reading configuration
-  variables.
+* That a changed `sys.exec_prefix` also rebuilds the cache from 3.14 is read
+  from `get_config_vars()` in Lib/sysconfig/__init__.py; only a changed
+  `sys.prefix` is tested.
 * Treating scheme count, path count and the length of one path as O(1) is a
   definitional choice: the scheme table is fixed at import.
 * `expand_makefile_vars()` is not priced. It is absent from the official
@@ -149,6 +151,20 @@ class TestConfigVarsAreOneSharedCache:
         finally:
             del config["ZZ_TEST_SHARED"]
 
+    def test_a_changed_prefix_rebuilds_the_cache_on_3_12_8_and_3_13_1(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        version = sys.version_info[:3]
+        rebuilds = version >= (3, 13, 1) or (3, 12, 8) <= version < (3, 13)
+        moved = os.path.join(sys.prefix, "moved")
+        config = sysconfig.get_config_vars()
+
+        monkeypatch.setattr(sys, "prefix", moved)
+        after = sysconfig.get_config_vars()
+
+        assert (after is not config) is rebuilds
+        assert (after["base"] == moved) is rebuilds
+
     def test_unknown_names_read_as_none(self) -> None:
         assert sysconfig.get_config_var("NO_SUCH_VARIABLE") is None
         assert sysconfig.get_config_vars("py_version_short", "NO_SUCH_VARIABLE") == [
@@ -156,7 +172,7 @@ class TestConfigVarsAreOneSharedCache:
             None,
         ]
 
-    def test_a_lookup_allocates_nothing_in_a_grown_cache(
+    def test_a_lookup_peaks_under_1kb_in_a_grown_cache(
         self, grow_cache: Callable[[], None]
     ) -> None:
         grow_cache()
@@ -311,7 +327,7 @@ class TestParseConfigHReadsALineAtATime:
         assert sysconfig.parse_config_h(source) == {}  # type: ignore[arg-type]
         assert source.lines_read == self.LINES + 1
 
-    def test_comments_cost_no_memory_and_definitions_do(self) -> None:
+    def test_comment_lines_peak_small_and_definitions_large(self) -> None:
         comments = "/* nothing to see here at all */\n" * self.LINES
         definitions = "".join(f"#define NAME_{index} {index}\n" for index in range(self.LINES))
 

@@ -9,10 +9,12 @@ the configuration variables.
 `V` is the configuration variables (on POSIX, everything the build recorded from its Makefile
 and `pyconfig.h`; far fewer on Windows), `a` is the names passed to `get_config_vars()`, `L` is
 the lines in a header file handed to `parse_config_h()`, and `D` is the `#define` and `#undef`
-lines among them. The install-scheme table is a fixed handful of schemes of at most eight paths
+lines among them; header lines are priced as of bounded length. The install-scheme table is a fixed handful of schemes of at most eight paths
 each, so scheme and path counts, and the length of one path, are priced as O(1). The first call in
 the process to anything that reads configuration variables pays a one-off O(V) load; the bounds
-below are for the calls after it.
+below are for the calls after it. On Python 3.12.8+ and 3.13.1+, a call that finds `sys.prefix`
+changed since the load pays it again, into a new dictionary; from 3.14, so does a changed
+`sys.exec_prefix`.
 
 ## Complexity Reference
 
