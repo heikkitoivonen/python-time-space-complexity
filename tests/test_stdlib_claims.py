@@ -13,8 +13,9 @@ docs/stdlib/array.md's claims live in tests/test_array_complexity.py,
 docs/stdlib/decimal.md's in tests/test_decimal_complexity.py,
 docs/stdlib/multiprocessing.md's in tests/test_multiprocessing_complexity.py,
 docs/stdlib/secrets.md's in tests/test_secrets_complexity.py,
-docs/stdlib/tempfile.md's in tests/test_tempfile_complexity.py and
-docs/stdlib/smtplib.md's in tests/test_smtplib_complexity.py, which cover
+docs/stdlib/tempfile.md's in tests/test_tempfile_complexity.py,
+docs/stdlib/smtplib.md's in tests/test_smtplib_complexity.py and
+docs/stdlib/tomllib.md's in tests/test_tomllib_complexity.py, which cover
 those modules' tables as well.
 
 Deliberately not covered, because a unit test cannot settle them:
@@ -47,11 +48,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:  # pyright targets the floor of the supported range, which predates it
-    tomllib: Any = None
 
 
 def best_time(func: Callable[[], Any], repeats: int = 5) -> float:
@@ -393,42 +389,6 @@ class TestStructFormatCaching:
     def test_a_short_read_fails_before_unpacking(self) -> None:
         with pytest.raises(struct.error):
             struct.unpack("i", b"AB")
-
-
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="tomllib is new in 3.11")
-class TestTomllibNestingIsNotFree:
-    """docs/stdlib/tomllib.md.
-
-    The page claimed nesting costs no more per character than a flat key.
-    Each table header creates and installs a dict, so the same number of keys
-    spread over tables costs about twice as much.
-    """
-
-    KEYS = 2_000
-
-    @pytest.mark.timing
-    def test_tables_cost_more_than_flat_keys(self) -> None:
-        flat = "\n".join(f"k{i} = {i}" for i in range(self.KEYS))
-        nested = "\n".join(f"[t{i}]\nk = {i}" for i in range(self.KEYS))
-
-        flat_time = best_time(lambda: tomllib.loads(flat))
-        nested_time = best_time(lambda: tomllib.loads(nested))
-
-        assert nested_time > flat_time * 1.3, (
-            f"a table per key is not free: flat={flat_time:.2e}s nested={nested_time:.2e}s"
-        )
-
-    @pytest.mark.timing
-    def test_parsing_scales_with_the_text(self) -> None:
-        small = "\n".join(f"k{i} = {i}" for i in range(500))
-        large = "\n".join(f"k{i} = {i}" for i in range(5_000))
-
-        small_time = best_time(lambda: tomllib.loads(small))
-        large_time = best_time(lambda: tomllib.loads(large))
-
-        assert large_time > small_time * 5, (
-            f"O(n) in the text: {small_time:.2e}s vs {large_time:.2e}s"
-        )
 
 
 class TestUnicodeDataLookupsAreTableReads:
