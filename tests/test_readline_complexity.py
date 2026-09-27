@@ -34,10 +34,14 @@ Measurement scope:
   entries before writing keeps it readable. `append_history_file(1)` writes
   the newest entry. Timed: `append_history_file(1)` costs less than 3x as much
   with 100,000 entries held as with 100, and appending 100,000 of them more
-  than 20x as much as appending 1,000. Into a copy of a 100,000-line file it
-  costs more than 10x as much as into a 1,000-line one with a history length
-  set, and less than 3x without. `read_history_file()` and `write_history_file()` cost more than 5x
-  as much for 10x the entries.
+  than 20x as much as appending 1,000. For files of 10,000, 100,000 and
+  1,000,000 lines, each 10x step costs more than 3x with a history length set
+  and less than 4x without; the overall ratios exceed 10x and stay below 10x,
+  respectively. Each sample copies the file and warms it with one append
+  outside the timer, then times ten one-entry appends; the fastest of five
+  samples is used. The length limit exceeds the file size, so it tests the
+  rewrite without discarding entries. `read_history_file()` and
+  `write_history_file()` cost more than 5x as much for 10x the entries.
 * Completion on a pseudo-terminal, with the user's init files replaced by
   empty ones: one Tab after "ap" with two matches calls the completer with
   states 0, 1 and 2 and no more, and one after "eat ban" reports
@@ -100,6 +104,7 @@ import sys
 import textwrap
 import time
 from collections.abc import Callable, Iterator
+from itertools import pairwise
 from typing import Any
 
 import pytest
@@ -566,28 +571,32 @@ class TestHistoryFiles:
     ) -> None:
         target = tmp_path / "target"
         costs = []
-        for lines in (1_000, 100_000):
+        for lines in (10_000, 100_000, 1_000_000):
             source = tmp_path / f"source{lines}"
             fill(lines)
             readline.write_history_file(str(source))
             fill(10)
             readline.set_history_length(length)
             durations = []
-            for _ in range(7):
+            for _ in range(5):
                 shutil.copyfile(source, target)
+                readline.append_history_file(1, str(target))  # warm outside the timed batch
                 start = time.perf_counter_ns()
-                readline.append_history_file(1, str(target))
-                durations.append(time.perf_counter_ns() - start)
+                for _ in range(10):
+                    readline.append_history_file(1, str(target))
+                durations.append((time.perf_counter_ns() - start) / 10)
             readline.set_history_length(-1)
             costs.append(min(durations))
 
-        ratio = costs[1] / costs[0]
+        ratios = [larger / smaller for smaller, larger in pairwise(costs)]
+        overall = costs[-1] / costs[0]
+        detail = f"length={length}, 10,000/100,000/1,000,000 lines: {costs} ns; ratios {ratios}"
         if length < 0:
-            assert ratio < 3, f"no length, 1,000- and 100,000-line files: {costs} ns, x{ratio:.2f}"
+            assert all(ratio < 4 for ratio in ratios), detail
+            assert overall < 10, detail
         else:
-            assert ratio > 10, (
-                f"length set, 1,000- and 100,000-line files: {costs} ns, x{ratio:.2f}"
-            )
+            assert all(ratio > 3 for ratio in ratios), detail
+            assert overall > 10, detail
 
     @pytest.mark.timing
     def test_reading_and_writing_follow_the_file(self, tmp_path: pathlib.Path) -> None:
