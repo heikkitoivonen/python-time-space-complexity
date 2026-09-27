@@ -1,507 +1,318 @@
 # abc Module Complexity
 
-The `abc` module provides infrastructure for defining abstract base classes (ABCs) in Python, enforcing that derived classes implement specified methods.
+The `abc` module defines abstract base classes: classes whose abstract methods must be overridden
+before they can be instantiated, and which can claim unrelated classes as virtual subclasses. Its work
+happens when a class is created and when `isinstance()` or `issubclass()` meets a class for the
+first time; instances carry nothing extra. The bounds below price that work, on top of what
+building or instantiating a plain class costs.
+
+`m` is the entries in a class body's namespace, `b` is the direct bases plus the abstract names
+they declare, `a` is the abstract methods a class is left with, and `g` is the registration and
+subclass links an ABC can reach: to its registered classes and its subclasses, followed recursively
+through every ABC among them. Attribute lookup, a plain class's MRO test, comparing and joining
+method names, and `__subclasshook__` are priced as O(1), as the default hook is.
 
 ## Complexity Reference
 
+### Decorators
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `@abstractmethod` decorator | O(1) | O(1) | Mark method abstract |
-| `@abstractclassmethod` decorator | O(1) | O(1) | Mark classmethod abstract (legacy helper) |
-| `@abstractstaticmethod` decorator | O(1) | O(1) | Mark staticmethod abstract (legacy helper) |
-| `@abstractproperty` decorator | O(1) | O(1) | Mark property abstract (legacy helper) |
-| Class instantiation attempt | O(n) | O(n) | n = abstract methods |
-| `isinstance(obj, ABC)` | O(n) | O(1) | n = MRO length; may also check virtual subclasses |
-| `issubclass(cls, ABC)` | O(n) | O(1) | n = MRO length; may also check virtual subclasses |
-| Method resolution (MRO) | O(n) | O(n) | n = class hierarchy depth |
-| Register virtual subclass | O(1) | O(n) | n = registered classes |
-| `get_cache_token()` | O(1) | O(1) | Monotonic token for ABC cache invalidation |
-| `update_abstractmethods(cls)` | O(n) | O(n) | n = class hierarchy depth |
+| `@abc.abstractmethod` | O(1) | O(1) | Sets `__isabstractmethod__` on the function; only an `ABCMeta` class enforces it |
+| `abc.abstractclassmethod(callable)`, `abc.abstractstaticmethod(callable)`, `abc.abstractproperty(fget)` | O(1) | O(1) | Deprecated; stack `classmethod`, `staticmethod` or `property` over `abstractmethod` instead |
 
-## Abstract Base Classes
+### ABCMeta
 
-### Basic Abstract Class
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `abc.ABCMeta(name, bases, namespace)`, `class C(metaclass=ABCMeta)` | O(m + b) | O(m + b) | Tests every namespace value and every abstract name of the direct bases, once |
+| `C.__abstractmethods__` | O(1) | O(1) | The frozenset stored at class creation, not recomputed |
+| Instantiating a concrete ABC subclass | O(1) | O(1) | Beyond `__init__`; the abstract methods are not looked at again |
+| Instantiating a class with abstract methods | O(a log a) | O(a) | `TypeError` naming every abstract method, sorted |
+| `isinstance(obj, C)`, `issubclass(cls, C)`: first check of a class | O(g) | O(g) | Walks registered classes and subclasses recursively, caching the answer in every ABC it visits unless the registry holds the class directly |
+| `isinstance(obj, C)`, `issubclass(cls, C)`: cached | O(1) | O(1) | A positive answer stays cached; a negative one only until any ABC registers a new virtual subclass. A class registered directly is found in the registry instead, also O(1) |
+| `ABCMeta.register(subclass)` | O(g) | O(g) | Checks `issubclass(subclass, C)` first, then the reverse to refuse a cycle, so `g` includes `subclass`'s links when it is an ABC; unless already a subclass, adds one weak reference and a new cache token. Returns `subclass` |
+| `ABCMeta.__subclasshook__(subclass)` | O(1) | O(1) | Override as a classmethod; returning `True` or `False` answers an uncached check before registration and inheritance are consulted |
+
+### ABC
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `class C(ABC)` | O(m + b) | O(m + b) | The same as `metaclass=ABCMeta`; `ABC` has empty `__slots__` and adds nothing to instances |
+
+### Functions
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `abc.get_cache_token()` | O(1) | O(1) | Changes whenever any ABC registers a new virtual subclass |
+| `abc.update_abstractmethods(cls)` | O(m + b) | O(m + b) | Recomputes `__abstractmethods__` from the class body and its direct bases; returns a class without that attribute unchanged |
+
+## Defining an ABC
+
+### Abstract Methods Are Checked Once
+
+Class creation decides which methods are still abstract and stores them in `__abstractmethods__`.
+Instantiation does not look at them again, so a concrete subclass costs no more to instantiate than
+a plain class, however many abstract methods its bases declared.
 
 ```python
 from abc import ABC, abstractmethod
 
-# Define abstract base class - O(1)
-class Animal(ABC):
-    
-    # Mark as abstract - O(1)
+class DataStore(ABC):  # O(m + b), once
     @abstractmethod
-    def make_sound(self):
-        """Subclasses must implement this"""
-        pass
-    
-    # Concrete method in ABC - O(1)
-    def sleep(self):
-        return "Zzz..."
+    def read(self, key): ...
 
-# Attempt instantiation - O(n) check for abstract methods
+    @abstractmethod
+    def write(self, key, value): ...
+
+assert DataStore.__abstractmethods__ == frozenset({'read', 'write'})  # O(1)
+
+class PartialStore(DataStore):
+    def read(self, key):
+        return None
+
 try:
-    animal = Animal()  # TypeError
-except TypeError as e:
-    print("Cannot instantiate ABC")
+    PartialStore()  # O(a log a) - builds the message
+except TypeError as error:
+    assert 'write' in str(error) and 'read' not in str(error)
+else:
+    raise AssertionError('a class with an abstract method was instantiated')
 
-# Concrete subclass - O(1)
-class Dog(Animal):
-    def make_sound(self):
-        return "Woof!"
+class MemoryStore(DataStore):
+    def __init__(self):
+        self.data = {}
 
-# Can instantiate concrete class - O(n)
-dog = Dog()
-print(dog.make_sound())  # Woof!
+    def read(self, key):
+        return self.data.get(key)
+
+    def write(self, key, value):
+        self.data[key] = value
+
+store = MemoryStore()  # O(1) - no abstract-method scan
+store.write('k', 1)
+assert store.read('k') == 1
 ```
 
-### Abstract Properties
+### Properties, Class Methods and Static Methods
+
+`abstractmethod` goes innermost. The wrapper reports the function's flag, so the class treats it
+as abstract like any other method.
 
 ```python
 from abc import ABC, abstractmethod
 
 class Shape(ABC):
-    
-    # Abstract property - O(1)
     @property
     @abstractmethod
-    def area(self):
-        pass
-    
-    @property
-    @abstractmethod
-    def perimeter(self):
-        pass
+    def area(self): ...
 
-# Concrete implementation - O(1)
-class Rectangle(Shape):
-    def __init__(self, width, height):
-        self.width = width
-        self.height = height
-    
-    @property
-    def area(self):
-        return self.width * self.height
-    
-    @property
-    def perimeter(self):
-        return 2 * (self.width + self.height)
-
-# Create instance - O(n)
-rect = Rectangle(5, 3)
-
-# Access properties - O(1)
-print(rect.area)       # 15
-print(rect.perimeter)  # 16
-```
-
-### Abstract Class Methods
-
-```python
-from abc import ABC, abstractmethod
-
-class DatabaseConnection(ABC):
-    
-    # Abstract class method - O(1)
     @classmethod
     @abstractmethod
-    def from_config(cls, config):
-        pass
+    def unit(cls): ...
 
-class PostgresConnection(DatabaseConnection):
+    @staticmethod
+    @abstractmethod
+    def sides(): ...
+
+assert Shape.__abstractmethods__ == frozenset({'area', 'unit', 'sides'})
+
+class Square(Shape):
+    def __init__(self, side):
+        self.side = side
+
+    @property
+    def area(self):
+        return self.side * self.side
+
     @classmethod
-    def from_config(cls, config):
-        return cls(config['host'], config['port'])
+    def unit(cls):
+        return cls(1)
 
-# Use class method - O(1)
-conn = PostgresConnection.from_config({'host': 'localhost', 'port': 5432})
+    @staticmethod
+    def sides():
+        return 4
+
+assert Square(3).area == 9
+assert Square.unit().area == 1
+assert Square.sides() == 4
 ```
 
-### Abstract Static Methods
+### Adding Methods After Creation
+
+Because the set is computed once, a method attached to the class later does not change it.
+`update_abstractmethods()` recomputes it with the same O(m + b) scan class creation ran, which
+makes it the tool for class decorators that add methods.
 
 ```python
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod, update_abstractmethods
 
-class Validator(ABC):
-    
-    # Abstract static method - O(1)
-    @staticmethod
+class Greeter(ABC):
     @abstractmethod
-    def validate(value):
-        pass
+    def greet(self): ...
 
-class EmailValidator(Validator):
-    @staticmethod
-    def validate(value):
-        return '@' in value
+class Late(Greeter):
+    pass
 
-# Use static method - O(1)
-is_valid = EmailValidator.validate("user@example.com")
+Late.greet = lambda self: 'hi'
+assert Late.__abstractmethods__ == frozenset({'greet'})  # still recorded as abstract
+
+update_abstractmethods(Late)  # O(m + b)
+assert Late.__abstractmethods__ == frozenset()
+assert Late().greet() == 'hi'
 ```
 
-## Multiple Abstract Methods
+## isinstance and issubclass
 
-### Enforcing Multiple Implementations
+### Caching
+
+Each ABC caches the answers it has worked out. The first check walks its registry and its
+subclasses, recursively; a repeat is a set lookup, as is any check of a class registered directly
+on that ABC. A negative answer is dropped as soon as any ABC
+registers a new virtual subclass, so the next negative check walks again, while a positive answer is
+kept. The hook below counts the ABCs a check visits.
 
 ```python
-from abc import ABC, abstractmethod
+from abc import ABC
 
-class DataStore(ABC):
-    
-    # Multiple abstract methods - O(n) to enforce
-    @abstractmethod
-    def read(self, key):
-        pass
-    
-    @abstractmethod
-    def write(self, key, value):
-        pass
-    
-    @abstractmethod
-    def delete(self, key):
-        pass
+visits = []
 
-# Incomplete implementation - TypeError
-class PartialStore(DataStore):
-    def read(self, key):
-        return None
-    # Missing write() and delete()
+class Plugin(ABC):
+    @classmethod
+    def __subclasshook__(cls, subclass):
+        visits.append(cls)
+        return NotImplemented
 
-try:
-    store = PartialStore()  # O(n) - checks all 3 methods
-except TypeError:
-    print("Must implement all abstract methods")
+subclasses = [type(f'Plugin{i}', (Plugin,), {}) for i in range(10)]
 
-# Complete implementation - O(1)
-class MemoryStore(DataStore):
-    def __init__(self):
-        self.data = {}
-    
-    def read(self, key):
-        return self.data.get(key)
-    
-    def write(self, key, value):
-        self.data[key] = value
-    
-    def delete(self, key):
-        del self.data[key]
+class Unrelated:
+    pass
 
-# Create instance - O(n)
-store = MemoryStore()
+assert not issubclass(Unrelated, Plugin)  # O(g) - Plugin and its 10 subclasses
+assert len(visits) == 11
+
+visits.clear()
+assert not issubclass(Unrelated, Plugin)  # O(1) - cached
+assert visits == []
+
+class Other(ABC):
+    pass
+
+Other.register(int)  # any registration invalidates negative answers
+assert not issubclass(Unrelated, Plugin)  # O(g) again
+assert len(visits) == 11
+
+visits.clear()
+assert issubclass(subclasses[0], Plugin)
+visits.clear()
+Other.register(float)
+assert issubclass(subclasses[0], Plugin)  # O(1) - positive answers survive
+assert visits == []
 ```
 
 ## Virtual Subclasses
 
-### Register Virtual Subclass
+### Registering
 
-```python
-from abc import ABC, abstractmethod
-
-class PluginInterface(ABC):
-    @abstractmethod
-    def execute(self):
-        pass
-
-# Existing class not inheriting from ABC
-class LegacyPlugin:
-    def execute(self):
-        return "Legacy execution"
-
-# Register as virtual subclass - O(1) per registration
-PluginInterface.register(LegacyPlugin)
-
-# Check relationship - O(n) against inheritance chain
-obj = LegacyPlugin()
-print(isinstance(obj, PluginInterface))   # True
-print(issubclass(LegacyPlugin, PluginInterface))  # True
-```
-
-### Virtual Subclass Benefits
+`register()` makes `issubclass()` and `isinstance()` answer `True` without inheritance, unless a
+`__subclasshook__` answers first. It checks
+nothing about the class's methods, and the registered class does not gain the ABC in its MRO.
+Each call starts with an `issubclass()` check, which walks the classes already registered,
+so registering k classes one at a time into one ABC is O(k²) in total.
 
 ```python
 from abc import ABC, abstractmethod
 
 class Drawable(ABC):
     @abstractmethod
-    def draw(self):
-        pass
+    def draw(self): ...
 
-# Register multiple unrelated classes
+@Drawable.register  # O(g) - returns the class, so it works as a decorator
 class Circle:
     def draw(self):
-        return "Drawing circle..."
+        return 'circle'
 
-class Rectangle:
-    def draw(self):
-        return "Drawing rectangle..."
+@Drawable.register
+class Blank:  # no draw() - registration does not check
+    pass
 
-# Register both - O(1) each
-Drawable.register(Circle)
-Drawable.register(Rectangle)
-
-# Polymorphic usage - O(n) per check
-def render(obj):
-    if isinstance(obj, Drawable):
-        return obj.draw()
-    return "Not drawable"
-
-# Works without inheritance
-circle = Circle()
-print(render(circle))  # Drawing circle...
+assert isinstance(Circle(), Drawable)
+assert issubclass(Blank, Drawable)
+assert Drawable not in Circle.__mro__
+assert Blank() is not None  # virtual subclasses are not held to the abstract methods
 ```
 
-## Inheritance Hierarchies
+### Structural Checks with __subclasshook__
 
-### Multi-Level Inheritance
+A hook answers for classes that were neither registered nor derived. It runs on every check the
+caches cannot answer, and a check the registry answers directly is one of those: the registry is
+consulted after the hook and does not fill the cache.
 
 ```python
 from abc import ABC, abstractmethod
 
-# Level 1 - Abstract base
-class Vehicle(ABC):
+class Closeable(ABC):
     @abstractmethod
-    def start(self):
-        pass
+    def close(self): ...
 
-# Level 2 - Intermediate abstract
-class Car(Vehicle):
-    @abstractmethod
-    def open_trunk(self):
-        pass
+    @classmethod
+    def __subclasshook__(cls, subclass):
+        if cls is Closeable:
+            return any('close' in vars(klass) for klass in subclass.__mro__)
+        return NotImplemented
 
-# Level 3 - Concrete implementation
-class Sedan(Car):
-    def start(self):
-        return "Engine running"
-    
-    def open_trunk(self):
-        return "Trunk opened"
+class Resource:
+    def close(self):
+        return 'closed'
 
-# Create instance - O(n) checks hierarchy
-sedan = Sedan()
-print(sedan.start())        # Engine running
-print(sedan.open_trunk())   # Trunk opened
+assert issubclass(Resource, Closeable)  # O(1) plus the hook
+assert not issubclass(int, Closeable)
 ```
 
-### Mixin with Abstract Base
+### The Cache Token
+
+`get_cache_token()` changes whenever any ABC registers a new virtual subclass, so code that caches its own
+results derived from ABC checks can compare tokens to know when to drop them.
 
 ```python
-from abc import ABC, abstractmethod
-
-class Logger:
-    """Mixin - not abstract"""
-    def log(self, message):
-        return f"LOG: {message}"
-
-class Serializable(ABC):
-    """Abstract mixin"""
-    @abstractmethod
-    def to_dict(self):
-        pass
-
-class User(Logger, Serializable):
-    def __init__(self, name, email):
-        self.name = name
-        self.email = email
-    
-    def to_dict(self):
-        return {'name': self.name, 'email': self.email}
-
-# Create instance - O(n)
-user = User("Alice", "alice@example.com")
-
-# Use mixin methods - O(1)
-print(user.log("User created"))     # LOG: User created
-print(user.to_dict())               # {'name': 'Alice', ...}
-```
-
-## Common Patterns
-
-### Factory Pattern with ABC
-
-```python
-from abc import ABC, abstractmethod
-
-class Driver(ABC):
-    @abstractmethod
-    def connect(self):
-        pass
-
-class PostgresDriver(Driver):
-    def connect(self):
-        return "Connected to PostgreSQL"
-
-class MySQLDriver(Driver):
-    def connect(self):
-        return "Connected to MySQL"
-
-class DriverFactory:
-    # O(1) factory lookup
-    @staticmethod
-    def create_driver(db_type):
-        drivers = {
-            'postgres': PostgresDriver,
-            'mysql': MySQLDriver
-        }
-        driver_class = drivers.get(db_type)
-        if driver_class:
-            return driver_class()
-        raise ValueError(f"Unknown driver: {db_type}")
-
-# Use factory - O(1)
-driver = DriverFactory.create_driver('postgres')
-print(driver.connect())  # Connected to PostgreSQL
-```
-
-### Template Method Pattern
-
-```python
-from abc import ABC, abstractmethod
-
-class DataProcessor(ABC):
-    
-    # Template method - defines algorithm structure
-    def process(self, data):
-        validated = self.validate(data)  # O(?)
-        transformed = self.transform(validated)  # O(?)
-        return self.save(transformed)  # O(?)
-    
-    @abstractmethod
-    def validate(self, data):
-        pass
-    
-    @abstractmethod
-    def transform(self, data):
-        pass
-    
-    @abstractmethod
-    def save(self, data):
-        pass
-
-class CSVProcessor(DataProcessor):
-    def validate(self, data):
-        return len(data) > 0
-    
-    def transform(self, data):
-        return data.upper()
-    
-    def save(self, data):
-        return f"Saved CSV: {data}"
-
-# Use - O(?) based on implementation
-processor = CSVProcessor()
-result = processor.process("csv data")
-```
-
-## Checking Implementation
-
-### Verification Methods
-
-```python
-from abc import ABC, abstractmethod
+from abc import ABC, get_cache_token
 
 class Interface(ABC):
-    @abstractmethod
-    def required_method(self):
-        pass
-
-class Implementation(Interface):
-    def required_method(self):
-        return "Implemented"
-
-# Check if subclass - O(n)
-print(issubclass(Implementation, Interface))  # True
-
-# Check if instance - O(n)
-obj = Implementation()
-print(isinstance(obj, Interface))  # True
-
-# Check abstract methods - O(n) to compute set
-abstract_methods = Interface.__abstractmethods__
-print(abstract_methods)  # frozenset({'required_method'})
-```
-
-## Performance Considerations
-
-### Instantiation Cost
-
-```python
-from abc import ABC, abstractmethod
-import time
-
-class AbstractBase(ABC):
-    @abstractmethod
-    def method(self):
-        pass
-
-class Concrete(AbstractBase):
-    def method(self):
-        return None
-
-# Instantiation checks abstracts - O(n)
-start = time.time()
-for _ in range(100000):
-    obj = Concrete()
-elapsed = time.time() - start
-
-# Cost is O(1) per instance, n checks at class definition time
-```
-
-### Virtual Subclass Lookups
-
-```python
-from abc import ABC
-
-class MyABC(ABC):
     pass
 
-# Register many - O(k) total for k registrations
-for i in range(1000):
-    class DummyClass:
-        pass
-    MyABC.register(DummyClass)
-
-# isinstance checks - O(n) in worst case
-class TestClass:
+class Newcomer:
     pass
-MyABC.register(TestClass)
 
-# Check - O(n) through registered classes
-result = isinstance(TestClass(), MyABC)
+token = get_cache_token()  # O(1)
+Interface.register(Newcomer)
+assert get_cache_token() != token
+
+token = get_cache_token()
+Interface.register(Newcomer)  # already registered - nothing changes
+assert get_cache_token() == token
 ```
 
-## Best Practices
+## Performance Best Practices
 
-### Do's
-- Use ABC for interface definition
-- Clearly document abstract methods
-- Use `@abstractmethod` consistently
-- Provide concrete implementations in subclasses
+✅ **Do**:
 
-```python
-from abc import ABC, abstractmethod
+- Put abstract methods on a base freely: a concrete subclass's instantiation pays nothing for them
+- Register virtual subclasses at import time, before the checks that depend on them run
+- Call `update_abstractmethods()` from a class decorator that adds methods after class creation
 
-class Cache(ABC):
-    """Cache interface for different backends"""
-    
-    @abstractmethod
-    def get(self, key):
-        """Retrieve value by key"""
-        pass
-    
-    @abstractmethod
-    def set(self, key, value):
-        """Store key-value pair"""
-        pass
-```
+❌ **Avoid**:
 
-### Avoid's
-- Don't create ABCs for single-use classes
-- Don't use virtual registration excessively
-- Don't override abstract methods to remove implementation
-- Don't use ABC when simple inheritance suffices
+- Registering classes in a loop that also runs negative `isinstance()` checks: every new
+  registration sends each ABC's next negative check back through its registry and subclasses
+- Registering many classes one at a time into one ABC; each call walks the registry built so far
+- A `__subclasshook__` that does expensive work: an uncached check pays it at every ABC visited
 
-## Related Documentation
+## Version Notes
 
-- [Enum Module](enum.md)
-- [Collections Module](collections.md)
-- [Typing Module](typing.md)
+- **All Python 3**: `abstractclassmethod`, `abstractstaticmethod` and `abstractproperty` are
+  deprecated; they remain importable on every supported version
+
+## Related Modules
+
+- **[collections.abc](collections.abc.md)** - ready-made ABCs, several with a `__subclasshook__`
+- **[functools](functools.md)** - `singledispatch` dispatches on ABCs, virtual subclasses included
+- **[typing](typing.md)** - `Protocol` for structural typing checked statically

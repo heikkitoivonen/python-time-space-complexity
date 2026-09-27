@@ -113,6 +113,9 @@ ignore = [
 # tests into tautologies. F722 reads the deliberately non-type string handed to
 # `cast()` as a broken forward annotation.
 "tests/test_typing_complexity.py" = ["UP006", "UP007", "UP045", "F722"]
+# The abc tests build ABCs with no abstract methods on purpose: registration,
+# caching and __subclasshook__ are the subject, and B024 flags every one of them.
+"tests/test_abc_complexity.py" = ["B024"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["python_time_space_complexity"]
