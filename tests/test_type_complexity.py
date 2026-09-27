@@ -153,6 +153,11 @@ def test_merge_cost_depends_on_both_width_and_depth(dimension: str) -> None:
 @pytest.mark.serial
 @pytest.mark.parametrize("multiple", [False, True])
 def test_mro_allocation_scales_with_result_length(multiple: bool) -> None:
+    """The peak stays within a small multiple of the returned list's size.
+
+    A list header reused from the freelist is not traced, so the depth-16
+    peak can be the item array alone; the bound is per size, not a peak ratio.
+    """
     peaks, sizes = [], []
     for depth in (16, 256):
         cls = merging_class(4, depth) if multiple else chain(depth)
@@ -165,7 +170,8 @@ def test_mro_allocation_scales_with_result_length(multiple: bool) -> None:
         assert result == list(cls.__mro__)
         sizes.append(sys.getsizeof(result))
     assert 5 < sizes[1] / sizes[0] < 25, sizes
-    assert 5 < peaks[1] / peaks[0] < 25, peaks
+    assert all(peak <= 4 * size for peak, size in zip(peaks, sizes, strict=True)), (peaks, sizes)
+    assert peaks[1] > 5 * sizes[0], (peaks, sizes)
 
 
 def run_example(source: str, workdir: pathlib.Path) -> subprocess.CompletedProcess[str]:

@@ -121,6 +121,21 @@ def _restore_trace_hooks() -> Iterator[None]:
 
 
 @pytest.fixture(autouse=True)
+def _no_collection_while_tracing() -> Iterator[None]:
+    """A finalizer run by a collection inside a traced call is traced too.
+
+    Garbage left by earlier test files (an unclosed shelf, say) would add its
+    modules to the counts and the ignore cache, so collect it first.
+    """
+    gc.collect()
+    was_enabled = gc.isenabled()
+    gc.disable()
+    yield
+    if was_enabled:
+        gc.enable()
+
+
+@pytest.fixture(autouse=True)
 def _forget_new_linecache_entries() -> Iterator[None]:
     """Printing and reports load sources into `linecache`; drop the ones added here."""
     before = set(linecache.cache)
