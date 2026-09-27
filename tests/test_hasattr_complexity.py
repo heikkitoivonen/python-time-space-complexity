@@ -68,6 +68,7 @@ import textwrap
 import time
 import tracemalloc
 from collections.abc import Callable
+from functools import partial
 from typing import Any
 
 import pytest
@@ -228,12 +229,14 @@ class TestSpaceColumn:
         hasattr(obj, "missing")
         walked_hit, walked_miss = Name("a_attr"), Name("missing")
 
-        assert traced_peak(lambda: hasattr(obj, "a_attr")) == 0
-        assert traced_peak(lambda: hasattr(obj, "missing")) == 0
-        assert traced_peak(lambda: hasattr(obj, walked_hit)) == 0
-        assert traced_peak(lambda: hasattr(obj, walked_miss)) == 0
+        # partial, not a lambda: on 3.12+ a cold Python code object allocates
+        # monitoring data on its first run once any test has called settrace().
+        assert traced_peak(partial(hasattr, obj, "a_attr")) == 0
+        assert traced_peak(partial(hasattr, obj, "missing")) == 0
+        assert traced_peak(partial(hasattr, obj, walked_hit)) == 0
+        assert traced_peak(partial(hasattr, obj, walked_miss)) == 0
         cls.changed = 1
-        assert traced_peak(lambda: hasattr(obj, "a_attr")) == 0
+        assert traced_peak(partial(hasattr, obj, "a_attr")) == 0
 
     def test_a_hook_allocation_is_charged_to_the_call(self) -> None:
         class Sample:
