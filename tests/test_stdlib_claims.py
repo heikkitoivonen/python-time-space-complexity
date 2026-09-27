@@ -12,6 +12,7 @@ proves it reads nothing at construction, and no tolerance is involved.
 docs/stdlib/array.md's claims live in tests/test_array_complexity.py,
 docs/stdlib/decimal.md's in tests/test_decimal_complexity.py,
 docs/stdlib/multiprocessing.md's in tests/test_multiprocessing_complexity.py,
+docs/stdlib/numbers.md's in tests/test_numbers_complexity.py,
 docs/stdlib/secrets.md's in tests/test_secrets_complexity.py,
 docs/stdlib/tempfile.md's in tests/test_tempfile_complexity.py,
 docs/stdlib/smtplib.md's in tests/test_smtplib_complexity.py and
@@ -30,7 +31,6 @@ import bisect
 import contextlib
 import filecmp
 import fnmatch
-import numbers
 import posixpath
 import pprint
 import queue
@@ -187,39 +187,6 @@ class TestCmpToKeyCallsPerComparison:
         assert comparisons["n"] > size * 3, (
             f"compare() runs per comparison, about n log n: {comparisons['n']} calls for n={size}"
         )
-
-
-class TestNumbersAbcCaching:
-    """docs/stdlib/numbers.md: isinstance() against an ABC caches per
-    (class, ABC) pair, so the first check on a type costs more."""
-
-    @pytest.mark.timing
-    def test_first_check_on_a_class_costs_more_than_the_rest(self) -> None:
-        firsts: list[float] = []
-        laters: list[float] = []
-        for index in range(200):
-            fresh = type(f"Probe{index}", (), {})
-            instance = fresh()
-
-            start = time.perf_counter()
-            isinstance(instance, numbers.Number)
-            firsts.append(time.perf_counter() - start)
-
-            start = time.perf_counter()
-            isinstance(instance, numbers.Number)
-            laters.append(time.perf_counter() - start)
-
-        first = sorted(firsts)[len(firsts) // 2]
-        later = sorted(laters)[len(laters) // 2]
-        assert first > later * 2, (
-            f"the negative result should be cached after the first check: "
-            f"first={first:.2e}s later={later:.2e}s"
-        )
-
-    def test_the_answer_is_the_same_either_way(self) -> None:
-        assert isinstance(42, numbers.Integral)
-        assert isinstance(3.5, numbers.Real)
-        assert not isinstance("42", numbers.Number)
 
 
 class TestPosixpathIsPureStringWork:
