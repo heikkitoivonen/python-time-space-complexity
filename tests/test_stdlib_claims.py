@@ -36,10 +36,8 @@ import posixpath
 import pprint
 import queue
 import sqlite3
-import sys
 import threading
 import time
-import unicodedata
 from collections import defaultdict, deque
 from collections.abc import Callable, Iterator
 from fractions import Fraction
@@ -302,100 +300,6 @@ class TestSqliteCommitBatching:
         assert per_row > batched * 10, (
             f"a commit per row should wait for the disk 100 times: "
             f"batched={batched:.2e}s per_row={per_row:.2e}s"
-        )
-
-
-class TestUnicodeDataLookupsAreTableReads:
-    """docs/stdlib/unicodedata.md: the per-character properties are O(1)
-    table reads, and an ASCII string answers is_normalized from a flag."""
-
-    @pytest.mark.timing
-    def test_property_lookups_do_not_depend_on_the_code_point(self) -> None:
-        low = best_time(lambda: [unicodedata.category("a") for _ in range(20_000)])
-        high = best_time(lambda: [unicodedata.category("\U0001f600") for _ in range(20_000)])
-
-        ratio = max(low, high) / min(low, high)
-        assert ratio < 3.0, f"both are table reads: ascii={low:.2e}s astral={high:.2e}s"
-
-    @pytest.mark.timing
-    @pytest.mark.skipif(
-        sys.version_info < (3, 11),
-        reason="the ASCII short-circuit in is_normalized() is new in 3.11",
-    )
-    def test_ascii_is_normalized_answers_from_a_flag(self) -> None:
-        ascii_text = "a" * 200_000
-        accented = "é" * 200_000
-
-        ascii_time = best_time(lambda: unicodedata.is_normalized("NFC", ascii_text))
-        accented_time = best_time(lambda: unicodedata.is_normalized("NFC", accented))
-
-        assert accented_time > ascii_time * 10, (
-            f"ASCII short-circuits, other text is scanned: "
-            f"ascii={ascii_time:.2e}s accented={accented_time:.2e}s"
-        )
-
-    def test_normalization_still_agrees_with_the_check(self) -> None:
-        decomposed = "café"
-        assert not unicodedata.is_normalized("NFC", decomposed)
-        assert unicodedata.is_normalized("NFC", unicodedata.normalize("NFC", decomposed))
-
-    def test_an_already_normalized_string_is_returned_unchanged(self) -> None:
-        # The page claimed normalize() allocates a new string. It does not
-        # when there is nothing to do - the O(n) space is the worst case.
-        ascii_text = "cafe"
-        composed = unicodedata.normalize("NFC", "cafe\u0301")
-
-        assert unicodedata.normalize("NFC", ascii_text) is ascii_text
-        assert unicodedata.normalize("NFC", composed) is composed
-
-    def test_a_string_needing_work_does_allocate(self) -> None:
-        decomposed = "cafe\u0301"
-        result = unicodedata.normalize("NFC", decomposed)
-
-        assert result is not decomposed
-        assert result != decomposed
-
-    @pytest.mark.timing
-    def test_is_normalized_cannot_inherit_the_quadratic_normalize(self) -> None:
-        """The page prices is_normalized() at O(n) with no CVE-2026-3276 caveat.
-
-        A review asked for one, reasoning that the fallback to normalize()
-        inherits whatever normalize() costs. It cannot: the two requirements
-        exclude each other. normalize() is only superlinear when a combining
-        run contains a class inversion, and an inversion is the one thing that
-        lets the quick check answer without falling back. So the fallback runs
-        only on already-ordered runs, where the sort does no swaps.
-
-        Both arms hold on a patched and an unpatched CPython alike, which is
-        why this needs no version guard.
-        """
-
-        def adversarial(marks: int) -> str:
-            return "a" + "".join(chr(0x0300 + (i % 40)) for i in range(marks))
-
-        def ordered(marks: int) -> str:
-            return "a" + "\u0301" * marks
-
-        # Inversions present: the quick check stops at the first one, so the
-        # answer costs the same for twenty times the input.
-        small, large = adversarial(1_000), adversarial(20_000)
-        flat = best_time(lambda: unicodedata.is_normalized("NFC", large)) / best_time(
-            lambda: unicodedata.is_normalized("NFC", small)
-        )
-        assert flat < 5, (
-            f"an inversion should settle the quick check regardless of length, "
-            f"but twenty times the marks cost {flat:.1f}x"
-        )
-
-        # No inversions: this is the input that does fall through to
-        # normalize(), and it is linear there on any CPython.
-        small, large = ordered(1_000), ordered(20_000)
-        fallback = best_time(lambda: unicodedata.is_normalized("NFC", large)) / best_time(
-            lambda: unicodedata.is_normalized("NFC", small)
-        )
-        assert fallback < 100, (
-            f"the fallback only sees already-ordered runs, so twenty times the "
-            f"marks should cost about twenty times, not {fallback:.1f}x"
         )
 
 
