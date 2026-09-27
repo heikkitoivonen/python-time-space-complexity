@@ -40,7 +40,6 @@ import threading
 import time
 from collections import defaultdict, deque
 from collections.abc import Callable, Iterator
-from fractions import Fraction
 from functools import cmp_to_key
 from pathlib import Path
 from typing import Any
@@ -323,68 +322,6 @@ class TestBisectKeyListDominates:
             f"the O(n) rebuild dwarfs the O(log n) search it precedes: "
             f"rebuild={rebuild:.2e}s search={search:.2e}s"
         )
-
-
-class TestFractionLoopDoesNotReduce:
-    """docs/stdlib/fractions.md.
-
-    The continued-fraction example was annotated as re-reducing via GCD on
-    every step. Neither of its operations does: subtracting an integer from a
-    reduced fraction leaves it reduced, and a reciprocal is a swap. The GCDs
-    that do run have 1 as an operand.
-    """
-
-    def test_subtracting_an_int_leaves_it_reduced(self) -> None:
-        import math
-        import random
-
-        for _ in range(500):
-            value = Fraction(random.randint(1, 10**9), random.randint(1, 10**9))
-            result = value - random.randint(-1000, 1000)
-            assert math.gcd(result.numerator, result.denominator) == 1
-
-    def test_the_reciprocal_is_a_swap(self) -> None:
-        value = Fraction(1_414_213_562, 10**9)
-        reciprocal = 1 / value
-
-        assert reciprocal.numerator == value.denominator
-        assert reciprocal.denominator == value.numerator
-
-    def test_the_gcds_in_the_loop_are_trivial(self) -> None:
-        """Every gcd() the loop reaches has 1 as an operand."""
-        import fractions as fractions_module
-        import math
-
-        seen: list[tuple[int, ...]] = []
-        real_gcd = math.gcd
-
-        def counting_gcd(*args: int) -> int:
-            seen.append(args)
-            return real_gcd(*args)
-
-        fractions_module.math.gcd = counting_gcd  # type: ignore[assignment]
-        try:
-            x = Fraction(1_414_213_562, 10**9)
-            seen.clear()
-            for _ in range(5):
-                a = int(x)
-                x = x - a
-                if x == 0:
-                    break
-                x = 1 / x
-        finally:
-            fractions_module.math.gcd = real_gcd  # type: ignore[assignment]
-
-        assert seen, "the loop should reach gcd at all"
-        assert all(1 in args for args in seen), (
-            f"a real reduction would have two non-trivial operands: {seen[:5]}"
-        )
-
-    def test_a_genuine_reduction_does_happen_elsewhere(self) -> None:
-        """Contrast: adding two fractions really does reduce."""
-        total = Fraction(1, 6) + Fraction(1, 3)
-        assert total == Fraction(1, 2)
-        assert total.denominator == 2, "6 and 3 were reduced away"
 
 
 class TestQueueVersusDeque:

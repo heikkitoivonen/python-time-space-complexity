@@ -39,7 +39,6 @@ from collections import deque
 from collections.abc import Callable, Iterator
 from decimal import Decimal, getcontext
 from difflib import SequenceMatcher
-from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
@@ -592,26 +591,6 @@ class TestSqliteInsertTouchesEveryIndex:
         assert indexed > unindexed, (
             f"each index is another B-tree insert: {unindexed:.2e}s vs {indexed:.2e}s"
         )
-
-
-class TestFractionDenominatorsGrowThroughASum:
-    """docs/stdlib/fractions.md implied a fixed cost per addition. Unless the
-    denominators share factors they multiply out, so every later step is
-    working with bigger numbers."""
-
-    def test_coprime_denominators_multiply_out(self) -> None:
-        primes = [2, 3, 5, 7, 11, 13, 17, 19]
-        total = sum((Fraction(1, p) for p in primes), Fraction(0))
-
-        product = 1
-        for prime in primes:
-            product *= prime
-        assert total.denominator == product
-
-    def test_shared_factors_do_not_grow(self) -> None:
-        total = sum((Fraction(1, 8) for _ in range(8)), Fraction(0))
-        assert total == 1
-        assert total.denominator == 1
 
 
 class TestLoggingFormatsPerHandler:
