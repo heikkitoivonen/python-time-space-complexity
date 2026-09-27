@@ -19,8 +19,8 @@ Measurement scope:
   two pages. A timing test maps 1 MiB and 1 GiB of anonymous memory and asserts
   the larger costs under 10x the smaller, where touching them would cost
   1,024x. Linux only: the fault counter is `ru_minflt`.
-* `close()` over 256 MiB with every page touched costs over 8x `close()` over
-  16 MiB touched the same way, and over 20x `close()` over 256 MiB untouched,
+* `close()` over 64 MiB with every page touched costs over 8x `close()` over
+  1 MiB touched the same way, and over 20x `close()` over 64 MiB untouched,
   so the bound is the touched pages, not the length. Measured on Linux with
   `MADV_NOHUGEPAGE`.
 * `read(k)`, `mm[i:j]` and `readline()` peak within 4 KiB of the bytes they
@@ -38,9 +38,10 @@ Measurement scope:
   step on every version, which is the O(r·s) worst case. On random bytes
   both cost over 8x and under 64x from 64 KiB to 1 MiB, the r term, where
   quadratic growth would cost 256x.
-* `resize()` doubles a 256 MiB private anonymous map with every page touched
-  in under a tenth of the time `bytes(mm)` takes to copy it, and keeps the
-  contents; on a file it resizes the file too. Growing a shared anonymous
+* `resize()` doubles a 16 MiB private anonymous map with every page touched
+  with fewer than 64 minor faults, and reading every old page afterwards
+  adds fewer than 64 more, where copying the map into another one faults at
+  least one per two pages; the contents are kept; on a file it resizes the file too. Growing a shared anonymous
   map raises `ValueError` on 3.13+, and before 3.13 a subprocess that grows
   one and touches the new page dies of `SIGBUS`. Linux only.
 * `x in mm` is `True` for a single byte present and `False` for a two-byte
@@ -70,9 +71,9 @@ Not settled here:
   Modules/mmapmodule.c, and is only observed to reach the file.
 * `madvise()`'s O(q) is the kernel's work for the option given; only that the
   call succeeds is observed.
-* `resize()` time is asserted only against a copy of the mapping. O(p) is
-  the kernel's page-table work behind `mremap()` and is not measured across
-  sizes.
+* `resize()` is shown not to copy by its page faults, not by its time. O(p)
+  is the kernel's page-table work behind `mremap()` and is not measured
+  across sizes.
 * Platform rows, which no run of this project reaches: the Windows
   constructor with `tagname` and its file growth, Windows `resize()` copying
   anonymous memory, `SystemError` from `resize()` on Unix without `mremap()`,
@@ -295,12 +296,12 @@ class TestCloseReleasesTouchedPages:
     @pytest.mark.serial
     @pytest.mark.timing
     def test_the_cost_follows_touched_pages(self) -> None:
-        small = self.close_ns(16 * MIB, touch=True)
-        large = self.close_ns(256 * MIB, touch=True)
-        untouched = self.close_ns(256 * MIB, touch=False)
+        small = self.close_ns(MIB, touch=True)
+        large = self.close_ns(64 * MIB, touch=True)
+        untouched = self.close_ns(64 * MIB, touch=False)
 
-        assert large > small * 8, f"16x the touched pages: {small}ns to {large}ns"
-        assert large > untouched * 20, f"256 MiB touched {large}ns, untouched {untouched}ns"
+        assert large > small * 8, f"64x the touched pages: {small}ns to {large}ns"
+        assert large > untouched * 20, f"64 MiB touched {large}ns, untouched {untouched}ns"
 
     def test_closing_leaves_the_file_open(self, file_of: Callable[[bytes], Any]) -> None:
         f = file_of(b"abc")
@@ -706,23 +707,31 @@ class TestSizeResizeAndFlush:
 
     @linux_only
     @pytest.mark.serial
-    @pytest.mark.timing
     def test_resize_does_not_copy_the_bytes(self) -> None:
-        size = 256 * MIB
-        durations = []
-        copies = []
-        for _ in range(3):
-            mm = anonymous(size, flags=mmap.MAP_PRIVATE)  # type: ignore[attr-defined]
+        size = 16 * MIB
+        pages = size // mmap.PAGESIZE
+        with anonymous(size, flags=mmap.MAP_PRIVATE) as mm:  # type: ignore[attr-defined]
             touch_every_page(mm)
-            copies.append(best_ns(lambda m=mm: bytes(m), repeats=1))  # type: ignore[misc]
-            start = time.perf_counter_ns()
-            mm.resize(size * 2)
-            durations.append(time.perf_counter_ns() - start)
-            assert mm[size - mmap.PAGESIZE] == 1 and mm[size] == 0
-            mm.close()
 
-        resize, copy = min(durations), min(copies)
-        assert resize * 10 < copy, f"resize {resize}ns against a {copy}ns copy of 256 MiB"
+            with anonymous(size) as target:
+                before = minor_faults()
+                target[:] = mm
+                copying = minor_faults() - before
+
+            before = minor_faults()
+            mm.resize(size * 2)
+            resizing = minor_faults() - before
+
+            before = minor_faults()
+            kept = sum(mm[offset] for offset in range(0, size, mmap.PAGESIZE))
+            rereading = minor_faults() - before
+
+            assert mm[size] == 0
+
+        assert copying >= pages // 2, f"copying {pages} pages faulted only {copying}"
+        assert resizing < 64, f"resizing {pages} touched pages faulted {resizing}"
+        assert rereading < 64, f"rereading {pages} moved pages faulted {rereading}"
+        assert kept == pages
 
     @linux_only
     @pytest.mark.skipif(sys.version_info < (3, 13), reason="the check arrived in 3.13")

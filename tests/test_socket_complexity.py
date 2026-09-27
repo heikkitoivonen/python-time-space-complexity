@@ -27,8 +27,10 @@ Measurement scope:
   peaks at or above `CMSG_SPACE(800)`, and with one descriptor below it.
 * The `sendall()` timeout is total: a reader that takes 64 KiB every 20 ms
   keeps a loop of single `send()` calls under a 0.3 s per-call timeout alive
-  for 1.5 s, while `sendall()` of 256 MiB under the same timeout and the same
-  reader raises `TimeoutError` within 5 s.
+  for 1.5 s without draining 16 MiB, while `sendall()` of 48 MiB under the
+  same timeout and the same reader raises `TimeoutError` within 5 s. That
+  reader takes at most 3.2 MiB/s, so a per-call timeout would let the 48 MiB
+  run for at least 15 s.
 * `sendfile()` of a 32 MiB regular file calls `os.sendfile()` and peaks under
   64 KB, with the lazy `selectors` import done first; a 4 MiB `BytesIO`, which
   has no descriptor, goes through the block fallback, delivers every byte,
@@ -409,7 +411,7 @@ class TestSendallTimeoutIsTotal:
         stop = threading.Event()
         reader = self.trickle(right, stop)
         left.settimeout(self.TIMEOUT)
-        payload = memoryview(b"x" * (64 * MIB))
+        payload = memoryview(b"x" * (16 * MIB))
         sent = 0
         start = time.monotonic()
         try:
@@ -433,7 +435,7 @@ class TestSendallTimeoutIsTotal:
         start = time.monotonic()
         try:
             with pytest.raises(TimeoutError):
-                left.sendall(b"x" * (256 * MIB))
+                left.sendall(b"x" * (48 * MIB))
             elapsed = time.monotonic() - start
         finally:
             stop.set()
