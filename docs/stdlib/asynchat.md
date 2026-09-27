@@ -1,328 +1,266 @@
 # asynchat Module Complexity
 
-⚠️ **REMOVED IN PYTHON 3.12**: The `asynchat` module was deprecated since Python 3.6 and removed in Python 3.12. Use `asyncio` instead.
+The `asynchat` module frames command/response protocols over an `asyncore` channel. An
+`async_chat` subclass reads from its socket, splits the input at a terminator and hands you the
+pieces; on the way out it queues data and producers and sends them a chunk at a time as the
+socket becomes writable. It keeps no whole message: what a message costs to hold is decided by
+your `collect_incoming_data()`.
 
-The `asynchat` module provides asynchronous socket handlers with automatic buffering and line-based protocol support.
+!!! warning "Removed in Python 3.12"
+    Deprecated since Python 3.6 and removed in Python 3.12 by PEP 594. The examples that
+    import it need Python 3.10 or 3.11; new code should use `asyncio` streams.
 
-## Classes & Methods
+`n` is the bytes passed to one `push()` or still held by a `simple_producer`, `r` is the bytes
+one `recv()` returns (at most `ac_in_buffer_size`), `m` is the terminators matched within those
+bytes, `t` is the length of a bytes terminator, `b` is `ac_out_buffer_size`, `s` is a
+`simple_producer`'s `buffer_size`, and `q` is the entries in the producer queue. The bounds count
+bytes scanned and copied and exclude the cost of your own `collect_incoming_data()`,
+`found_terminator()` and producer `more()` methods. A send step is priced for chunks of at most b
+bytes, which is what `push()` queues; a producer chunk longer than that costs its own length.
+
+## Complexity Reference
+
+### async_chat
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `async_chat(map)` | O(1) | O(1) | Create async chat instance |
-| `set_terminator(term)` | O(1) | O(1) | Set message terminator |
-| `push(data)` | O(1) | O(1) | Queue data for sending |
-| `collect_incoming_data(data)` | O(n) | O(n) | Collect received data, n = size |
-| `found_terminator()` | O(1) | O(1) | Callback when terminator found |
+| `asynchat.async_chat(sock=None, map=None)` | O(1) | O(1) | Given a socket, registers the channel in `map`, or in asyncore's global map; subclass it and override the two callbacks below |
+| `async_chat.set_terminator(term)` | O(1) | O(1) | `term` is a bytes delimiter, an int byte count, or `None` to collect everything; a negative count raises `ValueError` |
+| `async_chat.get_terminator()` | O(1) | O(1) | An int terminator counts down as bytes arrive and is left at 0 once it fires, which collects everything, like `None`, until you set another |
+| `async_chat.collect_incoming_data(data)` | O(1) | O(1) | Must be overridden; the default raises `NotImplementedError`. Called with each piece of input as it arrives, so one message can arrive in several calls |
+| `async_chat.found_terminator()` | O(1) | O(1) | Must be overridden; the default raises `NotImplementedError`. Called once per terminator matched, after the input before it has been collected |
+| `async_chat.handle_read()` | O(r·(m + 1) + t²) | O(r + t) | Called by the loop for one `recv()`. Each terminator matched copies the rest of the input, so many small messages in one read cost r·m; between reads it keeps at most a partial terminator |
+| `async_chat.push(data)` | O(n) | O(n) | `bytes` longer than b are copied into b-byte chunks up front, and data of at most b bytes is queued as is; sends at most one chunk now. `str` raises `TypeError` |
+| `async_chat.push_with_producer(producer)` | O(b) | O(b) | Queues the producer and runs one send step; `more()` is called only once the producer reaches the head of the queue, and again only after its last chunk has gone |
+| `async_chat.initiate_send()`, `async_chat.handle_write()` | O(b) | O(b) | At most one `send()` of at most b bytes per call; a producer chunk longer than b is re-sliced after every send, costing its whole length each time |
+| `async_chat.close_when_done()` | O(1) | O(1) | Queues `None`; the channel closes when the queue reaches it |
+| `async_chat.discard_buffers()` | O(q) | O(1) | Drops every queued chunk and producer and any partial terminator |
+| `async_chat.readable()`, `async_chat.writable()` | O(1) | O(1) | Always readable; writable while the queue is not empty or the socket is not yet connected |
+| `async_chat.handle_close()` | O(1) | O(1) | Closes the socket and removes the channel from its map |
+| `async_chat.ac_in_buffer_size`, `async_chat.ac_out_buffer_size` | O(1) | O(1) | Class attributes, 65536 each; override them in a subclass to change r's ceiling and b |
+| `async_chat.use_encoding`, `async_chat.encoding` | O(1) | O(1) | Off by default; when set, `set_terminator()` encodes a `str` terminator with `encoding` (`'latin-1'`) in O(t), and `push()` still rejects `str` |
 
-## Creating Async Chat Handlers
+### simple_producer
 
-### Time Complexity: O(1)
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `asynchat.simple_producer(data, buffer_size=512)` | O(1) | O(1) | Holds a reference to `data` |
+| `simple_producer.more()` | O(n) | O(n) | Returns the first s bytes and copies the other n − s, so draining `bytes` costs O(n²/s); a `memoryview` makes each call O(1) |
 
-```python
-# ⚠️ DEPRECATED - Use asyncio instead
-import asynchat
-import socket
+### Module functions
 
-class Handler(asynchat.async_chat):
-    """Chat handler (DEPRECATED)."""
-    
-    def __init__(self, sock, addr):
-        asynchat.async_chat.__init__(self, sock)
-        self.addr = addr
-        
-        # Set terminator: O(1)
-        self.set_terminator(b'\r\n')  # O(1)
-        
-        self.data = []
-    
-    def handle_connect(self):
-        """Connection established: O(1)."""
-        print(f"Connected: {self.addr}")
-    
-    def collect_incoming_data(self, data):
-        """Collect incoming data: O(n)."""
-        # n = size of data
-        self.data.append(data)  # O(n)
-    
-    def found_terminator(self):
-        """Message complete: O(n)."""
-        # n = total message size
-        message = b''.join(self.data)  # O(n)
-        self.data = []
-        
-        # Echo back: O(n)
-        self.push(message + b'\r\n')  # O(n)
-```
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `asynchat.find_prefix_at_end(haystack, needle)` | O(t²) | O(t) | t = `len(needle)`; tries each proper prefix of `needle` against the end of `haystack`, longest first, and returns the length that matched, or 0 |
 
-### Space Complexity: O(1) per instance
+## Reading Framed Input
+
+`handle_read()` takes one `recv()` and walks it for the terminator. Input goes to
+`collect_incoming_data()` as it arrives, so a message split across two reads reaches you in two
+pieces, and the channel itself holds nothing but a partial terminator between reads. Each
+terminator matched slices the rest of the read into a new object, which is why a read carrying
+many small messages costs r·m rather than r; a smaller `ac_in_buffer_size` caps r.
 
 ```python
-# ⚠️ DEPRECATED
-import asynchat
-
-class Handler(asynchat.async_chat):
-    """Handler instance."""
-    pass
-
-# Each instance: O(1) space
-handler = Handler(sock, addr)  # O(1)
-```
-
-## Setting Terminators
-
-### Time Complexity: O(1)
-
-```python
-# ⚠️ DEPRECATED
-import asynchat
-
-class LineHandler(asynchat.async_chat):
-    """Handle line-based protocol."""
-    
-    def __init__(self, sock):
-        asynchat.async_chat.__init__(self, sock)
-        
-        # Line terminator: O(1)
-        self.set_terminator(b'\n')  # O(1)
-        
-        self.buffer = []
-    
-    def collect_incoming_data(self, data):
-        """Collect until terminator: O(n)."""
-        self.buffer.append(data)  # O(n)
-```
-
-### Space Complexity: O(1)
-
-```python
-# ⚠️ DEPRECATED
-import asynchat
-
-handler = asynchat.async_chat(sock)
-
-# Setting terminator uses minimal space
-handler.set_terminator(b'\r\n')  # O(1) space
-```
-
-## Pushing Data
-
-### Time Complexity: O(n)
-
-Where n = size of data.
-
-```python
-# ⚠️ DEPRECATED
-import asynchat
-
-class Handler(asynchat.async_chat):
-    """Handler with push."""
-    
-    def send_message(self, msg):
-        """Send message: O(n)."""
-        # n = message size
-        self.push(msg + b'\r\n')  # O(n) to queue
-```
-
-### Space Complexity: O(n)
-
-```python
-# ⚠️ DEPRECATED
-# Each push adds to send buffer
-handler.push(data)  # O(n) space in buffer
-```
-
-## Common Patterns
-
-### Echo Server (DEPRECATED)
-
-```python
-# ⚠️ DEPRECATED - Use asyncio instead
 import asynchat
 import asyncore
 import socket
 
-class EchoHandler(asynchat.async_chat):
-    """Echo handler (DEPRECATED)."""
-    
-    def __init__(self, sock, addr):
-        asynchat.async_chat.__init__(self, sock)
-        self.addr = addr
-        self.set_terminator(b'\r\n')  # O(1)
-        self.data = []
-    
+class LineCollector(asynchat.async_chat):
+    def __init__(self, sock, map):
+        super().__init__(sock, map)  # O(1)
+        self.set_terminator(b"\r\n")  # O(1)
+        self.pieces = []
+        self.lines = []
+
     def collect_incoming_data(self, data):
-        """Collect data: O(n)."""
-        self.data.append(data)  # O(n)
-    
+        self.pieces.append(data)
+
     def found_terminator(self):
-        """Echo back: O(n)."""
-        msg = b''.join(self.data)  # O(n)
-        self.data = []
-        self.push(msg + b'\r\n')  # O(n)
+        self.lines.append(b"".join(self.pieces))
+        self.pieces = []
 
-class EchoServer(asyncore.dispatcher):
-    """Echo server (DEPRECATED)."""
-    
-    def __init__(self, host, port):
-        asyncore.dispatcher.__init__(self)
-        self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.bind((host, port))
-        self.listen(5)
-    
-    def handle_accepted(self, sock, addr):
-        """Accept connection: O(1)."""
-        EchoHandler(sock, addr)  # O(1) to create
+channels = {}
+ours, theirs = socket.socketpair()
+chat = LineCollector(ours, channels)
 
-# ⚠️ DEPRECATED - Don't use
-server = EchoServer('localhost', 9000)
-asyncore.loop()  # DEPRECATED
+theirs.sendall(b"HELLO\r\nWOR")
+asyncore.loop(timeout=1, map=channels, count=1)  # one handle_read(): O(r·(m + 1) + t²)
+assert chat.lines == [b"HELLO"] and chat.pieces == [b"WOR"]
+
+theirs.sendall(b"LD\r\n")
+asyncore.loop(timeout=1, map=channels, count=1)
+assert chat.lines == [b"HELLO", b"WORLD"]
+
+chat.close()
+theirs.close()
 ```
 
-### Protocol Handler (DEPRECATED)
+### Byte-Count Terminators
+
+An int terminator fires after that many bytes and is then left at 0, which collects everything
+that follows. Set a new terminator in `found_terminator()`.
 
 ```python
-# ⚠️ DEPRECATED - Use asyncio instead
 import asynchat
+import asyncore
+import socket
 
-class ProtocolHandler(asynchat.async_chat):
-    """Protocol handler (DEPRECATED)."""
-    
-    def __init__(self, sock):
-        asynchat.async_chat.__init__(self, sock)
-        self.set_terminator(b'\r\n')  # O(1)
-        self.buffer = []
-    
+class Records(asynchat.async_chat):
+    def __init__(self, sock, map):
+        super().__init__(sock, map)
+        self.set_terminator(5)  # O(1) - a byte count
+        self.pieces = []
+        self.records = []
+
     def collect_incoming_data(self, data):
-        """Collect: O(n)."""
-        self.buffer.append(data)  # O(n)
-    
+        self.pieces.append(data)
+
     def found_terminator(self):
-        """Process message: O(n)."""
-        line = b''.join(self.buffer)  # O(n)
-        self.buffer = []
-        
-        # Parse and respond: O(n)
-        response = self.process_command(line)
-        self.push(response + b'\r\n')  # O(n)
-    
-    def process_command(self, cmd):
-        """Process command: O(n)."""
-        # Parse command: O(n)
-        parts = cmd.split(b' ')  # O(n)
-        
-        # Handle command
-        if parts[0] == b'ECHO':
-            return parts[1]
-        else:
-            return b'ERROR: Unknown command'
+        self.records.append(b"".join(self.pieces))
+        self.pieces = []
+        assert self.get_terminator() == 0  # O(1) - spent
+        self.set_terminator(5)
+
+channels = {}
+ours, theirs = socket.socketpair()
+chat = Records(ours, channels)
+
+theirs.sendall(b"abcdefghij")
+asyncore.loop(timeout=1, map=channels, count=1)
+assert chat.records == [b"abcde", b"fghij"]
+
+try:
+    chat.set_terminator(-1)
+except ValueError as error:
+    assert "positive" in str(error)
+else:
+    raise AssertionError("a negative byte count was accepted")
+
+chat.close()
+theirs.close()
 ```
 
-## Why asynchat is Deprecated
+## Writing Output
+
+### Pushing Data
+
+`push()` splits `bytes` longer than `ac_out_buffer_size` into chunks once, then tries to send the
+first. Each later writable event sends at most one more, so a large push is spread over several
+turns of the loop.
 
 ```python
-# ⚠️ DEPRECATED REASONS:
-
-# 1. asyncio is more modern and standard
-import asyncio
-
-async def handle_client(reader, writer):
-    """Modern asyncio approach."""
-    while True:
-        data = await reader.readline()
-        if not data:
-            break
-        writer.write(data)
-        await writer.drain()
-
-# 2. asynchat doesn't integrate with asyncio
-# 3. No support for modern features
-# 4. Limited error handling
-# 5. Harder to debug
-
-# MIGRATION PATH:
-# asynchat -> asyncio
-# asyncore -> asyncio or concurrent.futures
-```
-
-## Complexity Comparison
-
-```python
-# asynchat operations (DEPRECATED):
-handler = asynchat.async_chat(sock)
-handler.set_terminator(b'\n')  # O(1)
-handler.push(data)  # O(n) where n = data size
-handler.collect_incoming_data(chunk)  # O(n)
-
-# asyncio equivalent (MODERN):
-async def handle(reader, writer):
-    data = await reader.readuntil(b'\n')  # O(n)
-    writer.write(data)
-    await writer.drain()  # O(n)
-
-# asyncio: Better integration, clearer code, standard library
-```
-
-## Performance Characteristics
-
-### Not Recommended
-
-```python
-# ⚠️ DO NOT USE asynchat
 import asynchat
+import asyncore
+import socket
 
-# Issues:
-# 1. Slower than asyncio
-# 2. Less maintainable
-# 3. Removed in Python 3.12
-# 4. Poor error handling
-# 5. Difficult to test
+class Sender(asynchat.async_chat):
+    ac_out_buffer_size = 4096
 
-class Handler(asynchat.async_chat):
-    """Don't use - DEPRECATED."""
+channels = {}
+ours, theirs = socket.socketpair()
+chat = Sender(ours, channels)
+
+chat.push(b"x" * 10_000)  # O(n) - three chunks, the first sent now
+received = len(theirs.recv(65536))
+assert received <= 4096
+
+while received < 10_000:
+    asyncore.loop(timeout=1, map=channels, count=1)  # one chunk per writable event: O(b)
+    received += len(theirs.recv(65536))
+assert received == 10_000
+
+try:
+    chat.push("text")
+except TypeError:
     pass
+else:
+    raise AssertionError("push() accepted a str")
+
+chat.close()
+theirs.close()
 ```
 
-### What to Use Instead
+### Producers
+
+A producer is any object with a `more()` method. The channel calls it only when the producer
+reaches the head of the queue, one chunk at a time. `simple_producer` slices its data on every
+call, so each call copies what is left; wrapping the data in a `memoryview` makes the slices free.
 
 ```python
-# ✅ USE ASYNCIO
-import asyncio
+import asynchat
+import asyncore
+import socket
 
-async def handle_client(reader, writer):
-    """Modern approach."""
-    try:
-        while True:
-            data = await reader.readuntil(b'\n')
-            writer.write(data)
-            await writer.drain()
-    except asyncio.IncompleteReadError:
-        pass
-    finally:
-        writer.close()
+data = b"z" * 100_000
+
+copying = asynchat.simple_producer(data, buffer_size=512)
+assert len(copying.more()) == 512  # O(n) - the other n - s bytes are copied
+
+viewing = asynchat.simple_producer(memoryview(data), buffer_size=512)
+assert bytes(viewing.more()) == b"z" * 512  # O(1) - a view, nothing copied
+
+channels = {}
+ours, theirs = socket.socketpair()
+chat = asynchat.async_chat(ours, channels)
+chat.push_with_producer(asynchat.simple_producer(memoryview(b"abc" * 1000)))  # O(b)
+chat.close_when_done()  # O(1) - close once the queue drains
+
+while channels:  # one chunk per writable event, then the close
+    asyncore.loop(timeout=1, map=channels, count=1)
+received = b"".join(iter(lambda: theirs.recv(65536), b""))
+assert received == b"abc" * 1000
+theirs.close()
+```
+
+## Migrating to asyncio
+
+`asyncio` streams do the same framing. `StreamReader.readuntil()` returns a whole message with
+its delimiter, so there is no pair of callbacks to write.
+
+```python
+import asyncio
 
 async def main():
-    """Run server."""
-    server = await asyncio.start_server(
-        handle_client,
-        '127.0.0.1', 8888
-    )
-    
-    async with server:
-        await server.serve_forever()
+    reader = asyncio.StreamReader()
+    reader.feed_data(b"HELLO\r\nWORLD\r\n")
+    reader.feed_eof()
+    lines = []
+    while not reader.at_eof():
+        lines.append(await reader.readuntil(b"\r\n"))
+    return lines
 
-# asyncio.run(main())
+assert asyncio.run(main()) == [b"HELLO\r\n", b"WORLD\r\n"]
 ```
+
+## Performance Best Practices
+
+✅ **Do**:
+
+- Keep the pieces `collect_incoming_data()` receives and join them in `found_terminator()`; the
+  channel keeps no message for you
+- `push()` bytes you already hold, which chunks them once, rather than wrapping them in a
+  `simple_producer`
+- Wrap large data in a `memoryview` when it must go through a `simple_producer`
+- Return chunks no longer than `ac_out_buffer_size` from your own producers
+- Lower `ac_in_buffer_size` for protocols that send many small messages at once; it caps r in
+  r·m
+
+❌ **Avoid**:
+
+- A `simple_producer` over a large `bytes` object - O(n²/s) to drain
+- A producer whose `more()` returns more than `ac_out_buffer_size` at once - it is re-sliced
+  after every send
+- `asynchat` in new code - it does not exist from Python 3.12
 
 ## Version Notes
 
-- **Python 2.0-2.6**: asynchat introduced
-- **Python 2.7-3.5**: Widely used
-- **Python 3.6+**: Deprecated (use asyncio)
-- **Python 3.12+**: Removed
+- **Python 3.6+**: Deprecated in favour of `asyncio`
+- **Python 3.10+**: Importing the module emits a `DeprecationWarning`
+- **Python 3.12+**: Removed by PEP 594; `import asynchat` raises `ModuleNotFoundError`
 
-## Related Documentation
+## Related Modules
 
-- [asyncio Module](asyncio.md) - **USE THIS INSTEAD**
-- [asyncore Module](asyncore.md) - Also removed in 3.12
-- [socket Module](socket.md) - Low-level sockets
-- [concurrent.futures Module](concurrent_futures.md) - Alternative for concurrency
+- **[asyncio](asyncio.md)** - the replacement; `StreamReader.readuntil()` reads to a delimiter
+- **[asyncore](asyncore.md)** - the loop and `dispatcher` base class `async_chat` builds on, removed in 3.12 too
+- **[socket](socket.md)** - the `send()` and `recv()` calls each channel makes
