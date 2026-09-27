@@ -163,13 +163,13 @@ def process(x, y):
     pass
 
 
-# Bad: materializes all 1,000,000 pairs at once - O(n*m) memory
-pairs = [(x, y) for x in range(1000) for y in range(1000)]
+# Bad: materializes all 100,000 pairs at once - O(n*m) memory
+pairs = [(x, y) for x in range(1000) for y in range(100)]
 
-# Better: the 1,000,000 pairs are yielded one at a time and never all held.
+# Better: the 100,000 pairs are yielded one at a time and never all held.
 # Not O(1) though - product() copies each input to a tuple before yielding
-# anything, so this holds the 2,000 input values throughout: O(n + m)
-pairs = product(range(1000), range(1000))
+# anything, so this holds the 1,100 input values throughout: O(n + m)
+pairs = product(range(1000), range(100))
 for x, y in pairs:
     process(x, y)
 ```

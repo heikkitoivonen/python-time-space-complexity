@@ -51,12 +51,12 @@ Measurement scope:
   walks `co_names` instead, so the probe asserts only that the names it could
   read are a small fraction of the instructions, and that the result agrees.
 * `findsource()` is timed over three modules holding the same two-line
-  function: two of 40,000 lines with the definition at either end, and one of
-  400 with it at the top. Warm, top and bottom are within 2x of each other and
+  function: two of 15,000 lines with the definition at either end, and one of
+  150 with it at the top. Warm, top and bottom are within 2x of each other and
   top is within 2x of the small file, so the cached call tracks neither
   position nor file size, and the line list it returns is the same object on a
   second call. `getsourcelines()` over the
-  40,000-line pair costs more than 3x at the top, which is the tail below the
+  15,000-line pair costs more than 3x at the top, which is the tail below the
   definition. All three modules are imported and measured once before timing.
 * `stack()` and `stack(0)` are compared by counting `linecache.getlines`
   calls from a 20-frame recursion: one per frame against none at all. The
@@ -234,7 +234,7 @@ def write_module(directory: pathlib.Path, name: str, before: int, after: int) ->
     return module
 
 
-PADDING = 40_000
+PADDING = 15_000
 
 
 async def _PROBE_CORO(alpha: int) -> int:  # noqa: N802 - a constant, not a function to call
@@ -841,7 +841,7 @@ class TestSourceCostsTheTailOfTheFile:
     """`findsource()` | O(F) first call, then O(1); `getsourcelines()` | O(t).
 
     The two modules hold everything fixed but the definition's position: the
-    same two-line function, the same 40,000-line file. A bound in `F` predicts
+    same two-line function, the same 15,000-line file. A bound in `F` predicts
     they cost the same; a bound in `t` predicts the one at the top costs far
     more, and only `getsourcelines()` does.
     """
@@ -892,7 +892,7 @@ class TestSourceCostsTheTailOfTheFile:
         bottom = best_us(lambda: inspect.getsourcelines(at_bottom.tiny), inner=20)
 
         assert top > 3 * bottom, (
-            f"40,000 lines below the definition cost {top / bottom:.1f}x ({bottom:.1f}us)"
+            f"15,000 lines below the definition cost {top / bottom:.1f}x ({bottom:.1f}us)"
         )
 
     def test_getsourcefile_does_not_go_through_linecache(

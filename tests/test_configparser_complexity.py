@@ -35,12 +35,12 @@ Measurement scope:
   Malformed syntax raises on `get()` after `read_string()`, and at once from
   `read_dict()`; `SectionProxy.clear()` on an interpolating parser stops at a
   value it cannot expand, leaving it in place.
-* `options()`, `len()` and `iter()` of a `SectionProxy`, `popitem()` and the
+* `options()`, `len()` and `iter()` of a `SectionProxy` and the
   constructor's `defaults` are traced peaks that grow more than 100x from 10
-  to 100,000 DEFAULT options or sections; `has_option()`, `has_section()`,
+  to 100,000 DEFAULT options, and `popitem()`'s from 10 to 20,000 sections; `has_option()`, `has_section()`,
   `in` on a proxy and `len()` of the DEFAULT proxy stay under 2 KB with
   100,000 DEFAULT options, and iterating a parser to the end under 2 KB with
-  100,000 sections. `clear()` on a parser of 200 sections is a
+  20,000 sections. `clear()` on a parser of 200 sections is a
   subclass whose `sections()` records its result, which lists 20,100 names in
   all; `SectionProxy.clear()` on 50 options with 5 DEFAULT options records
   51 `options()` calls. `items(section)` calls `before_get` once per option,
@@ -507,11 +507,11 @@ class TestPopitemAndClear:
 
     def test_popitem_lists_every_section(self) -> None:
         peaks = []
-        for count in (10, 100_000):
+        for count in (10, 20_000):
             parser = parser_with_sections(count)
             peaks.append(peak_bytes(parser.popitem))
 
-        assert peaks[1] > peaks[0] * 100, f"popitem over 10 and 100,000 sections: {peaks}"
+        assert peaks[1] > peaks[0] * 100, f"popitem over 10 and 20,000 sections: {peaks}"
 
     def test_clear_lists_the_remaining_sections_once_per_section(self) -> None:
         listed: list[int] = []
@@ -586,7 +586,7 @@ class TestMappingAccess:
         assert "DEFAULT" in parser and "s1" in parser and "missing" not in parser
 
     def test_iterating_a_parser_is_lazy(self) -> None:
-        parser = parser_with_sections(100_000)
+        parser = parser_with_sections(20_000)
 
         seen = [0]
 
@@ -597,8 +597,8 @@ class TestMappingAccess:
 
         peak = peak_bytes(walk)
 
-        assert seen[0] == 100_001
-        assert peak < 2_000, f"iterating 100,000 sections peaked at {peak}"
+        assert seen[0] == 20_001
+        assert peak < 2_000, f"iterating 20,000 sections peaked at {peak}"
 
     def test_assigning_a_section_replaces_its_options(self) -> None:
         parser = configparser.ConfigParser()

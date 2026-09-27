@@ -42,8 +42,9 @@ Measurement scope:
 * Opening a 4 MB `file:` URL peaks under 512 KB, reading it over 3.6 MB, and
   `read(1024)` under 64 KB. The first line of a one-line 4 MB file peaks over
   3.6 MB; the first line of a 4 MB file of short lines peaks under 64 KB.
-  Opening a `data:` URL of 1,000,000 characters allocates more than 20x the
-  10,000-character one, percent- and base64-encoded, and the response is a
+  Opening a `data:` URL whose payload decodes to 300,000 bytes allocates more
+  than 50x one decoding to 1,000, percent- and base64-encoded, and the
+  response is a
   `BytesIO` already holding the decoded body.
 * `urlretrieve()` of a 4 MB `file:` URL to a named file peaks under 512 KB
   and calls `reporthook` 513 times with the same block size, one call per
@@ -604,7 +605,7 @@ class TestOpeningDoesNotReadTheBody:
     def test_data_urls_are_decoded_while_opening(self, encoding: str) -> None:
         urllib.request.urlopen("data:,warm").close()
         peaks = []
-        for size in (SMALL, LARGE):
+        for size in (1_000, 300_000):
             body = b"x" * size
             url = (
                 "data:," + "%78" * size
@@ -617,7 +618,7 @@ class TestOpeningDoesNotReadTheBody:
                 assert response.fp.getvalue() == body
                 assert response.fp.tell() == 0
 
-        assert peaks[1] > 20 * peaks[0], f"opening must decode the payload: {peaks}"
+        assert peaks[1] > 50 * peaks[0], f"opening must decode the payload: {peaks}"
 
 
 class TestUrlretrieveCopiesInBlocks:

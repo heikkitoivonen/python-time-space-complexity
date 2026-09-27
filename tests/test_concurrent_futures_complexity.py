@@ -19,7 +19,7 @@ Measurement scope:
   and a second submit after the first result starts none. On 3.14
   `InterpreterPoolExecutor(3)` adds nothing to `interpreters.list_all()` and
   its first submit adds one.
-* `ThreadPoolExecutor.submit()` is timed with 100 and 100,000 tasks already
+* `ThreadPoolExecutor.submit()` is timed with 100 and 30,000 tasks already
   queued behind a blocked single worker; the deeper queue costs under 3x.
   A task returning its argument returns the same object, so arguments pass by
   reference.
@@ -46,8 +46,8 @@ Measurement scope:
   calling thread; `set_result()` runs each of 50 callbacks once.
 * `wait()` and `as_completed()` each call `sorted` once, over the n distinct
   futures, for n = 50; duplicates are yielded once and already-finished
-  futures come before one finished later. A timing test over 1,000, 10,000
-  and 100,000 finished futures bounds each 10x step of `wait()` under 40x,
+  futures come before one finished later. A timing test over 300, 3,000
+  and 30,000 finished futures bounds each 10x step of `wait()` under 40x,
   where a quadratic would give 100x and n log n about 12x.
 * `concurrent.futures.TimeoutError` is the builtin from 3.11 and a distinct
   class before; the `Broken*` classes subclass `BrokenExecutor`; the
@@ -210,7 +210,7 @@ class TestThreadWorkersStartOnDemand:
                 executor.shutdown()
 
         shallow = submit_cost(100)
-        deep = submit_cost(100_000)
+        deep = submit_cost(30_000)
         assert deep < 3 * shallow, f"200 submits: {shallow:.0f}ns at depth 100, {deep:.0f}ns deep"
 
 
@@ -463,9 +463,9 @@ class TestWaitingSortsOnce:
     def test_wait_grows_well_below_quadratic(self) -> None:
         costs = {
             n: best_ns(lambda made=self.finished(n): futures.wait(made), repeats=5)
-            for n in (1_000, 10_000, 100_000)
+            for n in (300, 3_000, 30_000)
         }
-        for small, large in ((1_000, 10_000), (10_000, 100_000)):
+        for small, large in ((300, 3_000), (3_000, 30_000)):
             ratio = costs[large] / costs[small]
             assert ratio < 40, f"wait() on {small} -> {large} futures cost x{ratio:.1f}"
 

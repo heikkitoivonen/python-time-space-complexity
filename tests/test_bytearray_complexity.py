@@ -121,8 +121,8 @@ Measurement scope:
   their length while still returning 256, which is its k term.
 * `split()` scales with the buffer and `join()` with the bytes in ten parts,
   with the number of parts, and with the number of *empty* parts - which
-  produce no output at all. Joining 1,000,000 empty parts peaks above
-  10,000,000 bytes, which is the p term of its row. `partition()` on a miss
+  produce no output at all. Joining 200,000 empty parts peaks above
+  2,000,000 bytes, which is the p term of its row. `partition()` on a miss
   returns the whole buffer as a copy plus two empties.
 * Predicates: `isalpha()` scales with the letters it reads and costs more
   than ten times as much as the same buffer with a digit in front.
@@ -144,7 +144,11 @@ Not settled here:
 * `clear()`, and `resize()` shrinking, are O(n) because the allocator
   returns the pages; a small buffer shrinks in place at O(1), so both
   measurements span 1,000,000 to 100,000,000 bytes, where glibc unmaps, and
-  carry no upper bound.
+  carry no upper bound. They still depend on allocator state: a long-lived
+  process can hold a free heap region big enough to take and give back the
+  large buffer without unmapping it. In the serial timing run 50,000,000
+  bytes did that (x1.0 and x2.0) and 100,000,000 did not, so these two
+  tests exceed 64 MB of resident memory.
 * The O(n + m) bound on `find()`, `count()` and `in` follows from the two-way
   algorithm in Objects/stringlib/fastsearch.h, present since 3.10; only the n
   term is timed. The reverse search's worst case is measured at one buffer
@@ -168,7 +172,8 @@ Not settled here:
   measurements run at 100,000 and 10,000,000 bytes except for `ba * count`,
   whose result would reach 100 MB there: its ratio then prices the page
   faults of writing that, not the product, so it is measured two orders
-  smaller.
+  smaller. `split()` runs at 50,000 and 5,000,000 bytes, and `join()`'s part
+  counts at 2,000 and 200,000, so the pieces stay within 64 MB.
 """
 
 from __future__ import annotations
@@ -298,25 +303,20 @@ class TestConstruction:
 
     @pytest.mark.timing
     def test_each_constructor_scales_with_its_source(self) -> None:
-        small_bytes, large_bytes = bytes(SMALL), bytes(LARGE)
-        small_text, large_text = "é" * SMALL, "é" * LARGE
-        small_hex, large_hex = "ab" * SMALL, "ab" * LARGE
-        small_list, large_list = [0] * (SMALL // 10), [0] * (LARGE // 10)
+        def scaling(source: Callable[[int], Any], build: Callable[[Any], Any]) -> float:
+            # One pair of sources alive at a time.
+            small, large = source(SMALL), source(LARGE)
+            return growth(lambda: build(small), lambda: build(large))
 
         ratios = {
-            "count": growth(lambda: bytearray(SMALL), lambda: bytearray(LARGE)),
-            "bytes": growth(lambda: bytearray(small_bytes), lambda: bytearray(large_bytes)),
-            "str": growth(
-                lambda: bytearray(small_text, "utf-8"), lambda: bytearray(large_text, "utf-8")
-            ),
-            "fromhex": growth(
-                lambda: bytearray.fromhex(small_hex), lambda: bytearray.fromhex(large_hex)
-            ),
-            "list": growth(lambda: bytearray(small_list), lambda: bytearray(large_list)),
+            "count": scaling(lambda size: size, bytearray),
+            "bytes": scaling(bytes, bytearray),
+            "str": scaling(lambda size: "é" * size, lambda text: bytearray(text, "utf-8")),
+            "fromhex": scaling(lambda size: "ab" * size, bytearray.fromhex),
+            "list": scaling(lambda size: [0] * (size // 10), bytearray),
             # A lossy handler emits nothing, and still walks every character.
-            "str, ascii, ignore": growth(
-                lambda: bytearray(small_text, "ascii", "ignore"),
-                lambda: bytearray(large_text, "ascii", "ignore"),
+            "str, ascii, ignore": scaling(
+                lambda size: "é" * size, lambda text: bytearray(text, "ascii", "ignore")
             ),
         }
 
@@ -874,8 +874,8 @@ class TestClearReverseCopyAndResize:
 
         ratio = clear_cost(100_000_000) / clear_cost(1_000_000)
 
-        # No upper bound: the small buffer is released in place, so the ratio
-        # reflects the allocator returning pages rather than a growth class.
+        # No upper bound: the ratio reflects the allocator returning pages
+        # rather than a growth class.
         assert ratio > LINEAR, f"clear() of 100x the bytes cost x{ratio:.1f}"
 
     @pytest.mark.timing
@@ -1315,8 +1315,9 @@ class TestSplittingAndJoining:
 
     @pytest.mark.timing
     def test_split_scales_with_the_buffer(self) -> None:
-        small = bytearray(b"aaaaaaaaa," * (SMALL // 10))
-        large = bytearray(b"aaaaaaaaa," * (LARGE // 10))
+        # Half the usual sizes: a million pieces alone would pass 64 MB.
+        small = bytearray(b"aaaaaaaaa," * (SMALL // 20))
+        large = bytearray(b"aaaaaaaaa," * (LARGE // 20))
 
         ratio = growth(lambda: small.split(b","), lambda: large.split(b","))
 
@@ -1324,17 +1325,17 @@ class TestSplittingAndJoining:
 
     def test_join_costs_something_per_part_whatever_it_holds(self) -> None:
         """Empty parts produce no output, and each still costs a descriptor."""
-        parts = [b""] * 1_000_000
+        parts = [b""] * 200_000
 
         peak = peak_bytes(lambda: bytearray(b"").join(parts))
 
         assert bytearray(b"").join(parts) == b""
-        assert peak > 10_000_000, f"1,000,000 empty parts peaked at {peak} bytes"
+        assert peak > 2_000_000, f"200,000 empty parts peaked at {peak} bytes"
 
     @pytest.mark.timing
     def test_join_scales_with_the_parts_and_with_the_result(self) -> None:
-        few_parts, many_parts = [b"ab"] * 10_000, [b"ab"] * 1_000_000
-        few_empty, many_empty = [b""] * 10_000, [b""] * 1_000_000
+        few_parts, many_parts = [b"ab"] * 2_000, [b"ab"] * 200_000
+        few_empty, many_empty = [b""] * 2_000, [b""] * 200_000
         small_parts, big_parts = [bytes(10_000)] * 10, [bytes(1_000_000)] * 10
         separator = bytearray(b",")
 

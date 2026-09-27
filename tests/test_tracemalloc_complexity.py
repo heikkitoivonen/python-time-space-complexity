@@ -29,8 +29,8 @@ Measurement scope:
   few kilobytes where a 1 MB block was traced. In a timing test,
   `clear_traces()` over 500,000 traced blocks costs more than 20x the same
   call over 10,000.
-* Recorded tracebacks outlive their blocks: 20,000 objects allocated on
-  20,000 distinct lines and then freed leave `get_tracemalloc_memory()` more
+* Recorded tracebacks outlive their blocks: 8,000 objects allocated on
+  8,000 distinct lines and then freed leave `get_tracemalloc_memory()` more
   than 20x higher than the same objects allocated on one line and freed, and
   in a timing test the following `clear_traces()` costs more than 20x more.
 * `start()` while tracing still rejects `nframe=0`. With a 1 MB block kept
@@ -47,14 +47,14 @@ Measurement scope:
   trace per live block, and shares one frames tuple among the traces of each
   distinct traceback: 20,000 blocks allocated on one line hold a handful of
   distinct frames tuples, not 20,000. In a timing test with the cyclic
-  collector disabled, a snapshot of 640,000 live blocks costs between 16x and
-  1,000x one of 10,000, where linear predicts 64x and quadratic 4,096x.
+  collector disabled, a snapshot of 160,000 live blocks costs between 16x and
+  1,000x one of 2,500, where linear predicts 64x and quadratic 4,096x.
 * `statistics()` on 20,000 traces sharing one traceback: on 3.10-3.13,
   1,000 stored frames cost more than 8x one frame for `'lineno'`; on 3.14+
   less than 5x, because the shared tuple's hash is cached. With
-  `cumulative=True`, 100 frames cost more than 20x one on every version. Over 5,000
+  `cumulative=True`, 100 frames cost more than 20x one on every version. Over 1,500
   distinct tracebacks, grouping by `'lineno'` peaks within 1.5x at one or
-  200 frames and `'traceback'` more than 3x higher at 200; over 2,000,
+  200 frames and `'traceback'` more than 3x higher at 200; over 500,
   `cumulative=True` peaks more than 3x higher at 100 frames than at one.
   `'filename'` returns one group per file; results are sorted largest first.
 * `compare_to()` reports a group present only in the old snapshot with size 0
@@ -360,8 +360,8 @@ class TestCounters:
 
     @staticmethod
     def allocate_and_free(distinct_lines: bool) -> tuple[int, float]:
-        """Tracer memory after 20,000 freed objects, and the cost of clearing then."""
-        count = 20_000
+        """Tracer memory after 8,000 freed objects, and the cost of clearing then."""
+        count = 8_000
         if distinct_lines:
             body = "\n".join("    keep.append(object())" for _ in range(count))
         else:
@@ -389,7 +389,7 @@ class TestCounters:
         many_lines = min(self.allocate_and_free(distinct_lines=True)[1] for _ in range(3))
 
         ratio = many_lines / one_line
-        assert ratio > 20, f"20,000 recorded tracebacks cost x{ratio:.2f} to clear"
+        assert ratio > 20, f"8,000 recorded tracebacks cost x{ratio:.2f} to clear"
 
     @pytest.mark.timing
     def test_reading_the_counters_does_not_grow_with_the_traces(self) -> None:
@@ -459,7 +459,7 @@ class TestTakingASnapshot:
         gc.disable()  # a collection triggered by the snapshot's own tuples is not its cost
         try:
             with tracing():
-                for blocks in (10_000, 640_000):
+                for blocks in (2_500, 160_000):
                     keep = [object() for _ in range(blocks)]
                     durations.append(best_ns(tracemalloc.take_snapshot, repeats=3))
                     del keep
@@ -548,9 +548,9 @@ class TestGrouping:
     @pytest.mark.parametrize(
         ("key", "cumulative", "distinct", "frames", "grows"),
         [
-            ("lineno", False, 5_000, 200, False),
-            ("traceback", False, 5_000, 200, True),
-            ("lineno", True, 2_000, 100, True),
+            ("lineno", False, 1_500, 200, False),
+            ("traceback", False, 1_500, 200, True),
+            ("lineno", True, 500, 100, True),
         ],
     )
     def test_space_grows_with_frames_only_when_they_are_kept(

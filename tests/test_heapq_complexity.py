@@ -556,13 +556,13 @@ class TestMaxHeapOperations:
         )
 
     def test_heapreplace_max_is_logarithmic(self) -> None:
-        """1,024x the heap costs about twice the comparisons, not 1,024 times."""
+        """256x the heap costs about twice the comparisons, not 256 times."""
         small = self._counted_max(lambda h: heapreplace_max(h, CountingInt(h[0] - 1)), 1_023)
-        large = self._counted_max(lambda h: heapreplace_max(h, CountingInt(h[0] - 1)), 1_048_575)
+        large = self._counted_max(lambda h: heapreplace_max(h, CountingInt(h[0] - 1)), 262_143)
 
         assert large < 5 * small, (
             f"heapreplace_max does not look logarithmic: {small} against {large} "
-            f"comparisons for a 1,024x heap"
+            f"comparisons for a 256x heap"
         )
 
     def test_the_combined_max_operations_allocate_nothing(self) -> None:

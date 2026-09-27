@@ -59,7 +59,7 @@ Measurement scope:
   whole of an exact `str` or `bytes` subject is the subject, while a
   `bytearray` subject gives back `bytes`. `group(1, 2, 2, 1)` is a tuple of
   four, repeats included. `groups()` over 50 groups costs over 5x one
-  group. `expand()` over a template of 10,000,000 against 10,000 characters
+  group. `expand()` over a template of 2,000,000 against 10,000 characters
   costs over 20x, with the captured group held at 1,000 characters.
 * `findall` over 20,000 words peaks over 3x what iterating `finditer`
   does, and over 2x as high at 200-character matches as at 5-character ones
@@ -642,11 +642,11 @@ class TestMatchObjectsHoldPositions:
     @pytest.mark.timing
     def test_expand_follows_the_template_length(self, clean_pattern_cache: None) -> None:
         """Captured group held at 1,000 characters and one backreference;
-        the template's literal text varies 1,000x."""
+        the template's literal text varies 200x."""
         found = re.compile(r"(a+)").fullmatch("a" * 1_000)
         assert found is not None
         brief = r"\1" + "x" * 10_000
-        lengthy = r"\1" + "x" * 10_000_000
+        lengthy = r"\1" + "x" * 2_000_000
 
         for template in (brief, lengthy):
             result = found.expand(template)
@@ -656,7 +656,7 @@ class TestMatchObjectsHoldPositions:
         short = best_ns(lambda: found.expand(brief), repeats=3, inner=50)
         long = best_ns(lambda: found.expand(lengthy), repeats=3)
 
-        assert long > short * 20, f"10,000 chars {short:.0f} ns, 10,000,000 chars {long:.0f} ns"
+        assert long > short * 20, f"10,000 chars {short:.0f} ns, 2,000,000 chars {long:.0f} ns"
 
 
 class TestFindallAndFinditer:

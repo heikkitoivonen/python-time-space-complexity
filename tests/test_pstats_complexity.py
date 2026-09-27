@@ -28,7 +28,7 @@ Measurement scope:
   directories are gone merge into one, their counts summed; with pairwise
   distinct callers the merges copy g(g - 1) / 2 existing caller entries, and
   with one shared caller g - 1. It drops the sort order and the callee map.
-* `sort_stats()` on 1,000 and 100,000 functions with seeded random times makes
+* `sort_stats()` on 300 and 30,000 functions with seeded random times makes
   between f·log2(f)/2 and f·log2(f) comparisons at each size, and the larger
   profile makes between 130x and 1,000x the comparisons of the smaller:
   linear would be 100x, quadratic 10,000x. Its peak rises more than 20x from
@@ -413,12 +413,12 @@ class TestSortStats:
         return count
 
     def test_comparisons_grow_as_f_log_f(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        counts = {f: self.comparisons(monkeypatch, f) for f in (1_000, 100_000)}
+        counts = {f: self.comparisons(monkeypatch, f) for f in (300, 30_000)}
 
         for f, count in counts.items():
             bound = f * math.log2(f)
             assert bound / 2 < count <= bound, f"{count} comparisons for {f} functions"
-        ratio = counts[100_000] / counts[1_000]
+        ratio = counts[30_000] / counts[300]
         assert 130 < ratio < 1_000, f"100x the functions made x{ratio:.1f} the comparisons"
 
     def test_the_peak_grows_with_functions(self) -> None:

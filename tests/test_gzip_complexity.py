@@ -184,23 +184,33 @@ class FedZlib:
         return getattr(zlib, name)
 
     def _counting(self, inner: Any) -> Any:
-        counter = self
-
-        class Proxy:
-            def decompress(self, data: bytes, *args: Any) -> bytes:
-                counter.fed += len(data)
-                return inner.decompress(data, *args)
-
-            def __getattr__(self, name: str) -> Any:
-                return getattr(inner, name)
-
-        return Proxy()
+        return _CountingDecompressor(self, inner)
 
     def decompressobj(self, *args: Any, **kwargs: Any) -> Any:
         return self._counting(zlib.decompressobj(*args, **kwargs))
 
     def _ZlibDecompressor(self, *args: Any, **kwargs: Any) -> Any:  # noqa: N802
         return self._counting(zlib._ZlibDecompressor(*args, **kwargs))  # pyright: ignore[reportAttributeAccessIssue]
+
+
+class _CountingDecompressor:
+    """A decompressor that adds the bytes it is handed to its `FedZlib`.
+
+    Defined once rather than per decompressor: a class built in a closure sits
+    in a reference cycle, so each discarded decompressor, and the rest of the
+    input it holds as `unused_data`, would wait for the cyclic collector.
+    """
+
+    def __init__(self, counter: FedZlib, inner: Any) -> None:
+        self._counter = counter
+        self._inner = inner
+
+    def decompress(self, data: bytes, *args: Any) -> bytes:
+        self._counter.fed += len(data)
+        return self._inner.decompress(data, *args)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
 
 
 class TestOneShotCompress:

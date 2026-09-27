@@ -51,8 +51,8 @@ Timed on the pinned interpreter (aarch64, CPython 3.14) at n = 1,000,000:
   million alike;
 * `rotate()` costs 34ns for 1, 43ns for n - 1 and for n + 1, and 128us for
   n // 2 (x3,000), which is the modular k in the row;
-* `deque(range(100)) * 100_000` costs 55ms and the same with `maxlen=100`
-  0.7us (x80,000), the cap in the `*` row;
+* `deque(range(100)) * 40_000` costs x34,000 what the same with
+  `maxlen=100` does, the cap in the `*` row;
 * the page's sliding window over 50,000 items costs 3.4ms for a width of 2
   and 60ms for 256 (x17), the O(n * window_size) it is annotated with;
 * `list.pop(0)` on a million items costs 365us against 40ns for
@@ -564,8 +564,8 @@ class TestRepeat:
         unbounded = deque(range(100))
         bounded = deque(range(100), maxlen=100)
 
-        uncapped = best_time(lambda: unbounded * 100_000, repeats=3)
-        capped = best_time(lambda: bounded * 100_000, repeats=3, loops=100) / 100
+        uncapped = best_time(lambda: unbounded * 40_000, repeats=3)
+        capped = best_time(lambda: bounded * 40_000, repeats=3, loops=100) / 100
 
         assert uncapped / capped > CAP_FLOOR, (
             f"unbounded {uncapped:.2e}s vs maxlen=100 {capped:.2e}s ({uncapped / capped:.0f}x)"
@@ -825,7 +825,7 @@ class TestDocumentedExamples:
     @pytest.mark.timing
     def test_the_benchmark_block_favours_the_deque(self) -> None:
         lst = list(range(LARGE))
-        dq = deque(range(LARGE))
+        dq = deque(lst)  # the page's deque(range(...)), sharing the list's ints
 
         list_time = best_time(lambda: lst.pop(0), repeats=3, loops=100)
         deque_time = best_time(lambda: dq.popleft(), repeats=3, loops=100)

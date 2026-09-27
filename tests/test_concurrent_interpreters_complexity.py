@@ -9,8 +9,10 @@ more than four orders of magnitude apart, and the fixed rows by observation.
 Measurement scope:
 
 * `prepare_main()`, `call()` and a queue's `put()` + `get()` are timed with a
-  1,000-byte and a 50,000,000-byte `bytes` value; the large one costs more
-  than 20x, where a shared reference would cost the same. That excludes a
+  1,000-byte and a 20,000,000-byte `bytes` value; the large one costs more
+  than 5x, where a shared reference would cost the same (x27 to x32 for
+  `prepare_main()` and `call()`, whose fixed cost is about 30us, and x700 for
+  the queue on 3.14). That excludes a
   constant-cost transfer; that the growth is linear rather than faster is
   read from the copy paths, not asserted. The returned or received object is
   not the one sent, a dict sent through a queue arrives equal and distinct,
@@ -69,7 +71,7 @@ PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "concurrent.in
 EXPECTED_BLOCKS = 4
 
 SMALL = b"x" * 1_000
-LARGE = b"x" * 50_000_000
+LARGE = b"x" * 20_000_000
 
 
 def best_ns(func: Callable[[], Any], repeats: int = 5) -> float:
@@ -149,13 +151,13 @@ class TestValuesCrossAsCopies:
     def test_prepare_main_is_linear_in_the_value(self, interp: Any) -> None:
         small = best_ns(lambda: interp.prepare_main(data=SMALL))
         large = best_ns(lambda: interp.prepare_main(data=LARGE))
-        assert large > 20 * small, f"prepare_main: {small:.0f}ns vs {large:.0f}ns"
+        assert large > 5 * small, f"prepare_main: {small:.0f}ns vs {large:.0f}ns"
 
     @pytest.mark.timing
     def test_call_is_linear_in_the_arguments(self, interp: Any) -> None:
         small = best_ns(lambda: interp.call(len, SMALL))
         large = best_ns(lambda: interp.call(len, LARGE))
-        assert large > 20 * small, f"call: {small:.0f}ns vs {large:.0f}ns"
+        assert large > 5 * small, f"call: {small:.0f}ns vs {large:.0f}ns"
 
     @pytest.mark.timing
     def test_a_queue_round_trip_is_linear_in_the_item(self) -> None:
@@ -170,7 +172,7 @@ class TestValuesCrossAsCopies:
 
         small = best_ns(round_trip(SMALL))
         large = best_ns(round_trip(LARGE))
-        assert large > 20 * small, f"queue: {small:.0f}ns vs {large:.0f}ns"
+        assert large > 5 * small, f"queue: {small:.0f}ns vs {large:.0f}ns"
 
     def test_received_objects_are_new(self, interp: Any) -> None:
         channel = interpreters.create_queue()

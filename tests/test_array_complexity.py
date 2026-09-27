@@ -19,6 +19,9 @@ Measurement scope:
   `extend()` is asserted O(k) by the same 100x step in k into an empty array,
   and independent of n by extending a 1,000- and a 1,000,000-item array by
   ten items and deleting them again, which reallocates neither time.
+  Lists fed to an array, and the array `tolist()` converts, hold the values
+  0 to 255, which CPython caches: two million distinct ints would take 64 MB
+  on their own. Distinct values are not timed on those rows.
 * `a == b` for unequal lengths is timed like a constant row against equal
   arrays, which are timed like a linear row.
 * `x in a`, `index()`, `remove()` and `count()` are counted with an object
@@ -147,16 +150,21 @@ def _wide(n: int) -> array.array[int]:
     return array.array("q", range(10**9, 10**9 + n))
 
 
+def _cached(n: int) -> list[int]:
+    """n values from 0 to 255, which CPython caches, so the list holds no ints of its own."""
+    return [i & 255 for i in range(n)]
+
+
 def _unicode(n: int) -> array.array[str]:
     return array.array("w", "x" * n)  # pyright: ignore[reportArgumentType]
 
 
 # Each builder returns the operation to time on an n-item input.
 LINEAR: dict[str, Callable[[int], Callable[[], Any]]] = {
-    "array(typecode, list)": lambda n: (lambda src: lambda: array.array("q", src))(list(range(n))),
+    "array(typecode, list)": lambda n: (lambda src: lambda: array.array("q", src))(_cached(n)),
     "array(typecode, iterator)": lambda n: lambda: array.array("q", iter(range(n))),
     "extend(k items) into an empty array": (
-        lambda n: (lambda src: lambda: array.array("q").extend(src))(list(range(n)))
+        lambda n: (lambda src: lambda: array.array("q").extend(src))(_cached(n))
     ),
     "slice": lambda n: (lambda a: lambda: a[1:])(_wide(n)),
     "x in a, missing": lambda n: (lambda a: lambda: -1 in a)(_wide(n)),
@@ -176,8 +184,8 @@ LINEAR: dict[str, Callable[[int], Callable[[], Any]]] = {
     "a * 2": lambda n: (lambda a: lambda: a * 2)(_wide(n)),
     "copy.copy": lambda n: (lambda a: lambda: copy.copy(a))(_wide(n)),
     "copy.deepcopy": lambda n: (lambda a: lambda: copy.deepcopy(a))(_wide(n)),
-    "tolist": lambda n: (lambda a: a.tolist)(_wide(n)),
-    "fromlist": lambda n: (lambda src: lambda: array.array("q").fromlist(src))(list(range(n))),
+    "tolist": lambda n: (lambda a: a.tolist)(array.array("q", _cached(n))),
+    "fromlist": lambda n: (lambda src: lambda: array.array("q").fromlist(src))(_cached(n)),
     "tobytes": lambda n: (lambda a: a.tobytes)(_wide(n)),
     "frombytes": lambda n: (lambda raw: lambda: array.array("q").frombytes(raw))(
         _wide(n).tobytes()

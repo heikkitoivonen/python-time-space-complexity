@@ -10,11 +10,11 @@ caches are settled by identity. Only `symtable()` itself needs a stopwatch.
 Measurement scope:
 
 * `symtable()` over module-level statements, an assignment and a lambda per
-  pair, at 200, 2,000 and 20,000 pairs: each 10x step is asserted under 30x in
+  pair, at 100, 1,000 and 10,000 pairs: each 10x step is asserted under 30x in
   time, where linear predicts 10x and quadratic 100x. The same statements at
   3,000 pairs inside one function are asserted more than 5x dearer than at
   module level; that is the b·f term, measured at 32x to 36x on 3.10 and 3.14. The traced peak
-  grows between 5x and 30x from 2,000 to 20,000 pairs (9.8x on 3.14), where
+  grows between 5x and 30x from 1,000 to 10,000 pairs (9.5x on 3.14), where
   linear predicts 10x and quadratic 100x.
 * `symtable()` is observed to raise `SyntaxError` for a fault on the last of
   1,000 lines, and to register one wrapper for its filename in the factory's
@@ -183,7 +183,7 @@ class TestBuildingAnalysesTheWholeSource:
         assert memo_entries(name) == 1 + len(children)
 
     def test_the_peak_follows_the_source(self) -> None:
-        small, large = at_module(2_000), at_module(20_000)
+        small, large = at_module(1_000), at_module(10_000)
 
         peaks = [peak_bytes(lambda: build(small)), peak_bytes(lambda: build(large))]
 
@@ -191,7 +191,7 @@ class TestBuildingAnalysesTheWholeSource:
 
     @pytest.mark.timing
     def test_module_level_code_is_linear(self) -> None:
-        sources = [at_module(count) for count in (200, 2_000, 20_000)]
+        sources = [at_module(count) for count in (100, 1_000, 10_000)]
         for source in sources:
             build(source)
 

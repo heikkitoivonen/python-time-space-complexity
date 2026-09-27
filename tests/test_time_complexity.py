@@ -16,7 +16,7 @@ Measurement scope:
   length is asserted to be four times the repetitions, and bounded by a
   constant multiple of the format - at most 15 characters per format
   character - for `%c`, `%Y`, `%%` and literal text, in the C locale.
-* `strptime()` is timed on inputs of 10,000, 100,000 and 1,000,000 literal
+* `strptime()` is timed on inputs of 5,000, 50,000 and 500,000 literal
   characters plus a year, with the format already cached: every 10x step
   costs more than 4x and less than 40x. The compile is separated from the
   O(n) match by padding the format with whitespace, which compiles to one
@@ -434,7 +434,7 @@ class TestStrptimeFollowsItsInput:
     @pytest.mark.timing
     def test_each_tenfold_input_costs_linearly_more(self) -> None:
         times = []
-        for size in (10_000, 100_000, 1_000_000):
+        for size in (5_000, 50_000, 500_000):
             value, fmt = "z" * size + "2026", "z" * size + "%Y"
             time.strptime(value, fmt)  # compile outside the measurement
             times.append(best_ns(lambda v=value, f=fmt: time.strptime(v, f), inner=3))

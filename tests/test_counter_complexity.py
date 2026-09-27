@@ -129,10 +129,10 @@ class TestCounterIsADictSubclass:
     @pytest.mark.timing
     def test_lookup_is_constant_time(self) -> None:
         small = Counter(range(1_000))
-        large = Counter(range(1_000_000))
+        large = Counter(range(200_000))
 
         small_time = best_time(lambda: [small[500] for _ in range(10_000)])
-        large_time = best_time(lambda: [large[500_000] for _ in range(10_000)])
+        large_time = best_time(lambda: [large[100_000] for _ in range(10_000)])
 
         assert large_time < small_time * 3, (
             f"lookup is a dict lookup: {small_time:.2e}s vs {large_time:.2e}s"
@@ -140,8 +140,8 @@ class TestCounterIsADictSubclass:
 
     @pytest.mark.timing
     def test_construction_is_linear(self) -> None:
-        small = list(range(100_000))
-        large = list(range(1_000_000))
+        small = list(range(50_000))
+        large = list(range(500_000))
 
         small_time = best_time(lambda: Counter(small), repeats=3)
         large_time = best_time(lambda: Counter(large), repeats=3)

@@ -2,7 +2,7 @@
 
 docs/stdlib/ordereddict.md had no test file. All ten of its code blocks run,
 and its complexity table holds: every operation it prices at O(1) stays flat
-from a thousand entries to a million.
+from a thousand entries to 300,000.
 
 What needed work was the comparative advice, which was true but shapeless.
 "Regular dict is faster" spans 1.05x for a lookup to 5.69x for iteration,
@@ -37,18 +37,18 @@ def ordered(size: int) -> OrderedDict:
     return OrderedDict((f"k{index}", index) for index in range(size))
 
 
-SMALL, LARGE = 1_000, 1_000_000
+SMALL, LARGE = 1_000, 300_000
 
 
 class TestConstantTimeOperations:
-    """Every row the table prices at O(1), from 1k entries to 1M."""
+    """Every row the table prices at O(1), from 1k entries to 300k."""
 
     def _flat(self, action: Callable[[OrderedDict], Any], label: str) -> None:
         small, large = ordered(SMALL), ordered(LARGE)
         small_time = best_time(lambda: [action(small) for _ in range(5_000)])
         large_time = best_time(lambda: [action(large) for _ in range(5_000)])
 
-        # A thousand times the entries; O(n) would be a thousand times the
+        # 300 times the entries; O(n) would be 300 times the
         # cost. Anything in single digits is locality, not complexity.
         assert large_time < small_time * 10, (
             f"{label} should not scale with the mapping: {small_time:.2e}s vs {large_time:.2e}s"

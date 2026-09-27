@@ -184,8 +184,8 @@ class TestCompileDirComplexity:
         """The space bound needs M, the per-file compilation working set.
 
         With one directory entry and one file, E is constant while peak
-        memory tracks the source: a 1.8 MB module peaked around 232 MB here,
-        which O(E) does not describe at all.
+        memory tracks the source: 8,000 lines peak more than 3x what 1,000
+        do (8.2x traced on 3.14), which O(E) does not describe at all.
         """
         import tracemalloc
 
@@ -204,7 +204,7 @@ class TestCompileDirComplexity:
                 tracemalloc.stop()
 
         small_peak = peak_for(1_000)
-        large_peak = peak_for(20_000)
+        large_peak = peak_for(8_000)
 
         assert large_peak > small_peak * 3, (
             f"one entry either way, and peak memory still grew: "

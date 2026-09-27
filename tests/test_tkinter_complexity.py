@@ -71,11 +71,11 @@ The stopwatch tests, on one interpreter each: ``_options``, which every
 widget constructor and ``configure()`` uses, ttk's included, on 1000 and
 4000 options, where the tuple rebuild makes the ratio near 16 and a
 linear formatter would give 4, against ``ttk._format_optdict``, which the
-``Style`` and item methods use, on the same sizes, which stays near 4; ``deletecommand()`` of the last 200 of 20000
-and of 80000 registered commands, near 4 for the list scan; ``register()``
-of 2000 commands on an empty registry and on one holding 80000, near 1
-with the garbage collector paused, since the full registry's 80000 closures
-would otherwise be traversed by a collection the measurement triggers; and
+``Style`` and item methods use, on the same sizes, which stays near 4; ``deletecommand()`` of the last 200 of 5000
+and of 40000 registered commands, near 8 for the list scan; ``register()``
+of 2000 commands on an empty registry and on the 39800 left after those
+deletions, near 1 with the garbage collector paused, since the full registry's
+closures would otherwise be traversed by a collection the measurement triggers; and
 ``trace_info()`` and removal of the newest trace on 200, 2000 and 20000
 traces. Each 10x step must cost more than 20x (linear predicts 10x,
 quadratic 100x). Both use the fastest of five samples with cyclic GC
@@ -815,12 +815,13 @@ class TestGrowth:
 
             return run
 
-        small, large = registered(20000), registered(80000)
+        small, large = registered(5000), registered(40000)
         delete_ratio = _best(delete_last(large, 200), repeat=1) / _best(
             delete_last(small, 200), repeat=1
         )
+        del small
 
-        empty, full = _tcl(), registered(80000)
+        empty, full = _tcl(), large
 
         def register(root: Any) -> Callable[[], None]:
             def run() -> None:
@@ -835,8 +836,10 @@ class TestGrowth:
         finally:
             gc.enable()
 
-        assert delete_ratio > 2.5, f"4x the commands made deletecommand x{delete_ratio:.1f}"
-        assert register_ratio < 2, f"40x the commands made register x{register_ratio:.1f}"
+        assert delete_ratio > 3, f"8x the commands made deletecommand x{delete_ratio:.1f}"
+        assert register_ratio < 2, (
+            f"register() beside 39,800 commands cost x{register_ratio:.1f} of an empty registry"
+        )
 
     def test_trace_info_and_trace_remove_are_quadratic_in_the_traces(self) -> None:
         sizes = (200, 2000, 20000)

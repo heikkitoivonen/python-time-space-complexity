@@ -14,14 +14,14 @@ Measurement scope:
 * The j·t term: `findlabels()` on a function of 500 `if x == i: return i`
   branches against one of 8,000 (16x the code, each branch one target) must
   grow more than 40x, where a linear walk predicts 16x and a quadratic one
-  256x; 78x to 136x was measured on 3.10 to 3.14. The control is 2,500
-  against 40,000 lines of `x = x + 1`, with no targets, which must grow less
-  than 40x and measured 17x to 18x.
-* The per-instruction target lookup: 3,000 branches followed by 20,000
-  straight lines, against 21,000 straight lines, through
+  256x; 78x to 136x was measured on 3.10 to 3.14. The control is 1,250
+  against 20,000 lines of `x = x + 1`, with no targets, which must grow less
+  than 40x and measured 16x to 17x on 3.14.
+* The per-instruction target lookup: 3,000 branches followed by 12,000
+  straight lines, against 13,000 straight lines, through
   `list(get_instructions())`, each divided by the instructions it yields. The
   whole pass is timed, branches included. On 3.10 the branchy function must
-  cost more than 2.5x per instruction (x14.7 measured); on 3.11+ less than
+  cost more than 2.5x per instruction (x16 measured); on 3.11+ less than
   2.5x (x1.08 to x1.19). x86_64 CI weighs the scan less: 1,000 branches cost
   x2.65 there on 3.10 as a whole-run ratio, against x6.6 on aarch64.
 * Laziness: draining `get_instructions()` over a one-line function of about
@@ -33,9 +33,9 @@ Measurement scope:
 * `Bytecode()` calls `findlabels` zero times; its peak grows more than 10x
   from 1,000 to 20,000 lines (measured 19x to 25x), so the line table is
   read at construction. Every `iter()` over it calls `findlabels` once more.
-* `code_info()` over 100 and 50,000 lines of `x = x + 1`, whose tables are
-  identical, must stay within 20x (measured 1.0x to 2.8x) where a walk of the
-  bytecode predicts 500x; its line count grows with the constant table.
+* `code_info()` over 100 and 20,000 lines of `x = x + 1`, whose tables are
+  identical, must stay within 20x (measured 1.0x on 3.14) where a walk of the
+  bytecode predicts 200x; its line count grows with the constant table.
   `show_code()` prints it and `Bytecode.info()` returns it.
 * `dis()` on a function with one nested function calls `findlabels` twice,
   prints "Disassembly of" for the nested one, and not at `depth=0`;
@@ -239,7 +239,7 @@ class TestJumpTargetsAreQuadratic:
 
     @pytest.mark.timing
     def test_sixteen_times_the_code_without_targets_stays_linear(self) -> None:
-        small, large = straight(2500), straight(40000)
+        small, large = straight(1250), straight(20000)
         assert targets(large) == []
 
         ratio = best_ns(lambda: targets(large)) / best_ns(lambda: targets(small))
@@ -258,7 +258,7 @@ class TestTargetLookupPerInstruction:
 
     @pytest.mark.timing
     def test_three_thousand_targets_only_cost_the_tail_on_3_10(self) -> None:
-        branchy, plain = branches(3000, tail=20000), straight(21000)
+        branchy, plain = branches(3000, tail=12000), straight(13000)
 
         ratio = self.per_instruction_ns(branchy) / self.per_instruction_ns(plain)
         if sys.version_info < (3, 11):
@@ -304,13 +304,13 @@ class TestCodeInfoReadsTablesOnly:
 
     @pytest.mark.timing
     def test_bytecode_length_does_not_enter(self) -> None:
-        short, long = straight(100), straight(50000)
+        short, long = straight(100), straight(20000)
         assert dis.code_info(short) == dis.code_info(long)
 
         ratio = best_ns(lambda: dis.code_info(long), repeats=20) / best_ns(
             lambda: dis.code_info(short), repeats=20
         )
-        assert ratio < 20, f"500x the bytecode cost code_info x{ratio:.1f}"
+        assert ratio < 20, f"200x the bytecode cost code_info x{ratio:.1f}"
 
     def test_output_grows_with_the_constant_table(self) -> None:
         def constants(count: int) -> types.CodeType:

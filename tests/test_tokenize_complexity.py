@@ -453,8 +453,8 @@ class TestUntokenize:
 
     @pytest.mark.timing
     def test_four_times_the_tokens_costs_about_four_times(self) -> None:
-        small = list(tokenize.generate_tokens(io.StringIO("a = b + c\n" * 10_000).readline))
-        large = list(tokenize.generate_tokens(io.StringIO("a = b + c\n" * 40_000).readline))
+        small = list(tokenize.generate_tokens(io.StringIO("a = b + c\n" * 5_000).readline))
+        large = list(tokenize.generate_tokens(io.StringIO("a = b + c\n" * 20_000).readline))
         assert len(large) == (len(small) - 1) * 4 + 1
 
         small_ns = best_ns(lambda: tokenize.untokenize(small), inner=3)

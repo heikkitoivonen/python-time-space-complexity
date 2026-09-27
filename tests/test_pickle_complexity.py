@@ -13,7 +13,7 @@ Measurement scope:
 * Output length: a list of distinct strings grows between 8x and 12x in
   pickle length from 2,000 to 20,000 elements under every protocol 0-5
   (protocol 0 writes memo indexes as decimal text, which adds a digit).
-  A timing test has `dumps()` and `loads()` of 2,000, 20,000 and 200,000
+  A timing test has `dumps()` and `loads()` of 1,000, 10,000 and 100,000
   strings and of as many small dicts each cost between 4x and 40x per 10x
   step (linear predicts 10x, quadratic 100x).
 * `dump()` into a sink that discards what it is given: 1,000,000 ints peak
@@ -64,8 +64,8 @@ Measurement scope:
   protocol 4 raises `PicklingError`. `raw()` is a `memoryview`
   over the same object, and `raw()` after `release()` raises `ValueError`;
   wrapping a 10,000,000-byte buffer peaks under 5 KB.
-* A structure nested 1,000,000 lists deep raises `RecursionError` on
-  `dumps()`.
+* A structure nested 200,000 lists deep raises `RecursionError` on
+  `dumps()`; 3.14 raised at 50,000 and not at 10,000 on aarch64.
 * Constants and exceptions by value and by `issubclass`: `DEFAULT_PROTOCOL`
   is 4 before 3.14 and 5 from 3.14, a nested function raises
   `PicklingError` from 3.14 and `AttributeError` before, each guarded on
@@ -212,7 +212,7 @@ class TestPickleLengthIsLinear:
     @pytest.mark.timing
     @pytest.mark.parametrize("shape", ["strings", "dicts"])
     def test_time_grows_linearly(self, shape: str) -> None:
-        sizes = (2_000, 20_000, 200_000)
+        sizes = (1_000, 10_000, 100_000)
         objects = [
             strings(n) if shape == "strings" else [{"k": i, "v": f"s{i}"} for i in range(n)]
             for n in sizes
@@ -467,7 +467,7 @@ class TestTheMemo:
 
     def test_deep_nesting_raises_recursion_error(self) -> None:
         nested: list[Any] = []
-        for _ in range(1_000_000):
+        for _ in range(200_000):
             nested = [nested]
 
         with pytest.raises(RecursionError):

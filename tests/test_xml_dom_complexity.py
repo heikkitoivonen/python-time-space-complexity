@@ -18,9 +18,11 @@ Measurement scope:
   50 pieces from `parse()`, and from `parseString()` when it is 80-character
   lines, and the characters already joined when each piece arrives sum to
   more than 10 times the text's length; unbroken text reaches
-  `parseString()` in one piece. A timing test finds 32,000,000 characters
-  cost more than 20x what 4,000,000 do from a file, against 8x for linear
-  work. Entity references are not varied.
+  `parseString()` in one piece. A timing test finds 4,000,000 characters
+  cost more than 20x what 500,000 do from a file that returns at most 1 KiB
+  per read, against 8x for linear work; the short reads split each size into
+  sixteen times the pieces 16 KiB reads would. Entity references are not
+  varied.
 * pulldom: reading 500,000 records peaks under 3x what 50,000 do; nothing is
   attached to the root, and `expandNode()` builds one record under its node
   and leaves it detached. `parseString()` queues every event of a
@@ -246,6 +248,13 @@ class TestParsingBuildsTheWholeTree:
         assert calls == [64], "without parser or bufsize, parse() does not use pulldom"
 
 
+class ShortReads(io.BytesIO):
+    """A binary stream that returns at most 1 KiB per read, as a pipe may."""
+
+    def read(self, size: int | None = -1, /) -> bytes:
+        return super().read(1024 if size is None or size < 0 else min(size, 1024))
+
+
 class TestLongTextNodes:
     """`parse()` and `parseString()` | O(n + Σc²): a text node arriving in
     several pieces is rebuilt once per piece. A file arrives 16 KiB per parser
@@ -298,10 +307,10 @@ class TestLongTextNodes:
     def test_the_file_cost_grows_quadratically_in_the_text(self) -> None:
         def parse(length: int) -> Callable[[], Any]:
             data = b"<blob>" + b"x" * length + b"</blob>"
-            return lambda: minidom.parse(io.BytesIO(data))
+            return lambda: minidom.parse(ShortReads(data))
 
-        small_ns = best_ns(parse(4_000_000), repeats=3)
-        large_ns = best_ns(parse(32_000_000), repeats=3)
+        small_ns = best_ns(parse(500_000), repeats=3)
+        large_ns = best_ns(parse(4_000_000), repeats=3)
 
         ratio = large_ns / small_ns
         assert ratio > 20, f"8x the text cost x{ratio:.1f}; linear work would give x8"

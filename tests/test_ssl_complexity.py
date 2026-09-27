@@ -74,14 +74,14 @@ Measurement scope:
   a thread that is joined before anything is asserted. `recv(100000)` returns
   16,384 of a 40,000-byte `sendall()`. The O(1) space in the write row takes
   two measurements, because a timeout alone cannot separate "streams the
-  records" from "encrypts everything, then blocks": a 100 MiB `write()` to a
+  records" from "encrypts everything, then blocks": a 40 MiB `write()` to a
   peer that is not reading raises `TimeoutError` at a one-second timeout
-  *and* leaves the process's resident peak *during the call* within 50 MiB of
+  *and* leaves the process's resident peak *during the call* within 20 MiB of
   where it started, with the payload already resident. The peak is sampled
   from a second thread reading /proc/self/statm, which sees what a reading
   taken afterwards would miss - a buffer freed on the way out - and what
   `ru_maxrss` would miss under an earlier high-water mark. A control test
-  allocates and frees 100 MiB inside the same probe and asserts it is seen,
+  allocates and frees 40 MiB inside the same probe and asserts it is seen,
   so the write's flat reading is not a probe that cannot see anything. `sendall()` of 40,000 bytes reaches the
   instrumented `send` exactly once, so its loop adds nothing. `sendfile()` of
   a 20,000-byte file reaches `send` three times, none of them over 8,192
@@ -175,6 +175,7 @@ Not settled here:
 
 from __future__ import annotations
 
+import mmap
 import os
 import pathlib
 import re
@@ -832,10 +833,10 @@ class TestSSLSocketOverSocketPair:
         the call does not finish while the peer is not reading. The resident
         peak *during* the call shows the allocation: an implementation that
         encrypted the whole message and then blocked would also time out, but
-        would be holding another 100 MiB while it did - even if it released
+        would be holding another 40 MiB while it did - even if it released
         that buffer on the way out. `tracemalloc` cannot see this: the
         allocation would be OpenSSL's, not Python's."""
-        payload = b"x" * (100 * 1024 * 1024)
+        payload = b"x" * (40 * 1024 * 1024)
         with tls_socketpair(server_context(chain_file), client_context(ROOT_CERT)) as (
             _client,
             server,
@@ -846,23 +847,23 @@ class TestSSLSocketOverSocketPair:
             with ResidentPeak() as resident, pytest.raises(TimeoutError):
                 server.write(payload)
 
-        assert resident.peak - before < 50 * 1024 * 1024, (before, resident.peak)
+        assert resident.peak - before < 20 * 1024 * 1024, (before, resident.peak)
 
     @pytest.mark.skipif(not pathlib.Path("/proc/self/statm").exists(), reason="needs /proc")
     def test_the_resident_probe_sees_a_transient_allocation(self) -> None:
-        """The control for the row above: a probe that cannot see 100 MiB come
+        """The control for the row above: a probe that cannot see 40 MiB come
         and go proves nothing by not seeing it during the write."""
         before = _resident_bytes()
 
         with ResidentPeak() as resident:
-            blob = bytearray(100 * 1024 * 1024)
-            blob[:: os.sysconf("SC_PAGE_SIZE")] = b"\x01" * (
-                len(blob) // os.sysconf("SC_PAGE_SIZE")
-            )
+            # An anonymous mapping, so the pages are fresh whatever malloc holds.
+            blob = mmap.mmap(-1, 40 * 1024 * 1024)
+            for offset in range(0, len(blob), mmap.PAGESIZE):
+                blob[offset] = 1
             time.sleep(0.05)
-            del blob
+            blob.close()
 
-        assert resident.peak - before > 50 * 1024 * 1024, (before, resident.peak)
+        assert resident.peak - before > 20 * 1024 * 1024, (before, resident.peak)
 
     def test_sendall_makes_one_send_for_a_buffer_send_takes_whole(
         self, chain_file: pathlib.Path

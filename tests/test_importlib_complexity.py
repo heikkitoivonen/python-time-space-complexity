@@ -41,7 +41,7 @@ Measurement scope:
   the `.pyc` path then the source; the second import in the same process
   reads only the `.pyc` and compiles nothing; a rewrite that keeps the size
   and the mtime is served stale from the `.pyc`; a changed mtime at the same
-  size compiles again, and so does a changed size at the same mtime. `get_code()` from a valid `.pyc` over 2,000 and 40,000
+  size compiles again, and so does a changed size at the same mtime. `get_code()` from a valid `.pyc` over 1,000 and 20,000
   assignment lines costs more than 5x in a timing test. `cache_from_source()`
   and `source_from_cache()` round-trip a path that does not exist.
   `source_hash()` is 8 bytes and, over 100 KB against 10 MB, costs between
@@ -758,7 +758,7 @@ class TestBytecodeCaching:
     @pytest.mark.timing
     def test_get_code_from_a_valid_pyc_follows_the_file_size(self, tmp_path: pathlib.Path) -> None:
         costs: dict[int, float] = {}
-        for lines in (2_000, 40_000):
+        for lines in (1_000, 20_000):
             source = write_module(
                 tmp_path, f"sized{lines}", "".join(f"x{i} = {i}\n" for i in range(lines))
             )
@@ -768,7 +768,7 @@ class TestBytecodeCaching:
                 lambda loader=loader, lines=lines: loader.get_code(f"sized{lines}")
             )
 
-        ratio = costs[40_000] / costs[2_000]
+        ratio = costs[20_000] / costs[1_000]
         assert 5 < ratio < 200, f"20x the source cost {ratio:.1f}x from the bytecode cache"
 
     def test_set_data_creates_the_missing_directories(self, tmp_path: pathlib.Path) -> None:

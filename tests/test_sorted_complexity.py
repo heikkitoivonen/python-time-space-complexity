@@ -28,8 +28,8 @@ Measured on the pinned interpreter at n = 100,000 unless stated:
   with or without a key, which is the O(n) space row (quadratic would be
   sixteenfold).
 
-One claim needs a stopwatch: heapq.nsmallest(10) against sorted() on a
-million shuffled ints, x18 measured on one aarch64 machine and asserted at x3.
+One claim needs a stopwatch: heapq.nsmallest(10) against sorted() on
+300,000 shuffled ints, x15 measured on one aarch64 machine and asserted at x3.
 Both sides are O(n) on already-sorted input, so the test shuffles; k and the
 input shape are not varied, and the page's recommendation rests on the
 O(n log k) against O(n log n) bounds rather than on this one measurement.
@@ -275,7 +275,7 @@ class TestNsmallest:
 
     @pytest.mark.timing
     def test_nsmallest_beats_sorting_everything(self) -> None:
-        numbers = shuffled(1_000_000)
+        numbers = shuffled(300_000)
 
         full_sort = best_time(lambda: sorted(numbers), repeats=3)
         ten_smallest = best_time(lambda: heapq.nsmallest(10, numbers), repeats=3)

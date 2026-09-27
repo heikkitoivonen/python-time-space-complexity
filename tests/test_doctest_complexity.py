@@ -11,7 +11,7 @@ Measurement scope:
 
 * `DocTestFinder.find()` over a synthetic module holding 5,000 integers: 100
   one-example docstrings peak over 5x what 10 do, and 100 docstrings over
-  50,000 globals peak over 10x what they do over 500, so the space is t·g.
+  10,000 globals peak over 10x what they do over 100, so the space is t·g.
   Every `DocTest.globs` is a distinct dictionary equal to the module's.
 * `testmod()` over 200 undocumented functions and one documented one runs 202
   `DocTest`s (the module, every function), against 1 with `exclude_empty=True`;
@@ -164,8 +164,8 @@ class TestFinderCopiesGlobalsPerDocTest:
 
     def test_space_grows_with_the_globals(self) -> None:
         finder = doctest.DocTestFinder()
-        small = make_module("small", globals_=500, documented=100)
-        large = make_module("large", globals_=50_000, documented=100)
+        small = make_module("small", globals_=100, documented=100)
+        large = make_module("large", globals_=10_000, documented=100)
 
         small_peak = peak_bytes(lambda: finder.find(small))
         large_peak = peak_bytes(lambda: finder.find(large))
