@@ -279,15 +279,14 @@ class _Expensive(metaclass=_ExpensiveMeta):
 
 
 class TestUnicodeDataCaveats:
-    """docs/stdlib/unicodedata.md priced lookup() at O(1) and normalization
-    as linear. The lookup claim was wrong; the normalization claim became true
-    after CPython replaced its quadratic insertion sort for long combining runs
-    to fix CVE-2026-3276."""
+    """docs/stdlib/unicodedata.md: lookup() matches whole names only, and
+    normalization is linear in a combining run on releases that carry the
+    CVE-2026-3276 fix, which replaced a quadratic insertion sort."""
 
-    def test_lookup_reads_the_whole_name(self) -> None:
+    def test_a_prefix_of_a_valid_name_is_not_found(self) -> None:
         assert unicodedata.lookup("GREEK SMALL LETTER MU") == "μ"
         with pytest.raises(KeyError):
-            # A prefix of a valid name fails, so the whole name is examined.
+            # A prefix of a valid name is not a match.
             unicodedata.lookup("GREEK SMALL LETTER M")
 
     @pytest.mark.timing
