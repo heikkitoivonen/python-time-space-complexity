@@ -1,415 +1,244 @@
 # hmac Module Complexity
 
-The `hmac` module provides HMAC (Hash-based Message Authentication Code) functionality for cryptographic message authentication.
+The `hmac` module computes keyed message authentication codes (RFC 2104) over the fixed-size hashes
+in `hashlib`, and compares digests without an early exit. An `HMAC` object is an inner and an outer
+hash state keyed once, so like a hash object it absorbs each byte once and holds nothing
+proportional to the data it has seen.
 
-## Functions & Methods
+Bytes are the unit throughout. `n` is the message bytes passed to one call, `m` is key bytes, `k`
+is the digest size in bytes, `b` is the hash's block size, and `c` is the length of the second
+argument to `compare_digest()`. Both `k` and `b` are fixed per algorithm, so a bound in them alone
+is constant for a given hash.
+
+## Complexity Reference
+
+### Functions
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `hmac.new(key, msg, digestmod)` | O(n) | O(1) | Create HMAC, n = msg size |
-| `HMAC.update(msg)` | O(n) | O(1) | Add data to digest, k = hash block size |
-| `HMAC.digest()` | O(k) | O(k) | Get binary digest, k = hash output size |
-| `HMAC.hexdigest()` | O(k) | O(k) | Get hex digest |
-| `hmac.compare_digest(a, b)` | O(n) | O(1) | Timing-safe for equal-length inputs |
+| `hmac.new(key, msg=None, digestmod)` | O(m + n) | O(b) | `digestmod` is required: a `hashlib` name such as `'sha256'` or a constructor such as `hashlib.sha256`. A key longer than `b` is hashed once; a shorter one is padded to `b`. `key` must be `bytes` or `bytearray` |
+| `hmac.digest(key, msg, digest)` | O(m + n) | O(b) | The same result as `new(key, msg, digest).digest()` in one call |
+| `hmac.compare_digest(a, b)` | O(c) | O(1) | Walks the whole second argument wherever the first difference lies, and still walks it when the lengths differ. Both arguments must be ASCII `str` or both bytes-like, or it raises `TypeError` |
 
-## Creating HMAC
+### HMAC
 
-### Time Complexity: O(n)
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `HMAC.update(msg)` | O(n) | O(1) | Repeated calls equal one call on the concatenation |
+| `HMAC.digest()` | O(b) | O(k) | A snapshot: the state is copied and the copy finalized, so the object stays usable and the cost is independent of what was absorbed |
+| `HMAC.hexdigest()` | O(b) | O(k) | The same snapshot rendered as 2k hex characters |
+| `HMAC.copy()` | O(b) | O(b) | Copies the keyed state without rekeying; the two objects then diverge freely |
+| `HMAC.digest_size`, `HMAC.block_size`, `HMAC.name` | O(1) | O(1) | `k`, `b`, and `'hmac-'` plus the hash's name |
 
-Where n = message size.
+### Constants
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `hmac.digest_size` | O(1) | O(1) | Always `None`; read `digest_size` from the instance |
+| `HMAC.blocksize` | O(1) | O(1) | 64, the block size assumed for a hash that reports none |
+| `hmac.trans_5C`, `hmac.trans_36` | O(1) | O(1) | 256-byte translation tables for the outer and inner key pads |
+
+## Creating an HMAC
+
+Construction keys two hash states and absorbs `msg` if one is given, so its cost is the key plus
+the message. `hmac.digest()` does the same work when only the result is wanted.
 
 ```python
-import hmac
 import hashlib
+import hmac
 
-# Create HMAC: O(n)
-key = b'secret_key'
+key = b'secret-key'
 message = b'data to sign' * 1000
 
-# One-shot: O(n)
-h = hmac.new(key, message, hashlib.sha256)  # O(n)
+h = hmac.new(key, message, hashlib.sha256)  # O(m + n)
+assert h.name == 'hmac-sha256'
+assert h.digest_size == 32 and h.block_size == 64  # O(1)
 
-# With bytes: O(n) to process entire message
-digest = h.digest()  # O(k) where k = output size
+# One-shot: the same bytes in one call
+assert hmac.digest(key, message, 'sha256') == h.digest()  # O(m + n)
+
+# digestmod has no default
+try:
+    hmac.new(key, message)
+except TypeError as error:
+    assert 'digestmod' in str(error)
+else:
+    raise AssertionError('an HMAC was built without a digestmod')
 ```
 
-### Space Complexity: O(1)
+### Long Keys
+
+A key longer than the hash's block size is replaced by its digest before anything else happens.
+That costs one pass over the key at construction and nothing afterwards.
 
 ```python
-import hmac
 import hashlib
+import hmac
 
-# No buffering of the full message (beyond the input itself)
-h = hmac.new(key, message, hashlib.sha256)  # O(1) extra space
+long_key = b'x' * 1000  # longer than SHA-256's 64-byte block
+
+h = hmac.new(long_key, b'data', hashlib.sha256)  # O(m) once, to hash the key
+hashed_key = hashlib.sha256(long_key).digest()
+assert h.digest() == hmac.new(hashed_key, b'data', hashlib.sha256).digest()
 ```
 
 ## Streaming Updates
 
-### Time Complexity: O(n)
-
-Where n = total size of all messages added.
+`update()` absorbs its bytes and keeps only the keyed state, so a file of any size costs its
+length in time and one chunk in memory.
 
 ```python
-import hmac
 import hashlib
+import hmac
+import io
 
-# Streaming: process data incrementally
-h = hmac.new(b'secret', digestmod=hashlib.sha256)
+stream = io.BytesIO(b'a' * 1_000_000)
+h = hmac.new(b'secret', digestmod=hashlib.sha256)  # O(1)
 
-# Each update: O(m) per message
-messages = [b'part1', b'part2', b'part3']
-for msg in messages:
-    h.update(msg)  # O(m) per update
+while chunk := stream.read(65536):
+    h.update(chunk)  # O(n) per chunk, O(1) extra memory
 
-# Total: O(n) where n = sum of all message sizes
-digest = h.digest()  # O(k) where k = output size
+assert h.digest() == hmac.digest(b'secret', b'a' * 1_000_000, 'sha256')
 ```
 
-### Space Complexity: O(k)
+## Digests and Copies
 
-Where k = hash block size (not dependent on total data).
+A digest is a snapshot: the object stays usable afterwards, and the cost does not grow with what
+it has absorbed. A copy clones the keyed state, which is the cheap way to authenticate many
+messages sharing a key and a prefix.
 
 ```python
-import hmac
 import hashlib
+import hmac
 
-# Memory efficient: only keeps internal state
-h = hmac.new(b'secret', digestmod=hashlib.sha256)
+h = hmac.new(b'secret', b'header:', hashlib.sha256)
 
-# Process huge amounts of data with O(k) memory
-with open('huge_file.bin', 'rb') as f:
-    while True:
-        chunk = f.read(4096)  # Read chunks
-        if not chunk:
-            break
-        h.update(chunk)  # O(k) memory, not O(total_size)
+digest = h.digest()  # O(b), independent of the bytes absorbed
+assert h.digest() == digest  # nothing was finalized in place
+assert h.hexdigest() == digest.hex()  # 2k characters
+
+first = h.copy()   # O(b) - no rekeying, no replay of 'header:'
+second = h.copy()
+first.update(b'one')
+second.update(b'two')
+assert first.digest() == hmac.digest(b'secret', b'header:one', 'sha256')
+assert second.digest() == hmac.digest(b'secret', b'header:two', 'sha256')
+assert h.digest() == digest  # the original is untouched
 ```
 
-## Getting Digest
+## Comparing Digests
 
-### Time Complexity: O(k)
-
-Where k = hash output size.
+`compare_digest()` has no early exit: it walks every byte of its second argument whether the
+first difference is at the start or the end, so its time reveals the length of what it compares
+but not where the inputs differ. `==` stops at the first difference.
 
 ```python
-import hmac
 import hashlib
-
-h = hmac.new(b'secret', b'data', hashlib.sha256)
-
-# Binary digest: O(k)
-digest = h.digest()  # O(k) for SHA256 = O(32)
-
-# Hex digest: O(k)
-hex_digest = h.hexdigest()  # O(k) to convert
-```
-
-### Space Complexity: O(k)
-
-```python
-import hmac
-import hashlib
-
-h = hmac.new(b'secret', b'data', hashlib.sha256)
-
-# Creates output of fixed size
-digest = h.digest()  # O(k) space, SHA256 = 32 bytes
-hex_digest = h.hexdigest()  # O(2k) space (hex encoded)
-```
-
-## Different Hash Algorithms
-
-### Time Complexity by Algorithm
-
-```python
-import hmac
-import hashlib
-
-message = b'data' * 1000
-
-# MD5: Deprecated (cryptographically broken)
-# O(n) time
-h = hmac.new(b'key', message, hashlib.md5)  # O(n)
-digest = h.digest()  # O(16) bytes
-
-# SHA1: Deprecated (cryptographically broken)
-# O(n) time
-h = hmac.new(b'key', message, hashlib.sha1)  # O(n)
-digest = h.digest()  # O(20) bytes
-
-# SHA256: Common, secure choice
-# O(n) time
-h = hmac.new(b'key', message, hashlib.sha256)  # O(n)
-digest = h.digest()  # O(32) bytes
-
-# SHA512: Larger digest size; performance varies by platform
-# O(n) time
-h = hmac.new(b'key', message, hashlib.sha512)  # O(n)
-digest = h.digest()  # O(64) bytes
-```
-
-## Copy Operations
-
-### Time Complexity: O(k)
-
-```python
-import hmac
-import hashlib
-
-h1 = hmac.new(b'secret', b'data1', hashlib.sha256)
-h2 = hmac.new(b'secret', b'data2', hashlib.sha256)
-
-# Copy HMAC state: O(k)
-h_copy = h1.copy()  # O(k) to copy internal state
-
-# Use copy for parallel processing
-h1.update(b'more_data')  # O(m)
-h_copy.update(b'other_data')  # O(m)
-
-# Get separate digests
-digest1 = h1.digest()  # O(k)
-digest2 = h_copy.digest()  # O(k)
-```
-
-### Space Complexity: O(k)
-
-```python
-import hmac
-import hashlib
-
-h1 = hmac.new(b'secret', b'data', hashlib.sha256)
-
-# Creates copy of state
-h_copy = h1.copy()  # O(k) space
-```
-
-## Constant-Time Comparison
-
-### Time Complexity: O(n)
-
-Where n = length of digest (always full comparison).
-
-```python
 import hmac
 
-# CRITICAL: Always use compare_digest for authentication
-# Prevents timing attacks
+expected = hmac.digest(b'secret', b'message', 'sha256')
+received = bytes(32)
 
-# Received HMAC
-received_hmac = b'abc123...'  # 32 bytes for SHA256
+assert hmac.compare_digest(expected, expected)  # O(c)
+assert not hmac.compare_digest(received, expected)  # O(c), wherever they differ
+assert not hmac.compare_digest(expected[:16], expected)  # different lengths: False
 
-# Computed HMAC
-computed_hmac = b'abc123...'  # computed value
+# Hex strings work too, if both are ASCII str
+assert hmac.compare_digest(expected.hex(), expected.hex())
 
-# Bad: Direct comparison (timing attack vulnerable)
-if received_hmac == computed_hmac:  # ❌ INSECURE
-    # Time depends on where difference is
-    # Early difference is fast, late difference is slow
+try:
+    hmac.compare_digest(expected.hex(), expected)
+except TypeError:
     pass
-
-# Good: Constant-time comparison
-if hmac.compare_digest(received_hmac, computed_hmac):  # ✓ SECURE
-    # Timing-safe for equal-length inputs; time depends on length
-    pass
-```
-
-### Space Complexity: O(1)
-
-```python
-import hmac
-
-# Just compares, no extra memory
-result = hmac.compare_digest(hash1, hash2)  # O(1) space
+else:
+    raise AssertionError('a str was compared with bytes')
 ```
 
 ## Common Patterns
 
-### Simple Message Authentication
+### Signing and Verifying a Message
 
 ```python
-import hmac
 import hashlib
+import hmac
 
-def sign_message(key, message):
-    """Sign a message with HMAC."""
-    return hmac.new(key, message, hashlib.sha256).hexdigest()  # O(n)
+def sign(key, message):
+    return hmac.new(key, message, hashlib.sha256).hexdigest()  # O(m + n)
 
-def verify_message(key, message, signature):
-    """Verify message signature (constant-time comparison)."""
-    expected = sign_message(key, message)  # O(n)
-    return hmac.compare_digest(signature, expected)  # O(k), timing-safe
+def verify(key, message, signature):
+    return hmac.compare_digest(sign(key, message), signature)  # O(m + n + c)
+
+key = b'secret-key'
+signature = sign(key, b'transfer 100')
+assert verify(key, b'transfer 100', signature)
+assert not verify(key, b'transfer 900', signature)
 ```
 
-### Streaming Large Files
+### Signing Requests With a Shared Prefix
 
 ```python
-import hmac
 import hashlib
+import hmac
 
-def hmac_file(key, filename):
-    """Compute HMAC of file."""
-    h = hmac.new(key, digestmod=hashlib.sha256)
-    
-    with open(filename, 'rb') as f:
-        while True:
-            chunk = f.read(65536)  # 64KB chunks
-            if not chunk:
-                break
-            h.update(chunk)  # O(k) memory
-    
-    return h.hexdigest()  # Total: O(n) time, O(k) memory
+base = hmac.new(b'api-secret', b'POST\n/v1/orders\n', hashlib.sha256)
+
+def sign_body(body):
+    h = base.copy()  # O(b) instead of rekeying and re-absorbing the prefix
+    h.update(body)   # O(n)
+    return h.hexdigest()
+
+signature = sign_body(b'{"qty": 1}')
+expected = hmac.new(b'api-secret', b'POST\n/v1/orders\n{"qty": 1}', hashlib.sha256)
+assert hmac.compare_digest(signature, expected.hexdigest())
 ```
 
-### Authentication Token Generation
+### Expiring Tokens
 
 ```python
-import hmac
 import hashlib
-import time
+import hmac
 
-def generate_token(secret, user_id):
-    """Generate authenticated token."""
-    # Include timestamp for token expiration
-    timestamp = str(int(time.time())).encode()
-    user_data = f'{user_id}:{timestamp}'.encode()
-    
-    token = hmac.new(secret, user_data, hashlib.sha256)  # O(n)
-    return f'{user_data.decode()}:{token.hexdigest()}'
+def make_token(secret, user_id, issued_at):
+    payload = f'{user_id}:{issued_at}'
+    tag = hmac.new(secret, payload.encode(), hashlib.sha256).hexdigest()
+    return f'{payload}:{tag}'
 
-def verify_token(secret, token, max_age_seconds=3600):
-    """Verify and extract user from token."""
-    parts = token.rsplit(':', 1)
-    user_data, signature = parts[0].encode(), parts[1]
-    
-    # Verify HMAC (constant-time)
-    expected_sig = hmac.new(secret, user_data, hashlib.sha256).hexdigest()
-    
-    if not hmac.compare_digest(signature, expected_sig):  # O(k)
+def check_token(secret, token, now, max_age=3600):
+    payload, _, tag = token.rpartition(':')
+    expected = hmac.new(secret, payload.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(tag, expected):  # O(c)
         return None
-    
-    # Check timestamp
-    user_id, timestamp = user_data.decode().split(':')
-    age = int(time.time()) - int(timestamp)
-    
-    if age > max_age_seconds:
+    user_id, issued_at = payload.split(':')
+    if now - int(issued_at) > max_age:
         return None
-    
     return user_id
+
+token = make_token(b'secret', 'alice', issued_at=1_000)
+assert check_token(b'secret', token, now=1_500) == 'alice'
+assert check_token(b'secret', token, now=10_000) is None  # expired
+assert check_token(b'other', token, now=1_500) is None  # wrong key
 ```
 
-### API Request Signing
+## Performance Best Practices
 
-```python
-import hmac
-import hashlib
-import json
+✅ **Do**:
 
-def sign_request(secret, method, path, body):
-    """Sign API request for authentication."""
-    # Create canonical request
-    request_str = f'{method}\n{path}\n{body}'
-    
-    # HMAC-SHA256 signature
-    signature = hmac.new(
-        secret.encode(),
-        request_str.encode(),
-        hashlib.sha256
-    ).hexdigest()  # O(n)
-    
-    return signature
+- Verify with `compare_digest()`, which takes the same time wherever the inputs differ
+- Stream large inputs through `update()`; memory stays at the keyed state
+- `copy()` a keyed object to authenticate many messages under one key or prefix
 
-def verify_request(secret, method, path, body, signature):
-    """Verify API request signature."""
-    expected_sig = sign_request(secret, method, path, body)  # O(n)
-    
-    # Constant-time comparison
-    return hmac.compare_digest(signature, expected_sig)  # O(k), timing-safe
-```
+❌ **Avoid**:
 
-## Performance Characteristics
-
-### Best Practices
-
-```python
-import hmac
-import hashlib
-
-# Good: Use SHA256 (secure and standard)
-h = hmac.new(b'key', b'data', hashlib.sha256)  # Secure
-
-# Avoid: MD5 or SHA1 (cryptographically broken)
-h = hmac.new(b'key', b'data', hashlib.md5)  # ❌ Broken
-
-# Good: Use compare_digest for verification
-if hmac.compare_digest(received, computed):  # ✓ Safe
-    pass
-
-# Avoid: Direct comparison (timing attack)
-if received == computed:  # ❌ Vulnerable
-    pass
-
-# Good: Stream large data
-h = hmac.new(b'key', digestmod=hashlib.sha256)
-for chunk in read_large_file():
-    h.update(chunk)  # O(k) memory
-
-# Avoid: Load entire file at once
-h = hmac.new(b'key', large_data, hashlib.sha256)  # ❌ O(n) memory
-```
-
-### Algorithm Selection
-
-```python
-import hmac
-import hashlib
-
-# MD5: BROKEN - DO NOT USE
-# Fast but cryptographically broken
-
-# SHA1: DEPRECATED - AVOID
-# Still used in legacy systems but not recommended
-
-# SHA256: RECOMMENDED - USE THIS
-# Good balance of security and performance
-h = hmac.new(b'key', b'data', hashlib.sha256)
-
-# SHA512: Larger digest size
-# Performance varies by platform
-h = hmac.new(b'key', b'data', hashlib.sha512)
-```
-
-## Key Sizes
-
-### Recommended Key Sizes
-
-```python
-import hmac
-import hashlib
-
-# HMAC key size recommendations
-# At least as long as hash output size
-
-# SHA256: use 32+ byte keys
-key_256 = b'x' * 32
-h = hmac.new(key_256, b'data', hashlib.sha256)
-
-# SHA512: use 64+ byte keys
-key_512 = b'x' * 64
-h = hmac.new(key_512, b'data', hashlib.sha512)
-
-# Keys longer than hash block size are hashed
-# (block size = 64 for SHA256, 128 for SHA512)
-very_long_key = b'x' * 1000
-h = hmac.new(very_long_key, b'data', hashlib.sha256)
-# Long key is automatically hashed
-```
+- `==` on digests: it returns at the first differing byte, which leaks where they differ
+- Reading a whole file into memory to pass as `msg`, when chunks through `update()` cost the same time
+- Rebuilding an `HMAC` per message with a long key, when a copy skips hashing the key again
 
 ## Version Notes
 
-- **Python 3.x**: `hmac` module available, including `compare_digest()`
+- **Python 3.8+**: `digestmod` is required; `hmac.new(key, msg)` raises `TypeError`
 
-## Related Documentation
+## Related Modules
 
-- [hashlib Module](hashlib.md) - Hash functions
-- [secrets Module](secrets.md) - Secure random number generation
-- [base64 Module](base64.md) - Base64 encoding
+- **[hashlib](hashlib.md)** - the hash functions an HMAC is built on, and `pbkdf2_hmac()`
+- **[secrets](secrets.md)** - random keys and tokens; `secrets.compare_digest` is this module's function
+- **[base64](base64.md)** - encoding a digest for transport
