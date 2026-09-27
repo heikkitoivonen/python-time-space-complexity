@@ -55,9 +55,11 @@ Measurement scope:
   150 with it at the top. Warm, top and bottom are within 2x of each other and
   top is within 2x of the small file, so the cached call tracks neither
   position nor file size, and the line list it returns is the same object on a
-  second call. `getsourcelines()` over the
-  15,000-line pair costs more than 3x at the top, which is the tail below the
-  definition. All three modules are imported and measured once before timing.
+  second call. `getsourcelines()` over the 15,000-line pair has a traced peak
+  at the top exceeding the bottom's by more than half the storage for 15,000
+  pointers, exposing the copied tail with the returned function held at two
+  lines. All three modules are imported and their source caches warmed before
+  measurement.
 * `stack()` and `stack(0)` are compared by counting `linecache.getlines`
   calls from a 20-frame recursion: one per frame against none at all. The
   same counter shows `getframeinfo(frame, 0)` reads nothing. What `context=0`
@@ -180,6 +182,7 @@ import inspect
 import linecache
 import pathlib
 import re
+import struct
 import subprocess
 import sys
 import textwrap
@@ -882,17 +885,25 @@ class TestSourceCostsTheTailOfTheFile:
         assert first is second, "findsource() rebuilt the line list instead of reusing linecache"
         assert len(first) > PADDING
 
-    @pytest.mark.timing
     def test_getsourcelines_costs_what_follows_the_definition(
         self, modules: tuple[Any, Any, Any]
     ) -> None:
         at_top, at_bottom, _ = modules
 
-        top = best_us(lambda: inspect.getsourcelines(at_top.tiny), inner=20)
-        bottom = best_us(lambda: inspect.getsourcelines(at_bottom.tiny), inner=20)
+        peaks = []
+        for module in (at_top, at_bottom):
+            inspect.getsourcelines(module.tiny)  # warm source lookup and tokenization
+            tracemalloc.start()
+            try:
+                lines, _ = inspect.getsourcelines(module.tiny)
+                peaks.append(tracemalloc.get_traced_memory()[1])
+            finally:
+                tracemalloc.stop()
+            assert lines == ["def tiny():\n", "    return 1\n"]
 
-        assert top > 3 * bottom, (
-            f"15,000 lines below the definition cost {top / bottom:.1f}x ({bottom:.1f}us)"
+        top, bottom = peaks
+        assert top - bottom > PADDING * struct.calcsize("P") // 2, (
+            f"{PADDING} lines below the definition: top peak {top}, bottom peak {bottom} bytes"
         )
 
     def test_getsourcefile_does_not_go_through_linecache(

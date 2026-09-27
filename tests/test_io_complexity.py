@@ -76,10 +76,11 @@ Measurement scope:
   copy. `truncate(size // 4)` on a stream sharing its bytes costs more than
   20x for 100x the bytes; `seek()` and `tell()` cost under 20x. A write one
   byte 10 MB past the end peaks over 10 MB and leaves zero bytes behind it.
-* `str +=` on CPython with a second reference to the string: 250, 2,000 and
-  16,000 appends of 20 characters cost more than 500x from the first size to
-  the last and more than 32x for the last 8x step, against 64x and 8x for a
-  linear loop.
+* `str +=` on CPython with a second reference to the string: 500, 5,000 and
+  50,000 appends of 20 characters cost more than 30x per 10x step and more
+  than 1,000x overall. Linear growth predicts 10x per step and 100x overall;
+  quadratic growth predicts 100x per step and 10,000x overall. Row width and
+  character representation are held fixed.
 * `io.Reader` and `io.Writer` accept any object with the method and reject
   one without it; they are skipped before 3.14. `UnsupportedOperation` is
   both an `OSError` and a `ValueError`, and `io.BlockingIOError` is the
@@ -979,11 +980,13 @@ class TestStrConcatenation:
 
     @pytest.mark.timing
     def test_an_aliased_loop_is_quadratic(self) -> None:
-        durations = [best_ns(partial(self.build, rows), repeats=3) for rows in (250, 2_000, 16_000)]
+        durations = [best_ns(partial(self.build, rows), repeats=5) for rows in (500, 5_000, 50_000)]
         ratios = [larger / smaller for smaller, larger in pairwise(durations)]
 
-        assert durations[2] > durations[0] * 500, f"64x rows: {durations} ns, linear is 64x"
-        assert ratios[1] > 32, f"8x rows per step: {ratios}; linear is 8x, quadratic 64x"
+        assert durations[2] > durations[0] * 1_000, f"100x rows: {durations} ns, linear is 100x"
+        assert all(ratio > 30 for ratio in ratios), (
+            f"10x rows per step: {ratios}; linear is 10x, quadratic 100x; {durations} ns"
+        )
 
 
 class TestProtocolsAndConstants:
