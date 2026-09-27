@@ -15,12 +15,14 @@ rows by ratios far from the excluded growth classes.
 Measurement scope:
 
 * Dictionary size: decompressing a one-byte stream peaks between 256 KiB and
-  512 KiB at preset 0, between 8 MiB and 10 MiB at preset 6, between 64 MiB
-  and 72 MiB at preset 9, and between 1 MiB and 1.5 MiB for a filter chain
-  with `dict_size` 1 MiB. Building an `LZMADecompressor` peaks under 5 KB, and
-  a call given only the 12-byte stream header under 100 KB; building one for
+  512 KiB at preset 0, between 8 MiB and 10 MiB at preset 6, and between
+  1 MiB and 1.5 MiB for a filter chain with `dict_size` 1 MiB. Preset 9's
+  LZMA2 filter properties encode a 64 MiB `dict_size`, read without building
+  its 673 MiB compressor. Building an `LZMADecompressor` peaks under 5 KB, a
+  call given only the 12-byte header of a preset-2 stream under 100 KB, and
+  the call given the rest over 2 MiB; building one for
   `FORMAT_RAW` with `dict_size` 8 MiB peaks between 8 MiB and 12 MiB. With
-  `memlimit=1 MiB` a preset-6 stream raises `LZMAError` and a preset-0 stream
+  `memlimit=1 MiB` a preset-2 stream raises `LZMAError` and a preset-0 stream
   decodes.
 * Compressor working memory: building an `LZMACompressor` at preset 6 peaks
   more than 20x higher than at preset 0 (D is 32x larger), and so do
@@ -28,7 +30,6 @@ Measurement scope:
   compressor peaks within 10% of preset 6. A one-byte stream written with
   `PRESET_EXTREME` at preset 0 or 6 decodes with a peak within 10% of the
   plain preset's, so the flag keeps D.
-  Construction at preset 7 takes more than 10x as long as at preset 0.
   `compress()` of 20,000,000 zero bytes at preset 0 peaks within 1.5x of
   compressing 1,000 bytes.
 * Compression time: 16x the input (250,000 to 4,000,000 bytes) costs between
@@ -71,8 +72,8 @@ Measurement scope:
   zero, and `SEEK_END` takes the remaining 3,000,000; after rewinding,
   `seek(-3_000_000, SEEK_END)` takes 1,000,000, so the size is kept. A
   500-byte backward seek inside the read buffer takes nothing.
-  `read(100_000_000)` and `read1(100_000_000)` on a one-byte file each peak
-  above 50 MB. `peek()` does not move `tell()`. Concatenated streams read back
+  `read(16 MiB)` and `read1(16 MiB)` on a one-byte file each peak above
+  8 MiB. `peek()` does not move `tell()`. Concatenated streams read back
   in turn, including one appended in `'ab'` mode. A 13-byte `write()` and
   `flush()` leave nothing decodable in the target; `close()` leaves a wrapped
   `BytesIO` open and closes a file it opened. `closed`, `fileno()`,
@@ -92,9 +93,9 @@ Not settled here:
   only presets 0 and 6 are timed, on generated text and random bytes, and a
   16x step excludes only constant and quadratic growth. `PRESET_EXTREME`,
   the `CHECK_*` choices, and the BCJ filters are not timed.
-* O(D) construction time is an upper bound: construction time is not
-  monotonic in D across presets 0 to 6, and only preset 7 against preset 0 is
-  timed. That decompressor time does not include a D term is likewise not
+* O(D) construction time is an upper bound and is not timed: across presets
+  0 to 7 construction time is not monotonic in D. Presets 7 to 9 allocate 185 MiB to 673 MiB and are not
+  built. That decompressor time does not include a D term is likewise not
   timed.
 * "Up to about D bytes" of held input is observed at presets 1 and 2, and on
   one input shape each; the held amount's dependence on how much output one
@@ -140,6 +141,9 @@ EXPECTED_BLOCKS = 7
 
 KIB = 1 << 10
 MIB = 1 << 20
+
+# The filter-property codecs are private, so not in the type stubs.
+_lzma_internals: Any = lzma
 
 
 def best_ns(func: Callable[[], Any], repeats: int = 3, inner: int = 1) -> float:
@@ -235,7 +239,7 @@ class TestTheDictionarySetsTheMemory:
 
     @pytest.mark.parametrize(
         ("preset", "low", "high"),
-        [(0, 256 * KIB, 512 * KIB), (6, 8 * MIB, 10 * MIB), (9, 64 * MIB, 72 * MIB)],
+        [(0, 256 * KIB, 512 * KIB), (6, 8 * MIB, 10 * MIB)],
     )
     def test_a_one_byte_stream_costs_its_readers_d(self, preset: int, low: int, high: int) -> None:
         stream = lzma.compress(b"x", preset=preset)
@@ -243,6 +247,14 @@ class TestTheDictionarySetsTheMemory:
         peak = peak_bytes(lambda: lzma.decompress(stream))
 
         assert low <= peak <= high, f"preset {preset} decoded with a {peak}-byte peak"
+
+    def test_preset_9_sets_d_to_64_mib(self) -> None:
+        properties = _lzma_internals._encode_filter_properties(
+            {"id": lzma.FILTER_LZMA2, "preset": 9}
+        )
+        decoded = _lzma_internals._decode_filter_properties(lzma.FILTER_LZMA2, properties)
+
+        assert decoded["dict_size"] == 64 * MIB
 
     def test_a_filter_chain_sets_d_with_dict_size(self) -> None:
         filters = [{"id": lzma.FILTER_LZMA2, "dict_size": MIB}]
@@ -253,7 +265,7 @@ class TestTheDictionarySetsTheMemory:
         assert MIB <= peak <= MIB * 3 // 2, peak
 
     def test_the_decompressor_allocates_when_the_header_arrives(self) -> None:
-        stream = lzma.compress(b"x", preset=9)
+        stream = lzma.compress(b"x", preset=2)
         built = peak_bytes(lzma.LZMADecompressor)
         decompressor = lzma.LZMADecompressor()
 
@@ -262,7 +274,7 @@ class TestTheDictionarySetsTheMemory:
 
         assert built < 5_000, built
         assert header_only < 100_000, header_only
-        assert rest > 64 * MIB, rest
+        assert rest > 2 * MIB, rest
         assert decompressor.eof
 
     def test_a_raw_decompressor_allocates_d_when_built(self) -> None:
@@ -277,9 +289,9 @@ class TestTheDictionarySetsTheMemory:
 
         assert lzma.decompress(lzma.compress(data, preset=0), memlimit=MIB) == data
         with pytest.raises(lzma.LZMAError, match="Memory usage limit"):
-            lzma.decompress(lzma.compress(data), memlimit=MIB)
+            lzma.decompress(lzma.compress(data, preset=2), memlimit=MIB)
         with pytest.raises(lzma.LZMAError, match="Memory usage limit"):
-            lzma.LZMADecompressor(memlimit=MIB).decompress(lzma.compress(data))
+            lzma.LZMADecompressor(memlimit=MIB).decompress(lzma.compress(data, preset=2))
 
 
 class TestCompressorWorkingMemory:
@@ -327,14 +339,6 @@ class TestCompressorWorkingMemory:
 
         assert len(lzma.compress(data, preset=0)) < 10_000
         assert large_peak < small_peak * 1.5, f"{large_peak} for 20 MB, {small_peak} for 1 KB"
-
-    @pytest.mark.timing
-    def test_construction_time_grows_with_d(self) -> None:
-        preset_0 = best_ns(lambda: lzma.LZMACompressor(preset=0), repeats=7)
-        preset_7 = best_ns(lambda: lzma.LZMACompressor(preset=7), repeats=7)
-
-        ratio = preset_7 / preset_0
-        assert ratio > 10, f"64x the dictionary cost x{ratio:.1f} to build"
 
 
 class TestCompressionIsLinear:
@@ -397,7 +401,7 @@ class TestTheCompressorHoldsInput:
         assert held < MIB, f"{held} bytes held at D = 1 MiB"
 
     def test_a_flushed_compressor_cannot_be_used_again(self) -> None:
-        compressor = lzma.LZMACompressor()
+        compressor = lzma.LZMACompressor(preset=0)
         compressor.compress(b"data")
         compressor.flush()
 
@@ -455,14 +459,14 @@ class TestDecompress:
         with pytest.raises(lzma.LZMAError, match="format not supported"):
             lzma.decompress(b"garbage!")
         with pytest.raises(lzma.LZMAError, match="ended before"):
-            lzma.decompress(lzma.compress(b"x" * 1_000)[:-3])
-        assert lzma.decompress(lzma.compress(b"ok") + b"junk") == b"ok"
+            lzma.decompress(lzma.compress(b"x" * 1_000, preset=0)[:-3])
+        assert lzma.decompress(lzma.compress(b"ok", preset=0) + b"junk") == b"ok"
 
     def test_auto_reads_both_containers(self) -> None:
-        alone = lzma.compress(b"legacy", format=lzma.FORMAT_ALONE)
+        alone = lzma.compress(b"legacy", format=lzma.FORMAT_ALONE, preset=0)
 
         assert lzma.decompress(alone) == b"legacy"
-        assert lzma.decompress(lzma.compress(b"xz")) == b"xz"
+        assert lzma.decompress(lzma.compress(b"xz", preset=0)) == b"xz"
 
     def test_raw_needs_filters(self) -> None:
         with pytest.raises(ValueError, match="filter"):
@@ -478,7 +482,7 @@ class TestStreamingDecompressor:
 
     def test_output_arrives_before_the_stream_is_complete(self) -> None:
         data = random_bytes(1_000_000)
-        stream = lzma.compress(data, preset=6)
+        stream = lzma.compress(data, preset=0)
         decompressor = lzma.LZMADecompressor()
 
         partial = decompressor.decompress(stream[:-100])
@@ -511,14 +515,14 @@ class TestStreamingDecompressor:
 
     def test_one_stream_only(self) -> None:
         decompressor = lzma.LZMADecompressor()
-        decompressor.decompress(lzma.compress(b"data"))
+        decompressor.decompress(lzma.compress(b"data", preset=0))
 
         assert decompressor.eof
         with pytest.raises(EOFError, match="end of stream"):
             decompressor.decompress(b"more")
 
     def test_unused_data_is_set_at_the_end_of_the_stream(self) -> None:
-        stream = lzma.compress(b"data")
+        stream = lzma.compress(b"data", preset=0)
         decompressor = lzma.LZMADecompressor()
         assert decompressor.unused_data == b""
         assert decompressor.needs_input is True
@@ -533,7 +537,7 @@ class TestStreamingDecompressor:
         assert decompressor.unused_data is decompressor.unused_data
 
     def test_check_is_known_once_the_header_is_read(self) -> None:
-        stream = lzma.compress(b"data", check=lzma.CHECK_SHA256)
+        stream = lzma.compress(b"data", check=lzma.CHECK_SHA256, preset=0)
         decompressor = lzma.LZMADecompressor()
         assert decompressor.check == lzma.CHECK_UNKNOWN
 
@@ -546,7 +550,7 @@ class TestStreamingDecompressor:
         assert decompressor.eof
         assert decompressor.check == lzma.CHECK_SHA256
         alone = lzma.LZMADecompressor(format=lzma.FORMAT_ALONE)
-        alone.decompress(lzma.compress(b"data", format=lzma.FORMAT_ALONE))
+        alone.decompress(lzma.compress(b"data", format=lzma.FORMAT_ALONE, preset=0))
         assert alone.check == lzma.CHECK_NONE
 
 
@@ -643,7 +647,7 @@ class TestLZMAFile:
     def test_lines_and_iteration(self) -> None:
         text = b"".join(f"line {i}\n".encode() for i in range(100))
 
-        with lzma.LZMAFile(io.BytesIO(lzma.compress(text))) as f:
+        with lzma.LZMAFile(io.BytesIO(lzma.compress(text, preset=0))) as f:
             assert f.readline() == b"line 0\n"
             assert f.readlines(10) == [b"line 1\n", b"line 2\n"]
             assert list(f)[-1] == b"line 99\n"
@@ -653,9 +657,9 @@ class TestLZMAFile:
         f = lzma.LZMAFile(io.BytesIO(lzma.compress(b"x", preset=0)))
         read = getattr(f, method)
 
-        peak = peak_bytes(lambda: read(100_000_000))
+        peak = peak_bytes(lambda: read(16 * MIB))
 
-        assert peak > 50_000_000, f"{method}(100_000_000) of one byte peaked at {peak}"
+        assert peak > 8 * MIB, f"{method}(16 MiB) of one byte peaked at {peak}"
         f.close()
 
     def test_readinto_and_read1(self) -> None:
@@ -667,9 +671,9 @@ class TestLZMAFile:
 
     def test_concatenated_streams_read_in_turn(self) -> None:
         target = io.BytesIO()
-        with lzma.LZMAFile(target, "wb") as f:
+        with lzma.LZMAFile(target, "wb", preset=0) as f:
             f.write(b"one")
-        with lzma.LZMAFile(target, "ab") as f:
+        with lzma.LZMAFile(target, "ab", preset=0) as f:
             f.write(b"two")
 
         assert lzma.decompress(target.getvalue()) == b"onetwo"
@@ -703,13 +707,13 @@ class TestLZMAFile:
 
     def test_close_closes_only_a_file_it_opened(self, tmp_path: pathlib.Path) -> None:
         wrapped = io.BytesIO()
-        with lzma.LZMAFile(wrapped, "wb") as f:
+        with lzma.LZMAFile(wrapped, "wb", preset=0) as f:
             f.write(b"data")
         assert not wrapped.closed
         assert f.closed
 
         path = tmp_path / "data.xz"
-        with lzma.open(path, "wb") as named:
+        with lzma.open(path, "wb", preset=0) as named:
             assert named.writable() and not named.readable()
             assert isinstance(named.fileno(), int)
             inner = named._fp  # pyright: ignore[reportAttributeAccessIssue]  # noqa: SLF001
@@ -724,14 +728,14 @@ class TestLZMAFile:
     @pytest.mark.skipif(sys.version_info < (3, 13), reason="added in 3.13")
     def test_mode_and_name(self, tmp_path: pathlib.Path) -> None:
         path = tmp_path / "data.xz"
-        with lzma.LZMAFile(path, "wb") as f:
+        with lzma.LZMAFile(path, "wb", preset=0) as f:
             assert f.mode == "wb"
             assert f.name == str(path)
         with lzma.LZMAFile(path) as f:
             assert f.mode == "rb"
 
     def test_text_mode_wraps_in_a_text_wrapper(self) -> None:
-        with lzma.open(io.BytesIO(lzma.compress(b"a\nb\n")), "rt", encoding="ascii") as f:
+        with lzma.open(io.BytesIO(lzma.compress(b"a\nb\n", preset=0)), "rt", encoding="ascii") as f:
             assert isinstance(f, io.TextIOWrapper)
             assert f.read() == "a\nb\n"
 
