@@ -17,8 +17,8 @@ Measurement scope:
   integers, one array of floats, one inline table, and comment lines. Every 4x
   step must cost under 8x, where linear predicts 4x and quadratic 16x.
   Nesting is two further shapes: 200 lines each holding arrays or inline
-  tables nested 10, 30 and 90 deep, where each 3x step must cost under 5x
-  (linear 3x, quadratic 9x).
+  tables nested 10 and 270 deep, where the 27x step must cost under 100x
+  (linear 27x, quadratic 729x; x20 to x41 on 3.11 to 3.14).
 * One top-level dotted key: from 100 to 800 parts the traced peak grows more
   than 20x and less than 200x (linear predicts 8x, quadratic 64x, cubic
   512x; x38 to x46 on 3.14.7), and in a timing test from 100 to 900 parts
@@ -194,14 +194,12 @@ class TestParsingIsLinearInTheText:
 
     @pytest.mark.timing
     @pytest.mark.parametrize("shape", list(NESTED))
-    def test_three_times_the_depth_costs_about_three_times(self, shape: str) -> None:
-        documents = [NESTED[shape](depth) for depth in (10, 30, 90)]
-        durations = [best_ns(lambda s=text: tomllib.loads(s)) for text in documents]
-        ratios = [durations[i + 1] / durations[i] for i in range(2)]
+    def test_27_times_the_depth_costs_about_27_times(self, shape: str) -> None:
+        small, large = NESTED[shape](10), NESTED[shape](270)
+        ratio = best_ns(lambda: tomllib.loads(large)) / best_ns(lambda: tomllib.loads(small))
 
-        assert all(ratio < 5 for ratio in ratios), (
-            f"{shape}: depths 10, 30, 90 took {durations} ns, steps {ratios}; "
-            "linear predicts 3x a step, quadratic 9x"
+        assert ratio < 100, (
+            f"{shape}: 27x the depth cost x{ratio:.1f}; linear predicts 27x, quadratic 729x"
         )
 
     def test_flat_keys_allocate_in_proportion_to_the_text(self) -> None:

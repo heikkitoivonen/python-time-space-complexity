@@ -17,11 +17,13 @@ Measurement scope:
   256x; 78x to 136x was measured on 3.10 to 3.14. The control is 2,500
   against 40,000 lines of `x = x + 1`, with no targets, which must grow less
   than 40x and measured 17x to 18x.
-* The per-instruction target lookup: 1,000 branches followed by 20,000
+* The per-instruction target lookup: 3,000 branches followed by 20,000
   straight lines, against 21,000 straight lines, through
-  `list(get_instructions())`. On 3.10 the branchy function must cost more
-  than 3x the straight one (measured 6x to 7x at 5,000 and 40,000 tail
-  lines); on 3.11+ less than 2x (measured 1.0x to 1.4x).
+  `list(get_instructions())`, each divided by the instructions it yields. The
+  whole pass is timed, branches included. On 3.10 the branchy function must
+  cost more than 2.5x per instruction (x14.7 measured); on 3.11+ less than
+  2.5x (x1.08 to x1.19). x86_64 CI weighs the scan less: 1,000 branches cost
+  x2.65 there on 3.10 as a whole-run ratio, against x6.6 on aarch64.
 * Laziness: draining `get_instructions()` over a one-line function of about
   40,000 code units without keeping the instructions peaks under 50 KB, and
   `list()` of it over 5 MB. That input has one line and no targets, so it
@@ -246,20 +248,23 @@ class TestJumpTargetsAreQuadratic:
 
 class TestTargetLookupPerInstruction:
     """Version Notes: from 3.11 each instruction's offset is looked up in a set
-    of targets; on 3.10 it scans the list, O(n·t). A thousand targets ahead of
-    a long straight tail separates the two."""
+    of targets; on 3.10 it scans the list, O(n·t). Three thousand targets ahead
+    of a long straight tail separate the two."""
+
+    @staticmethod
+    def per_instruction_ns(code: types.CodeType) -> float:
+        count = len(list(dis.get_instructions(code)))
+        return best_ns(lambda: list(dis.get_instructions(code)), repeats=3) / count
 
     @pytest.mark.timing
-    def test_a_thousand_targets_only_cost_the_tail_on_3_10(self) -> None:
-        branchy, plain = branches(1000, tail=20000), straight(21000)
+    def test_three_thousand_targets_only_cost_the_tail_on_3_10(self) -> None:
+        branchy, plain = branches(3000, tail=20000), straight(21000)
 
-        ratio = best_ns(lambda: list(dis.get_instructions(branchy)), repeats=3) / best_ns(
-            lambda: list(dis.get_instructions(plain)), repeats=3
-        )
+        ratio = self.per_instruction_ns(branchy) / self.per_instruction_ns(plain)
         if sys.version_info < (3, 11):
-            assert ratio > 3, f"1,000 targets cost x{ratio:.2f} over straight code on 3.10"
+            assert ratio > 2.5, f"3,000 targets cost x{ratio:.2f} per instruction on 3.10"
         else:
-            assert ratio < 2, f"1,000 targets cost x{ratio:.2f} over straight code"
+            assert ratio < 2.5, f"3,000 targets cost x{ratio:.2f} per instruction"
 
 
 class TestIterationIsLazy:

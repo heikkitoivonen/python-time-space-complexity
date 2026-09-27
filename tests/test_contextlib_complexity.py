@@ -26,13 +26,16 @@ Measurement scope:
   `pop_all()` is asserted to move the very deque that holds the callbacks,
   which is what makes it O(1) at any k. Unwinding 100,000 no-op callbacks is
   asserted to peak under 20 KB of traced allocation.
-* Registering and unwinding are timed together over k = 250 and 8,000 exits
-  with garbage collection off, best of five, for `ExitStack` and
-  `AsyncExitStack`, with the body raising. Exits that raise without handling the exception in flight - an
-  `__exit__` method that raises, which the stack calls outside any `except`
-  block - grow less than 100x for 32x the exits (x19 to x47 measured on 3.10
-  and 3.14). `@contextmanager` and `@asynccontextmanager` objects whose
-  `finally` raises grow more than 120x (x172 to x372 measured). The final
+* Registering and unwinding are timed together with garbage collection off,
+  best of five, for `ExitStack` and `AsyncExitStack`, with the body raising.
+  Exits that raise without handling the exception in flight - an `__exit__`
+  method that raises, which the stack calls outside any `except` block - grow
+  less than 100x from k = 250 to 8,000 (x19 to x47 measured on 3.10 and
+  3.14). `@contextmanager` and `@asynccontextmanager` objects whose `finally`
+  raises grow more than 160x from k = 250 to 16,000, where linear predicts
+  64x and quadratic 4096x (x916 and x1017 on 3.14). At k = 250 per-exit
+  overhead still dominates: from 250 to 8,000 they grow x220 to x390 on
+  aarch64 and x99 and x119 in one x86_64 CI run. The final
   exception's `__context__` chain is asserted to hold all k exceptions, which
   is the O(k) space of that row.
 * `closing()` and `aclosing()` call `close()` or `aclose()` exactly once, on a
@@ -494,7 +497,7 @@ class TestRaisingExitsDuringUnwinding:
     walks the context chain of the exception being handled, which holds every
     earlier exit's exception."""
 
-    SMALL, LARGE = 250, 8_000
+    SMALL = 250
 
     def test_the_chain_holds_every_exception(self) -> None:
         k = 50
@@ -526,8 +529,10 @@ class TestRaisingExitsDuringUnwinding:
         chain = context_chain(asyncio.run(main()))
         assert len(chain) == k + 1
 
-    def growth(self, build: Callable[[Any, int], Callable[[], None]], factory: Any) -> float:
-        runs = [build(factory, k) for k in (self.SMALL, self.LARGE)]
+    def growth(
+        self, build: Callable[[Any, int], Callable[[], None]], factory: Any, count: int
+    ) -> float:
+        runs = [build(factory, k) for k in (self.SMALL, count)]
         try:
             for run in runs:
                 run()
@@ -548,7 +553,7 @@ class TestRaisingExitsDuringUnwinding:
     def test_exits_that_raise_outside_a_handler_unwind_in_linear_time(
         self, build: Any, factory: Any
     ) -> None:
-        ratio = self.growth(build, factory)
+        ratio = self.growth(build, factory, 8_000)
 
         assert ratio < 100, f"32x the raising exits cost x{ratio:.1f}; linear predicts x32"
 
@@ -561,9 +566,9 @@ class TestRaisingExitsDuringUnwinding:
     def test_cleanups_that_raise_while_handling_unwind_in_quadratic_time(
         self, build: Any, factory: Any
     ) -> None:
-        ratio = self.growth(build, factory)
+        ratio = self.growth(build, factory, 16_000)
 
-        assert ratio > 120, f"32x the raising cleanups cost x{ratio:.1f}; quadratic predicts x1024"
+        assert ratio > 160, f"64x the raising cleanups cost x{ratio:.1f}; quadratic predicts x4096"
 
 
 class TestSingleCleanupHelpers:
