@@ -871,6 +871,7 @@ class TestIntern:
         else:
             assert interned_size() == before, "a string nobody references is not kept interned"
 
+    @pytest.mark.serial
     def test_only_the_immortal_window_keeps_an_interned_string_alive(self) -> None:
         """The retention, measured on every supported version.
 
