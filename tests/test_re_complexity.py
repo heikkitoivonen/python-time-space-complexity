@@ -15,8 +15,15 @@ Measurement scope:
 
 * `re.compile` over `(?:abc)` repeated 10, 100 and 1,000 times: each 10x
   step in the pattern costs between 4x and 40x, which admits linear growth
-  and excludes quadratic. Two alternatives sharing a prefix of 4,000 and then
-  16,000 characters cost between 8x and 40x per 4x step, which is the O(n²) case. The
+  and excludes quadratic. Two alternatives sharing a prefix of 1,000, 4,000
+  and 16,000 characters are the O(n²) case, settled by counting: the parser
+  moves the prefix out one item at a time with `del item[0]`, and those
+  deletions shift exactly n(n+1) items for two alternatives sharing n
+  characters, while alternatives with no common prefix shift none. Each
+  shifted item is one pointer moved, so linear parsing overhead obscures the
+  quadratic term in wall-clock timings: on 3.10 and 3.14 the shared prefix
+  costs 1.3x to 1.8x the unshared one at 1,000 characters and 5.8x to 16.7x
+  at 32,000. The
   same pattern and flags compiled twice is the same object; after `purge()`
   it is not, nor with `re.DEBUG`, which prints the parse tree. Long literals, alternations of 8,000
   words, 8,000 capturing or named groups and 16,000 backreferences all
@@ -176,6 +183,11 @@ def compiler_module() -> Any:
     return getattr(re, "_compiler", None) or _re_internals.sre_compile
 
 
+def parser_module() -> Any:
+    """The module that parses a pattern into `SubPattern` item lists."""
+    return getattr(re, "_parser", None) or _re_internals.sre_parse
+
+
 def template_cache() -> Any:
     """The lru_cache that parses a replacement template."""
     return getattr(re, "_compile_template", None) or _re_internals._compile_repl
@@ -206,16 +218,30 @@ class TestCompilation:
             f"10x the pattern should cost about 10x, not 100x: {times} ns, steps {steps}"
         )
 
-    @pytest.mark.timing
-    def test_a_shared_prefix_across_alternatives_is_quadratic(self) -> None:
-        times = []
-        for length in (1_000, 4_000, 16_000):
-            pattern = "x" * length + "a|" + "x" * length + "b"
-            times.append(best_ns(lambda p=pattern: (re.purge(), re.compile(p)), repeats=3))
-        re.purge()
+    def test_a_shared_prefix_across_alternatives_shifts_quadratically_many_items(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        subpattern = parser_module().SubPattern
+        delete = subpattern.__delitem__
+        shifted = [0]
 
-        steps = [later / earlier for earlier, later in zip(times, times[1:], strict=False)]
-        assert 8 < steps[-1] < 40, f"4x the prefix should cost ~16x: {times} ns, steps {steps}"
+        def counting_delete(self: Any, index: Any) -> None:
+            shifted[0] += len(self.data) - 1 if index == 0 else 0
+            delete(self, index)
+
+        monkeypatch.setattr(subpattern, "__delitem__", counting_delete)
+
+        def items_shifted(pattern: str) -> int:
+            shifted[0] = 0
+            re.purge()
+            re.compile(pattern)
+            return shifted[0]
+
+        for length in (1_000, 4_000, 16_000):
+            shared = "x" * length + "a|" + "x" * length + "b"
+            assert items_shifted(shared) == length * (length + 1), f"prefix of {length}"
+        assert items_shifted("x" * 16_000 + "a|" + "y" * 16_000 + "b") == 0
+        re.purge()
 
     def test_debug_bypasses_the_cache(
         self, clean_pattern_cache: None, capsys: pytest.CaptureFixture[str]
