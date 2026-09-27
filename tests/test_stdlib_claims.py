@@ -15,7 +15,8 @@ docs/stdlib/multiprocessing.md's in tests/test_multiprocessing_complexity.py,
 docs/stdlib/numbers.md's in tests/test_numbers_complexity.py,
 docs/stdlib/secrets.md's in tests/test_secrets_complexity.py,
 docs/stdlib/tempfile.md's in tests/test_tempfile_complexity.py,
-docs/stdlib/smtplib.md's in tests/test_smtplib_complexity.py and
+docs/stdlib/smtplib.md's in tests/test_smtplib_complexity.py,
+docs/stdlib/struct.md's in tests/test_struct_complexity.py and
 docs/stdlib/tomllib.md's in tests/test_tomllib_complexity.py, which cover
 those modules' tables as well.
 
@@ -35,7 +36,6 @@ import posixpath
 import pprint
 import queue
 import sqlite3
-import struct
 import sys
 import threading
 import time
@@ -303,59 +303,6 @@ class TestSqliteCommitBatching:
             f"a commit per row should wait for the disk 100 times: "
             f"batched={batched:.2e}s per_row={per_row:.2e}s"
         )
-
-
-class TestStructFormatCaching:
-    """docs/stdlib/struct.md.
-
-    The page claimed pre-compiling a Struct saves parsing the format "on
-    every call". It does not: the module-level functions cache compiled
-    formats, so a repeated format is parsed once anyway. Pre-compiling saves
-    the cache lookup, and saves the parse only when the cache misses.
-    """
-
-    FORMAT = "iiii"
-
-    @pytest.mark.timing
-    def test_precompiled_saves_only_the_cache_lookup(self) -> None:
-        compiled = struct.Struct(self.FORMAT)
-        data = compiled.pack(1, 2, 3, 4)
-
-        module_time = best_time(lambda: [struct.unpack(self.FORMAT, data) for _ in range(20_000)])
-        struct_time = best_time(lambda: [compiled.unpack(data) for _ in range(20_000)])
-
-        assert struct_time < module_time, "pre-compiling should still win"
-        assert struct_time > module_time / 3, (
-            f"but only by the cache lookup, not by a whole parse: "
-            f"module={module_time:.2e}s struct={struct_time:.2e}s"
-        )
-
-    @pytest.mark.timing
-    def test_the_parse_is_only_re_paid_on_a_cache_miss(self) -> None:
-        formats = ["i" * n for n in range(2, 60)]
-        payloads = {f: struct.pack(f, *range(len(f))) for f in formats}
-        compiled = [struct.Struct(f) for f in formats]
-
-        def cold() -> None:
-            struct._clearcache()  # type: ignore[attr-defined]
-            for fmt in formats:
-                struct.unpack(fmt, payloads[fmt])
-
-        def warm() -> None:
-            for fmt, prepared in zip(formats, compiled, strict=True):
-                prepared.unpack(payloads[fmt])
-
-        cold_time = best_time(cold)
-        warm_time = best_time(warm)
-
-        assert cold_time > warm_time * 2, (
-            f"with the cache cleared the parse dominates: "
-            f"cold={cold_time:.2e}s warm={warm_time:.2e}s"
-        )
-
-    def test_a_short_read_fails_before_unpacking(self) -> None:
-        with pytest.raises(struct.error):
-            struct.unpack("i", b"AB")
 
 
 class TestUnicodeDataLookupsAreTableReads:
