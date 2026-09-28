@@ -137,6 +137,7 @@ nav:
     - Zip: builtins/zip.md
   - Standard Library:
     - Standard Library Overview: stdlib/index.md
+    - __future__: stdlib/__future__.md
     - ABC: stdlib/abc.md
     - Aifc: stdlib/aifc.md
     - Annotationlib: stdlib/annotationlib.md
@@ -280,6 +281,7 @@ nav:
     - Py_compile: stdlib/py_compile.md
     - Pyclbr: stdlib/pyclbr.md
     - Pydoc: stdlib/pydoc.md
+    - Pydoc_data: stdlib/pydoc_data.md
     - Pyexpat: stdlib/pyexpat.md
     - Queue: stdlib/queue.md
     - Quopri: stdlib/quopri.md
@@ -306,6 +308,9 @@ nav:
     - Socketserver: stdlib/socketserver.md
     - Spwd: stdlib/spwd.md
     - Sqlite3: stdlib/sqlite3.md
+    - Sre_compile: stdlib/sre_compile.md
+    - Sre_constants: stdlib/sre_constants.md
+    - Sre_parse: stdlib/sre_parse.md
     - Ssl: stdlib/ssl.md
     - Stat: stdlib/stat.md
     - Statistics: stdlib/statistics.md
