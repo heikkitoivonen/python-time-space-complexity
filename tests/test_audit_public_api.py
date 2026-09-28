@@ -25,20 +25,132 @@ class Parent:
         pass
 
 
-def test_main_entry_points_are_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_main_entry_points_are_skipped_and_never_resolved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     module = ModuleType("probe")
-    module.__main__ = lambda: None  # type: ignore[attr-defined]
+    module.__path__ = []  # type: ignore[attr-defined]
     module.__all__ = ["__main__"]  # type: ignore[attr-defined]
-    assert audit.inspect_public_api(module)["items"] == []
+    imported: list[str] = []
+    monkeypatch.setattr(audit.importlib, "import_module", imported.append)
+    result = audit.inspect_public_api(module)
+    assert imported == []
+    assert result["items"] == result["errors"] == result["unavailable"] == []
     apis = public_manifest({"probe.__main__.run": "function"})["apis"]
     assert audit.unresolved_documented(apis, set(), {"probe"}) == []
-    modules, _ = audit.audited_modules(["probe", "probe.__main__"], apis)
+    modules, excluded = audit.audited_modules(["probe", "probe.__main__"], apis)
     assert modules == ["probe"]
-    monkeypatch.setattr(
-        audit, "discover_modules", lambda: (["probe"], ["probe.__main__", "idlelib"])
+    assert excluded == []
+    apis = public_manifest({"probe.__main__": "module", "probe.__main__.run": "function"})["apis"]
+    monkeypatch.setattr(audit, "discover_modules", lambda: ["antigravity", "idlelib", "probe"])
+    modules, excluded = audit.audited_modules(None, apis)
+    assert modules == ["antigravity", "idlelib", "probe"]
+    assert excluded == []
+
+
+@pytest.mark.parametrize(
+    ("name", "program"),
+    [
+        ("antigravity", True),
+        ("idlelib.idle", True),
+        ("json.__main__", False),
+        ("json", False),
+        ("idlelib", False),
+        ("__future__", False),
+    ],
+)
+def test_program_modules_are_recognised(name: str, program: bool) -> None:
+    assert audit.runs_program(name) is program
+
+
+def test_program_modules_are_read_from_source_without_running(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package = tmp_path / "entry_probe"
+    package.mkdir()
+    (package / "__init__.py").touch()
+    monkeypatch.setattr(audit, "PROGRAM_MODULES", {"entry_probe.cli"})
+    (package / "cli.py").write_text(
+        "import sys\n"
+        "from os import path\n"
+        "raise SystemExit('ran')\n"
+        "LIMIT = 1\n"
+        "state = {}\n"
+        "_hidden = 1\n"
+        "def main(): pass\n"
+        "async def serve(): pass\n"
+        "def _helper(): pass\n"
+        "class Tool:\n"
+        "    def run(self): pass\n"
+        "    def _step(self): pass\n"
+        "if __name__ == '__main__':\n"
+        "    guarded = 1\n"
     )
-    _, excluded = audit.audited_modules(None, apis)
-    assert excluded == ["idlelib"]
+    monkeypatch.syspath_prepend(str(tmp_path))
+    result = audit.inspect_module_worker("entry_probe.cli")
+    assert "entry_probe.cli" not in audit.sys.modules
+    audit.sys.modules.pop("entry_probe", None)
+    assert result["errors"] == result["unavailable"] == []
+    assert result["module_identity"] == "entry_probe.cli"
+    assert {item["name"]: item["kind"] for item in result["items"]} == {
+        "entry_probe.cli.main": "function",
+        "entry_probe.cli.serve": "function",
+        "entry_probe.cli.state": "attribute",
+        "entry_probe.cli.Tool": "class",
+        "entry_probe.cli.Tool.run": "method",
+    }
+
+
+def test_program_module_without_source_blocks_the_gate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package = tmp_path / "compiled_probe"
+    package.mkdir()
+    (package / "__init__.py").touch()
+    (package / "cli.pyc").write_bytes(b"")
+    monkeypatch.setattr(audit, "PROGRAM_MODULES", {"compiled_probe.cli"})
+    monkeypatch.syspath_prepend(str(tmp_path))
+    result = audit.inspect_module_worker("compiled_probe.cli")
+    audit.sys.modules.pop("compiled_probe", None)
+    assert result["unavailable"] == []
+    assert result["errors"][0].startswith("compiled_probe.cli: ValueError")
+
+
+def test_antigravity_is_inspected_without_importing_it() -> None:
+    loaded = "antigravity" in audit.sys.modules
+    result = audit.inspect_module_worker("antigravity")
+    assert ("antigravity" in audit.sys.modules) is loaded
+    assert result["errors"] == []
+    assert "antigravity.geohash" in {item["name"] for item in result["items"]}
+
+
+def test_import_errors_are_unavailable_not_blocking(monkeypatch: pytest.MonkeyPatch) -> None:
+    result = audit.inspect_module_worker("no_such_module_for_the_audit")
+    assert result["errors"] == []
+    assert result["available"] is False
+    assert result["unavailable"][0].startswith("no_such_module_for_the_audit: ModuleNotFoundError")
+    monkeypatch.setattr(audit, "PROGRAM_MODULES", {"missing_program_probe"})
+    program = audit.inspect_module_worker("missing_program_probe")
+    assert program["errors"] == []
+    assert program["unavailable"]
+
+
+def test_binding_import_errors_are_unavailable_and_others_block(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = ModuleType("probe")
+    module.__path__ = []  # type: ignore[attr-defined]
+    module.__all__ = ["missing", "broken"]  # type: ignore[attr-defined]
+
+    def import_module(name: str) -> ModuleType:
+        if name == "probe.missing":
+            raise ModuleNotFoundError(name)
+        raise RuntimeError(name)
+
+    monkeypatch.setattr(audit.importlib, "import_module", import_module)
+    result = audit.inspect_public_api(module, {})
+    assert result["unavailable"] == ["probe.missing: ModuleNotFoundError: probe.missing"]
+    assert result["errors"] == ["probe.broken: RuntimeError: probe.broken"]
 
 
 def test_single_underscore_modules_are_excluded(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -47,6 +159,8 @@ def test_single_underscore_modules_are_excluded(monkeypatch: pytest.MonkeyPatch)
             "_thread": "module",
             "_thread.allocate_lock": "function",
             "_tkinter": "module",
+            "json._impl": "module",
+            "json._impl.child": "module",
             "__future__": "module",
             "__future__.annotations": "data",
         }
@@ -55,12 +169,12 @@ def test_single_underscore_modules_are_excluded(monkeypatch: pytest.MonkeyPatch)
     assert audit.is_private_module("_tkinter.sub")
     assert not audit.is_private_module("__future__")
     assert not audit.is_private_module("json._private")
-    monkeypatch.setattr(audit, "discover_modules", lambda: (["json"], []))
+    monkeypatch.setattr(audit, "discover_modules", lambda: ["json"])
 
     modules, excluded = audit.audited_modules(None, apis)
 
     assert modules == ["__future__", "json"]
-    assert excluded == ["_thread", "_tkinter"]
+    assert excluded == ["_thread", "_tkinter", "json._impl", "json._impl.child"]
     unresolved = audit.unresolved_documented(
         apis, set(), {"__future__", "json", "_thread", "_tkinter"}
     )
@@ -243,7 +357,14 @@ def test_report_ranks_all_defects_and_preserves_unknowns(
                 {"name": "small.absent", "kind": "function"},
             ]
         elif name == "unavailable":
-            errors = ["unavailable: ImportError: platform"]
+            return name, {
+                "items": [],
+                "errors": [],
+                "unavailable": ["unavailable: ImportError: platform"],
+                "available": False,
+            }
+        elif name == "broken":
+            errors = ["broken: TimeoutExpired: slow"]
         return name, {"items": items, "errors": errors}
 
     monkeypatch.setattr(audit, "inspect_module", inspect)
@@ -257,17 +378,21 @@ def test_report_ranks_all_defects_and_preserves_unknowns(
             **{f"large.item{i}": "attribute" for i in range(30)},
         }
     )
-    report = audit.generate_api_report(tmp_path, ["small", "large", "unavailable"], manifest)
+    report = audit.generate_api_report(
+        tmp_path, ["small", "large", "unavailable", "broken"], manifest
+    )
     assert [(page["file"], page["defects"]) for page in report["pages"]] == [
         ("docs/stdlib/large.md", 31),
         ("docs/stdlib/small.md", 1),
     ]
-    assert report["inspection_errors"] == ["unavailable: ImportError: platform"]
+    assert report["inspection_errors"] == ["broken: TimeoutExpired: slow"]
+    assert report["import_errors"] == ["unavailable: ImportError: platform"]
     audit.print_api_report(report)
     output = capsys.readouterr().out
     assert "large.item29" in output
     assert "MISSING FILE" in output
-    assert "coverage unknown" in output
+    assert "INSPECTION ERRORS (coverage unknown)\n  - broken: TimeoutExpired" in output
+    assert "not a gate failure)\n  - unavailable: ImportError: platform" in output
 
 
 def test_discovery_stays_in_stdlib_and_finds_submodules(
@@ -282,12 +407,34 @@ def test_discovery_stays_in_stdlib_and_finds_submodules(
     tests = package / "tests"
     tests.mkdir()
     (tests / "__init__.py").touch()
+    (tests / "test_child.py").touch()
+    private = package / "_impl"
+    private.mkdir()
+    (private / "__init__.py").touch()
+    (private / "public.py").touch()
     (tmp_path / "third_party.py").touch()
     monkeypatch.setattr(audit, "get_all_stdlib_modules", lambda: ["probe", "unavailable"])
     monkeypatch.setattr(audit.sysconfig, "get_path", lambda _: str(tmp_path))
-    modules, excluded = audit.discover_modules()
-    assert modules == ["probe", "probe.child", "unavailable"]
-    assert excluded == ["probe.__main__", "probe.tests"]
+    assert audit.discover_modules() == [
+        "probe",
+        "probe.child",
+        "probe.tests",
+        "probe.tests.test_child",
+        "unavailable",
+    ]
+
+
+def test_only_single_underscore_top_level_modules_lack_pages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    names = frozenset({"_thread", "__future__", "sre_parse", "pydoc_data", "antigravity"})
+    monkeypatch.setattr(audit.sys, "stdlib_module_names", names)
+    assert audit.get_all_stdlib_modules() == [
+        "__future__",
+        "antigravity",
+        "pydoc_data",
+        "sre_parse",
+    ]
 
 
 def test_structured_singleton_members() -> None:
@@ -329,36 +476,66 @@ def test_uppercase_constants_are_excluded(module_name: str) -> None:
     assert {item["name"] for item in audit.inspect_public_api(control)["items"]} == set()
 
 
-def test_encodings_keeps_registry_and_aliases_but_excludes_codec_bindings() -> None:
+def test_encodings_keeps_codec_module_bindings() -> None:
     module = ModuleType("encodings")
     vars(module).update(
         cp865=ModuleType("encodings.cp865"),
-        utf_8=ModuleType("encodings.utf_8"),
         aliases=ModuleType("encodings.aliases"),
-        sys=ModuleType("sys"),
         normalize_encoding=lambda value: value,
     )
     result = audit.inspect_public_api(module)
     assert result["errors"] == []
-    assert {item["name"] for item in result["items"]} == {
-        "encodings.aliases",
-        "encodings.sys",
-        "encodings.normalize_encoding",
+    assert {item["name"]: item["identity"] for item in result["items"]} == {
+        "encodings.aliases": "encodings.aliases",
+        "encodings.cp865": "encodings.cp865",
+        "encodings.normalize_encoding": "encodings.normalize_encoding",
     }
 
 
-def test_codec_modules_are_excluded_from_discovery(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_codec_modules_are_discovered(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     package = tmp_path / "encodings"
     package.mkdir()
-    for name in ("__init__", "cp865", "utf_8", "aliases"):
+    for name in ("__init__", "cp865", "utf_8", "aliases", "_private"):
         (package / f"{name}.py").touch()
     monkeypatch.setattr(audit, "get_all_stdlib_modules", lambda: ["encodings"])
     monkeypatch.setattr(audit.sysconfig, "get_path", lambda _: str(tmp_path))
-    modules, excluded = audit.discover_modules()
-    assert modules == ["encodings", "encodings.aliases"]
-    assert excluded == ["encodings.cp865", "encodings.utf_8"]
+    assert audit.discover_modules() == [
+        "encodings",
+        "encodings.aliases",
+        "encodings.cp865",
+        "encodings.utf_8",
+    ]
+
+
+def test_undocumented_codec_members_need_classification_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "docs" / "stdlib").mkdir(parents=True)
+    (tmp_path / "docs" / "stdlib" / "encodings.md").write_text("`encodings.idna`: ToASCII")
+    manifest = public_manifest(
+        {"encodings": "module", "encodings.idna": "module", "encodings.idna.ToASCII": "function"}
+    )
+
+    def inspect(name: str) -> tuple[str, dict]:
+        members = {"encodings.idna": ["ToASCII", "Codec"], "encodings.cp865": ["Codec"]}
+        return name, {
+            "items": [
+                {"name": f"{name}.{member}", "kind": "class"} for member in members.get(name, [])
+            ],
+            "errors": [],
+        }
+
+    monkeypatch.setattr(audit, "inspect_module", inspect)
+    report = audit.generate_api_report(
+        tmp_path, ["encodings", "encodings.cp865", "encodings.idna"], manifest
+    )
+    assert report["missing_names"] == 0
+    assert audit.api_gate_passes(report)
+    assert [item["name"] for item in report["needs_classification"]] == [
+        "encodings.cp865",
+        "encodings.cp865.Codec",
+        "encodings.idna.Codec",
+    ]
 
 
 class Override(Example):
@@ -711,7 +888,14 @@ def test_page_gate_includes_submodules_and_preserves_review_diagnostics(
 
     def inspect(name: str) -> tuple[str, dict]:
         if name == "other":
-            return name, {"items": [], "errors": ["other: ImportError: unavailable"]}
+            return name, {"items": [], "errors": ["other: TimeoutExpired: slow"]}
+        if name == "probe.gone":
+            return name, {
+                "items": [],
+                "errors": [],
+                "unavailable": ["probe.gone: ImportError: platform"],
+                "available": False,
+            }
         names = ["present", "absent", "unclassified"] if name == "probe.child" else []
         return name, {
             "items": [{"name": f"{name}.{member}", "kind": "function"} for member in names],
@@ -721,36 +905,62 @@ def test_page_gate_includes_submodules_and_preserves_review_diagnostics(
     monkeypatch.setattr(audit, "inspect_module", inspect)
 
     def scoped() -> dict:
-        report = audit.generate_api_report(tmp_path, ["probe", "probe.child", "other"], manifest)
+        report = audit.generate_api_report(
+            tmp_path, ["probe", "probe.child", "probe.gone", "other"], manifest
+        )
         return audit.page_api_report(tmp_path, report, "docs/stdlib/probe.md")
 
     report = scoped()
     assert report["missing_names"] == 1
     assert not audit.api_gate_passes(report)
     assert not report["inspection_errors"]
+    assert report["import_errors"] == ["probe.gone: ImportError: platform"]
     assert [item["name"] for item in report["unresolved_documented"]] == ["probe.child.unavailable"]
     assert [item["name"] for item in report["needs_classification"]] == ["probe.child.unclassified"]
     page.write_text(page.read_text() + " absent")
     report = scoped()
-    assert audit.api_gate_passes(report)
+    assert audit.api_gate_passes(report)  # The import error does not block the gate.
     assert report["unresolved_documented"]  # Passing name coverage still needs human review.
     assert not audit.api_gate_passes(audit.page_api_report(tmp_path, report, "docs/stdlib/typo.md"))
+    (docs / "quiet.md").write_text("A module the official inventory documents no names in.")
+    quiet = audit.page_api_report(tmp_path, report, "docs/stdlib/quiet.md")
+    assert (quiet["total_names"], quiet["page_exists"]) == (0, True)
+    assert audit.api_gate_passes(quiet)
+    quiet["inspection_errors"] = ["quiet: TimeoutExpired"]
+    assert not audit.api_gate_passes(quiet)
     report["inspection_errors"] = ["probe.child: TimeoutExpired"]
     assert not audit.api_gate_passes(report)
     report["inspection_errors"] = []
     report["manifest"] = {"available": False}
     assert not audit.api_gate_passes(report)
+    repo_wide = {
+        "manifest": {"available": True},
+        "total_names": 0,
+        "missing_names": 0,
+        "inspection_errors": [],
+    }
+    assert not audit.api_gate_passes(repo_wide)  # Only a page scope may be empty.
 
 
-@pytest.mark.parametrize(("missing", "expected"), [(0, 0), (1, 1)])
+@pytest.mark.parametrize(
+    ("missing", "missing_pages", "expected"), [(0, [], 0), (1, [], 1), (0, ["sre_parse"], 1)]
+)
 def test_check_exit_status_and_json_output(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], missing: int, expected: int
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    missing: int,
+    missing_pages: list[str],
+    expected: int,
 ) -> None:
     import json
     import sys
 
     monkeypatch.setattr(sys, "argv", ["audit", "--check", "--json"])
-    monkeypatch.setattr(audit, "generate_audit_report", lambda root: {})
+    monkeypatch.setattr(
+        audit,
+        "generate_audit_report",
+        lambda root: {"builtins": {"missing": []}, "stdlib": {"missing": missing_pages}},
+    )
     monkeypatch.setattr(
         audit,
         "generate_api_report",
@@ -765,3 +975,58 @@ def test_check_exit_status_and_json_output(
         audit.main()
     assert exc.value.code == expected
     assert json.loads(capsys.readouterr().out)["api"]["missing_names"] == missing
+
+
+@pytest.mark.parametrize(("missing_pages", "expected"), [([], 0), (["pydoc_data"], 1)])
+def test_pages_only_check_gates_pages_without_the_api_audit(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    missing_pages: list[str],
+    expected: int,
+) -> None:
+    import sys
+
+    def no_api(root: Path) -> dict:
+        raise AssertionError("--pages-only must not run the API audit")
+
+    monkeypatch.setattr(sys, "argv", ["audit", "--pages-only", "--check"])
+    monkeypatch.setattr(audit, "generate_api_report", no_api)
+    monkeypatch.setattr(audit, "print_report", lambda report: None)
+    monkeypatch.setattr(
+        audit,
+        "generate_audit_report",
+        lambda root: {"builtins": {"missing": []}, "stdlib": {"missing": missing_pages}},
+    )
+    with pytest.raises(SystemExit) as exc:
+        audit.main()
+    assert exc.value.code == expected
+    output = capsys.readouterr().out
+    assert ("Page gate: PASS" in output) is (expected == 0)
+    assert "API gate" not in output
+
+
+@pytest.mark.parametrize(
+    ("total", "missing", "line"),
+    [
+        (0, 0, "API gate: PASS (no official API names checked for this page)"),
+        (3, 0, "API gate: PASS"),
+        (3, 1, "API gate: FAIL (misses or unknown/empty coverage)"),
+    ],
+)
+def test_page_gate_says_when_it_checked_no_names(
+    capsys: pytest.CaptureFixture[str], total: int, missing: int, line: str
+) -> None:
+    import argparse
+
+    report = {
+        "api": {
+            "manifest": {"available": True},
+            "total_names": total,
+            "missing_names": missing,
+            "inspection_errors": [],
+            "page_exists": True,
+        }
+    }
+    args = argparse.Namespace(page="docs/stdlib/probe.md", pages_only=False, json=False)
+    assert audit.gates_pass(report, args) is (missing == 0)
+    assert capsys.readouterr().out.splitlines() == [line]

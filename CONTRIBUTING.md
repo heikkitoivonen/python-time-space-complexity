@@ -73,7 +73,10 @@ a large case count does not necessarily imply a long runtime.
 Run `make audit` to print coverage for the current interpreter and English
 `docs/builtins/` and `docs/stdlib/` trees. Discovery uses the `builtins` namespace
 and `sys.stdlib_module_names`; totals depend on the Python version running the
-command. The command does not write files.
+command. The command does not write files. It fails unless every builtin, every
+stdlib module and every documented public API name is covered; modules that
+cannot be imported on this platform are listed but do not fail it. `make check`
+runs it.
 
 When adding a page, follow the documentation style below and add its path to
 `mkdocs.yml` navigation. Run `make check` before submitting. Live tests name any

@@ -55,8 +55,9 @@ Not settled here:
   `webbrowser.open()` run, are limited to Linux and skip elsewhere.
 * The module-level names `webbrowser` and `hashlib` are the imported modules,
   not API of this one, and are not documented. The shared public API audit
-  excludes `antigravity` because importing it opens a browser, so its name
-  coverage is this page's two tables, not the audit.
+  reads `antigravity` from source, because importing it opens a browser, and
+  the official API inventory lists no name inside it, so the audit checks only
+  that this page exists; its name coverage is the page's two tables.
 * `latitude` and `longitude` are ordinary degree values throughout; a float
   whose integer part has hundreds of digits would make `%d` formatting the
   cost, and is not measured.

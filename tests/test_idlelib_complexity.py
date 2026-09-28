@@ -68,9 +68,9 @@ Not settled here:
   needs no `DISPLAY`, so the tests that rely on it skip there.
 * The private modules - the editor, shell, colorizer, debugger and the rest
   of idlelib - are not documented, as the package docstring and PEP 434 mark
-  them as implementation that can change in a bugfix release. The shared
-  public API audit excludes `idlelib` as a program, so the page's table is
-  its name coverage.
+  them as implementation that can change in a bugfix release. The official
+  API inventory lists no name inside `idlelib`, so the shared public API audit
+  checks only that this page exists; the page's table is its name coverage.
 """
 
 from __future__ import annotations

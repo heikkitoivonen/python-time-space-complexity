@@ -25,9 +25,10 @@ unclassified runtime discoveries in a separate report section; `__all__` is
 supporting evidence for review, not automatic promotion to the actionable list.
 Only explicitly documented instance attributes supplement runtime inspection.
 Unavailable or unresolved documented APIs are listed separately. Constants,
-class dunders, individual codecs, single-underscore top-level modules such as
-`_thread` and `_tkinter` with their submodules, and the audit's program
-exclusions still apply.
+class dunders, and single-underscore modules such as `_thread` and `_tkinter`
+with their submodules, and `__main__` entry points, are excluded. `antigravity`
+and `idlelib.idle` are audited from their source, because importing them runs a
+program.
 A name mention is coverage evidence, not verification of a complexity claim.
 
 A manifest applies to its Python minor version. If no matching snapshot exists,
@@ -63,8 +64,14 @@ uv run python scripts/audit_documentation.py --page docs/stdlib/os.md --check --
 
 Page scope includes submodules assigned to that page and preserves cross-module
 alias deduplication. `--check` exits with status 1 for missing APIs, an empty
-scope, an unavailable manifest, or inspection errors in scope. Without `--check`,
-the audit remains informational. `--json` works with both options.
+scope on a page path that does not exist, an unavailable manifest, or inspection
+errors in scope. An existing page with an empty scope, such as `sre_parse.md`,
+passes and says no names were checked; its unresolved and needs-classification
+lists are then all there is to review. Import errors -
+a module this platform or build cannot import - are listed separately and do not
+fail it. Without `--page`, `--check` also fails on a builtin or stdlib module
+without a page; `make audit` runs it that way. Without `--check`, the audit
+remains informational. `--json` works with both options.
 
 A passing gate establishes name coverage only. Review the remaining unresolved
 and unclassified diagnostics explicitly, including version/platform limitations;

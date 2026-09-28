@@ -233,7 +233,10 @@ Runtime inspection and official documentation still supplement inventory gaps.
 Resolve every reported miss with substantive documentation or correct an audit
 classification/matching defect with a regression test. Group related APIs when
 they share a bound. Do not add token mentions to obtain a pass, silently suppress
-names, or treat an inspection failure or empty inventory as zero misses.
+names, or treat an inspection failure or empty inventory as zero misses. A page
+whose modules have no names in the official inventory (`sre_parse.md`) passes
+with "no official API names checked for this page": the gate then checks nothing, and
+the needs-classification list is the whole inventory the page must account for.
 
 The gate checks name coverage, not complexity correctness. Review the scoped
 unresolved/unavailable and unclassified diagnostics too; record explicit names
@@ -248,11 +251,11 @@ coverage.
 
 Some modules cannot be imported where the work is happening: `winreg`, `msvcrt`
 and `asyncio.windows_events` on Linux, and their equivalents elsewhere. The
-audit reports each as an inspection error, and its exit status counts every
-inspection error as a failure. That conflates two different things, and only
-one of them is yours to fix.
+audit lists each under import errors, apart from inspection errors, and import
+errors do not fail `--check`. A green exit therefore does not say which of two
+different things an import error is, and only one of them is yours to fix.
 
-Sort each inspection error into one of three classes:
+Sort each import error into one of three classes:
 
 - **Imports here.** The ordinary case, including your own platform's APIs. A
   miss or a failing test is a blocker.
@@ -266,18 +269,18 @@ Sort each inspection error into one of three classes:
   would surface real misses. Record it as unresolved, under that name, and do
   not report the module's coverage as established.
 
-So a `--check` run reporting **zero missing names** whose only inspection
-errors are foreign-platform modules has met the coverage bar, whatever its exit
-status says. Report it that way - "0 missing; the gate cannot exit clean on
-Linux because these two modules are Windows-only" - rather than presenting a
-red gate as an open coverage gap, or implying a green one the tool cannot
-produce. Never quote the exit status alone as evidence in either direction:
-read the missing-name count and the error list. Where a missing-build module is
-among the errors, say that the count is provisional on that build.
+So a `--check` run reporting **zero missing names** whose only import errors
+are foreign-platform modules has met the coverage bar. Report it that way - "0
+missing; these two modules are Windows-only and were not inspected" - rather
+than letting a green exit imply they were covered. Never quote the exit status
+alone as evidence: read the missing-name count and both error lists. Where a
+missing-build module is among the import errors, say that the count is
+provisional on that build. Any error under inspection errors - a timeout, a
+binding that raises - fails the gate and is yours to fix.
 
 What this does not license: a reachable module that fails to import is a real
-failure, and an inspection error is never a reason to skip reading the official
-inventory for that module's APIs. A page still documents the APIs its module
+failure even though the gate stays green, and an import error is never a reason
+to skip reading the official inventory for that module's APIs. A page still documents the APIs its module
 exposes on platforms you are not running, sourced from the official docs, with
 the platform named in the row.
 
@@ -348,9 +351,11 @@ unit tests even when a generic code-block runner also executes the example.
 
 1. Add the English page to the appropriate alphabetized navigation section in
    `mkdocs.yml`.
-2. Run `make audit` to print live coverage without writing files. Coverage tests
-   compare the current interpreter with the English documentation tree; CI also
-   checks the pinned newest supported Python patch. Preserve navigation targets
+2. Run `make audit` to check live coverage without writing files; it fails
+   unless every builtin, stdlib module and public API name is covered, and
+   `make check` runs it. Coverage tests compare the current interpreter with
+   the English documentation tree; CI also checks the pinned newest supported
+   Python patch. Preserve navigation targets
    for historical modules even when the current interpreter no longer has them.
 3. Look for existing translations at the equivalent `docs/<locale>/...` path.
    If they exist, faithfully mirror the English change and run:

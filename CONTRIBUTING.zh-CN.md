@@ -1,4 +1,4 @@
-<!-- source_sha: 7c21ccea674eb146b27732caa56e963c4f20603a75e50f18bca8af6f82490da6 -->
+<!-- source_sha: 9f5e66723312da84fded429bb1bdeacd75a7e832eb9f31a851cb1260b3013083 -->
 <!-- translated: machine -->
 
 [English](CONTRIBUTING.md) | **简体中文**
@@ -63,7 +63,7 @@ uv run pytest tests/test_audit_public_api.py
 
 ## 文档覆盖率
 
-运行 `make audit`，查看当前解释器以及英文 `docs/builtins/` 和 `docs/stdlib/` 目录的覆盖率。发现逻辑使用 `builtins` 命名空间和 `sys.stdlib_module_names`；总数取决于运行命令的 Python 版本。该命令不会写入文件。
+运行 `make audit`，查看当前解释器以及英文 `docs/builtins/` 和 `docs/stdlib/` 目录的覆盖率。发现逻辑使用 `builtins` 命名空间和 `sys.stdlib_module_names`；总数取决于运行命令的 Python 版本。该命令不会写入文件。只要有任何内置项、标准库模块或已文档化的公共 API 名称未被覆盖，它就会失败；无法在当前平台导入的模块会被列出，但不会导致失败。`make check` 会运行它。
 
 添加页面时，请遵循下方文档风格指南，并将其路径加入 `mkdocs.yml` 导航。提交前运行 `make check`。实时测试会列出缺少文档的内置项或标准库模块，CI 也会在固定的最新受支持 Python 补丁版本上运行覆盖率测试。页面覆盖率并不代表 API 覆盖完整，也不能证明复杂度声明；这些需要有针对性的测试。
 

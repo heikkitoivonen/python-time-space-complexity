@@ -28,10 +28,11 @@ help:
 	@echo "  make lint        Run ruff linter"
 	@echo "  make format      Format code with ruff"
 	@echo "  make types       Run pyright type checker"
-	@echo "  make check       Run lint, types, skill checks, and tests"
+	@echo "  make check       Run lint, types, skill checks, tests, and the coverage audit"
 	@echo "  make test        Run checks with automatic workers, then timing/serial tests"
 	@echo "                   Override with TEST_WORKERS=N (0 disables workers)"
-	@echo "  make audit       Print live documentation coverage (no files written)"
+	@echo "  make audit       Print live documentation coverage and fail below 100%"
+	@echo "                   (no files written; import errors do not fail it)"
 	@echo "  make skills-build    Build the offline skill in build/skills/"
 	@echo "  make skills-check    Validate the generated skill"
 	@echo "  make skills-package  Create release ZIPs and checksums in dist/skills/"
@@ -81,7 +82,7 @@ format:
 types:
 	uv run pyright
 
-check: lint types skills-check test
+check: lint types skills-check test audit
 
 skills-build:
 	uv run python scripts/build_skills.py build
@@ -102,7 +103,7 @@ test:
 	uv run pytest -m "timing or serial" -n 0
 
 audit:
-	uv run python scripts/audit_documentation.py
+	uv run python scripts/audit_documentation.py --check
 
 clean:
 	rm -rf site/

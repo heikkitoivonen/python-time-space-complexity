@@ -226,25 +226,32 @@ uv add --dev package-name
 ### Adding Documentation
 1. Create markdown file in `/docs`
 2. Update navigation in `mkdocs.yml`
-3. Run `make audit` to inspect live documentation coverage
+3. Run `make audit` to check live documentation coverage
 4. Run `make serve` to preview
 5. Run `make check` to verify
 6. Commit with message: `Add: Topic name documentation`
 
 Coverage tests compare the current interpreter's builtins and standard library
-with the current English documentation tree. Run `make audit` for a readable
-report; it prints results without writing files. Keep every navigation target,
+with the current English documentation tree. `make audit` prints a readable
+report without writing files, and fails unless builtins, stdlib modules and the
+public API are all at 100%. `make check` runs it. Keep every navigation target,
 including pages for removed modules and EOL Python versions. CI also checks
 coverage on the pinned newest supported Python patch.
 
+Only single-underscore modules such as `_thread` and `python -m` entry points
+(`json.__main__`) are outside the audit. `__future__`, `pydoc_data`, the
+`sre_*` shims, every `encodings` codec, `idlelib`, `turtledemo` and
+`antigravity` are all in it. `antigravity` and `idlelib.idle` run a program on
+import, so the audit reads their names from source instead of importing them. The generic codec classes
+each `encodings` module repeats are not in the official API inventory, so they
+land under needs-classification rather than as misses.
+
 Local work and CI both run on Linux, so a module that only exists on another
-platform - `winreg`, `msvcrt`, `asyncio.windows_events` - is reported as an
-inspection error on every run and fails the audit's exit status even when no
-name is missing. That is a platform limit, not a coverage gap: read the
-missing-name count, name those modules in the module's test rationale, and do
-not chase a green exit that cannot happen here. A module that imports on Linux
-is the opposite - a miss or failure there is a blocker. This applies to the
-audit only; `make check` must still pass.
+platform - `winreg`, `msvcrt`, `asyncio.windows_events` - is reported under
+import errors on every run. Import errors do not fail the audit: they are a
+platform limit, not a coverage gap. Name those modules in the module's test
+rationale. Any other inspection error (a timeout, a binding that raises) does
+fail it, and a module that imports on Linux is a blocker when it has a miss.
 
 ### Editing an English Page That Has Translations
 

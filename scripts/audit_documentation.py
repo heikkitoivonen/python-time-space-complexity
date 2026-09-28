@@ -67,19 +67,9 @@ def get_all_stdlib_modules() -> list[str]:
     here: it walks ``sys.path``, so installed third-party packages and this
     repository's own ``scripts/`` modules would be counted as stdlib and the
     reported coverage would drift with whatever happens to be installed.
+    Only single-underscore implementation modules such as ``_thread`` are left out.
     """
-    non_public = {
-        "pydoc_data",
-        "sre_compile",
-        "sre_constants",
-        "sre_parse",
-    }
-
-    return sorted(
-        name
-        for name in sys.stdlib_module_names
-        if not name.startswith("_") and name not in non_public
-    )
+    return sorted(name for name in sys.stdlib_module_names if not is_private_module(name))
 
 
 def get_documented_files(docs_dir: Path) -> dict[str, list[str]]:
@@ -229,12 +219,11 @@ def print_report(report: dict[str, Any]) -> None:
     print("\n" + "=" * 70)
 
 
-# These are programs, demonstrations, or test suites, not importable library APIs.
-# Keep every exclusion visible in the report; never import executable entry points.
-EXCLUDED_COMPONENTS = {"test", "tests", "__main__"}
 # These builtin APIs remain public despite their underscore spelling.
 SPECIAL_BUILTINS = {"__import__"}
-EXCLUDED_PACKAGES = {"antigravity", "idlelib", "turtledemo"}
+# Importing these runs a program (antigravity opens a web browser, idlelib.idle starts
+# IDLE), so their names are read from source instead.
+PROGRAM_MODULES = {"antigravity", "idlelib.idle"}
 BUILTIN_PAGES = {
     "bytearray": "bytearray_func",
     "complex": "complex_func",
@@ -268,53 +257,53 @@ def is_private_module(name: str) -> bool:
     return top.startswith("_") and not top.startswith("__")
 
 
+def in_private_module(name: str) -> bool:
+    """A module is private when any component of its dotted name has one leading underscore."""
+    return any(part.startswith("_") and not part.startswith("__") for part in name.split("."))
+
+
 def undocumented_private(name: str, apis: dict[str, Any]) -> bool:
     """A single-underscore name counts only when the official inventory documents it."""
     last = name.rsplit(".", 1)[-1]
     return last.startswith("_") and not last.startswith("__") and name not in apis
 
 
-def is_codec_module(name: str) -> bool:
-    """Individual codec implementations are outside the audit; retain alias metadata."""
-    return name.startswith("encodings.") and name != "encodings.aliases"
+def runs_program(name: str) -> bool:
+    """A program module executes on import, so it is inspected from source."""
+    return name in PROGRAM_MODULES
 
 
-def excluded_binding(obj: Any, kind: str) -> bool:
-    """Omit constants and bindings to individual codec modules."""
-    return (kind == "constant") or (isinstance(obj, ModuleType) and is_codec_module(obj.__name__))
+def is_entry_point(name: str) -> bool:
+    """``python -m`` entry points (``json.__main__``) are programs, not library API."""
+    return "__main__" in name.split(".")
 
 
-def discover_modules() -> tuple[list[str], list[str]]:
+def discover_modules() -> list[str]:
     """Discover installed stdlib submodules without importing their parents.
 
     Only search package directories beneath the interpreter's stdlib directory,
     never sys.path (which includes project code and third-party packages).
-    Platform-unavailable top-level modules remain in the inventory.
+    Platform-unavailable top-level modules remain in the inventory. Submodules
+    whose own name has a single leading underscore are skipped with their children,
+    and so are ``__main__`` entry points.
     """
     found = set(get_all_stdlib_modules())
-    excluded: set[str] = set()
     stdlib = Path(sysconfig.get_path("stdlib"))
 
     def walk(directory: Path, prefix: str) -> None:
         for info in pkgutil.iter_modules([str(directory)]):
-            name = prefix + info.name
-            if (
-                info.name in EXCLUDED_COMPONENTS
-                or name.split(".")[0] in EXCLUDED_PACKAGES
-                or is_codec_module(name)
+            if info.name == "__main__" or (
+                info.name.startswith("_") and not info.name.startswith("__")
             ):
-                excluded.add(name)
-            elif not info.name.startswith("_"):
-                found.add(name)
-                if info.ispkg:
-                    walk(directory / info.name, name + ".")
+                continue
+            found.add(prefix + info.name)
+            if info.ispkg:
+                walk(directory / info.name, prefix + info.name + ".")
 
     for name in sorted(found):
-        if name in EXCLUDED_PACKAGES:
-            excluded.add(name)
-        elif (stdlib / name / "__init__.py").is_file():
+        if (stdlib / name / "__init__.py").is_file():
             walk(stdlib / name, name + ".")
-    return sorted(found - excluded), sorted(excluded)
+    return sorted(found)
 
 
 @cache
@@ -615,11 +604,12 @@ def inspect_public_api(
     in __all__ counts only when the official inventory documents it under the module's
     own __name__. Re-exported names are included, even when they may be implementation
     imports. Class dunder members and constants are excluded; __import__ remains included
-    as a builtin API.
+    as a builtin API. A ``__main__`` binding is never resolved: that would run the program.
     No API functions or constructors are called; descriptors are inspected statically.
     """
     items: list[dict[str, Any]] = []
     errors: list[str] = []
+    unavailable: list[str] = []
     excluded_names: list[str] = []
     apis = load_public_manifest()["apis"] if public_apis is None else public_apis
     hints = attribute_hints(apis)
@@ -627,7 +617,7 @@ def inspect_public_api(
 
     def visit(name: str, obj: Any, ancestors: tuple[type, ...] = ()) -> None:
         kind = api_kind(name, obj, bool(ancestors))
-        if "__main__" in name.split(".") or excluded_binding(obj, kind):
+        if kind == "constant":
             excluded_names.append(name)
             return
         record: dict[str, Any] = binding_record(
@@ -648,7 +638,7 @@ def inspect_public_api(
             visit(f"{name}.{member}", value, (*ancestors, obj))
 
     names = set(dir(module)) | exports
-    for name in sorted(names):
+    for name in sorted(names - {"__main__"}):
         if (
             name.startswith("_")
             and (name not in exports or undocumented_private(f"{module.__name__}.{name}", apis))
@@ -659,8 +649,78 @@ def inspect_public_api(
             value = public_binding(module, name)
             visit(f"{module.__name__}.{name}", value)
         except Exception as exc:
-            errors.append(f"{module.__name__}.{name}: {type(exc).__name__}: {exc}")
-    return {"items": items, "errors": errors, "available": True, "excluded_names": excluded_names}
+            message = f"{module.__name__}.{name}: {type(exc).__name__}: {exc}"
+            (unavailable if isinstance(exc, ImportError) else errors).append(message)
+    return {
+        "items": items,
+        "errors": errors,
+        "unavailable": unavailable,
+        "available": True,
+        "excluded_names": excluded_names,
+    }
+
+
+def source_definitions(module: ast.Module, name: str) -> list[tuple[str, str]]:
+    """Name and kind of each public top-level definition, without executing anything."""
+    found: list[tuple[str, str]] = []
+    for node in module.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            found.append((node.name, "function"))
+        elif isinstance(node, ast.ClassDef):
+            found.append((node.name, "class"))
+            found.extend(
+                (f"{node.name}.{member.name}", "method")
+                for member in node.body
+                if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and not member.name.startswith("_")
+            )
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            found.extend(
+                (target.id, "attribute")
+                for target in targets
+                if isinstance(target, ast.Name) and not target.id.isupper()
+            )
+    return [
+        (f"{name}.{relative}", kind)
+        for relative, kind in found
+        if not relative.split(".")[0].startswith("_")
+    ]
+
+
+def inspect_program_source(name: str) -> dict[str, Any]:
+    """List a program module's top-level definitions from its source, without running it.
+
+    Functions, classes with their public methods, and assignments to a single
+    non-constant name count. Imported names and anything bound inside a statement
+    such as ``if __name__ == "__main__":`` do not.
+    """
+    spec = importlib.util.find_spec(name)
+    if spec is None:
+        raise ModuleNotFoundError(f"No module named {name!r}", name=name)
+    origin = spec.origin
+    if origin is None or not origin.endswith(".py"):
+        # It exists but cannot be read without running it: coverage is unknown.
+        raise ValueError(f"no Python source to read for program module {name!r}")
+    tree = ast.parse(Path(origin).read_text(encoding="utf-8"))
+    return {
+        "items": [
+            {
+                "name": qualified,
+                "kind": kind,
+                "identity": qualified,
+                "canonical": qualified,
+                "definition": qualified.removeprefix(name + "."),
+                "exported": False,
+            }
+            for qualified, kind in source_definitions(tree, name)
+        ],
+        "errors": [],
+        "unavailable": [],
+        "available": True,
+        "excluded_names": [],
+        "module_identity": name,
+    }
 
 
 def load_inspection_module(name: str) -> ModuleType:
@@ -680,6 +740,8 @@ def inspect_module_worker(name: str) -> dict[str, Any]:
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
+                if runs_program(name):
+                    return inspect_program_source(name)
                 module = load_inspection_module(name)
                 result = inspect_public_api(module)
                 result["module_identity"] = module.__name__
@@ -691,7 +753,16 @@ def inspect_module_worker(name: str) -> dict[str, Any]:
                     ]
                 return result
     except BaseException as exc:
-        return {"items": [], "errors": [f"{name}: {type(exc).__name__}: {exc}"], "available": False}
+        # A module that cannot be imported here (another platform, an optional
+        # extension this build lacks) is unavailable, not a coverage failure.
+        message = f"{name}: {type(exc).__name__}: {exc}"
+        failed = isinstance(exc, ImportError)
+        return {
+            "items": [],
+            "errors": [] if failed else [message],
+            "unavailable": [message] if failed else [],
+            "available": False,
+        }
 
 
 def inspect_module(name: str) -> tuple[str, dict[str, Any]]:
@@ -897,18 +968,16 @@ def unresolved_documented(
 ) -> list[dict[str, str]]:
     """Keep unobserved documented APIs visible without treating them as missing docs."""
     result = []
+    private = {name for name, entry in apis.items() if entry["kind"] == "module"}
+    private = {name for name in private if in_private_module(name)}
     for name, entry in sorted(apis.items()):
         if (
             name in seen
-            or "__main__" in name.split(".")
             or (entry["kind"] == "attribute" and name.rsplit(".", 1)[-1].isupper())
-            or is_codec_module(name)
             or is_private_module(name)
-        ):
-            continue
-        if (
-            name.removeprefix("builtins.") in BUILTIN_CONSTANTS
-            or name.split(".")[0] in EXCLUDED_PACKAGES
+            or is_entry_point(name)
+            or any(name == module or name.startswith(module + ".") for module in private)
+            or name.removeprefix("builtins.") in BUILTIN_CONSTANTS
         ):
             continue
         if not any(name == module or name.startswith(module + ".") for module in modules):
@@ -926,30 +995,13 @@ def unresolved_documented(
 def audited_modules(
     modules: list[str] | None, public_apis: dict[str, Any]
 ) -> tuple[list[str], list[str]]:
-    """Inspect documented modules plus discoveries, preserving explicit exclusions."""
-    discovered, excluded = discover_modules() if modules is None else (modules, [])
+    """Inspect documented modules plus discoveries, less private modules and entry points."""
+    discovered = set(discover_modules() if modules is None else modules)
     if modules is None:
-        discovered = sorted(
-            set(discovered)
-            | {
-                name
-                for name, entry in public_apis.items()
-                if entry["kind"] == "module" and name.split(".")[0] not in EXCLUDED_PACKAGES
-            }
-        )
-    excluded = sorted(
-        set(excluded)
-        | {name for name in discovered if is_codec_module(name) or is_private_module(name)}
-    )
-    excluded = [name for name in excluded if "__main__" not in name.split(".")]
-    discovered = [
-        name
-        for name in discovered
-        if not is_codec_module(name)
-        and not is_private_module(name)
-        and "__main__" not in name.split(".")
-    ]
-    return discovered, excluded
+        discovered |= {name for name, entry in public_apis.items() if entry["kind"] == "module"}
+    discovered = {name for name in discovered if not is_entry_point(name)}
+    excluded = sorted(name for name in discovered if in_private_module(name))
+    return sorted(discovered - set(excluded)), excluded
 
 
 def generate_api_report(
@@ -962,6 +1014,7 @@ def generate_api_report(
     results: dict[str, dict[str, Any]] = {}
     pages: dict[str, dict[str, Any]] = {}
     errors: list[str] = []
+    unavailable: list[str] = []
     with ThreadPoolExecutor(max_workers=8) as pool:
         for module, result in pool.map(inspect_module, sorted(set(discovered) | {"builtins"})):
             results[module] = result
@@ -971,6 +1024,7 @@ def generate_api_report(
     groups: dict[str, list[dict[str, Any]]] = {}
     for module, result in sorted(results.items()):
         errors.extend(result["errors"])
+        unavailable.extend(result.get("unavailable", []))
         items = list(result["items"])
         if (module != "builtins" or module in public_apis) and result.get(
             "available", not result["errors"]
@@ -1048,16 +1102,17 @@ def generate_api_report(
         "deduplicated across verified aliases and inheritance. Unclassified runtime discoveries "
         "are reported separately and do not affect rankings; __all__ supplies review evidence only. "
         "Only explicitly documented instance fields are inventoried. Coverage means a name mention, "
-        "not a validated complexity claim. Constants, class dunder members, individual encodings "
-        "codec modules, single-underscore modules such as _thread, and listed programs are "
-        "excluded. Unavailable and unresolved documented APIs are reported separately; no "
-        "constructors are executed.",
+        "not a validated complexity claim. Constants, class dunder members, and single-underscore "
+        "modules such as _thread, and __main__ entry points, are excluded. antigravity and "
+        "idlelib.idle are read from source, not imported. Modules that fail to import on this platform and "
+        "unresolved documented APIs are reported separately; no constructors are executed.",
         "manifest": {key: value for key, value in manifest.items() if key != "apis"},
         "needs_classification": sorted(review, key=lambda item: item["name"]),
         "unresolved_documented": unresolved_documented(public_apis, seen_names, set(results)),
         "modules_inspected": len(results),
         "excluded": excluded,
         "inspection_errors": errors,
+        "import_errors": unavailable,
         "total_names": sum(len(page["items"]) for page in ranked),
         "alias_paths": sum(len(item["aliases"]) for page in ranked for item in page["items"]),
         "unclassified_names": len(review),
@@ -1093,7 +1148,10 @@ def print_api_report(report: dict[str, Any], include_review: bool = False) -> No
     print("\nINSPECTION ERRORS (coverage unknown)")
     for error in report["inspection_errors"]:
         print(f"  - {error}")
-    print("\nEXCLUDED MODULES / PACKAGES")
+    print("\nIMPORT ERRORS (unavailable on this platform; coverage unknown, not a gate failure)")
+    for error in report.get("import_errors", []):
+        print(f"  - {error}")
+    print("\nEXCLUDED MODULES (single leading underscore)")
     for name in report["excluded"]:
         print(f"  - {name}")
 
@@ -1121,11 +1179,10 @@ def page_api_report(root: Path, report: dict[str, Any], page: str) -> dict[str, 
         module = max(prefixes, key=len) if prefixes else name.split(".")[0]
         return documentation_page(root, module, name).relative_to(root).as_posix()
 
-    selected["inspection_errors"] = [
-        error
-        for error in report["inspection_errors"]
-        if target_page(error.split(":", 1)[0]) == page
-    ]
+    for key in ("inspection_errors", "import_errors"):
+        selected[key] = [
+            error for error in report.get(key, []) if target_page(error.split(":", 1)[0]) == page
+        ]
     selected["pages"] = [item for item in report["pages"] if item["file"] == page]
     for key in ("needs_classification", "unresolved_documented"):
         selected[key] = []
@@ -1138,14 +1195,26 @@ def page_api_report(root: Path, report: dict[str, Any], page: str) -> dict[str, 
         len(item["aliases"]) for p in selected["pages"] for item in p["items"]
     )
     selected["unclassified_names"] = len(selected["needs_classification"])
+    selected["page_exists"] = (root / page).is_file()
     return selected
 
 
+def pages_gate_passes(report: dict[str, Any]) -> bool:
+    """Every builtin and stdlib module needs its page."""
+    return not report["builtins"]["missing"] and not report["stdlib"]["missing"]
+
+
 def api_gate_passes(report: dict[str, Any]) -> bool:
-    """Zero misses is meaningful only with an inventory and successful inspection."""
+    """Zero misses is meaningful only with an inventory and successful inspection.
+
+    Import errors do not fail the gate: they mean the module is unavailable here. An
+    empty scope (no inventory name observed for the page) fails unless the page exists,
+    as for sre_parse.md, whose modules the inventory documents nothing in; an empty scope
+    on a mistyped page path still fails.
+    """
     return bool(
         report["manifest"].get("available")
-        and report["total_names"]
+        and (report["total_names"] or report.get("page_exists"))
         and not report["missing_names"]
         and not report["inspection_errors"]
     )
@@ -1163,11 +1232,13 @@ def main() -> None:
     )
     parser.add_argument("--page", help="Scope API results to a repository-relative Markdown page")
     parser.add_argument(
-        "--check", action="store_true", help="Fail on API misses or unknown coverage"
+        "--check",
+        action="store_true",
+        help="Fail on missing pages, API misses, or unknown coverage other than import errors",
     )
     args = parser.parse_args()
-    if args.pages_only and (args.page or args.check):
-        parser.error("--page and --check require the public API audit")
+    if args.pages_only and args.page:
+        parser.error("--page requires the public API audit")
     if args.inspect:
         print(json.dumps(inspect_module_worker(args.inspect)))
         return
@@ -1187,12 +1258,23 @@ def main() -> None:
         if "api" in report:
             print_api_report(report["api"], include_review=args.include_review)
     if args.check:
-        passed = api_gate_passes(report["api"])
-        if not args.json:
-            print(
-                "API gate: PASS" if passed else "API gate: FAIL (misses or unknown/empty coverage)"
-            )
-        raise SystemExit(0 if passed else 1)
+        raise SystemExit(0 if gates_pass(report, args) else 1)
+
+
+def gates_pass(report: dict[str, Any], args: argparse.Namespace) -> bool:
+    """Evaluate and announce the gates in scope; a page-scoped check gates its names only."""
+    pages = bool(args.page) or pages_gate_passes(report)
+    api = args.pages_only or api_gate_passes(report["api"])
+    if not args.json:
+        if not args.page:
+            print("Page gate: PASS" if pages else "Page gate: FAIL (missing pages)")
+        if not args.pages_only and not api:
+            print("API gate: FAIL (misses or unknown/empty coverage)")
+        elif not args.pages_only and not report["api"]["total_names"]:
+            print("API gate: PASS (no official API names checked for this page)")
+        elif not args.pages_only:
+            print("API gate: PASS")
+    return pages and api
 
 
 if __name__ == "__main__":

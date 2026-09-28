@@ -51,7 +51,9 @@ jobs:
         # hand the site build an interpreter no earlier step exercised.
         env:
           UV_PROJECT_ENVIRONMENT: .venv-newest
-        run: uv run --python 3.14.7 --frozen pytest tests/test_documentation_coverage.py
+        run: |
+          uv run --python 3.14.7 --frozen pytest tests/test_documentation_coverage.py
+          uv run --python 3.14.7 --frozen python scripts/audit_documentation.py --check
 
       - name: Build site
         # Not a plain `mkdocs build`: that puts every locale in one tree

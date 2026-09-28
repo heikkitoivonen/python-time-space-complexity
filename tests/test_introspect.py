@@ -3,6 +3,8 @@
 import sys
 from unittest.mock import MagicMock
 
+import pytest
+
 from scripts.introspect import (
     build_item_list,
     find_item_index,
@@ -217,11 +219,13 @@ class TestGetStdlibModules:
         assert "sys" in modules
         assert "json" in modules
 
-    def test_excludes_non_public_modules(self) -> None:
+    def test_only_single_underscore_modules_are_excluded(self) -> None:
         modules = get_stdlib_modules()
-        non_public = ["pydoc_data", "sre_compile", "sre_constants", "sre_parse"]
-        for mod in non_public:
-            assert mod not in modules
+        for mod in ["pydoc_data", "sre_compile", "sre_constants", "sre_parse", "antigravity"]:
+            assert mod in modules
+        assert "__future__" in modules
+        assert "_thread" not in modules
+        assert all(not (m.startswith("_") and not m.startswith("__")) for m in modules)
 
 
 class TestBuildItemList:
@@ -263,12 +267,25 @@ class TestBuildItemList:
         for mod in private_modules:
             assert mod not in names, f"Private module {mod} should be excluded"
 
-    def test_excludes_non_public_stdlib_modules(self) -> None:
+    def test_includes_formerly_skipped_modules(self) -> None:
         items = build_item_list()
         names = [name for name, _ in items]
-        non_public = ["pydoc_data", "sre_compile", "sre_constants", "sre_parse"]
-        for mod in non_public:
-            assert mod not in names, f"Non-public module {mod} should be excluded"
+        for mod in ["pydoc_data", "sre_compile", "sre_constants", "sre_parse", "antigravity"]:
+            assert mod in names, f"Module {mod} should be included"
+
+    def test_antigravity_opens_no_browser(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import webbrowser
+
+        opened: list[str] = []
+        monkeypatch.delitem(sys.modules, "antigravity", raising=False)
+        monkeypatch.setattr(webbrowser, "open", lambda url, *args, **kwargs: opened.append(url))
+        names = [name for name, _ in build_item_list()]
+        assert "antigravity.geohash" in names
+        assert "antigravity" in sys.modules
+        assert opened == []
+        webbrowser.open("probe")
+        assert opened == ["probe"], "the original webbrowser.open must be restored"
+        sys.modules.pop("antigravity", None)
 
     def test_includes_dunder_stdlib_modules(self) -> None:
         """Dunder modules like __future__ should be included."""

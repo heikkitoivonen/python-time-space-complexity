@@ -7,6 +7,8 @@ import contextlib
 import importlib
 import io
 import sys
+import warnings
+import webbrowser
 from types import ModuleType
 
 
@@ -21,16 +23,37 @@ def suppress_stdout():
         sys.stdout = old_stdout
 
 
+@contextlib.contextmanager
+def no_browser():
+    """Make webbrowser.open() a no-op, so importing antigravity opens nothing."""
+    original = webbrowser.open
+    webbrowser.open = lambda *args, **kwargs: True
+    try:
+        yield
+    finally:
+        webbrowser.open = original
+
+
+def import_stdlib_module(name: str) -> ModuleType:
+    """Import a module without its import-time output, warnings, or browser launch."""
+    with suppress_stdout(), no_browser(), warnings.catch_warnings():
+        # sre_compile, sre_constants and sre_parse warn on import from 3.11.
+        warnings.simplefilter("ignore")
+        return importlib.import_module(name)
+
+
 def get_stdlib_modules() -> list[str]:
-    """Get all stdlib module names, sorted alphabetically."""
+    """Get stdlib module names, sorted alphabetically.
+
+    Only single-underscore implementation modules such as ``_thread`` are left out;
+    dunder modules such as ``__future__`` stay.
+    """
     if hasattr(sys, "stdlib_module_names"):
-        non_public = {
-            "pydoc_data",
-            "sre_compile",
-            "sre_constants",
-            "sre_parse",
-        }
-        return sorted(name for name in sys.stdlib_module_names if name not in non_public)
+        return sorted(
+            name
+            for name in sys.stdlib_module_names
+            if not (name.startswith("_") and not name.startswith("__"))
+        )
     raise RuntimeError("Python 3.10+ required for sys.stdlib_module_names")
 
 
@@ -117,19 +140,13 @@ def build_item_list() -> list[tuple[str, object]]:
         items.append(item)
         seen_names.add(item[0])
 
-    # Modules to skip (antigravity opens browser, etc.)
-    skip_modules = {"antigravity"}
-
-    # Add stdlib modules and their members
+    # Add stdlib modules and their members. A module this platform cannot import
+    # (winreg on Linux, for example) is left out.
     for module_name in get_stdlib_modules():
-        if module_name == "builtins" or module_name in skip_modules:
-            continue
-        # Skip private modules (single underscore) but keep dunder modules like __future__
-        if module_name.startswith("_") and not module_name.startswith("__"):
+        if module_name == "builtins":
             continue
         try:
-            with suppress_stdout():
-                module = importlib.import_module(module_name)
+            module = import_stdlib_module(module_name)
         except Exception:
             continue
 

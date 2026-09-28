@@ -1,4 +1,4 @@
-<!-- source_sha: c4853848b6c975c183fef3f253d94fab1a663a2abb7aa24448944cdb1cc61d7f -->
+<!-- source_sha: ac89df1d97a23d22010210448aceecb9349b94d1e389d63af38c6018cdb950f1 -->
 <!-- translated: machine -->
 
 [English](README.md) | **简体中文**
@@ -132,12 +132,12 @@ make serve-en            # Serve English documentation only
 make serve-one LOCALE=ja  # Serve one locale as it ships
 make build               # Build all locales as separate sites
 make build-en            # Build English documentation only
-make check               # Run lint, types, skill validation, and tests
+make check               # Run lint, types, skill validation, tests, and audit
 make lint                # Check lint and formatting
 make format              # Format code and apply lint fixes
 make types               # Run type checker
 make test                # Run tests
-make audit               # Report live documentation coverage
+make audit               # Report live documentation coverage; fail below 100%
 make skills-build        # Build offline skill in build/skills/
 make skills-check        # Validate generated skill content and links
 make skills-package      # Create release ZIPs and checksums in dist/skills/

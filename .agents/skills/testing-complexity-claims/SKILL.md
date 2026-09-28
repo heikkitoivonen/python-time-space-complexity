@@ -301,9 +301,9 @@ final page line by line. Report any category C claims and their source evidence,
 and any category D claims the running platform skipped; do not say "all claims
 tested" when some are only sourced, skipped elsewhere, or remain uncertain.
 
-This licenses nothing about `make check`, which does not run the API audit.
-Lint, types and tests must all pass before a commit, on every platform and
-without exception. A foreign-platform claim reaches a green suite by being
+This licenses nothing about `make check`: lint, types, tests and the audit must
+all pass before a commit, on every platform and without exception. A foreign-platform claim reaches a green suite by being
 guarded so it *skips*; an unguarded `import winreg` that breaks collection is a
 defect in the test to fix, never a failure to explain away. The only thing a
-foreign platform excuses is an inspection diagnostic in the audit's own output.
+foreign platform excuses is an import error in the audit's own output, which
+does not fail it.
