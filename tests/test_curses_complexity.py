@@ -38,6 +38,10 @@ Measurement scope:
   derived window is readable through its parent. The clock covers the other
   direction, where sixteen times the columns at a fixed row count leaves
   `derwin()` unchanged and would multiply any per-cell allocation by sixteen.
+* `resize()` grows a fresh 64-by-4 pad to 64-by-16 or 64-by-4096, with
+  construction outside the clock. At a fixed row count, 256x the destination
+  cells must cost over 32x, separating cell work from fixed or per-row work.
+  The fastest of nine samples is used; row-count growth is not varied here.
 * The `instr()` and `getstr()` ceiling is exact, not asymptotic. Asking for
   3000 bytes of a 3000-byte row returns 2047 on 3.14 and 1023 before it, so the
   test reads the boundary off `sys.version_info` and asserts the number. The
@@ -767,21 +771,22 @@ class TestWindowAllocation:
 
     @pytest.mark.timing
     def test_resize_cost_tracks_the_cell_count(self) -> None:
-        def measure(stdscr: Any) -> float:
+        def measure(stdscr: Any) -> tuple[float, float]:
             import curses
 
-            def grow(rows: int, cols: int) -> Callable[[], Callable[[], Any]]:
+            def grow(cols: int) -> Callable[[], Callable[[], Any]]:
                 def make() -> Callable[[], Any]:
-                    window = curses.newpad(4, 4)
-                    return lambda: window.resize(rows, cols)
+                    window = curses.newpad(64, 4)
+                    return lambda: window.resize(64, cols)
 
                 return make
 
-            return _best(grow(1024, 1024), 5) / _best(grow(64, 64), 5)
+            return _best(grow(16), 9), _best(grow(4096), 9)
 
-        (ratio, _) = _screen(measure)
+        (durations, _) = _screen(measure)
+        ratio = durations[1] / durations[0]
 
-        assert ratio > 32, f"256x the cells made resize only x{ratio:.1f}"
+        assert ratio > 32, f"256x the cells made resize only x{ratio:.1f} ({durations} s)"
 
     def test_putwin_writes_a_file_that_grows_with_the_area(self, tmp_path: pathlib.Path) -> None:
         target = str(tmp_path)

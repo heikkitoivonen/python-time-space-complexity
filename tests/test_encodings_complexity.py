@@ -54,10 +54,14 @@ Measurement scope:
   becomes a `CodecInfo` named after the module.
 * Encoding and decoding are timed for UTF-8, ASCII and Latin-1 with
   `'strict'`, `'ignore'` and `'replace'`, on repeats of a 15-character
-  phrase mixing ASCII, Latin-1 and CJK text at 2,000, 20,000 and 200,000
+  phrase mixing ASCII, Latin-1 and CJK text at 2,000 and 2,000,000
   repeats, encoded as UTF-8 for decoding, with an undecodable `\\xff` after
-  each phrase for `'ignore'` and `'replace'`; each 10x step must cost under
-  30x.
+  each phrase for `'ignore'` and `'replace'`. The fastest of seven batches
+  of five calls is measured after warming each operation. The 1,000x input
+  interval must cost under 32,000x: linear predicts 1,000x and quadratic
+  1,000,000x. This wide interval allows allocation and memory-bandwidth
+  differences between sizes, especially for Latin-1's fast decode path.
+  Phrase composition and error density stay fixed.
 * The `idna` codec is observed, with `ToASCII` and `ToUnicode` replaced by
   counting wrappers, to call neither for `Example.COM` in either direction
   (returning it unchanged) and each once per label for
@@ -550,16 +554,16 @@ class TestEncodingIsLinear:
     @pytest.mark.timing
     @pytest.mark.parametrize(("direction", "encoding", "errors"), CASES)
     def test_time_is_linear(self, direction: str, encoding: str, errors: str) -> None:
-        operations = [
-            self.operation(direction, encoding, errors, r) for r in (2_000, 20_000, 200_000)
-        ]
+        operations = [self.operation(direction, encoding, errors, r) for r in (2_000, 2_000_000)]
 
-        durations = [best_ns(operation) for operation in operations]
-        ratios = [durations[1] / durations[0], durations[2] / durations[1]]
+        for operation in operations:
+            operation()
+        durations = [best_ns(operation, repeats=7, inner=5) for operation in operations]
+        ratio = durations[1] / durations[0]
 
-        assert all(ratio < 30 for ratio in ratios), (
-            f"{direction} {encoding} {errors}: 10x steps cost {ratios} ({durations} ns); "
-            "quadratic would be 100x"
+        assert ratio < 32_000, (
+            f"{direction} {encoding} {errors}: 1,000x input costs {ratio:.1f}x "
+            f"({durations} ns); quadratic would be 1,000,000x"
         )
 
 
