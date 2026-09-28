@@ -859,6 +859,7 @@ class TestClearReverseCopyAndResize:
     def test_resize_is_absent_before_3_14(self) -> None:
         assert not hasattr(bytearray, "resize")
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.timing
     def test_clear_costs_the_buffer_it_frees(self) -> None:
         def clear_cost(size: int) -> float:
@@ -886,6 +887,7 @@ class TestClearReverseCopyAndResize:
 
         assert_linear("reverse()", ratio)
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.skipif(sys.version_info < (3, 14), reason="resize() was added in 3.14")
     @pytest.mark.timing
     def test_shrinking_costs_the_buffer_it_gives_back(self) -> None:

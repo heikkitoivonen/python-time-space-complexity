@@ -324,6 +324,7 @@ class TestDiscoveryRunsOnce:
 
         assert with_entries["first"]["which"] == plain["first"]["which"] + 3
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_a_display_runs_xdg_settings_once(self, tmp_path: pathlib.Path) -> None:
         counts = _run_discovery(tmp_path, 3, {"DISPLAY": ":99"})
 
@@ -338,6 +339,7 @@ class TestDiscoveryRunsOnce:
         assert counts["first"]["check_output"] == 0
         assert counts["first"]["which"] == 0
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_browser_set_after_discovery_is_not_seen(self, tmp_path: pathlib.Path) -> None:
         command = shlex.join([sys.executable, "-c", "pass"]) + " %s"
         late = _run_discovery(tmp_path, 3, browser_after_first=command)

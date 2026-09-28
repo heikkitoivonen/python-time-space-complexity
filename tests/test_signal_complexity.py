@@ -620,6 +620,8 @@ class TestSetsOfSignals:
 
     @linux_only
     def test_numbers_without_a_name_stay_plain_ints(self) -> None:
+        if sys.platform != "linux":
+            pytest.skip("SIGRTMIN is Linux-only")
         valid = signal.valid_signals()
         plain = [number for number in valid if not isinstance(number, signal.Signals)]
 
@@ -743,6 +745,7 @@ class TestDocumentedExamples:
     def test_the_page_has_the_expected_blocks(self) -> None:
         assert len(_blocks()) == EXPECTED_BLOCKS
 
+    @linux_only
     def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
         ran = 0

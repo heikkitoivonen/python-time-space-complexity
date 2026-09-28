@@ -549,6 +549,7 @@ class TestDecimalConversion:
             pytest.param(lambda value: f"{value}", id="format"),
         ],
     )
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_quadratic_under_the_fast_path_threshold(self, convert: Callable[[int], str]) -> None:
         small, large = int("9" * 1_000), int("9" * 4_000)
 

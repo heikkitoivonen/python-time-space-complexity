@@ -491,6 +491,7 @@ class TestOtherOperatingSystems:
         deprecated = [w for w in caught if issubclass(w.category, DeprecationWarning)]
         assert len(deprecated) == (1 if sys.version_info >= (3, 13) else 0)
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.skipif(sys.platform != "darwin", reason="macOS-only plist")
     def test_mac_ver_reads_the_plist_every_call(self, opened: tuple[list[str], list[int]]) -> None:
         platform.mac_ver()

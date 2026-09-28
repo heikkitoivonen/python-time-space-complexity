@@ -304,6 +304,7 @@ class TestStartupOpensOneWindowPerFile:
     the stand-in file list's `open()` calls; the read is `loadfile()`'s one
     insert of the whole text; the growth is `sys.path` after `main()`."""
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.parametrize("count", [3, 30])
     def test_each_file_named_is_opened_once_in_order(
         self, tmp_path: pathlib.Path, count: int
@@ -314,6 +315,7 @@ class TestStartupOpensOneWindowPerFile:
 
         assert calls == [("Tk",), *(("open", name) for name in names), ("destroy",)]
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_each_new_directory_joins_the_front_of_sys_path_once(
         self, tmp_path: pathlib.Path
     ) -> None:

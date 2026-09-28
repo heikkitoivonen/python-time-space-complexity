@@ -325,6 +325,8 @@ class TestEpollReturnsOnlyWhatIsReady:
 
     @staticmethod
     def epoll_over(fds: list[int], mask: int | None = None) -> Any:
+        if sys.platform != "linux":
+            pytest.skip("epoll is Linux-only")
         ep = select.epoll()
         for fd in fds:
             ep.register(fd, select.EPOLLIN if mask is None else mask)
@@ -362,6 +364,8 @@ class TestEpollReturnsOnlyWhatIsReady:
     def test_the_default_returns_at_most_1023_events(
         self, pipe: tuple[int, int], dups: Callable[[int, int], list[int]]
     ) -> None:
+        if sys.platform != "linux":
+            pytest.skip("epoll is Linux-only")
         writers = dups(pipe[1], 1_100)
         with self.epoll_over(writers, select.EPOLLOUT) as ep:
             assert len(ep.poll(0)) == 1023
@@ -370,6 +374,8 @@ class TestEpollReturnsOnlyWhatIsReady:
                 ep.poll(0, maxevents=0)
 
     def test_registration_errors(self, pipe: tuple[int, int], tmp_path: pathlib.Path) -> None:
+        if sys.platform != "linux":
+            pytest.skip("epoll is Linux-only")
         r, _ = pipe
         regular = tmp_path / "file"
         regular.write_bytes(b"")
@@ -385,6 +391,8 @@ class TestEpollReturnsOnlyWhatIsReady:
                 ep.register(handle, select.EPOLLIN)
 
     def test_a_closed_object_refuses_io_and_registration(self, pipe: tuple[int, int]) -> None:
+        if sys.platform != "linux":
+            pytest.skip("epoll is Linux-only")
         r, _ = pipe
         ep = select.epoll()
         ep.register(r, select.EPOLLIN)
@@ -404,6 +412,8 @@ class TestEpollReturnsOnlyWhatIsReady:
         assert os.fstat(r) is not None, "closing the epoll object closed a registered file"
 
     def test_fromfd_wraps_an_existing_epoll_descriptor(self, pipe: tuple[int, int]) -> None:
+        if sys.platform != "linux":
+            pytest.skip("epoll is Linux-only")
         r, w = pipe
         os.write(w, b"x")
         with select.epoll() as ep:
@@ -414,6 +424,8 @@ class TestEpollReturnsOnlyWhatIsReady:
                 assert ep.poll(0) == [(r, select.EPOLLIN)], "not the same epoll instance"
 
     def test_epoll_descriptors_are_close_on_exec_whatever_the_flags(self) -> None:
+        if sys.platform != "linux":
+            pytest.skip("epoll is Linux-only")
         with select.epoll() as plain, select.epoll(flags=select.EPOLL_CLOEXEC) as flagged:
             assert not os.get_inheritable(plain.fileno())
             assert not os.get_inheritable(flagged.fileno())

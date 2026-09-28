@@ -220,6 +220,7 @@ class TestExtractingIsLinearInFrames:
     """`extract_tb` and `extract_stack` | O(d) | O(d): a record per frame,
     oldest first, with its source line read during extraction."""
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_extract_tb_has_one_record_per_frame_oldest_first(self) -> None:
         error = deep_error(7)
 
@@ -291,6 +292,7 @@ class TestLimit:
         assert len(summary) == 3
         assert frames.taken == 3
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_a_negative_limit_walks_everything_and_keeps_the_last(self) -> None:
         error = deep_error(52)
         frames = CountingFrames(traceback.walk_tb(error.__traceback__))
@@ -577,6 +579,7 @@ class TestStackSummary:
         monkeypatch.setattr(linecache, "getline", counting)
         return calls
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_lookup_lines_false_defers_reads(self, getline_calls: list[tuple[str, int]]) -> None:
         error = deep_error(3)
 
@@ -674,6 +677,7 @@ class TestStackSummary:
 
         assert "".join(summary.format()).count('  File "') == 2
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_frame_summary_fields(self) -> None:
         frame = traceback.extract_tb(deep_error(3).__traceback__)[-1]
 

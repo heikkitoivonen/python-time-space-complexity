@@ -312,6 +312,8 @@ class TestPosixClocks:
             assert time.clock_gettime(clock_id) >= 0
 
     def test_pthread_getcpuclockid_returns_a_readable_clock(self) -> None:
+        if sys.platform != "linux":
+            pytest.skip("typeshed declares pthread_getcpuclockid on Linux only")
         require("pthread_getcpuclockid", "clock_gettime")
         clock_id = time.pthread_getcpuclockid(threading.get_ident())
 

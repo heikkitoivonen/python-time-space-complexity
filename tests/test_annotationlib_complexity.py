@@ -546,6 +546,7 @@ class TestSizeTerms:
         )
         assert given < 10, f"with locals given, x{given:.1f} ({l_small:.2e}s to {l_large:.2e}s)"
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_evaluate_copies_a_given_locals_with_a_class_owner_and_not_without(self) -> None:
         small = {f"name{i}": i for i in range(10)}
         large = {f"name{i}": i for i in range(100_000)}
@@ -577,6 +578,7 @@ class TestSizeTerms:
             f"x10,000 in l cost x{ratio:.1f} ({t_small:.2e}s to {t_large:.2e}s)"
         )
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_evaluate_forwardref_fallback_grows_with_the_globals(self) -> None:
         small = {f"name{i}": i for i in range(10)}
         large = {f"name{i}": i for i in range(100_000)}

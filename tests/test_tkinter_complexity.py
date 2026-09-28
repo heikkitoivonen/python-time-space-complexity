@@ -734,6 +734,7 @@ class TestVariables:
         assert root.tk.call("info", "exists", tcl_name) == 0
         assert not _command_exists(root, command)
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_the_legacy_trace_methods_warn_from_3_14_and_fail_under_tcl_9(self) -> None:
         root = _tcl()
         var = tkinter.StringVar(master=root)
@@ -934,6 +935,7 @@ class TestDocumentedExamples:
         )
         assert len(_stated_outputs()) == EXPECTED_BLOCKS
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_every_block_compiles_and_runs_or_needs_a_display(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
         for (line, source), stated in zip(_blocks(), _stated_outputs(), strict=True):

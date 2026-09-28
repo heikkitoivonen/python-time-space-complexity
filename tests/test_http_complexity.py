@@ -1744,6 +1744,7 @@ class TestCodexReviewFindings:
         assert sorted(http.cookies.SimpleCookie("a=1; b=2").keys()) == ["a", "b"]
         assert list(http.cookies.SimpleCookie().keys()) == []
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_morsel_set_validates_the_name_and_keeps_the_value(self) -> None:
         """O(len(key) + v) time: the values are checked, then stored by reference."""
         morsel = http.cookies.Morsel()

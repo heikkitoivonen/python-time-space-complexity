@@ -160,6 +160,7 @@ class TestComplexityEstimator:
         complexity, _ = estimate_complexity.detect_complexity(n_values, times)
         assert complexity == "O(1) (Constant)", f"{complexity=}, {times=}"
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.timing
     def test_integration_linear_list(self):
         """Run measurement on linear function (List[int] hint).

@@ -667,6 +667,7 @@ class TestTemplatelib:
 
         assert peaks[0] * 20 < peaks[1] < peaks[0] * 300, f"100x the interpolations: {peaks}"
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.timing
     def test_consecutive_strings_cost_quadratic_time(self) -> None:
         Template = _templatelib("Template")

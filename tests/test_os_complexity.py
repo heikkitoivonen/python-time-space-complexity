@@ -395,6 +395,7 @@ class TestWalkSpaceNeedsBothTerms:
             f"bound: {small_peak} B against {large_peak} B"
         )
 
+    @LINUX_ONLY
     def test_peak_grows_with_the_depth(self, tmp_path: pathlib.Path) -> None:
         """The d term, at a fixed breadth of 1.
 
@@ -511,6 +512,7 @@ class TestWalkSpaceNeedsBothTerms:
         assert len(visited) == 21, "the root plus each subdirectory"
         assert sum(len(files) for _, _, files in visited) == 1
 
+    @LINUX_ONLY
     def test_equal_entry_counts_differ_by_shape(self, tmp_path: pathlib.Path) -> None:
         """Why the space column is O(P) and not O(n).
 
@@ -718,6 +720,7 @@ class TestMakedirsRecurses:
 
         assert not (tmp_path / "z").exists(), "removedirs should have unwound the chain"
 
+    @LINUX_ONLY
     def test_makedirs_keeps_every_prefix_at_once(self, tmp_path: pathlib.Path) -> None:
         """The L in O(n·L): frames hold prefixes, not just frames.
 
@@ -740,6 +743,7 @@ class TestMakedirsRecurses:
             f"are not the whole bound: {peaks} bytes for 1 and 80 character components"
         )
 
+    @LINUX_ONLY
     def test_removedirs_holds_one_prefix_at_a_time(self, tmp_path: pathlib.Path) -> None:
         """The contrast: O(L), not O(n·L) and not O(1).
 
@@ -827,6 +831,7 @@ class TestDirectoryHelperTimeIsPathWork:
 
         assert len(lengths) == 1, "the counter has to see the call it wraps"
 
+    @LINUX_ONLY
     def test_makedirs_parses_more_than_linearly_in_the_depth(self, tmp_path: pathlib.Path) -> None:
         """2x the components is about 4x the characters parsed."""
         totals = []
@@ -842,6 +847,7 @@ class TestDirectoryHelperTimeIsPathWork:
             f"cannot be the time bound: {totals} characters"
         )
 
+    @LINUX_ONLY
     def test_makedirs_parses_in_proportion_to_the_path_length(self, tmp_path: pathlib.Path) -> None:
         """The L term, with the component count held at 100."""
         totals = []
@@ -1904,7 +1910,7 @@ class TestDescriptorOperations:
         try:
             os.write(descriptor, b"payload")
             os.fsync(descriptor)
-            if hasattr(os, "fdatasync"):
+            if sys.platform != "darwin":
                 os.fdatasync(descriptor)
         finally:
             os.close(descriptor)
@@ -1977,11 +1983,14 @@ class TestDescriptorOperations:
 
     @LINUX_ONLY
     def test_copy_file_range_also_stays_in_the_kernel(self, tmp_path: pathlib.Path) -> None:
+        if sys.platform != "linux":
+            pytest.skip("os.copy_file_range is Linux-only")
         source = tmp_path / "src.bin"
         source.write_bytes(b"y" * 4_000_000)
         destination = tmp_path / "dst.bin"
 
         def copy() -> None:
+            assert sys.platform == "linux", "a nested scope needs its own narrowing"
             read_fd = os.open(source, os.O_RDONLY)
             write_fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             try:
@@ -1996,6 +2005,8 @@ class TestDescriptorOperations:
     @LINUX_ONLY
     def test_the_linux_descriptor_factories(self) -> None:
         """The O(1) rows for eventfd, memfd_create, pipe2 and pidfd_open."""
+        if sys.platform != "linux":
+            pytest.skip("the descriptor factories are Linux-only")
         read_end, write_end = os.pipe2(os.O_CLOEXEC)
         try:
             assert os.get_inheritable(read_end) is False, "O_CLOEXEC was applied"
@@ -2066,6 +2077,8 @@ class TestDescriptorOperations:
 
     @LINUX_ONLY
     def test_getrandom_returns_what_it_was_asked_for(self) -> None:
+        if sys.platform != "linux":
+            pytest.skip("os.getrandom is Linux-only")
         assert len(os.getrandom(64)) == 64
 
 
@@ -2081,14 +2094,17 @@ class TestProcessAndEnvironment:
 
     @POSIX_ONLY
     def test_the_id_functions_are_consistent(self) -> None:
+        assert os.getpgrp() > 0 and os.getpgid(0) == os.getpgrp()
+        assert os.getsid(0) > 0
+        if sys.platform == "darwin":
+            return  # macOS has no getresuid or getresgid
+
         real, effective, saved = os.getresuid()
         assert real == os.getuid(), "the real uid is the first of the three"
         assert effective == os.geteuid(), "and the effective uid is the second"
         assert isinstance(saved, int)
         real_gid, effective_gid, _ = os.getresgid()
         assert real_gid == os.getgid() and effective_gid == os.getegid()
-        assert os.getpgrp() > 0 and os.getpgid(0) == os.getpgrp()
-        assert os.getsid(0) > 0
 
     @POSIX_ONLY
     def test_getgroups_returns_one_entry_per_group(self) -> None:
@@ -2128,6 +2144,8 @@ class TestProcessAndEnvironment:
     @LINUX_ONLY
     def test_sched_affinity_and_parameters(self) -> None:
         """`os.sched_getaffinity(pid)` | O(c) - the set it builds."""
+        if sys.platform != "linux":
+            pytest.skip("the sched_* affinity calls are Linux-only")
         mask = os.sched_getaffinity(0)
 
         assert isinstance(mask, set) and mask
@@ -2363,6 +2381,7 @@ class TestExitStatusMacros:
         assert os.WCOREDUMP(status | 0x80), "and the flag is the bit that sets it"
         assert os.waitstatus_to_exitcode(status) == -signal.SIGTERM
 
+    @LINUX_ONLY
     @POSIX_ONLY
     def test_stopped_and_continued_statuses(self) -> None:
         import signal
@@ -2469,12 +2488,14 @@ class TestSystemConfiguration:
         assert isinstance(os.ctermid(), str)
 
 
-@POSIX_ONLY
+@LINUX_ONLY
 class TestExtendedAttributes:
     """`os.getxattr` and friends. Skipped where the filesystem refuses them."""
 
     @staticmethod
     def _supported(target: pathlib.Path) -> bool:
+        if sys.platform != "linux":
+            return False
         try:
             os.setxattr(target, b"user.probe", b"1")
         except OSError:
@@ -2483,6 +2504,8 @@ class TestExtendedAttributes:
         return True
 
     def test_value_and_name_lengths_are_the_bounds(self, tmp_path: pathlib.Path) -> None:
+        if sys.platform != "linux":
+            pytest.skip("os.*xattr is Linux-only")
         target = tmp_path / "f.txt"
         target.write_text("x", encoding="utf-8")
         if not self._supported(target):

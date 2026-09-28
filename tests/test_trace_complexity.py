@@ -301,6 +301,7 @@ class TestModesInstallDifferentHooks:
         assert len(printed) == 101
         assert module.__file__ in linecache.cache, "the printed source stays cached"
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_the_defaults_count_and_print(self) -> None:
         tracer = trace.Trace()
         output = io.StringIO()

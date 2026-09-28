@@ -421,6 +421,7 @@ class TestParsingReadsTheWholeFile:
 
         assert peaks[1] > peaks[0] * 50, f"100x the messages peaked at {peaks}"
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.timing
     def test_parsing_is_linear_in_the_file(self) -> None:
         files = [

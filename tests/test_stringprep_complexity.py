@@ -260,6 +260,7 @@ class TestNameprepAppliesTheTables:
         assert len(b1) == length
         assert len(b2) == length - label.count("\u00ad")
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.timing
     def test_reordering_combining_marks_stays_linear(self) -> None:
         """Alternating U+0315 (class 232) and U+0300 (class 230) is the shape

@@ -270,6 +270,8 @@ class TestReceivingAllocatesBufsize:
     def test_recv_does_not_initialize_unused_buffer_pages(
         self, pair: tuple[socket.socket, socket.socket]
     ) -> None:
+        if sys.platform != "linux":
+            pytest.skip("Linux demand-paging probe")
         import resource  # noqa: PLC0415 - unavailable on Windows
 
         # A fresh mapping provides a control independent of Python's allocator.
@@ -678,6 +680,7 @@ class TestCreateConnectionTriesInOrder:
     # gaierror, before any lookup, so the two failures can be told apart.
     UNCONVERTIBLE = ("::1", 80)
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.parametrize("unconvertible_first", [True, False])
     def test_total_failure_raises_the_last_error(
         self,
@@ -696,6 +699,7 @@ class TestCreateConnectionTriesInOrder:
 
         assert type(caught.value) is expected
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.skipif(sys.version_info < (3, 11), reason="all_errors was added in 3.11")
     def test_all_errors_collects_every_attempt(
         self, monkeypatch: pytest.MonkeyPatch, refusing: list[tuple[str, int]]
@@ -860,6 +864,7 @@ class TestDescriptorsAndAttributes:
                     assert address == client.getsockname()
                     assert connection.getpeername() == client.getsockname()
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_connect_ex_returns_the_error_number(self) -> None:
         holder, address = refusing_address()
         try:
@@ -929,14 +934,17 @@ class TestAfAlg:
     """`sendmsg_afalg` gathers its buffers into one kernel crypto request."""
 
     def test_two_buffers_encrypt_as_one_message(self) -> None:
-        if not hasattr(socket, "AF_ALG"):
+        if sys.platform != "linux":
             pytest.skip("AF_ALG is Linux-only")
+        if not hasattr(socket, "AF_ALG"):
+            pytest.skip("this build has no AF_ALG")
         try:
             algorithm = socket.socket(socket.AF_ALG, socket.SOCK_SEQPACKET)
         except OSError as error:
             pytest.skip(f"AF_ALG unavailable: {error}")
 
         def run(op: int, buffers: list[bytes]) -> bytes:
+            assert sys.platform == "linux", "a nested scope needs its own narrowing"
             with socket.socket(socket.AF_ALG, socket.SOCK_SEQPACKET) as base:
                 base.bind(("skcipher", "ecb(aes)"))
                 base.setsockopt(socket.SOL_ALG, socket.ALG_SET_KEY, bytes(16))
@@ -1032,6 +1040,7 @@ class TestDocumentedExamples:
     def test_the_page_has_the_expected_blocks(self) -> None:
         assert len(_blocks()) == EXPECTED_BLOCKS
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
         ran = 0

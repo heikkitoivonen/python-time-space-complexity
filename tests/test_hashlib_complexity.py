@@ -614,10 +614,9 @@ class TestFileDigest:
 
 
 def _usable_cpus() -> int:
-    try:
+    if sys.platform == "linux":
         return len(os.sched_getaffinity(0))
-    except AttributeError:  # pragma: no cover - not Linux
-        return os.cpu_count() or 1
+    return os.cpu_count() or 1
 
 
 @pytest.mark.timing

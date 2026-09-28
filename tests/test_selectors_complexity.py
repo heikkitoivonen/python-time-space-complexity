@@ -170,6 +170,8 @@ class TestDefaultSelector:
 
     @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux picks epoll")
     def test_it_is_epoll_on_linux(self) -> None:
+        if sys.platform != "linux":
+            pytest.skip("Linux picks epoll")
         assert selectors.DefaultSelector is selectors.EpollSelector
 
     def test_every_implementation_is_a_base_selector(self) -> None:
@@ -211,6 +213,8 @@ class TestDefaultSelector:
 
     @pytest.mark.skipif(not hasattr(selectors, "EpollSelector"), reason="needs epoll")
     def test_close_releases_the_kernel_object_not_the_files(self) -> None:
+        if sys.platform != "linux":
+            pytest.skip("EpollSelector is Linux-only")
         left, right = socket.socketpair()
         try:
             with selectors.EpollSelector() as sel:
@@ -516,6 +520,8 @@ class TestSelectScaling:
     def test_epoll_selector_is_linear_in_space_only(
         self, pipes: Callable[[int], list[tuple[int, int]]]
     ) -> None:
+        if sys.platform != "linux":
+            pytest.skip("EpollSelector is Linux-only")
         times, peaks = self.measure(selectors.EpollSelector, (20, 2_000), pipes)
         assert times[1] < 4 * times[0], f"epoll times {times}"
         assert peaks[1] > 50 * max(peaks[0], 1), f"epoll peaks {peaks}"

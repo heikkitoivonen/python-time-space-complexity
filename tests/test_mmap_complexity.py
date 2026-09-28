@@ -148,7 +148,7 @@ def touch_every_page(mm: mmap.mmap) -> None:
 def anonymous(size: int, **kwargs: Any) -> mmap.mmap:
     """An anonymous map advised against huge pages, so one fault is one page."""
     mm = mmap.mmap(-1, size, **kwargs)
-    if hasattr(mmap, "MADV_NOHUGEPAGE"):
+    if sys.platform == "linux" and hasattr(mmap, "MADV_NOHUGEPAGE"):
         mm.madvise(mmap.MADV_NOHUGEPAGE)
     return mm
 
@@ -764,6 +764,7 @@ class TestSizeResizeAndFlush:
         with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_COPY) as mm, pytest.raises(TypeError):
             mm.resize(8)
 
+    @linux_only
     def test_flush_reaches_the_file(self, file_of: Callable[[bytes], Any]) -> None:
         f = file_of(b"abcd" * 1024)
 

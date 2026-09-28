@@ -397,6 +397,7 @@ class TestExceptionReporting:
 
         assert deep - shallow == 3, f"3-deep printed {shallow}, 6-deep printed {deep}"
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_the_source_line_is_read_for_every_frame_that_has_one(self) -> None:
         """The s in the row: each printed frame carries its source line, which
         the hook has to go to the file for.

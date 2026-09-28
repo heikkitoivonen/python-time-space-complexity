@@ -225,6 +225,7 @@ class TestTcsetattr:
         with pytest.raises(TypeError, match="7 element list"):
             termios.tcsetattr(slave, termios.TCSANOW, termios.tcgetattr(slave)[:6])
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_tcsaflush_discards_a_waiting_line(self, pair: tuple[int, int]) -> None:
         master, slave = pair
         os.write(master, b"typed ahead\n")
@@ -308,6 +309,7 @@ class TestQueueControl:
 
         assert not readable(slave, 0.2)
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_tcooff_holds_writes_until_tcoon(self, pair: tuple[int, int]) -> None:
         master, slave = pair
 
@@ -323,6 +325,7 @@ class TestQueueControl:
 
         assert read_exactly(master, 4) == b"sent"
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_a_blocking_write_waits_for_tcoon(self, pair: tuple[int, int]) -> None:
         master, slave = pair
         termios.tcflow(slave, termios.TCOOFF)
@@ -345,6 +348,7 @@ class TestQueueControl:
         assert not writer.is_alive()
         assert read_exactly(master, 4) == b"held"
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_tcioff_and_tcion_send_stop_and_start(self, pair: tuple[int, int]) -> None:
         master, slave = pair
         control = termios.tcgetattr(slave)[6]
@@ -355,6 +359,7 @@ class TestQueueControl:
         termios.tcflow(slave, termios.TCION)
         assert read_exactly(master, 1) == control[termios.VSTART]
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.timing
     def test_tcdrain_returns_at_once_on_a_pseudo_terminal(self, pair: tuple[int, int]) -> None:
         _, slave = pair
@@ -366,6 +371,7 @@ class TestQueueControl:
 
         assert elapsed < 1, f"tcdrain took {elapsed:.3f}s on a pseudo-terminal"
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.timing
     def test_tcsendbreak_returns_at_once_on_a_pseudo_terminal(self, pair: tuple[int, int]) -> None:
         _, slave = pair
@@ -452,6 +458,7 @@ class TestDocumentedExamples:
         assert len(_blocks()) == EXPECTED_BLOCKS
         assert sum(WINDOW_SIZE_BLOCK in source for _, source in _blocks()) == 1
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
         ran = 0

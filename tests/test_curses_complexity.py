@@ -1938,6 +1938,7 @@ class TestAscii:
         assert ascii_.alt(ord("A")) == 0xC1
         assert ascii_.ascii(0xC1) == ord("A")
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_the_two_unctrl_spellings_differ(self) -> None:
         def compare(stdscr: Any) -> dict[str, Any]:
             import curses

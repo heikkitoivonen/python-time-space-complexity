@@ -993,6 +993,7 @@ class TestStackContextReadsSource:
             return TestStackContextReadsSource._recurse(remaining - 1, then)
         return then()
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_the_default_reads_once_per_frame(self) -> None:
         with CountingGetlines() as counter:
             frames = self._recurse(self.DEPTH, lambda: inspect.stack())
@@ -1817,6 +1818,7 @@ class TestRemainingReferenceRows:
         finally:
             agen.aclose().close()  # type: ignore[attr-defined]
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_frame_records_carry_the_same_fields(self) -> None:
         frame = inspect.currentframe()
         assert frame is not None

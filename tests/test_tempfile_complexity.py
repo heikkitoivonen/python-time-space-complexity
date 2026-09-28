@@ -399,6 +399,8 @@ class TestTemporaryFileNeedsNoName:
     def test_o_tmpfile_draws_no_name(
         self, tmp_path: pathlib.Path, names: Callable[[list[str]], ScriptedNames]
     ) -> None:
+        if sys.platform != "linux":
+            pytest.skip("O_TMPFILE is Linux-only")
         try:
             os.close(os.open(tmp_path, os.O_RDWR | os.O_TMPFILE))
         except OSError:

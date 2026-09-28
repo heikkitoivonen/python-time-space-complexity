@@ -416,6 +416,7 @@ class TestObjectTracebacks:
             assert tracemalloc.get_object_traceback(before) is None
             assert tracemalloc.get_object_traceback(after) is not None
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_it_stores_at_most_nframe_frames_oldest_first(self) -> None:
         with tracing(5):
             block = allocate_at_depth(20, 1)
@@ -709,6 +710,7 @@ class TestTracebacksAndStatistics:
     """`Traceback`, `Frame`, `Statistic` and `StatisticDiff` accessors | O(1);
     `Traceback.format()` | O(f) plus the source lines `linecache` loads."""
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_format_reads_the_source_and_reverses_on_request(self) -> None:
         with tracing(3):
             block = bytearray(1000)

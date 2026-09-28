@@ -208,6 +208,7 @@ class TestConstruction:
         assert not hasattr(server, "socket")
         assert server.server_address == LOOPBACK
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_tcp_server_binds_and_listens(self) -> None:
         with socketserver.TCPServer(LOOPBACK, socketserver.BaseRequestHandler) as server:
             listening = server.socket.getsockopt(socket.SOL_SOCKET, socket.SO_ACCEPTCONN)
@@ -217,6 +218,7 @@ class TestConstruction:
             assert server.server_address == server.socket.getsockname()
             assert server.fileno() == server.socket.fileno()
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_without_bind_and_activate_only_the_socket_exists(self) -> None:
         server = socketserver.TCPServer(
             LOOPBACK, socketserver.BaseRequestHandler, bind_and_activate=False
@@ -227,6 +229,7 @@ class TestConstruction:
         finally:
             server.server_close()
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_udp_server_binds_without_listening(self) -> None:
         with socketserver.UDPServer(LOOPBACK, socketserver.BaseRequestHandler) as server:
             assert server.socket.type == socket.SOCK_DGRAM
@@ -816,10 +819,12 @@ class TestDatagrams:
             client.close()
         return lengths[0]
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.skipif(sys.platform == "win32", reason="Windows fails the receive instead")
     def test_a_long_datagram_is_truncated(self) -> None:
         assert self.received_length(8192, 10_000) == 8192
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_a_larger_limit_admits_it(self) -> None:
         assert self.received_length(20_000, 10_000) == 10_000
 
@@ -946,6 +951,7 @@ class TestServerFamilies:
         with Reusing(LOOPBACK, socketserver.BaseRequestHandler) as server:
             assert server.socket.getsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT) != 0
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.skipif(not HAS_UNIX, reason="needs AF_UNIX")
     def test_a_unix_socket_file_survives_close(self, tmp_path: pathlib.Path) -> None:
         path = tmp_path / "server.sock"
@@ -996,6 +1002,7 @@ class TestDocumentedExamples:
     def test_the_page_has_the_expected_blocks(self) -> None:
         assert len(_blocks()) == EXPECTED_BLOCKS
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
         ran = 0
@@ -1010,6 +1017,7 @@ class TestDocumentedExamples:
         assert ran == EXPECTED_BLOCKS
         assert not failures, "\n\n".join(failures)
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_the_runner_notices_a_broken_assertion(self, tmp_path: pathlib.Path) -> None:
         line, source = next((n, s) for n, s in _blocks() if 'reply == b"8192 bytes"' in s)
         mutated = source.replace('reply == b"8192 bytes"', 'reply == b"10000 bytes"', 1)

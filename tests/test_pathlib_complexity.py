@@ -432,6 +432,7 @@ class TestJoiningCopiesTheSegments:
         str(path)
         return path
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_joining_onto_a_grown_path_copies_it(self) -> None:
         grown = self._grown(10_000)
 
@@ -1007,6 +1008,7 @@ class TestRecursiveGlobSpace:
 
         assert large_peak > 3 * small_peak, f"the w term: {small_peak} B against {large_peak} B"
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.parametrize("spelling", ["rglob", "glob"])
     def test_the_peak_grows_with_the_depth(self, tmp_path: pathlib.Path, spelling: str) -> None:
         """32x the depth at a breadth of one: x171 on 3.10 and x2.1 on 3.14.
@@ -1132,6 +1134,7 @@ class TestMkdirParents:
         assert 5 <= nested <= 10, f"five missing components, {nested} mkdir calls"
         assert (tmp_path / "a" / "b" / "c" / "d" / "e").is_dir()
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_the_peak_grows_faster_than_the_depth(self, tmp_path: pathlib.Path) -> None:
         """7x the missing components of fixed length: over x12, where O(k)
         would give x7 and O(k·L) x49."""

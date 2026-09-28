@@ -986,6 +986,7 @@ class TestGenerator:
         assert deep_output < flat_output * 1.1
         assert deep_total > flat_total * 5, f"{deep_total} vs {flat_total} at depth 4"
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_a_folded_header_passes_verification_and_as_bytes_checks_too(self) -> None:
         message = Message()
         message["Subject"] = " ".join(["word"] * 40)

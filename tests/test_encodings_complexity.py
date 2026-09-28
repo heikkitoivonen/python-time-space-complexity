@@ -786,6 +786,7 @@ class TestNameprep:
         assert idna.nameprep("Stra\u00dfe\u00ad") == "strasse"
         assert idna.nameprep("a\u0315\u0300") == "\u00e0\u0315"
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.timing
     @pytest.mark.parametrize("unit", ["Bücher\u00ad", "\u0315\u0300"], ids=["text", "marks"])
     def test_time_is_linear_in_the_label(self, unit: str) -> None:
