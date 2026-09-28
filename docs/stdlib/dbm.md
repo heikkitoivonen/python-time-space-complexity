@@ -6,15 +6,59 @@ The `dbm` module provides interfaces to various Unix database implementations, a
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `dbm.open()` | O(1) | O(1) | Open/create database |
+| `dbm.open()` | O(1) to O(n) | O(1) to O(n) | Open/create database; O(1) for `dbm.sqlite3` and `dbm.ndbm`, O(n) for `dbm.dumb`, which reads its whole key index into memory, and for `dbm.gnu`, which reads its bucket directory |
 | `db[key] = value` | O(1) to O(log n) | O(k) | Backend-dependent; gdbm is O(1) avg |
-| `db[key]` | O(1) to O(log n) | O(1) | Backend-dependent; gdbm is O(1) avg |
-| `del db[key]` | O(1) to O(log n) | O(1) | Backend-dependent |
+| `db[key]` | O(1) to O(log n) | O(v) | Backend-dependent; gdbm is O(1) avg; v = length of the value returned |
+| `del db[key]` | O(1) to O(n) | O(1) to O(n) | Backend-dependent; `dbm.dumb` rewrites its whole key index on every delete |
 | `key in db` | O(1) to O(log n) | O(1) | Backend-dependent |
-| `db.keys()` | O(n) | O(n) | Get all keys (slow) |
+| `db.keys()` | O(n) | O(n) | A list of every key; works on every backend |
+| Iterating `db` | O(n) | O(1) | `dbm.sqlite3` and `dbm.dumb` only; `dbm.ndbm` and `dbm.gnu` databases are not iterable |
+| Iterating `db.items()` or `db.values()` | O(n) plus one lookup per item | O(v) | `dbm.sqlite3`'s `items()` and `values()`, and `dbm.dumb`'s `values()`; `dbm.ndbm` and `dbm.gnu` databases have neither method |
+| `db.items()` on `dbm.dumb` | O(n) plus one lookup per item | O(n + V) | V = total length of the values; builds the whole list when called, rather than returning a view |
 | `db.close()` | O(n) | O(1) | Flush and close |
 | `whichdb()` | O(1) | O(1) | Detect backend type |
 | `error` | O(1) | O(1) | Exception type |
+
+### dbm.sqlite3
+
+Python 3.13+. `dbm.open()` tries this backend first when it creates a new database. Each pair is
+a row in one SQLite table with a unique index on the key, so single-key operations are indexed
+lookups. Here `n` is the number of keys stored and `v` the length of the value read, written,
+replaced or deleted; keys are treated as short.
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `dbm.sqlite3.open(filename, flag="r", mode=0o666)` | O(1) | O(1) | Opens an SQLite connection; independent of the keys already stored |
+| `db[key]` | O(log n + v) | O(v) | One indexed lookup |
+| `db[key] = value` | O(log n + v) | O(v) | Committed immediately: another connection sees it before `close()`; a replaced value's pages are freed too |
+| `del db[key]` | O(log n + v) | O(1) | Frees the deleted value's pages |
+| `key in db` | O(log n + v) | O(v) | Fetches the value to answer |
+| `len(db)` | O(n) | O(1) | Counts the keys on every call; nothing is cached |
+| Iterating `db` | O(n) | O(1) | Streams the keys from one query |
+| `db.keys()` | O(n) | O(n) | Builds a list |
+| Iterating `db.items()` or `db.values()` | O(n log n + V) | O(v) | V = total length of the values; one lookup per key on top of the key scan |
+| `sqlite3.close()` (`db.close()`) | O(w) | O(1) | w = pages in SQLite's write-ahead log, which the last connection to close copies into the database file |
+| `dbm.sqlite3.error` | O(1) | O(1) | Subclass of `OSError`, so `except dbm.error` catches it |
+
+### dbm.gnu
+
+Unix, and only where CPython was built against the GDBM library; otherwise `import dbm.gnu`
+raises `ImportError`. GDBM hashes keys into buckets, so single-key operations are O(1) on
+average, as in the table above. `gdbm` is the object `dbm.gnu.open()` returns, and `n` is the
+number of keys stored.
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `dbm.gnu.open(filename, flag="r", mode=0o666)` | O(n) | O(n) | Reads GDBM's bucket directory, which grows with the keys stored, into memory; `flag` may add `'f'` (fast: writes are not synchronized), `'s'` (synchronized) or `'u'` (no locking) |
+| `dbm.gnu.open_flags` | O(1) | O(1) | The flag characters this GDBM build accepts |
+| `dbm.gnu.error` | O(1) | O(1) | GDBM errors; a missing key raises `KeyError` |
+| `len(gdbm)` | O(n), then O(1) | O(1) | Counted once and cached until the next store or delete |
+| `gdbm.firstkey()`, `gdbm.nextkey(key)` | O(n) for a full walk | O(1) | Visits every key in hash order without building a list |
+| `gdbm.keys()` | O(n) | O(n) | Builds a list |
+| `gdbm.reorganize()` | O(n) | O(n) on disk | Copies the live records into a new file; deleted space is otherwise kept for reuse and never returned |
+| `gdbm.sync()` | O(d) | O(1) | d = changes not yet written; needed only in fast mode |
+| `gdbm.clear()` | O(n) | O(1) | Deletes key by key; 3.13+ |
+| `gdbm.close()` | O(d) | O(1) | Writes pending changes and releases the file |
 
 ## DBM Variants
 
@@ -22,29 +66,27 @@ The `dbm` module provides interfaces to various Unix database implementations, a
 
 ```python
 import dbm
+import dbm.dumb
 
-# Auto-detect appropriate backend
-db = dbm.open('mydb')  # O(1)
+# Auto-detect: a new database uses the first backend available
+with dbm.open('mydb', 'c') as db:
+    db[b'key'] = b'value'
+backend = dbm.whichdb('mydb')  # O(1): reads the file's header
+assert backend in ('dbm.sqlite3', 'dbm.gnu', 'dbm.ndbm', 'dbm.dumb')
 
-# dbm.dumb - pure Python (slow, always available)
-db = dbm.dumb.open('mydb')  # O(1)
+# dbm.dumb - pure Python, always available
+with dbm.dumb.open('portable', 'c') as db:
+    db[b'key'] = b'value'
+assert dbm.whichdb('portable') == 'dbm.dumb'
 
-# dbm.gnu - GNU DBM (fast, Linux/Unix)
+# dbm.gnu - only where CPython was built with GDBM
 try:
-    db = dbm.gnu.open('mydb')  # O(1)
+    import dbm.gnu
 except ImportError:
-    print("GNU DBM not available")
-
-# dbm.ndbm - Berkeley DB (legacy)
-try:
-    db = dbm.ndbm.open('mydb')  # O(1)
-except ImportError:
-    print("NDBM not available")
-
-# Detect which backend is available
-import dbm
-backend = dbm.whichdb('mydb')  # O(1) detect
-print(f"Using: {backend}")
+    pass
+else:
+    with dbm.gnu.open('gnudb', 'c') as db:
+        db[b'key'] = b'value'
 ```
 
 ### Recommended Backends
@@ -111,29 +153,38 @@ db.close()
 
 ### Iterate Keys
 
+`keys()` is the one way to list keys that every backend supports; it builds the whole list.
+`for key in db`, `items()` and `values()` work on `dbm.sqlite3` and `dbm.dumb` only - a
+`dbm.ndbm` or `dbm.gnu` database is not iterable, and `dbm.gnu` walks its keys without a list
+through `firstkey()` and `nextkey()` instead.
+
 ```python
 import dbm
 
-db = dbm.open('data', 'c')
+with dbm.open('data', 'c') as db:
+    db[b'user1'] = b'Alice'
+    db[b'user2'] = b'Bob'
+    db[b'user3'] = b'Charlie'
 
-# Store multiple items - O(log n) each
-db[b'user1'] = b'Alice'
-db[b'user2'] = b'Bob'
-db[b'user3'] = b'Charlie'
+    # keys() works on every backend - O(n), builds a list
+    keys = db.keys()
+    assert sorted(keys) == [b'user1', b'user2', b'user3']
+    names = {key: db[key] for key in keys}  # one lookup per key
+    assert names[b'user2'] == b'Bob'
 
-# Get all keys - O(n) expensive!
-keys = db.keys()
-for key in keys:
-    print(f"{key}: {db[key]}")
+    assert len(db) == 3  # O(n) on dbm.sqlite3; see the tables above
 
-# Direct iteration - O(n)
-for key in db:
-    print(f"{key}: {db[key]}")
-
-# Check count
-print(len(db))  # May not be O(1)
-
-db.close()
+# Direct iteration streams keys without a list, but only some backends allow it
+with dbm.open('data', 'r') as db:
+    if dbm.whichdb('data') in ('dbm.sqlite3', 'dbm.dumb'):
+        assert sorted(db) == [b'user1', b'user2', b'user3']  # O(n) to iterate, then a sort
+    else:
+        try:
+            iter(db)
+        except TypeError:
+            pass  # dbm.ndbm and dbm.gnu
+        else:
+            raise AssertionError('only dbm.sqlite3 and dbm.dumb are iterable')
 ```
 
 ## Modifications
@@ -190,58 +241,45 @@ with dbm.open('data', 'c') as db:
 ```python
 import dbm
 
-# 'r' - read-only - O(1)
-db = dbm.open('data', 'r')
-value = db[b'key']
+# 'n' - always create a new, empty database - O(1)
+with dbm.open('data', 'n') as db:
+    db[b'key'] = b'value'
 
-# 'w' - read-write, fails if not exists - O(1)
+# 'c' - read-write, create if missing (opening costs as in the dbm.open() row)
+with dbm.open('data', 'c') as db:
+    db[b'other'] = b'value'
+
+# 'r' - read-only, the default
+with dbm.open('data', 'r') as db:
+    assert db[b'key'] == b'value'
+
+# 'w' - read-write, fails if the database does not exist
 try:
-    db = dbm.open('newdata', 'w')
-except Exception as e:
-    print("Database doesn't exist")
-
-# 'c' - read-write, create if missing (default) - O(1)
-db = dbm.open('data', 'c')
-
-# 'n' - always create new, truncate if exists - O(1)
-db = dbm.open('data', 'n')
-
-db.close()
+    dbm.open('newdata', 'w')
+except dbm.error:
+    pass
+else:
+    raise AssertionError("'w' should not create a database")
 ```
 
 ## Data Type Restrictions
 
-### Keys and Values Must Be Bytes
+### Keys and Values Are Bytes
+
+Every backend accepts `str` keys and values and encodes them as UTF-8, and returns `bytes`. Other
+objects need encoding first, which costs O(v) on the way in and on the way out.
 
 ```python
 import dbm
-
-db = dbm.open('data', 'c')
-
-# Correct: use bytes
-db[b'key'] = b'value'
-db[b'number'] = b'42'
-db[b'list'] = b'[1, 2, 3]'
-
-# Wrong: strings, integers, objects won't work
-try:
-    db['key'] = 'value'  # TypeError
-except TypeError as e:
-    print(f"Error: {e}")
-
-# Wrong: mutable objects
-try:
-    db[b'list'] = [1, 2, 3]  # TypeError
-except TypeError as e:
-    print(f"Error: {e}")
-
-# Workaround: convert to/from strings
 import json
-data = {'name': 'Alice', 'age': 30}
-db[b'user'] = json.dumps(data).encode()
-retrieved = json.loads(db[b'user'].decode())
 
-db.close()
+with dbm.open('data', 'c') as db:
+    db['key'] = 'value'                          # str is stored as UTF-8
+    assert db[b'key'] == b'value'                # and read back as bytes
+
+    data = {'name': 'Alice', 'age': 30}
+    db[b'user'] = json.dumps(data).encode()      # O(v) to encode
+    assert json.loads(db[b'user']) == data       # O(v) to decode
 ```
 
 ## Performance Characteristics
@@ -273,6 +311,36 @@ try:
     print(f"GNU: {gnu_time:.4f}s vs Dumb: {dumb_time:.4f}s")
 except ImportError:
     print("GNU DBM not available")
+```
+
+## The SQLite Backend
+
+On 3.13+ a new database made by `dbm.open()` is a `dbm.sqlite3` file whenever SQLite is
+available. Lookups, stores and deletes are indexed, but `len()` counts every key each time it is
+called, and `key in db` reads the value it does not return.
+
+```python
+import dbm
+import dbm.sqlite3
+
+with dbm.open("default", "c") as db:            # O(1)
+    db[b"key"] = b"value"                       # O(log n + v)
+assert dbm.whichdb("default") == "dbm.sqlite3"
+
+with dbm.sqlite3.open("store.sqlite", "c") as db:   # O(1)
+    db[b"alpha"] = b"1"                         # O(log n + v)
+    db["beta"] = "2"                            # str keys and values are stored as UTF-8
+    assert db[b"beta"] == b"2"                  # O(log n + v)
+    assert b"alpha" in db                       # O(log n + v): fetches the value
+    assert len(db) == 2                         # O(n): counted on every call
+    assert sorted(db) == [b"alpha", b"beta"]    # O(n) to stream the keys, then a sort
+
+try:
+    dbm.sqlite3.open("missing.sqlite")          # flag "r" needs an existing file
+except dbm.error as error:
+    assert isinstance(error, dbm.sqlite3.error)
+else:
+    raise AssertionError("opening a missing database read-only should fail")
 ```
 
 ## Common Patterns
@@ -391,11 +459,12 @@ class DBMConfig:
             return json.loads(self.db[encoded_key].decode())
         return default
     
-    # Get all as dict - O(n)
+    # Get all as dict - one lookup and decode per key: keys() works on every
+    # backend, items() does not
     def get_all(self):
         return {
-            key.decode(): json.loads(value.decode())
-            for key, value in self.db.items()
+            key.decode(): json.loads(self.db[key].decode())
+            for key in self.db.keys()
         }
     
     def close(self):
@@ -407,15 +476,15 @@ config.set('database.host', 'localhost')
 config.set('database.port', 5432)
 config.set('debug', True)
 
-print(config.get('database.host'))
-print(config.get_all())
+assert config.get('database.host') == 'localhost'
+assert config.get_all() == {'database.host': 'localhost', 'database.port': 5432, 'debug': True}
 config.close()
 ```
 
 ## Limitations and Alternatives
 
 ### DBM Limitations
-- Keys and values must be bytes
+- Keys and values are bytes (`str` is encoded as UTF-8)
 - No complex queries
 - Limited to key-value pairs
 - Not suitable for relationships
@@ -423,19 +492,14 @@ config.close()
 ### When to Use
 
 ```python
-# Good for:
-# - Simple persistent storage
-# - Key-value pairs
-# - Cache backends
-# - Configuration storage
-
 import dbm
-db = dbm.open('simple_store')
 
-# Better alternatives:
-# - For structured data: sqlite3
-# - For documents: MongoDB
-# - For complex queries: PostgreSQL
+# Good for: simple persistent key-value storage, caches, configuration
+with dbm.open('simple_store', 'c') as db:
+    db[b'setting'] = b'on'
+    assert db[b'setting'] == b'on'
+
+# For structured data or queries, use sqlite3 instead
 ```
 
 ## Comparison with Alternatives
@@ -443,29 +507,34 @@ db = dbm.open('simple_store')
 ### DBM vs Shelve
 
 ```python
-# DBM: Lower level, faster, requires bytes
+# DBM: lower level, bytes only
 import dbm
-db = dbm.open('data')
-db[b'key'] = b'value'
+with dbm.open('raw', 'c') as db:
+    db[b'key'] = b'value'
 
-# Shelve: Higher level, handles pickling, slower
+# Shelve: stores any picklable value, pickling on every store and unpickling on every load
 import shelve
-shelf = shelve.open('data')
-shelf['key'] = {'complex': 'object'}
+with shelve.open('objects') as shelf:
+    shelf['key'] = {'complex': 'object'}
+    assert shelf['key'] == {'complex': 'object'}
 ```
 
 ### DBM vs SQLite
 
 ```python
-# DBM: Simple, fast, limited
+# DBM: one key, one value, lookups by key only
 import dbm
-db = dbm.open('data')
+with dbm.open('kv', 'c') as db:
+    db[b'key'] = b'value'
 
-# SQLite: Complex, slower, full querying
+# SQLite: tables, indexes and queries
 import sqlite3
 conn = sqlite3.connect('data.db')
-cursor = conn.cursor()
-cursor.execute('CREATE TABLE IF NOT EXISTS data...')
+conn.execute('CREATE TABLE IF NOT EXISTS data (key TEXT PRIMARY KEY, value TEXT)')
+conn.execute("INSERT OR REPLACE INTO data VALUES ('key', 'value')")
+conn.commit()
+assert conn.execute('SELECT value FROM data WHERE key = ?', ('key',)).fetchone() == ('value',)
+conn.close()
 ```
 
 ## Best Practices
@@ -482,6 +551,12 @@ cursor.execute('CREATE TABLE IF NOT EXISTS data...')
 - Don't share between processes without synchronization
 - Don't iterate over keys repeatedly
 - Don't use for large datasets
+- Don't call `len()` repeatedly on a `dbm.sqlite3` database - each call counts every key
+
+## Version Notes
+
+- **Python 3.13+**: Added `dbm.sqlite3`, which `dbm.open()` tries first when it creates a new
+  database; `dbm.gnu` and `dbm.ndbm` databases gained `clear()`
 
 ## Related Documentation
 

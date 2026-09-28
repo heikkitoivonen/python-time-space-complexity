@@ -1670,6 +1670,27 @@ class TestDescriptorOperations:
             f"os.read allocates what it is asked for: {small} B against {large} B"
         )
 
+    @POSIX_ONLY
+    def test_fstat_describes_the_open_file_without_its_path(self, tmp_path: pathlib.Path) -> None:
+        """`os.fstat(fd)`: the open file's metadata, even once no path names it."""
+        target = tmp_path / "payload.bin"
+        target.write_bytes(b"x" * 10)
+
+        descriptor = os.open(target, os.O_RDONLY)
+        try:
+            by_path = os.stat(target)
+            os.unlink(target)
+            with pytest.raises(FileNotFoundError):
+                os.stat(target)
+            by_descriptor = os.fstat(descriptor)
+        finally:
+            os.close(descriptor)
+
+        assert isinstance(by_descriptor, os.stat_result)
+        assert (by_descriptor.st_ino, by_descriptor.st_dev) == (by_path.st_ino, by_path.st_dev)
+        assert by_descriptor.st_size == 10
+        assert by_descriptor.st_nlink == 0, "the file has no name left"
+
     @pytest.mark.skipif(not hasattr(os, "readinto"), reason="os.readinto is 3.14+")
     def test_readinto_fills_the_callers_buffer(self, tmp_path: pathlib.Path) -> None:
         target = tmp_path / "payload.bin"

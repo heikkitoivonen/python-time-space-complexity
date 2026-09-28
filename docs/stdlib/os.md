@@ -22,6 +22,7 @@ produced before anything can be done with them.
 |-----------|------|-------|-------|
 | `os.stat(path)` | O(1) | O(1) | One syscall, following symlinks |
 | `os.lstat(path)` | O(1) | O(1) | Describes the link itself |
+| `os.fstat(fd)` | O(1) | O(1) | Describes the open file; no path to resolve, so it still works after the file is unlinked |
 | `os.access(path, mode)` | O(1) | O(1) | `effective_ids=True` needs `os.supports_effective_ids` |
 | `os.path.exists(path)` | O(1) | O(1) | One stat |
 | `os.path.lexists(path)` | O(1) | O(1) | One lstat; true for a broken symlink |

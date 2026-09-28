@@ -69,6 +69,20 @@ Measurement scope:
   4,000 deep as it does flat, timed; with `out`, a 100,000-element flat
   document peaks under 1 MB while returning a string peaks above its length.
   Attribute order and the output of the page's example are asserted.
+* `ElementInclude.include()` compares the tag of every element below the
+  root that is not a directive exactly twice - with the include and the
+  fallback tag - over 1,000 elements laid out flat and nested 50 deep, and walks included elements too. A counting loader is
+  called once per directive with nothing cached. `max_depth` admits 2**6
+  leaves through six doubling levels by default, raises
+  `LimitedRecursiveIncludeError` at a seventh, removes the limit with
+  `None`, and rejects a negative value; `max_depth=0` still expands a text
+  include and refuses an XML one; a file including itself raises
+  `FatalIncludeError`. `base_url` joins are observed through a recording
+  loader, and nested hrefs resolve against their including file. A text
+  include is deleted from its parent and its text joins the previous tail or
+  the parent's text. `default_loader()` is exercised on files under
+  tmp_path, with and without `encoding`; `xi:fallback` is observed unused.
+  A chain 100 deeper than the recursion limit raises `RecursionError`.
 * Every fenced Python block runs in its own subprocess, so the global
   namespace registry cannot leak between them, and a mutated assertion in
   one of them is asserted to fail.
@@ -97,8 +111,21 @@ Not settled here:
 * The page-scoped audit reports `TreeBuilder.doctype`, `start_ns` and
   `end_ns` as unresolved because the built-in `TreeBuilder` does not have
   them; the page documents them as hooks of a custom target, which
-  `TestXMLParserAndTargets` exercises. `xml.etree.ElementInclude` belongs to
-  the xml package page.
+  `TestXMLParserAndTargets` exercises. It asks to classify
+  `ElementInclude.FatalIncludeError` and `LimitedRecursiveIncludeError`,
+  which the page prices in its ElementInclude table.
+* `ElementInclude.include()`'s O(k + c) per `parse="text"` include is the
+  page's `del elem[index]` row plus a string concatenation, read from
+  Lib/xml/etree/ElementInclude.py: the tests observe that the directive is
+  deleted and its text joined, not the shift or the copy, and the
+  existing text is not varied. An XML include joins the directive's tail
+  onto the returned element's, which copies only when a custom loader
+  returns an element with a tail; that is not priced. A loader that
+  caches parsed trees shares their descendants between inclusions, since
+  `include()` shallow-copies what it returns; that is not exercised. `base_url`'s O(c) per include is
+  `urllib.parse.urljoin()`, read from Lib/xml/etree/ElementInclude.py, which
+  is unchanged in behaviour from 3.10 through 3.14; `base_url` and
+  `max_depth` date from 3.9, before the supported range.
 """
 
 from __future__ import annotations
@@ -116,11 +143,12 @@ import warnings
 import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterator
 from typing import Any
+from xml.etree import ElementInclude
 
 import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "xml.etree.elementtree.md"
-EXPECTED_BLOCKS = 12
+EXPECTED_BLOCKS = 15
 
 # The first patch of each minor release that scans a parent's children once per
 # tag for a positional predicate, instead of once per candidate.
@@ -1037,6 +1065,197 @@ class TestOtherConstructors:
         assert match is not None and truth is False
         if sys.version_info >= (3, 12):
             assert [warning.category for warning in caught] == [DeprecationWarning]
+
+
+XI = 'xmlns:xi="http://www.w3.org/2001/XInclude"'
+
+# The stubs accept only an Element and an overloaded loader protocol; the
+# runtime also takes an ElementTree and any callable with the loader's signature.
+expand_includes: Callable[..., None] = ElementInclude.include
+
+
+class RecordingLoader:
+    """A loader serving documents from a dict and recording each call."""
+
+    def __init__(self, documents: dict[str, str]) -> None:
+        self.documents = documents
+        self.calls: list[tuple[str, str]] = []
+
+    def __call__(self, href: str, parse: str, encoding: str | None = None) -> Any:
+        self.calls.append((href, parse))
+        text = self.documents[href]
+        return ET.fromstring(text) if parse == "xml" else text
+
+
+def doubling(levels: int) -> dict[str, str]:
+    """Files level1..level{levels-1} each including the next twice; the last is a leaf."""
+    documents = {
+        f"level{n}.xml": f'<l{n} {XI}><xi:include href="level{n + 1}.xml"/>'
+        f'<xi:include href="level{n + 1}.xml"/></l{n}>'
+        for n in range(1, levels)
+    }
+    documents[f"level{levels}.xml"] = "<leaf/>"
+    return documents
+
+
+def doubling_root() -> ET.Element:
+    return ET.fromstring(
+        f'<root {XI}><xi:include href="level1.xml"/><xi:include href="level1.xml"/></root>'
+    )
+
+
+class TestElementInclude:
+    """`expand_includes()` | O(e + u) | O(d + u), with `max_depth`,
+    `base_url`, `default_loader()` and the error classes."""
+
+    def test_every_element_is_compared_twice(self) -> None:
+        flat_root = flat_tree(1_000)
+        chain = ET.Element("root")
+        parent = chain
+        for index in range(1_000):
+            child = ET.SubElement(parent, CountingTag("item"))
+            if index % 20 == 19:
+                parent = child
+
+        assert counted(lambda: expand_includes(flat_root)) == 2_000
+        assert counted(lambda: expand_includes(chain)) == 2_000
+
+    def test_the_loader_is_called_once_per_directive(self) -> None:
+        loader = RecordingLoader(
+            {"part.xml": f'<part {XI}><xi:include href="leaf.xml"/></part>', "leaf.xml": "<leaf/>"}
+        )
+        root = ET.fromstring(
+            f'<r {XI}><xi:include href="part.xml"/><xi:include href="part.xml"/></r>'
+        )
+        result = expand_includes(root, loader=loader)
+
+        assert result is None
+        assert loader.calls == [("part.xml", "xml"), ("leaf.xml", "xml")] * 2
+        assert [child.tag for child in root.iter()] == ["r", "part", "leaf", "part", "leaf"]
+
+    def test_an_element_tree_is_accepted(self) -> None:
+        loader = RecordingLoader({"a.xml": "<a/>"})
+        tree = ET.ElementTree(ET.fromstring(f'<r {XI}><xi:include href="a.xml"/></r>'))
+        expand_includes(tree, loader=loader)
+
+        root = tree.getroot()
+        assert root is not None and root[0].tag == "a"
+
+    def test_the_default_depth_admits_six_doubling_levels(self) -> None:
+        root = doubling_root()
+        expand_includes(root, loader=RecordingLoader(doubling(6)))
+
+        assert ElementInclude.DEFAULT_MAX_INCLUSION_DEPTH == 6
+        assert len(list(root.iter("leaf"))) == 2**6
+
+    def test_a_seventh_level_raises_unless_the_limit_is_raised(self) -> None:
+        with pytest.raises(ElementInclude.LimitedRecursiveIncludeError):
+            expand_includes(doubling_root(), loader=RecordingLoader(doubling(7)))
+
+        for depth in (7, None):
+            root = doubling_root()
+            expand_includes(root, loader=RecordingLoader(doubling(7)), max_depth=depth)
+            assert len(list(root.iter("leaf"))) == 2**7
+
+        with pytest.raises(ValueError):
+            expand_includes(doubling_root(), max_depth=-1)
+
+    def test_text_includes_do_not_count_toward_the_depth(self) -> None:
+        loader = RecordingLoader({"t": "T", "x.xml": "<x/>"})
+        text_only = ET.fromstring(f'<r {XI}><xi:include href="t" parse="text"/></r>')
+        expand_includes(text_only, loader=loader, max_depth=0)
+
+        assert text_only.text == "T"
+        with pytest.raises(ElementInclude.LimitedRecursiveIncludeError):
+            expand_includes(
+                ET.fromstring(f'<r {XI}><xi:include href="x.xml"/></r>'),
+                loader=loader,
+                max_depth=0,
+            )
+
+    def test_an_include_of_a_file_being_included_raises(self) -> None:
+        loader = RecordingLoader({"self.xml": f'<s {XI}><xi:include href="self.xml"/></s>'})
+        root = ET.fromstring(f'<r {XI}><xi:include href="self.xml"/></r>')
+
+        with pytest.raises(ElementInclude.FatalIncludeError, match="recursive include"):
+            expand_includes(root, loader=loader, max_depth=None)
+        assert len(loader.calls) == 1
+
+    def test_the_error_classes_and_their_triggers(self) -> None:
+        assert issubclass(ElementInclude.FatalIncludeError, SyntaxError)
+        assert issubclass(
+            ElementInclude.LimitedRecursiveIncludeError, ElementInclude.FatalIncludeError
+        )
+        cases = [
+            f'<r {XI}><xi:include href="a" parse="html"/></r>',
+            f'<r {XI}><xi:include href="none"/></r>',
+            f"<r {XI}><xi:fallback/></r>",
+        ]
+        for document in cases:
+            with pytest.raises(ElementInclude.FatalIncludeError):
+                expand_includes(ET.fromstring(document), loader=lambda *args: None)
+
+    def test_the_namespace_constants(self) -> None:
+        assert ElementInclude.XINCLUDE == "{http://www.w3.org/2001/XInclude}"
+        assert ElementInclude.XINCLUDE_INCLUDE == ElementInclude.XINCLUDE + "include"
+        assert ElementInclude.XINCLUDE_FALLBACK == ElementInclude.XINCLUDE + "fallback"
+
+    def test_base_url_joins_each_href_and_nests(self) -> None:
+        loader = RecordingLoader(
+            {
+                "http://example.org/docs/parts/chapter.xml": (
+                    f'<chapter {XI}><xi:include href="note.txt" parse="text"/></chapter>'
+                ),
+                "http://example.org/docs/parts/note.txt": "Hello",
+            }
+        )
+        root = ET.fromstring(f'<book {XI}><xi:include href="parts/chapter.xml"/></book>')
+        expand_includes(root, loader=loader, base_url="http://example.org/docs/main.xml")
+
+        assert [href for href, _ in loader.calls] == [
+            "http://example.org/docs/parts/chapter.xml",
+            "http://example.org/docs/parts/note.txt",
+        ]
+        assert ET.tostring(root, encoding="unicode") == "<book><chapter>Hello</chapter></book>"
+
+    def test_a_text_include_is_deleted_from_its_parent(self) -> None:
+        loader = RecordingLoader({"t": "T"})
+        root = ET.fromstring(
+            f'<r {XI}>a<xi:include href="t" parse="text"/>b<x/>'
+            f'<xi:include href="t" parse="text"/>c<y/></r>'
+        )
+        assert len(root) == 4
+        expand_includes(root, loader=loader)
+
+        assert [child.tag for child in root] == ["x", "y"]
+        assert root.text == "aTb" and root[0].tail == "Tc"
+
+    def test_the_default_loader_reads_local_files(self, tmp_path: pathlib.Path) -> None:
+        (tmp_path / "doc.xml").write_text("<doc><a/></doc>", encoding="utf-8")
+        (tmp_path / "utf8.txt").write_text("caf\u00e9", encoding="utf-8")
+        (tmp_path / "latin.txt").write_text("caf\u00e9", encoding="latin-1")
+
+        element = ElementInclude.default_loader(str(tmp_path / "doc.xml"), "xml")
+        assert isinstance(element, ET.Element) and element.tag == "doc"
+        assert ElementInclude.default_loader(str(tmp_path / "utf8.txt"), "text") == "caf\u00e9"
+        latin = ElementInclude.default_loader(str(tmp_path / "latin.txt"), "text", "latin-1")
+        assert latin == "caf\u00e9"
+
+    def test_fallback_is_not_used_when_loading_fails(self, tmp_path: pathlib.Path) -> None:
+        missing = tmp_path / "missing.xml"
+        root = ET.fromstring(
+            f'<r {XI}><xi:include href="{missing}"><xi:fallback>x</xi:fallback></xi:include></r>'
+        )
+
+        with pytest.raises(FileNotFoundError):
+            expand_includes(root)
+
+    def test_a_tree_deeper_than_the_recursion_limit_raises(self) -> None:
+        depth = sys.getrecursionlimit() + 100
+        root = ET.fromstring("<a>" * depth + "</a>" * depth)
+
+        with pytest.raises(RecursionError):
+            expand_includes(root)
 
 
 def _blocks() -> list[tuple[int, str]]:

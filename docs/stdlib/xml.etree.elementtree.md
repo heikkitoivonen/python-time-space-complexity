@@ -151,6 +151,20 @@ elements beneath the element the search was called on.
 | `ET.iselement(element)` | O(1) | O(1) | True for any object with a `tag` attribute |
 | `ET.VERSION` | O(1) | O(1) | The ElementTree API version string |
 
+### ElementInclude
+
+`xml.etree.ElementInclude` expands XInclude directives in a tree you have already parsed. Here `u`
+is the characters the loader reads.
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `ElementInclude.include(elem, loader=None, base_url=None, max_depth=6)` | O(e + u), plus O(k + c) per `parse="text"` include | O(d + u + c) | Walks the whole tree, recursing once per level, and replaces each `xi:include` in place; e counts the included elements too. The loader is called once per `xi:include`, with nothing cached. A text include is deleted from its parent, O(k) as `del elem[index]` is, and its text is concatenated onto the text or tail before it, O(c). Takes an `Element` or an `ElementTree` and returns `None` |
+| `max_depth`, `ElementInclude.DEFAULT_MAX_INCLUSION_DEPTH` | O(1) | O(1) | Bounds how deeply `parse="xml"` includes nest, not how many each level has; past it `include()` raises `LimitedRecursiveIncludeError`, and `None` removes the limit. The default is 6 |
+| `base_url` | O(c) per include | O(c) | Joined to each `href` with `urllib.parse.urljoin()`; an included file's own includes resolve against its joined `href` |
+| `ElementInclude.default_loader(href, parse, encoding=None)` | O(u) | O(u) | Opens `href` as a local path: `parse="xml"` returns the parsed root element, anything else the file's text, read as UTF-8 unless `encoding` is given |
+| `ElementInclude.FatalIncludeError`, `ElementInclude.LimitedRecursiveIncludeError` | O(1) | O(1) | `SyntaxError` subclasses, the second a subclass of the first. Raised for an include of a file that is already being included, an unknown `parse`, a loader that returns `None`, and an `xi:fallback` outside an `xi:include` |
+| `ElementInclude.XINCLUDE`, `ElementInclude.XINCLUDE_INCLUDE`, `ElementInclude.XINCLUDE_FALLBACK` | O(1) | O(1) | The XInclude namespace and its two tags. `xi:fallback` is never used: a loader that fails raises |
+
 ## Parsing XML
 
 ### Whole Documents
@@ -382,6 +396,116 @@ assert ET.tostring(title, encoding='unicode') == (
 assert ET.canonicalize('<r b="2"  a="1"/>') == '<r a="1" b="2"></r>'  # O(n + r + (e + b)·(d + s) + b log a)
 ```
 
+## Expanding XInclude Directives
+
+`ElementInclude.include()` walks the tree and replaces each `xi:include` element with what its
+loader returns: an element for `parse="xml"`, text for `parse="text"`. It calls the loader once per
+directive and caches nothing, so a file named twice is read and parsed twice. Pass your own loader
+to read from somewhere other than the local disk.
+
+```python
+import xml.etree.ElementTree as ET
+from xml.etree import ElementInclude
+
+documents = {
+    'chapter.xml': '<chapter>Body</chapter>',
+    'year.txt': '2026',
+}
+calls = []
+
+def loader(href, parse, encoding=None):
+    calls.append(href)
+    text = documents[href]
+    return ET.fromstring(text) if parse == 'xml' else text
+
+root = ET.fromstring(
+    '<book xmlns:xi="http://www.w3.org/2001/XInclude">'
+    '<xi:include href="chapter.xml"/><xi:include href="chapter.xml"/>'
+    '<note>(c) <xi:include href="year.txt" parse="text"/></note>'
+    '</book>'
+)
+ElementInclude.include(root, loader=loader)  # O(e + u)
+assert ET.tostring(root, encoding='unicode') == (
+    '<book><chapter>Body</chapter><chapter>Body</chapter><note>(c) 2026</note></book>'
+)
+assert calls == ['chapter.xml', 'chapter.xml', 'year.txt']  # one call per directive
+```
+
+### Relative References and the Default Loader
+
+The default loader opens `href` as a local path. `base_url` is joined to each `href`, and an
+included file's own directives resolve against where that file was found, so a tree of files can
+include by relative path.
+
+```python
+import os
+import tempfile
+import xml.etree.ElementTree as ET
+from xml.etree import ElementInclude
+
+with tempfile.TemporaryDirectory() as directory:
+    os.mkdir(os.path.join(directory, 'parts'))
+    with open(os.path.join(directory, 'parts', 'chapter.xml'), 'w') as file:
+        file.write('<chapter xmlns:xi="http://www.w3.org/2001/XInclude">'
+                   '<xi:include href="note.txt" parse="text"/></chapter>')
+    with open(os.path.join(directory, 'parts', 'note.txt'), 'w') as file:
+        file.write('Hello')
+
+    root = ET.fromstring(
+        '<book xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include href="parts/chapter.xml"/></book>'
+    )
+    ElementInclude.include(root, base_url=directory + '/')  # note.txt resolves against parts/
+    assert ET.tostring(root, encoding='unicode') == '<book><chapter>Hello</chapter></book>'
+
+    note = ElementInclude.default_loader(os.path.join(directory, 'parts', 'note.txt'), 'text')  # O(u)
+    assert note == 'Hello'
+```
+
+### Depth and Fan-out
+
+`max_depth` limits how deeply included files nest, not how many directives each one holds. When
+every level includes the next one twice, the tree doubles at each level, so the default depth of
+six admits 2⁶ copies of the innermost file. An include of a file that is already being included
+raises at once, whatever the depth.
+
+```python
+import xml.etree.ElementTree as ET
+from xml.etree import ElementInclude
+
+XI = 'xmlns:xi="http://www.w3.org/2001/XInclude"'
+
+def twice(href):
+    return f'<xi:include href="{href}"/><xi:include href="{href}"/>'
+
+documents = {f'level{n}.xml': f'<l{n} {XI}>{twice(f"level{n + 1}.xml")}</l{n}>' for n in range(1, 6)}
+documents['level6.xml'] = '<leaf/>'
+
+def loader(href, parse, encoding=None):
+    return ET.fromstring(documents[href])
+
+root = ET.fromstring(f'<root {XI}>{twice("level1.xml")}</root>')
+ElementInclude.include(root, loader=loader)  # six levels of includes: the default limit
+assert len(list(root.iter('leaf'))) == 2 ** 6  # each level doubles the tree
+
+documents['level6.xml'] = f'<l6 {XI}><xi:include href="level7.xml"/></l6>'
+documents['level7.xml'] = '<leaf/>'
+root = ET.fromstring(f'<root {XI}>{twice("level1.xml")}</root>')
+try:
+    ElementInclude.include(root, loader=loader)  # a seventh level
+except ElementInclude.LimitedRecursiveIncludeError:
+    pass
+else:
+    raise AssertionError('seven nested includes passed max_depth=6')
+
+documents['self.xml'] = f'<s {XI}><xi:include href="self.xml"/></s>'
+try:
+    ElementInclude.include(ET.fromstring(f'<r {XI}><xi:include href="self.xml"/></r>'), loader=loader)
+except ElementInclude.FatalIncludeError as error:
+    assert 'recursive include' in str(error)
+else:
+    raise AssertionError('a file including itself was expanded')
+```
+
 ## Common Patterns
 
 ### Looking Up Elements by id
@@ -430,6 +554,8 @@ assert ET.tostring(root, encoding='unicode') == (
 - Serializing or indenting trees deeper than the recursion limit
 - `canonicalize()` on deeply nested documents - every name walks the open scopes
 - Testing an element's truth value
+- `ElementInclude.include(..., max_depth=None)` on documents you did not write - each level of
+  includes can multiply the tree
 
 ## Version Notes
 

@@ -12,6 +12,8 @@ The `zlib` module provides low-level compression and decompression functions usi
 | `Compress.compress(data)` | O(n) | O(k) | Add data to compress, k = buffer |
 | `Compress.flush()` | O(k) | O(k) | Finalize compression |
 | `Decompress.decompress(data)` | O(m) | O(k) | Decompress data |
+| `zlib.adler32(data, value=1)` | O(n) | O(1) | Checksum of `data`; pass the previous result as `value` to continue a running checksum |
+| `zlib.crc32(data, value=0)` | O(n) | O(1) | As `adler32()`, computing CRC-32 |
 
 ## Compression Functions
 
@@ -37,10 +39,12 @@ compressed = zlib.compress(data, level=9)  # O(n)
 ```python
 import zlib
 
+compressed = zlib.compress(b'example data ' * 10_000)
+
 # Decompress entire data: O(m) time, O(m) space
 # m = uncompressed size
-compressed = b'x\x9c...'  # DEFLATE data
 data = zlib.decompress(compressed)  # O(m)
+assert data == b'example data ' * 10_000
 
 # Space: creates entire decompressed result
 # O(m) for output
@@ -53,18 +57,21 @@ data = zlib.decompress(compressed)  # O(m)
 ```python
 import zlib
 
+data_chunks = [b'chunk %d ' % i * 1_000 for i in range(100)]
+
 # Create compressor: O(1)
 compressor = zlib.compressobj()  # O(1)
 
 # Add data to compress: O(n) total for all data
-result = b''
+parts = []
 for chunk in data_chunks:  # O(n) iterations
-    result += compressor.compress(chunk)  # O(n) total
+    parts.append(compressor.compress(chunk))  # O(n) total
 
 # Finalize: O(k)
-result += compressor.flush()  # O(k) for remaining
+parts.append(compressor.flush())  # O(k) for remaining
+result = b''.join(parts)  # one O(n) join, not a copy per chunk
 
-# Total: O(n) time, O(k) memory
+assert zlib.decompress(result) == b''.join(data_chunks)
 ```
 
 ### Space Complexity: O(k)
@@ -72,18 +79,35 @@ result += compressor.flush()  # O(k) for remaining
 ```python
 import zlib
 
-# Streaming with small buffer
+huge_data_chunks = (b'%d,' % i * 1_000 for i in range(1_000))  # produced lazily
+
+# Streaming with small buffer: each piece of output goes straight to the file,
+# so memory stays O(k) however much data passes through
 compressor = zlib.compressobj()
+checksum = 0
+with open('output.z', 'wb') as sink:
+    for chunk in huge_data_chunks:
+        checksum = zlib.crc32(chunk, checksum)  # to verify the file below
+        # compress() returns partial output
+        sink.write(compressor.compress(chunk))  # O(k) memory, not O(n)
 
-result = b''
-for chunk in huge_data_chunks:
-    # compress() returns partial output
-    result += compressor.compress(chunk)  # O(k) memory, not O(n)
-    
-    # Optional: flush periodically for incremental output
-    result += compressor.flush(zlib.Z_SYNC_FLUSH)  # Incremental flush
+        # Optional: flush periodically for incremental output
+        sink.write(compressor.flush(zlib.Z_SYNC_FLUSH))  # Incremental flush
 
-result += compressor.flush()  # Final flush
+    sink.write(compressor.flush())  # Final flush
+
+# Verify by streaming the file back through a decompressor, O(k) memory too
+decompressor = zlib.decompressobj()
+restored = 0
+with open('output.z', 'rb') as source:
+    while block := source.read(65_536):
+        piece = decompressor.decompress(block, 65_536)  # at most 64 KiB out
+        restored = zlib.crc32(piece, restored)
+        while decompressor.unconsumed_tail:
+            piece = decompressor.decompress(decompressor.unconsumed_tail, 65_536)
+            restored = zlib.crc32(piece, restored)
+restored = zlib.crc32(decompressor.flush(), restored)
+assert restored == checksum
 ```
 
 ## Streaming Decompression
@@ -93,15 +117,21 @@ result += compressor.flush()  # Final flush
 ```python
 import zlib
 
+payload = b'record ' * 100_000
+compressed = zlib.compress(payload)
+compressed_chunks = [compressed[i:i + 256] for i in range(0, len(compressed), 256)]
+assert len(compressed_chunks) > 1
+
 # Create decompressor: O(1)
 decompressor = zlib.decompressobj()  # O(1)
 
 # Add compressed data: O(m) total
-result = b''
+parts = []
 for chunk in compressed_chunks:
-    result += decompressor.decompress(chunk)  # O(m) total
+    parts.append(decompressor.decompress(chunk))  # O(m) total
+parts.append(decompressor.flush())
 
-# Total: O(m) time, O(k) memory
+assert b''.join(parts) == payload
 ```
 
 ### Space Complexity: O(k)
@@ -109,15 +139,25 @@ for chunk in compressed_chunks:
 ```python
 import zlib
 
-# Streaming with small buffer
+payload = b'record ' * 100_000
+compressed = zlib.compress(payload)
+compressed_chunks = [compressed[i:i + 256] for i in range(0, len(compressed), 256)]
+assert len(compressed_chunks) > 1
+
+# Streaming with small buffer: max_length caps each piece of output,
+# and each piece is consumed before the next is produced
 decompressor = zlib.decompressobj()
-
-result = b''
+checksum = 0
 for chunk in compressed_chunks:
-    # decompress() returns partial output
-    result += decompressor.decompress(chunk)  # O(k) memory
+    piece = decompressor.decompress(chunk, 65_536)  # at most 64 KiB out
+    checksum = zlib.crc32(piece, checksum)
+    while decompressor.unconsumed_tail:
+        piece = decompressor.decompress(decompressor.unconsumed_tail, 65_536)
+        checksum = zlib.crc32(piece, checksum)
+checksum = zlib.crc32(decompressor.flush(), checksum)
 
-# Total: O(m) time, O(k) memory (k = buffer size)
+assert checksum == zlib.crc32(payload)
+# Total: O(m) time, O(k) memory (k = the 64 KiB cap)
 ```
 
 ## Compression Levels
@@ -151,7 +191,7 @@ compressed = zlib.compress(data, level=9)  # Slowest, smallest
 ```python
 import zlib
 
-data = large_data
+data = b'log line with repeated words\n' * 50_000
 
 # Speed critical: level 1
 compressed = zlib.compress(data, level=1)  # Fastest
@@ -284,6 +324,7 @@ compressor = zlib.compressobj(
 ```python
 import zlib
 
+data = b'streamed payload ' * 10_000
 compressor = zlib.compressobj()
 
 # Z_NO_FLUSH: Default, maximum compression
@@ -299,6 +340,8 @@ result += compressor.flush(zlib.Z_FULL_FLUSH)
 
 # Z_FINISH: Final flush
 result += compressor.flush(zlib.Z_FINISH)
+
+assert zlib.decompress(result) == data
 ```
 
 ## Decompression Limits
@@ -334,6 +377,33 @@ def safe_decompress(compressed, max_size=10*1024*1024):
         raise ValueError(f"Decompression error: {e}")
 ```
 
+## Checksums
+
+`adler32()` and `crc32()` read `data` once and keep nothing but a 32-bit value, which they
+return. Passing that value back in continues the same checksum, so a stream can be checksummed a
+chunk at a time in O(n) total time and O(1) memory, with the same result as one call over all of
+it.
+
+```python
+import zlib
+
+data = b"payload " * 100_000
+view = memoryview(data)          # slices of a memoryview do not copy
+
+crc = zlib.crc32(data)           # O(n)
+adler = zlib.adler32(data)       # O(n)
+
+running_crc, running_adler = 0, 1
+for start in range(0, len(data), 65_536):
+    chunk = view[start:start + 65_536]
+    running_crc = zlib.crc32(chunk, running_crc)          # O(chunk)
+    running_adler = zlib.adler32(chunk, running_adler)    # O(chunk)
+
+assert running_crc == crc
+assert running_adler == adler
+assert zlib.crc32(b"") == 0 and zlib.adler32(b"") == 1  # the starting values
+```
+
 ## Performance Characteristics
 
 ### Best Practices
@@ -341,30 +411,36 @@ def safe_decompress(compressed, max_size=10*1024*1024):
 ```python
 import zlib
 
-# Good: Use streaming for large data
-compressor = zlib.compressobj()
-for chunk in data_chunks:
-    compressed += compressor.compress(chunk)  # O(k) memory
-compressed += compressor.flush()
+data_chunks = [b'row %d\n' % i for i in range(10_000)]
+data = b''.join(data_chunks)
+MAX_SIZE = 10 * 1024 * 1024
 
-# Avoid: Compress entire large data at once
-compressed = zlib.compress(huge_data)  # O(n) memory
+# Good: Use streaming for large data, writing output as it is produced
+compressor = zlib.compressobj()
+with open('rows.z', 'wb') as sink:
+    for chunk in data_chunks:
+        sink.write(compressor.compress(chunk))  # O(k) working memory
+    sink.write(compressor.flush())
+with open('rows.z', 'rb') as source:
+    assert zlib.decompress(source.read()) == data
+
+# Avoid when the input is huge: holds the input and output at once
+assert zlib.compress(data) != b''  # O(n) memory
 
 # Good: Use appropriate compression level
 # Default (6) is usually best balance
 compressed = zlib.compress(data)
 
 # Avoid: Using level 9 for real-time compression
-# 9 is much slower and rarely worth it
-compressed = zlib.compress(data, level=9)  # Very slow
+# 9 is usually slower for little gain
+compressed = zlib.compress(data, level=9)
 
-# Good: Check decompressed size before processing
+# Good: Cap decompressed output before trusting it
 decompressor = zlib.decompressobj()
-result = b''
-for chunk in chunks:
-    result += decompressor.decompress(chunk)
-    if len(result) > MAX_SIZE:
-        raise ValueError("Data too large")
+result = decompressor.decompress(compressed, MAX_SIZE + 1)
+if len(result) > MAX_SIZE:
+    raise ValueError("Data too large")
+assert result == data
 ```
 
 ### Compression Level Selection
@@ -372,7 +448,7 @@ for chunk in chunks:
 ```python
 import zlib
 
-data = sample_data
+data = b'sample text, somewhat repetitive. ' * 10_000
 
 # Real-time/streaming: level 1-3
 # Fast compression, reasonable ratio
