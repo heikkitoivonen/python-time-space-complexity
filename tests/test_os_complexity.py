@@ -128,6 +128,9 @@ Not settled by execution:
   macOS ones (st_flags, st_gen, st_rsize, st_creator, st_type, st_birthtime,
   st_birthtime_ns), os.chflags, os.lchflags, os.lchmod and os.plock. The
   POSIX-only tests below skip on Windows rather than assert.
+* The Windows clauses on the realpath, ismount and normpath rows. The
+  counting here wraps os.stat and os.lstat, which ntpath does not call for
+  them; tests/test_nt_complexity.py counts the nt calls behind ntpath instead.
 * os.path.isjunction and os.path.isdevdrive on Windows. The tests there run
   only on Windows and check behaviour: a junction made with
   _winapi.CreateJunction answers True where its target answers False, and

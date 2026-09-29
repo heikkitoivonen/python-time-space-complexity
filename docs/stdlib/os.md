@@ -31,7 +31,7 @@ produced before anything can be done with them.
 | `os.path.islink(path)` | O(1) | O(1) | One lstat |
 | `os.path.isjunction(path)` | O(1) | O(1) | 3.12+; one lstat on Windows, and `False` without touching the disk elsewhere |
 | `os.path.isdevdrive(path)` | O(L + C) | O(L + C) | On Windows an `abspath()` then one volume query, `False` if that fails; O(1) and always `False` elsewhere. Windows 3.12+, every platform 3.13+ |
-| `os.path.ismount(path)` | O(R) | O(R) | From 3.13 two lstat calls over O(L) of text; through 3.12 a `realpath()` of the parent runs first, carrying its cost |
+| `os.path.ismount(path)` | O(R) | O(R) | POSIX: from 3.13 two lstat calls over O(L) of text; through 3.12 a `realpath()` of the parent runs first, carrying its cost. Windows: an `abspath()` and one volume query on every version, see [nt](nt.md) |
 | `os.path.getsize(path)` | O(1) | O(1) | One stat |
 | `os.path.getatime(path)` | O(1) | O(1) | One stat |
 | `os.path.getmtime(path)` | O(1) | O(1) | One stat |
@@ -354,7 +354,7 @@ network, or a cache in front of either.
 | `os.path.dirname(path)` | O(L) | O(L) | |
 | `os.path.basename(path)` | O(L) | O(L) | |
 | `os.path.splitext(path)` | O(L) | O(L) | |
-| `os.path.normpath(path)` | O(L) | O(L) | |
+| `os.path.normpath(path)` | O(L) | O(L) | Windows 3.10 has no C implementation: O(L²) for a path of many `.` or `..` components, see [nt](nt.md) |
 | `os.path.isabs(path)` | O(1) | O(1) | Inspects the prefix only; Windows before 3.13 rewrites separators across the whole path first, making it O(L) there |
 | `os.path.normcase(path)` | O(L) | O(L) | O(1) on POSIX, which returns the argument unchanged; Windows case-folds it |
 | `os.path.splitdrive(path)` | O(L) | O(L) | O(1) on POSIX, which returns the argument as the tail; a Windows UNC prefix is scanned and sliced |
@@ -366,7 +366,7 @@ network, or a cache in front of either.
 | `os.path.expandvars(path)` | O(L + s) | O(L + s) | s = total length of the values substituted in |
 | `os.path.expanduser(path)` | O(L + H) | O(L + H) | H = the home directory spliced in; `~user`, and a bare `~` with no `HOME` set, consult the password database at whatever that backend costs |
 | `os.path.abspath(path)` | O(L + C) | O(L + C) | C = length of the working directory, which a relative path is prefixed with after one `getcwd()` |
-| `os.path.realpath(path)` | O(R) | O(R) | R = the path text walked: the argument (rooted at the working directory if relative), plus every symlink target spliced into it; one lstat per component |
+| `os.path.realpath(path)` | O(R) | O(R) | POSIX: R = the path text walked, the argument (rooted at the working directory if relative) plus every symlink target spliced into it; one lstat per component. Windows: no walk for a path it can open, O(L + C + F) with F the result's length; each trailing component it cannot open (missing, access denied) adds O(L + C); a link Windows will not resolve (a missing target, a loop, a chain longer than one open follows) is read one `readlink()` per link, adding O(W) with W the length of every path reached that way; and on 3.10 a path of many `.` or `..` components adds O(L²); see [nt](nt.md) |
 | `os.path.samefile(p1, p2)` | O(1) | O(1) | Two stat calls |
 | `os.path.sameopenfile(fd1, fd2)` | O(1) | O(1) | |
 | `os.path.samestat(s1, s2)` | O(1) | O(1) | Compares two `stat_result` objects |
@@ -377,7 +377,7 @@ Everything in this table is string work except seven: `ismount()`, `realpath()`,
 password database for a `~user` prefix. `samestat()` only compares two results
 that were fetched already.
 
-`realpath()` is the one worth reading twice. Neither the argument's length nor
+`realpath()` is the one worth reading twice. On POSIX neither the argument's length nor
 the result's bounds its cost: every symlink it resolves splices that link's
 target into the path still to be walked, and those components are stat'ed in
 turn. A two-component argument can cost more lstat calls than a sixteen-component
@@ -597,7 +597,7 @@ os.path.isabs(path)
 absolute = os.path.abspath(path)
 ```
 
-`os.path.realpath()` is the exception: it stats once per component it walks,
+`os.path.realpath()` is the exception: on POSIX it stats once per component it walks,
 including the components of every symlink target it splices in along the way.
 It is the wrong tool for normalising a string you never intend to open. Use
 `normpath()` for that.
@@ -658,7 +658,7 @@ prefix live at a time.
   `os.setns()`, `os.unshare()`, `os.path.splitroot()`,
   `os.path.isjunction()`, `os.path.isdevdrive()` (Windows only until 3.13),
   `DirEntry.is_junction()` and `stat_result.st_birthtime_ns`
-- **Python 3.13+**: `os.path.ismount()` lstats the parent directly and keeps
+- **Python 3.13+**: on POSIX `os.path.ismount()` lstats the parent directly and keeps
   `realpath()` only as a fallback, so it stops scaling with the parent's
   depth; `os.path.isabs()` inspects a three-character prefix on Windows
   instead of rewriting separators across the whole path. Adds
