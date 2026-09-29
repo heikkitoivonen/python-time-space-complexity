@@ -31,7 +31,7 @@ produced before anything can be done with them.
 | `os.path.islink(path)` | O(1) | O(1) | One lstat |
 | `os.path.isjunction(path)` | O(1) | O(1) | 3.12+; one lstat on Windows, and `False` without touching the disk elsewhere |
 | `os.path.isdevdrive(path)` | O(L + C) | O(L + C) | On Windows an `abspath()` then one volume query, `False` if that fails; O(1) and always `False` elsewhere. Windows 3.12+, every platform 3.13+ |
-| `os.path.ismount(path)` | O(R) | O(R) | POSIX: from 3.13 two lstat calls over O(L) of text; through 3.12 a `realpath()` of the parent runs first, carrying its cost. Windows: an `abspath()` and one volume query on every version, see [nt](nt.md) |
+| `os.path.ismount(path)` | O(R) | O(R) | POSIX: from 3.13 two lstat calls over O(L) of text; through 3.12 a `realpath()` of the parent runs first, carrying its cost. Windows: an `abspath()` and one volume query on every version, see [ntpath](ntpath.md) |
 | `os.path.getsize(path)` | O(1) | O(1) | One stat |
 | `os.path.getatime(path)` | O(1) | O(1) | One stat |
 | `os.path.getmtime(path)` | O(1) | O(1) | One stat |
@@ -349,24 +349,24 @@ network, or a cache in front of either.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `os.path.join(path, *paths)` | O(L) | O(L) | L = total length of the arguments; a later absolute component discards the prefix but was still scanned |
+| `os.path.join(path, *paths)` | O(L); O(n·L) for bytes | O(L) | L = total length of the arguments; a later absolute component discards the prefix but was still scanned. Bytes has no in-place concatenation, so each of the n arguments copies the result so far |
 | `os.path.split(path)` | O(L) | O(L) | |
 | `os.path.dirname(path)` | O(L) | O(L) | |
 | `os.path.basename(path)` | O(L) | O(L) | |
 | `os.path.splitext(path)` | O(L) | O(L) | |
-| `os.path.normpath(path)` | O(L) | O(L) | Windows 3.10 has no C implementation: O(L²) for a path of many `.` or `..` components, see [nt](nt.md) |
-| `os.path.isabs(path)` | O(1) | O(1) | Inspects the prefix only; Windows before 3.13 rewrites separators across the whole path first, making it O(L) there |
+| `os.path.normpath(path)` | O(L) | O(L) | Windows 3.10 has no C implementation: O(L²) for a path of many `.` or `..` components, see [ntpath](ntpath.md) |
+| `os.path.isabs(path)` | O(1) | O(1) | Inspects the prefix only; Windows 3.10 rewrites separators across the whole path first, making it O(L) there |
 | `os.path.normcase(path)` | O(L) | O(L) | O(1) on POSIX, which returns the argument unchanged; Windows case-folds it |
 | `os.path.splitdrive(path)` | O(L) | O(L) | O(1) on POSIX, which returns the argument as the tail; a Windows UNC prefix is scanned and sliced |
 | `os.path.splitroot(path)` | O(L) | O(L) | 3.12+; same shape as `splitdrive()` |
 | `os.path.isreserved(path)` | O(L) | O(L) | Splits the path into components; Windows, 3.13+ |
-| `os.path.relpath(path, start)` | O(L + S + C) | O(L + S + C) | S = length of `start`; one `getcwd()` per relative argument, so two when both are |
+| `os.path.relpath(path, start)` | O(L + S + C) | O(L + S + C) | S = length of `start`; one `getcwd()` per relative argument, so two when both are. Windows 3.10 first runs each argument through its Python `normpath()`, with that row's quadratic case, see [ntpath](ntpath.md) |
 | `os.path.commonpath(paths)` | O(B) | O(B) | B = total length of every path given |
 | `os.path.commonprefix(paths)` | O(B) | O(B) | Character-wise, so it can end mid-component |
 | `os.path.expandvars(path)` | O(L + s) | O(L + s) | s = total length of the values substituted in |
 | `os.path.expanduser(path)` | O(L + H) | O(L + H) | H = the home directory spliced in; `~user`, and a bare `~` with no `HOME` set, consult the password database at whatever that backend costs |
 | `os.path.abspath(path)` | O(L + C) | O(L + C) | C = length of the working directory, which a relative path is prefixed with after one `getcwd()` |
-| `os.path.realpath(path)` | O(R) | O(R) | POSIX: R = the path text walked, the argument (rooted at the working directory if relative) plus every symlink target spliced into it; one lstat per component. Windows: no walk for a path it can open, O(L + C + F) with F the result's length; each trailing component it cannot open (missing, access denied) adds O(L + C); a link Windows will not resolve (a missing target, a loop, a chain longer than one open follows) is read one `readlink()` per link, adding O(W) with W the length of every path reached that way; and on 3.10 a path of many `.` or `..` components adds O(L²); see [nt](nt.md) |
+| `os.path.realpath(path)` | O(R) | O(R) | POSIX: R = the path text walked, the argument (rooted at the working directory if relative) plus every symlink target spliced into it; one lstat per component. Windows: no walk for a path it can open, O(L + C + F) with F the result's length; each trailing component it cannot open (missing, access denied) adds O(L + C); a link Windows will not resolve (a missing target, a loop, a chain longer than one open follows) is read one `readlink()` per link, adding O(W) with W the length of every path reached that way; and on 3.10 a path of many `.` or `..` components adds O(L²); see [ntpath](ntpath.md) |
 | `os.path.samefile(p1, p2)` | O(1) | O(1) | Two stat calls |
 | `os.path.sameopenfile(fd1, fd2)` | O(1) | O(1) | |
 | `os.path.samestat(s1, s2)` | O(1) | O(1) | Compares two `stat_result` objects |
@@ -651,7 +651,8 @@ prefix live at a time.
 
 - **Python 3.5+**: `os.scandir()` and `os.DirEntry`, which is what lets a
   listing loop answer `is_file()` without a stat
-- **Python 3.11+**: adds `os.login_tty()`
+- **Python 3.11+**: `os.path.isabs()` inspects a three-character prefix on Windows
+  instead of rewriting separators across the whole path. Adds `os.login_tty()`
 - **Python 3.12+**: `os.walk()` drives an explicit stack instead of recursing,
   so depth stops costing a suspended frame per level — in the peak, and in the
   time, since results no longer pass up through one frame per level. Adds
@@ -660,9 +661,7 @@ prefix live at a time.
   `DirEntry.is_junction()` and `stat_result.st_birthtime_ns`
 - **Python 3.13+**: on POSIX `os.path.ismount()` lstats the parent directly and keeps
   `realpath()` only as a fallback, so it stops scaling with the parent's
-  depth; `os.path.isabs()` inspects a three-character prefix on Windows
-  instead of rewriting separators across the whole path. Adds
-  `os.process_cpu_count()`, the timerfd family, `os.posix_openpt()`,
+  depth. Adds `os.process_cpu_count()`, the timerfd family, `os.posix_openpt()`,
   `os.grantpt()`, `os.unlockpt()`, `os.ptsname()` and `os.path.isreserved()`
 - **Python 3.14+**: `os.readinto()` fills a caller-supplied buffer where
   `os.read()` allocates. Adds `os.reload_environ()`

@@ -128,9 +128,9 @@ Not settled by execution:
   macOS ones (st_flags, st_gen, st_rsize, st_creator, st_type, st_birthtime,
   st_birthtime_ns), os.chflags, os.lchflags, os.lchmod and os.plock. The
   POSIX-only tests below skip on Windows rather than assert.
-* The Windows clauses on the realpath, ismount and normpath rows. The
+* The Windows clauses on the realpath, relpath, ismount and normpath rows. The
   counting here wraps os.stat and os.lstat, which ntpath does not call for
-  them; tests/test_nt_complexity.py counts the nt calls behind ntpath instead.
+  them; tests/test_ntpath_complexity.py counts the nt calls behind ntpath instead.
 * os.path.isjunction and os.path.isdevdrive on Windows. The tests there run
   only on Windows and check behaviour: a junction made with
   _winapi.CreateJunction answers True where its target answers False, and
@@ -144,6 +144,7 @@ Not settled by execution:
   syscalls.
 """
 
+import functools
 import os
 import pathlib
 import re
@@ -953,13 +954,14 @@ class TestPathOperationsAreStringWork:
         On POSIX the whole function is `startswith` on the argument. A peak
         measurement cannot settle that - a scan that allocates nothing would
         pass one - so the control here is an actual O(L) pass over the very
-        same string: `str.replace`, which is what Windows before 3.13 does to
+        same string: `str.replace`, which is what Windows 3.10 does to
         the separators. isabs costs about 115ns whether the path is two
         characters or two million; the O(L) control costs some 590x that on
         the long one.
 
-        Windows before 3.13 is therefore O(L), which this platform cannot
-        exercise.
+        Windows 3.10 is therefore O(L); ntpath runs on every platform, and
+        tests/test_ntpath_complexity.py observes which versions rewrite the
+        whole path.
         """
         short, long = "/a", "/" + "a" * 2_000_000
 
@@ -1050,6 +1052,36 @@ class TestPathOperationsAreStringWork:
             del os.environ["OS_PAGE_PROBE"]
 
         assert len(expanded) == 5_000, "a 15-character input produced a 5,000-character result"
+
+    @pytest.mark.timing
+    def test_joining_bytes_copies_the_result_per_argument(self) -> None:
+        """`os.path.join(path, *paths)` | O(L) for str, O(n·L) for bytes.
+
+        Both posixpath and ntpath grow the result by concatenating to a
+        local, which str does in place and bytes cannot. 8,000, 32,000 and
+        128,000 one-character arguments: each 4x step predicts 4x if linear
+        and 16x if quadratic. Measured with both modules on Windows: bytes
+        x8.3 to x11 then x15 to x20 on 3.14, and x6.8 to x7.3 then x10 to
+        x13 on 3.10; str x2.0 to x4.7 per step. Argument length was not
+        varied.
+        """
+
+        def steps(root: Any, part: Any) -> list[float]:
+            durations = [
+                min(
+                    timeit.repeat(
+                        functools.partial(os.path.join, root, *([part] * n)), number=1, repeat=3
+                    )
+                )
+                for n in (8_000, 32_000, 128_000)
+            ]
+            return [durations[1] / durations[0], durations[2] / durations[1]]
+
+        as_str, as_bytes = steps(os.sep, "a"), steps(os.fsencode(os.sep), b"a")
+
+        assert all(step < 8 for step in as_str), f"str: x{as_str}"
+        assert as_bytes[1] > 8, f"bytes: x{as_bytes}"
+        assert as_bytes[0] * as_bytes[1] > 48, f"bytes: x{as_bytes}"
 
     @pytest.mark.skipif(
         sys.platform == "win32",
