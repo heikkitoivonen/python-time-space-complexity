@@ -237,15 +237,6 @@ import pytest
 # after the 3.10 signatures this file is checked against.
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "mailbox.md"
 EXPECTED_BLOCKS = 17
-# Blocks that cannot run on Windows, keyed by a line they contain, with the reason.
-WINDOWS_SKIPPED_BLOCKS = {
-    "box.flush()  # O(1) - the size check comes before any copying": (
-        "the block leaves the mbox open, and Windows cannot delete an open file"
-    ),
-    "maildir.set_flags(key, 'SR')          # O(f log f) plus one rename": (
-        "Maildir's default ':' info separator is not allowed in a Windows filename"
-    ),
-}
 
 
 def best_ns(func: Callable[[], Any], repeats: int = 7, inner: int = 1) -> float:
@@ -2072,16 +2063,8 @@ class TestDocumentedExamples:
     def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
         ran = 0
-        skipped: list[str] = []
         for line, source in _blocks():
             ran += 1
-            if sys.platform == "win32":
-                reasons = [
-                    why for marker, why in WINDOWS_SKIPPED_BLOCKS.items() if marker in source
-                ]
-                if reasons:
-                    skipped.append(f"{PAGE.name}:{line}: {reasons[0]}")
-                    continue
             workdir = tmp_path / f"block{line}"
             workdir.mkdir()
             result = _run_block(source, workdir)
@@ -2089,8 +2072,6 @@ class TestDocumentedExamples:
                 failures.append(f"{PAGE.name}:{line}\n{result.stderr.strip()}")
 
         assert ran == EXPECTED_BLOCKS
-        if sys.platform == "win32":
-            assert len(skipped) == len(WINDOWS_SKIPPED_BLOCKS), skipped
         assert not failures, "\n\n".join(failures)
 
     def test_the_runner_notices_a_broken_assertion(self, tmp_path: pathlib.Path) -> None:

@@ -204,6 +204,7 @@ assert calibrated.runcall(sum, range(10)) == 45
 import io
 import profile
 import pstats
+import time
 
 def leaf(x):
     return x * 2
@@ -211,7 +212,7 @@ def leaf(x):
 def work(n):
     return sum(leaf(i) for i in range(n))
 
-profiler = profile.Profile()
+profiler = profile.Profile(timer=time.perf_counter)  # a fine-grained clock on every platform
 assert profiler.runcall(work, 1_000) == 999_000  # O(c)
 
 report = io.StringIO()

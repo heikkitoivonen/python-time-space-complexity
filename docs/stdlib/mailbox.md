@@ -514,7 +514,7 @@ with tempfile.TemporaryDirectory() as directory:
         appended.write(b'From someone\nSubject: third\n\nbody\n\n')
 
     try:
-        box.flush()  # O(1) - the size check comes before any copying
+        box.close()  # O(1) - flushes, and the size check comes before any copying
     except mailbox.ExternalClashError as error:
         assert 'changed' in str(error)
     else:
@@ -650,6 +650,8 @@ from pathlib import Path
 if sys.version_info >= (3, 13):
     with tempfile.TemporaryDirectory() as directory:
         maildir = mailbox.Maildir(str(Path(directory) / 'md'))
+        if sys.platform == 'win32':
+            maildir.colon = '!'  # ':' is not allowed in a Windows file name
         message = EmailMessage()
         message['Subject'] = 's'
         message.set_content('body')

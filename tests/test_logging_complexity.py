@@ -138,7 +138,8 @@ Measurement scope:
   `exc_info`, and leaves `exc_text` on the record. `DatagramHandler`
   makes an unconnected datagram socket and sends one datagram per record.
 * `SysLogHandler` with a missing Unix socket path constructs without error
-  and has `createSocket()` exactly from 3.11;
+  and has `createSocket()` exactly from 3.11; on Windows the same address
+  raises `AttributeError` naming `AF_UNIX`;
   `encodePriority('user', 'info')` is 14; `mapPriority()` maps an unknown
   name to `warning`; `emit()` sends `<14>` + ident + message + NUL in one
   call, and no NUL with `append_nul` false.
@@ -167,6 +168,8 @@ Measurement scope:
 
 Not settled here:
 
+* That a `str` `SysLogHandler` address raises `AttributeError` on Windows:
+  its test is guarded to Windows, and CI, which runs on Linux, skips it.
 * Costs of the destination: a stream's write, a socket's connect and send,
   name resolution in `SysLogHandler`, an SMTP or HTTP exchange. The tests
   count the operations and never perform them.
@@ -2370,6 +2373,11 @@ class TestSysLogHandler:
             assert hasattr(handler, "createSocket") is (sys.version_info >= (3, 11))
         finally:
             handler.close()
+
+    @pytest.mark.skipif(sys.platform != "win32", reason="Windows-only behaviour")
+    def test_on_windows_a_unix_socket_address_raises(self, tmp_path: pathlib.Path) -> None:
+        with pytest.raises(AttributeError, match="AF_UNIX"):
+            logging.handlers.SysLogHandler(address=str(tmp_path / "missing.sock"))
 
     def test_priorities_are_lookups(self) -> None:
         # A UDP handler sends nothing until emit(), and works where AF_UNIX is missing.

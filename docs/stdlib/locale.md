@@ -24,10 +24,10 @@ selects it is the C library's work and is not priced here.
 | `locale.getlocale(category=LC_CTYPE)` | O(1) | O(1) | One `setlocale()` query, parsed through the alias table; `(None, None)` for the C locale. `LC_ALL` raises `TypeError` when the categories differ |
 | `locale.getdefaultlocale(envvars=('LC_ALL', 'LC_CTYPE', 'LANG', 'LANGUAGE'))` | O(1) | O(1) | Works out the default locale without changing the current one; warns `DeprecationWarning` on Python 3.11 to 3.14.6 |
 | `locale.getencoding()` | O(1) | O(1) | The current locale encoding, ignoring UTF-8 mode; Python 3.11+ |
-| `locale.getpreferredencoding(do_setlocale=True)` | Varies | Varies | Answers UTF-8 at once in UTF-8 mode; otherwise, with `do_setlocale=True`, sets `LC_CTYPE` from the environment and back, which is not thread-safe. `do_setlocale=False` is O(1) |
+| `locale.getpreferredencoding(do_setlocale=True)` | Varies | Varies | Answers UTF-8 at once in UTF-8 mode; otherwise, with `do_setlocale=True`, sets `LC_CTYPE` from the environment and back, which is not thread-safe; Windows never sets it. `do_setlocale=False` is O(1) |
 | `locale.normalize(localename)` | O(1) | O(1) | At most four lookups in `locale_alias`; a name it does not know is returned unchanged |
 | `locale.locale_alias`, `locale.locale_encoding_alias`, `locale.windows_locale` | O(1) | O(1) | The dictionaries `normalize()` and `getdefaultlocale()` consult; a lookup is a dict lookup |
-| `locale.LC_CTYPE`, `locale.LC_COLLATE`, `locale.LC_TIME`, `locale.LC_MONETARY`, `locale.LC_NUMERIC`, `locale.LC_MESSAGES`, `locale.LC_ALL` | O(1) | O(1) | Integer categories |
+| `locale.LC_CTYPE`, `locale.LC_COLLATE`, `locale.LC_TIME`, `locale.LC_MONETARY`, `locale.LC_NUMERIC`, `locale.LC_MESSAGES`, `locale.LC_ALL` | O(1) | O(1) | Integer categories; Windows has no `LC_MESSAGES` |
 | `locale.Error` | O(1) | O(1) | Raised by `setlocale()` for a locale that is not available |
 
 ### Conventions and language information
@@ -223,6 +223,7 @@ assert locale.setlocale(locale.LC_NUMERIC) == before
 
 - Sort with `key=locale.strxfrm`, which converts each string once
 - Pass `do_setlocale=False` to `getpreferredencoding()`, so it does not set `LC_CTYPE` and back
+  (Windows never does)
 - Set the locale once, at startup, from the main thread
 
 ❌ **Avoid**:
@@ -239,8 +240,8 @@ assert locale.setlocale(locale.LC_NUMERIC) == before
 - **Python 3.12+**: `locale.format()` is removed; use `format_string()`
 - **Python 3.13+**: `resetlocale()` is removed; use `setlocale(locale.LC_ALL, '')`
 - **Python 3.14.7+**: `getdefaultlocale()` no longer warns
-- **All Python 3**: Which locales exist depends on what is installed; only `'C'` and `'POSIX'`
-  are guaranteed
+- **All Python 3**: Which locales exist depends on what is installed; only `'C'` and, off
+  Windows, `'POSIX'` are guaranteed
 
 ## Related Modules
 

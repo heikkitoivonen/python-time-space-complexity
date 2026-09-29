@@ -78,9 +78,10 @@ Measurement scope:
   `None`, and rejects a negative value; `max_depth=0` still expands a text
   include and refuses an XML one; a file including itself raises
   `FatalIncludeError`. `base_url` joins are observed through a recording
-  loader, and nested hrefs resolve against their including file. A text
-  include is deleted from its parent and its text joins the previous tail or
-  the parent's text. `default_loader()` is exercised on files under
+  loader, and nested hrefs resolve against their including file; a base with
+  a drive letter, with either separator, reaches the loader as the bare href.
+  A text include is deleted from its parent and its text joins the previous
+  tail or the parent's text. `default_loader()` is exercised on files under
   tmp_path, with and without `encoding`; `xi:fallback` is observed unused.
   A chain 100 deeper than the recursion limit raises `RecursionError`.
 * Every fenced Python block runs in its own subprocess, so the global
@@ -1218,6 +1219,15 @@ class TestElementInclude:
         ]
         assert ET.tostring(root, encoding="unicode") == "<book><chapter>Hello</chapter></book>"
 
+    @pytest.mark.parametrize("base_url", ["C:/docs/", "C:" + chr(92) + "docs" + chr(92)])
+    def test_a_drive_letter_base_is_dropped_from_the_join(self, base_url: str) -> None:
+        loader = RecordingLoader({"chapter.xml": "<chapter/>"})
+        root = ET.fromstring(f'<book {XI}><xi:include href="chapter.xml"/></book>')
+
+        expand_includes(root, loader=loader, base_url=base_url)
+
+        assert [href for href, _ in loader.calls] == ["chapter.xml"]
+
     def test_a_text_include_is_deleted_from_its_parent(self) -> None:
         loader = RecordingLoader({"t": "T"})
         root = ET.fromstring(
@@ -1275,23 +1285,6 @@ def _blocks() -> list[tuple[int, str]]:
     return found
 
 
-# Blocks that cannot run on Windows, keyed by a snippet that identifies them.
-WINDOWS_SKIPPED_BLOCKS = {
-    "base_url=directory + '/'": (
-        "base_url is joined with urljoin(), which reads a Windows drive letter as a URL scheme"
-    ),
-}
-
-
-def _skipped_here(source: str) -> str | None:
-    """The reason this block cannot run on this platform, or None."""
-    if sys.platform == "win32":
-        for needle, reason in WINDOWS_SKIPPED_BLOCKS.items():
-            if needle in source:
-                return reason
-    return None
-
-
 def _run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
     script = cwd / "block.py"
     script.write_text(source, encoding="utf-8")
@@ -1318,8 +1311,6 @@ class TestDocumentedExamples:
         ran = 0
         for line, source in _blocks():
             ran += 1
-            if _skipped_here(source):
-                continue
             workdir = tmp_path / f"block{line}"
             workdir.mkdir()
             result = _run_block(source, workdir)

@@ -97,8 +97,9 @@ Not settled by execution:
   `sys.last_traceback` are not in that group: a plain script binds them too,
   and the tests below read them from a replacement `sys.excepthook`.
 * The platform-only rows - `sys.getwindowsversion()`, `sys.dllhandle`,
-  `sys.winver` and `sys._enablelegacywindowsfsencoding()` on Windows,
-  `sys.getandroidapilevel()` on Android, `sys._emscripten_info` on Emscripten
+  `sys.winver` and `sys._enablelegacywindowsfsencoding()` on Windows, the
+  absence of `sys.abiflags` there, `sys.getandroidapilevel()` on Android,
+  `sys._emscripten_info` on Emscripten
   - each have a test guarded by `sys.platform`. Every one of those guards
   skips on Linux and on CI, so no run this project performs verifies those
   rows; the guard is there so a reader on that platform gets an answer rather
@@ -2377,6 +2378,10 @@ class TestConstantTimeSurface:
         assert hasattr(sys, "dllhandle")
         assert hasattr(sys, "winver")
         assert callable(sys_attr("_enablelegacywindowsfsencoding"))
+
+    @pytest.mark.skipif(sys.platform != "win32", reason="Windows-only behaviour")
+    def test_windows_has_no_abiflags(self) -> None:
+        assert not hasattr(sys, "abiflags")
 
     def test_the_gil_and_jit_flags_answer_where_they_exist(self) -> None:
         """Both rows are Python 3.13+ and 3.14+; on an older interpreter the

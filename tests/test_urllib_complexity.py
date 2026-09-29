@@ -49,7 +49,9 @@ Measurement scope:
 * `urlretrieve()` of a 4 MB `file:` URL to a named file peaks under 512 KB
   and calls `reporthook` 513 times with the same block size, one call per
   block plus one before the first. A `file:` URL with no filename returns the
-  source's own path and creates no temporary file; `data:` URLs with no
+  source's own path and creates no temporary file (on Windows through a
+  relative URL; an absolute one returns `os.path.normpath` of the URL's path,
+  which does not exist); `data:` URLs with no
   filename create k temporary files, and `urlcleanup()` removes exactly those
   k with k `os.unlink` calls at k = 3 and 30, and uninstalls the installed
   opener. A response that stops short of its `Content-Length` raises
@@ -122,6 +124,9 @@ Measurement scope:
 
 Not settled here:
 
+* That on Windows `urlretrieve()` returns an unusable path for an absolute
+  `file:` URL: its test is guarded to Windows, and CI, which runs on Linux,
+  skips it; the page's example for that row is skipped on Windows.
 * Real network behaviour: HTTP and HTTPS connection cost, TLS, FTP and
   `CacheFTPHandler` reuse, proxies in use, and `read()` of a real
   `robots.txt`. The in-process handler stands in for the peer, so what is
@@ -662,6 +667,21 @@ class TestUrlretrieveCopiesInBlocks:
         assert os.path.samefile(local, source)
         assert urllib.request._url_tempfiles == []  # type: ignore[attr-defined]
         assert message["Content-Length"] == "4"
+
+    @pytest.mark.skipif(sys.platform != "win32", reason="Windows-only behaviour")
+    def test_on_windows_an_absolute_file_url_returns_an_unusable_path(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        source = tmp_path / "source.txt"
+        source.write_text("body", encoding="utf-8")
+        monkeypatch.setattr(urllib.request, "_url_tempfiles", [])
+        url_path = urllib.request.pathname2url(str(source))
+
+        local, _ = urllib.request.urlretrieve("file:" + url_path)
+
+        assert local == os.path.normpath(url_path)
+        assert not os.path.exists(local)
+        assert urllib.request._url_tempfiles == []  # type: ignore[attr-defined]
 
     @pytest.mark.parametrize("count", [3, 30])
     def test_urlcleanup_removes_each_temporary_file(
@@ -1683,9 +1703,6 @@ def _blocks() -> list[tuple[int, str]]:
 
 # Blocks that cannot run on Windows, keyed by a snippet that identifies them.
 WINDOWS_SKIPPED_BLOCKS = {
-    "response.headers['Content-Length'] == '23'": (
-        "write_text() writes each newline as CRLF on Windows, so the file is 25 bytes"
-    ),
     "os.path.samefile(local, source)": URLRETRIEVE_FILE_PATH,
 }
 

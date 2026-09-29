@@ -47,7 +47,7 @@ are outside the bounds and appear as "+ round trip" where an operation makes one
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `urllib.request.urlopen(url, data=None, timeout, *, context=None)` | O(n + h) + round trip | O(n) | Returns once the final response's status and headers are in; its body is not read. A `data:` URL is decoded in full here. Handlers add their own cost, such as a cookie lookup or a redirect |
-| `urllib.request.urlretrieve(url, filename=None, reporthook=None, data=None)` | O(n + h + b) + round trip | O(n) | Copies in fixed-size blocks, so memory does not grow with b. A `file:` URL with no `filename` returns the file's own path without copying |
+| `urllib.request.urlretrieve(url, filename=None, reporthook=None, data=None)` | O(n + h + b) + round trip | O(n) | Copies in fixed-size blocks, so memory does not grow with b. A `file:` URL with no `filename` returns the file's own path without copying; on Windows it is the URL's path rather than a Windows path, which for an absolute path is not a usable file name |
 | `urllib.request.urlcleanup()` | O(k) | O(1) | Also uninstalls an opener set by `install_opener()` |
 | `urllib.request.build_opener(*handlers)` | O(h²) | O(h) | Worst case; h includes the default handlers. Each is a sorted insertion by `handler_order` |
 | `urllib.request.install_opener(opener)` | O(1) | O(1) | `urlopen()` uses this opener from then on |
@@ -270,7 +270,7 @@ from urllib.request import urlopen, pathname2url
 
 with tempfile.TemporaryDirectory() as folder:
     path = pathlib.Path(folder) / 'page.txt'
-    path.write_text('first line\nsecond line\n')
+    path.write_bytes(b'first line\nsecond line\n')
     url = 'file:' + pathname2url(str(path))  # O(n)
 
     with urlopen(url) as response:  # O(n + h) - the file is opened, not read
@@ -371,7 +371,9 @@ assert issubclass(HTTPError, URLError) and issubclass(URLError, OSError)
 
 `urlretrieve()` copies the body in fixed-size blocks, so memory stays flat however large the
 download is. With no `filename` it writes a temporary file that stays until `urlcleanup()`, except
-for a `file:` URL, which gets its own path back without a copy.
+for a `file:` URL, which gets its own path back without a copy. On Windows that path is the URL's
+path rather than a Windows path, so for an absolute path it is not a usable file name, and this
+example is POSIX-only.
 
 ```python
 import os

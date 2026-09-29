@@ -160,7 +160,7 @@ is the characters the loader reads.
 |-----------|------|-------|-------|
 | `ElementInclude.include(elem, loader=None, base_url=None, max_depth=6)` | O(e + u), plus O(k + c) per `parse="text"` include | O(d + u + c) | Walks the whole tree, recursing once per level, and replaces each `xi:include` in place; e counts the included elements too. The loader is called once per `xi:include`, with nothing cached. A text include is deleted from its parent, O(k) as `del elem[index]` is, and its text is concatenated onto the text or tail before it, O(c). Takes an `Element` or an `ElementTree` and returns `None` |
 | `max_depth`, `ElementInclude.DEFAULT_MAX_INCLUSION_DEPTH` | O(1) | O(1) | Bounds how deeply `parse="xml"` includes nest, not how many each level has; past it `include()` raises `LimitedRecursiveIncludeError`, and `None` removes the limit. The default is 6 |
-| `base_url` | O(c) per include | O(c) | Joined to each `href` with `urllib.parse.urljoin()`; an included file's own includes resolve against its joined `href` |
+| `base_url` | O(c) per include | O(c) | Joined to each `href` with `urllib.parse.urljoin()`; an included file's own includes resolve against its joined `href`. A Windows path with a drive letter reads as a URL scheme and is dropped from the join |
 | `ElementInclude.default_loader(href, parse, encoding=None)` | O(u) | O(u) | Opens `href` as a local path: `parse="xml"` returns the parsed root element, anything else the file's text, read as UTF-8 unless `encoding` is given |
 | `ElementInclude.FatalIncludeError`, `ElementInclude.LimitedRecursiveIncludeError` | O(1) | O(1) | `SyntaxError` subclasses, the second a subclass of the first. Raised for an include of a file that is already being included, an unknown `parse`, a loader that returns `None`, and an `xi:fallback` outside an `xi:include` |
 | `ElementInclude.XINCLUDE`, `ElementInclude.XINCLUDE_INCLUDE`, `ElementInclude.XINCLUDE_FALLBACK` | O(1) | O(1) | The XInclude namespace and its two tags. `xi:fallback` is never used: a loader that fails raises |
@@ -435,7 +435,8 @@ assert calls == ['chapter.xml', 'chapter.xml', 'year.txt']  # one call per direc
 
 The default loader opens `href` as a local path. `base_url` is joined to each `href`, and an
 included file's own directives resolve against where that file was found, so a tree of files can
-include by relative path.
+include by relative path. `base_url` is joined as a URL, and a Windows drive letter reads as its
+scheme, so the example gives a path relative to the working directory.
 
 ```python
 import os
@@ -443,7 +444,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 from xml.etree import ElementInclude
 
-with tempfile.TemporaryDirectory() as directory:
+with tempfile.TemporaryDirectory(dir='.') as directory:
     os.mkdir(os.path.join(directory, 'parts'))
     with open(os.path.join(directory, 'parts', 'chapter.xml'), 'w') as file:
         file.write('<chapter xmlns:xi="http://www.w3.org/2001/XInclude">'
@@ -454,7 +455,8 @@ with tempfile.TemporaryDirectory() as directory:
     root = ET.fromstring(
         '<book xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include href="parts/chapter.xml"/></book>'
     )
-    ElementInclude.include(root, base_url=directory + '/')  # note.txt resolves against parts/
+    base_url = os.path.basename(directory) + '/'  # relative to the working directory
+    ElementInclude.include(root, base_url=base_url)  # note.txt resolves against parts/
     assert ET.tostring(root, encoding='unicode') == '<book><chapter>Hello</chapter></book>'
 
     note = ElementInclude.default_loader(os.path.join(directory, 'parts', 'note.txt'), 'text')  # O(u)

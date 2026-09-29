@@ -93,7 +93,7 @@ exception, since the constructor walks the collection it is handed rather than j
 | `FileExistsError`, `FileNotFoundError`, `IsADirectoryError`, `NotADirectoryError`, `PermissionError` | O(1) | O(1) | Path errors, selected by `errno` |
 | `ChildProcessError`, `InterruptedError`, `ProcessLookupError`, `TimeoutError` | O(1) | O(1) | `TimeoutError` is an `OSError`; `socket.timeout` became an alias of it in Python 3.10 and `asyncio.TimeoutError` in 3.11 |
 | `ConnectionError`, `BrokenPipeError`, `ConnectionAbortedError`, `ConnectionRefusedError`, `ConnectionResetError` | O(1) | O(1) | |
-| `EnvironmentError`, `IOError` | O(1) | O(1) | Names bound to `OSError` itself, not subclasses |
+| `EnvironmentError`, `IOError`, `WindowsError` | O(1) | O(1) | Names bound to `OSError` itself, not subclasses; `WindowsError` exists on Windows only |
 
 ### UnicodeError
 
@@ -175,7 +175,7 @@ BaseException
     ├── MemoryError
     ├── NameError
     │   └── UnboundLocalError
-    ├── OSError                   (also named EnvironmentError and IOError)
+    ├── OSError                   (also EnvironmentError, IOError, and WindowsError on Windows)
     │   ├── BlockingIOError
     │   ├── ChildProcessError
     │   ├── ConnectionError
@@ -851,6 +851,7 @@ traceback that already exists rather than starting a new one.
 
 ```python
 import errno
+import sys
 import traceback
 
 def read(path):
@@ -866,8 +867,8 @@ assert read("definitely-not-here.txt") == ""
 
 try:
     read(".")  # a directory, so a different errno
-except IsADirectoryError as error:
-    assert error.errno == errno.EISDIR
+except OSError as error:
+    assert type(error) is (PermissionError if sys.platform == "win32" else IsADirectoryError)
     assert len(traceback.extract_tb(error.__traceback__)) >= 2
 else:
     raise AssertionError("reading a directory succeeded")
@@ -933,8 +934,8 @@ assert issubclass(ValidationError, AppError)
 - **All Python 3.10+**: `NameError.name`, `AttributeError.name` and `.obj`,
   `SyntaxError.end_lineno` and `.end_offset`, `EncodingWarning`, and `socket.timeout` as an alias
   of `TimeoutError`
-- **All Python 3**: `EnvironmentError` and `IOError` are `OSError` itself, so they catch every
-  `OSError` subclass rather than a narrower set
+- **All Python 3**: `EnvironmentError` and `IOError`, and on Windows `WindowsError`, are `OSError`
+  itself, so they catch every `OSError` subclass rather than a narrower set
 
 ## Related Modules
 

@@ -91,7 +91,7 @@ operation that needs it pays O(L) once.
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `pathlib.types`, `pathlib.types.PathInfo` | O(1) | O(1) | Python 3.14+; the protocol `Path.info` implements |
-| `PathInfo.exists()`, `PathInfo.is_dir()`, `PathInfo.is_file()` | O(1) | O(1) | At most one stat call, on the first query, shared by the three and kept for the object's life. A path from `iterdir()` answers `is_dir()` and `is_file()` from its directory entry instead |
+| `PathInfo.exists()`, `PathInfo.is_dir()`, `PathInfo.is_file()` | O(1) | O(1) | At most one stat call, on the first query, shared by the three and kept for the object's life; on Windows each of the three makes at most one query of its own, kept the same way. A path from `iterdir()` answers `is_dir()` and `is_file()` from its directory entry instead |
 | `PathInfo.is_symlink()` | O(1) | O(1) | One lstat call, kept separately |
 
 ### Exceptions
@@ -241,6 +241,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
 On a `Path` you build, `Path.info` takes one stat call on its first query and answers `exists()`,
 `is_file()` and `is_dir()` from it after that; `is_symlink()` takes one lstat, cached the same way.
+On Windows each of the three makes at most one query of its own, cached the same way.
 A path yielded by `iterdir()` answers `is_file()`, `is_dir()` and `is_symlink()` from the directory
 entry it came from, which usually needs no call at all. The cache lives as long as the `Path` object, so a long-lived `Path` whose file changes underneath it keeps
 answering from the old stat. Build a fresh `Path` where that matters.
@@ -254,7 +255,7 @@ with tempfile.TemporaryDirectory() as tmp:
     path.write_text('contents')
 
     info = path.info  # O(1)
-    assert info.exists() and info.is_file() and not info.is_dir()  # one stat between them
+    assert info.exists() and info.is_file() and not info.is_dir()  # one stat between them on POSIX
 
     path.unlink()
     assert info.exists()  # still the cached answer
@@ -445,7 +446,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
 - Build a deep path with one `joinpath(*names)` call rather than a `/` per name in a loop
 - Read `parts` once into a local instead of in a loop
-- Use `Path.info` on 3.14 to ask several questions of one file for one stat call
+- Use `Path.info` on 3.14 to ask several questions of one file for one stat call (one per question on Windows)
 - Glob once and reuse the list, rather than globbing the same directory repeatedly
 - Use `os.scandir()` for a huge directory you only need the start of
 

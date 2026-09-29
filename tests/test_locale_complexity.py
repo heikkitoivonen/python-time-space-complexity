@@ -27,10 +27,13 @@ Measurement scope:
 * `getpreferredencoding()` runs in subprocesses with `-X utf8=1` and
   `-X utf8=0` and a counting `setlocale`: UTF-8 mode returns UTF-8 with no
   call, `do_setlocale=False` makes none, and `do_setlocale=True` without UTF-8
-  mode sets `LC_CTYPE` and restores it. `getencoding()` makes no call
+  mode sets `LC_CTYPE` and restores it, except on Windows, where it makes no
+  call either. `getencoding()` makes no call
   (3.11+). `getdefaultlocale()` leaves every category unchanged; it warns
   `DeprecationWarning` on 3.11 through 3.14.6 and not on 3.10 or 3.14.7
   (checked on 3.10.21, 3.11.16, 3.12, 3.13.14, 3.14.2, and 3.14.4 to 3.14.7).
+* On Windows, setting `'POSIX'` raises `locale.Error` and leaves the category
+  as it was, and `locale` has no `LC_MESSAGES`.
 * `localeconv()` returns a new dictionary on each call, with the same keys in
   the C locale and in `C.UTF-8`; in the C locale `frac_digits` is `CHAR_MAX`.
   Where `CHAR_MAX` is 127, `currency()` is asserted to raise `ValueError`
@@ -70,6 +73,9 @@ Measurement scope:
 
 Not settled here:
 
+* The Windows rows - no `'POSIX'` locale, no `LC_MESSAGES`, and
+  `getpreferredencoding(True)` making no `setlocale()` call - are asserted
+  by tests guarded to Windows, which CI, running on Linux, skips.
 * What `setlocale()` costs to select a locale, and what the catalogue
   functions cost to look a message up, are the C library's; the first use of
   a locale or a catalogue loads data from disk. Rows marked "Varies" are that.
@@ -78,10 +84,11 @@ Not settled here:
   Python formatting functions read. The length of `strxfrm()` keys in a
   locale with multi-level collation is not measured: the O(s) bound for them
   rests on the C library.
-* That `'C'` and `'POSIX'` are always available is POSIX's guarantee; that the
-  setting is process-wide and `setlocale()` not thread-safe is the Python
-  documentation's, as is that `getencoding()` ignores UTF-8 mode; that
-  `format()`'s `n` type follows `LC_NUMERIC` is the `string` documentation's.
+* That `'C'` and `'POSIX'` are always available off Windows is POSIX's
+  guarantee; that the setting is process-wide and `setlocale()` not
+  thread-safe is the Python documentation's, as is that `getencoding()`
+  ignores UTF-8 mode; that `format()`'s `n` type follows `LC_NUMERIC` is the
+  `string` documentation's.
 * `ERA`, `ALT_DIGITS` and non-ASCII conventions, which make `nl_langinfo()` and
   `localeconv()` switch `LC_CTYPE` briefly, need a locale that has them.
 * Windows: `windows_locale`, the `_locale._getdefaultlocale()` path of
@@ -238,6 +245,15 @@ class TestSettingsAreProcessWide:
 
         assert locale.localeconv()["decimal_point"] == "."
 
+    @pytest.mark.skipif(sys.platform != "win32", reason="Windows-only behaviour")
+    def test_windows_has_no_posix_locale(self) -> None:
+        before = locale.setlocale(locale.LC_NUMERIC)
+
+        with pytest.raises(locale.Error, match="unsupported locale setting"):
+            locale.setlocale(locale.LC_NUMERIC, "POSIX")
+
+        assert locale.setlocale(locale.LC_NUMERIC) == before
+
     def test_a_missing_locale_raises_and_changes_nothing(self) -> None:
         locale.setlocale(locale.LC_NUMERIC, "C")
 
@@ -303,6 +319,10 @@ class TestSettingsAreProcessWide:
     @pytest.mark.skipif(sys.platform == "win32", reason="LC_MESSAGES is POSIX-only")
     def test_lc_messages_is_an_integer(self) -> None:
         assert isinstance(locale.LC_MESSAGES, int)
+
+    @pytest.mark.skipif(sys.platform != "win32", reason="Windows-only behaviour")
+    def test_windows_has_no_lc_messages(self) -> None:
+        assert not hasattr(locale, "LC_MESSAGES")
 
 
 class CountingDict(dict[str, str]):
@@ -379,7 +399,7 @@ def _encoding_probe(utf8: int, do_setlocale: bool) -> list[str]:
 class TestEncodingQueries:
     """`getencoding()` and `getpreferredencoding(False)` are O(1) queries;
     `getpreferredencoding(True)` sets `LC_CTYPE` and back unless UTF-8 mode
-    answers first."""
+    answers first or the platform is Windows."""
 
     def test_utf8_mode_answers_without_touching_the_locale(self) -> None:
         output = _encoding_probe(utf8=1, do_setlocale=True)
@@ -401,6 +421,12 @@ class TestEncodingQueries:
         # A query, the environment's locale, then the saved name put back.
         assert output[1:3] == ["None", "''"]
         assert len(output) == 4
+
+    @pytest.mark.skipif(sys.platform != "win32", reason="Windows-only behaviour")
+    def test_on_windows_do_setlocale_true_makes_no_call(self) -> None:
+        output = _encoding_probe(utf8=0, do_setlocale=True)
+
+        assert len(output) == 1, output
 
     @pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
     def test_getencoding_makes_no_setlocale_call(self, monkeypatch: pytest.MonkeyPatch) -> None:

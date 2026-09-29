@@ -51,7 +51,8 @@ Measurement scope:
   buffer and not a scan of it.
 * Every `errno` the page maps to a subclass is asserted to produce it,
   `filename` and `filename2` are asserted to stay out of `args`, and
-  `winerror` is asserted present only on Windows. `characters_written` is
+  `winerror` is asserted present only on Windows, as is `WindowsError`, which
+  is `OSError` itself there. `characters_written` is
   asserted missing on a fresh `BlockingIOError` and settable afterwards.
   `socket.timeout` is asserted to be `TimeoutError` on every supported
   version and `asyncio.TimeoutError` only from 3.11, which is the boundary
@@ -168,12 +169,6 @@ import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "builtins" / "exceptions.md"
 EXPECTED_BLOCKS = 21
-# Blocks that cannot run on Windows, keyed by a line they contain, with the reason.
-WINDOWS_SKIPPED_BLOCKS = {
-    'read(".")  # a directory, so a different errno': (
-        "opening a directory raises PermissionError (EACCES), not IsADirectoryError, on Windows"
-    ),
-}
 
 # The group classes are Python 3.11 builtins. Naming them directly would not
 # lint or type-check against the 3.10 floor this project supports, so the
@@ -598,6 +593,10 @@ class TestOSErrorSplitsItsState:
     def test_the_old_names_are_oserror_itself(self) -> None:
         assert EnvironmentError is OSError
         assert IOError is OSError
+        if sys.platform == "win32":
+            assert builtins.WindowsError is OSError  # type: ignore[attr-defined]
+        else:
+            assert not hasattr(builtins, "WindowsError")
         assert issubclass(TimeoutError, OSError)
         assert issubclass(ConnectionResetError, ConnectionError)
 
@@ -1421,9 +1420,7 @@ class TestPageCoversTheClasses:
         missing = sorted(
             name
             for name in TestTheHierarchy._public_exception_classes()
-            # The page does not name the Windows-only OSError alias.
-            if name != "WindowsError"
-            and not re.search(rf"(?<![\w]){re.escape(name)}(?![\w])", text)
+            if not re.search(rf"(?<![\w]){re.escape(name)}(?![\w])", text)
         )
 
         assert missing == []
@@ -1470,16 +1467,8 @@ class TestDocumentedExamples:
     def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
         ran = 0
-        skipped: list[str] = []
         for line, source in _blocks():
             ran += 1
-            if sys.platform == "win32":
-                reasons = [
-                    why for marker, why in WINDOWS_SKIPPED_BLOCKS.items() if marker in source
-                ]
-                if reasons:
-                    skipped.append(f"{PAGE.name}:{line}: {reasons[0]}")
-                    continue
             workdir = tmp_path / f"block{line}"
             workdir.mkdir()
             result = _run_block(source, workdir)
@@ -1487,8 +1476,6 @@ class TestDocumentedExamples:
                 failures.append(f"{PAGE.name}:{line}\n{result.stderr.strip()}")
 
         assert ran == EXPECTED_BLOCKS
-        if sys.platform == "win32":
-            assert len(skipped) == len(WINDOWS_SKIPPED_BLOCKS), skipped
         assert not failures, "\n\n".join(failures)
 
     def test_the_runner_notices_a_broken_assertion(self, tmp_path: pathlib.Path) -> None:

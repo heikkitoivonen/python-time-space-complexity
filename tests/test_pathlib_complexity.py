@@ -40,14 +40,19 @@ Measurement scope:
 * Predicates, `stat()`, `lstat()`, `samefile()`, `owner()`, `group()`,
   `chmod()`, `unlink()` and `rmdir()` are counted at the os layer: one call
   each, two for `samefile()`, none for `absolute()`, and no directory read. 3.10
-  reaches os through `_NormalAccessor`, which the counter patches as well.
+  reaches os through `_NormalAccessor`, which the counter patches as well. On
+  Windows `exists()`, `is_file()`, `is_dir()` and `is_symlink()` reach native
+  `nt._path_*` queries instead of `os.stat`; the counter counts each as one.
   `is_mount()` makes the same count at depth 1 and 16 except on 3.12, where
   15 more components cost 15 more calls. `resolve()` makes eight more
   stat-family calls for eight more components.
-* `Path.info` (3.14): four `exists`/`is_file`/`is_dir` queries make one stat
-  call where the `Path` predicates make four, `is_symlink()` adds one lstat,
-  the attribute is the same object on each access, and its answer survives the
-  file's deletion while a fresh `Path` stats again. A path from `iterdir()`
+* `Path.info` (3.14): on POSIX four `exists`/`is_file`/`is_dir` queries make
+  one stat call where the `Path` predicates make four, and `is_symlink()` adds
+  one lstat. On Windows the first `exists()`, `is_file()` and `is_dir()` make
+  one native query each and asking all three again makes none; `is_symlink()`
+  asked twice makes one. On either platform the attribute is the same object
+  on each access, and its answer survives the file's deletion while a fresh
+  `Path` stats again. A path from `iterdir()`
   answers `is_file()`, `is_dir()` and `is_symlink()` with no os-level stat
   call, and still reports a file after it is deleted; `DirEntry`'s own
   fallback stat, where the filesystem reports no type, is not counted.
@@ -88,6 +93,8 @@ Measurement scope:
 
 Not settled here:
 
+* The Windows `Path.info` counts: the test that asserts them is guarded to
+  Windows, and CI, which runs on Linux, skips it.
 * "O(1)" for a syscall is a choice of unit: the kernel resolves a path
   component by component. On a real filesystem a recursive glob over a chain
   is quadratic in its depth by the clock on every version, which is that
@@ -131,6 +138,7 @@ import sys
 import textwrap
 import time
 import tracemalloc
+import types
 import warnings
 from collections import deque
 from collections.abc import Callable, Iterator
@@ -151,11 +159,7 @@ LATER_MARKERS: dict[str, tuple[tuple[int, int], int]] = {
 }
 
 POSIX_ONLY = pytest.mark.skipif(os.name != "posix", reason="POSIX-only behaviour")
-# On Windows os.path.exists(), isfile() and isdir() are native nt._path_* calls
-# that never reach os.stat, so the syscall counter cannot see them.
-NATIVE_PREDICATES = pytest.mark.skipif(
-    sys.platform == "win32", reason="Windows predicates bypass os.stat via nt._path_* calls"
-)
+WINDOWS_ONLY = pytest.mark.skipif(sys.platform != "win32", reason="Windows-only behaviour")
 
 # gh-101362: from 3.12 PurePath keeps its arguments and parses them on first use.
 DEFERRED = sys.version_info >= (3, 12)
@@ -169,6 +173,18 @@ SYSCALL_NAMES: tuple[str, ...] = (
     "unlink",
     "rmdir",
     "chmod",
+)
+# On Windows os.path.exists(), lexists(), isfile(), isdir(), islink() and
+# isjunction() are native nt._path_* queries that never reach os.stat. Each is
+# one filesystem query, counted under "native"; where the os.path function is
+# Python code it reaches os.stat and is counted there instead.
+NATIVE_PREDICATE_NAMES: tuple[str, ...] = (
+    "exists",
+    "lexists",
+    "isfile",
+    "isdir",
+    "islink",
+    "isjunction",
 )
 
 
@@ -205,18 +221,44 @@ class SyscallCounter:
     """Counts the filesystem syscalls a pathlib operation makes."""
 
     def __init__(self) -> None:
-        self.counts: dict[str, int] = dict.fromkeys(SYSCALL_NAMES, 0)
+        self.counts: dict[str, int] = dict.fromkeys((*SYSCALL_NAMES, "native"), 0)
 
     @property
     def stat_family(self) -> int:
-        """stat and lstat together: which of the two a predicate reaches
-        differs by version, the count does not."""
-        return self.counts["stat"] + self.counts["lstat"]
+        """stat, lstat and the native Windows predicates together: which of
+        them a predicate reaches differs by version and platform, the count
+        does not."""
+        return self.counts["stat"] + self.counts["lstat"] + self.counts["native"]
 
     @property
     def listings(self) -> int:
         """scandir and listdir together, for the same reason."""
         return self.counts["scandir"] + self.counts["listdir"]
+
+
+@contextmanager
+def counting_native_predicates(counter: SyscallCounter) -> Iterator[None]:
+    """Count each native os.path predicate call under "native"."""
+    native = {
+        name: func
+        for name in NATIVE_PREDICATE_NAMES
+        if isinstance(func := getattr(os.path, name, None), types.BuiltinFunctionType)
+    }
+
+    def make(name: str) -> Callable[..., Any]:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            counter.counts["native"] += 1
+            return native[name](*args, **kwargs)
+
+        return wrapper
+
+    for name in native:
+        setattr(os.path, name, make(name))
+    try:
+        yield
+    finally:
+        for name, func in native.items():
+            setattr(os.path, name, func)
 
 
 @contextmanager
@@ -244,7 +286,8 @@ def counting_syscalls() -> Iterator[SyscallCounter]:
             saved[name] = accessor.__dict__[name]
             setattr(accessor, name, staticmethod(wrapper))
     try:
-        yield counter
+        with counting_native_predicates(counter):
+            yield counter
     finally:
         for name, func in real.items():
             setattr(os, name, func)
@@ -490,7 +533,6 @@ class TestJoiningCopiesTheSegments:
         assert peak_bytes(lambda: os.path.join("data", long_segment)) > 500_000
         assert peak_bytes(lambda: base / long_segment) < 10_000
 
-    @NATIVE_PREDICATES
     def test_the_filesystem_call_is_the_same_either_way(self, tmp_path: pathlib.Path) -> None:
         path = tmp_path / "file.txt"
 
@@ -674,15 +716,16 @@ class TestCountingHarness:
 
     def test_os_is_restored_afterwards(self) -> None:
         before = os.stat
+        exists = os.path.exists
         with counting_syscalls():
             assert os.stat is not before
         assert os.stat is before
+        assert os.path.exists is exists
 
 
 class TestOneSyscallPerPredicate:
     """The O(1) rows of the Path table: one stat call each, counted."""
 
-    @NATIVE_PREDICATES
     def test_each_predicate_makes_exactly_one_stat_call(self, tmp_path: pathlib.Path) -> None:
         target = tmp_path / "f.txt"
         target.write_text("hello", encoding="utf-8")
@@ -708,7 +751,6 @@ class TestOneSyscallPerPredicate:
             assert counter.stat_family == 1, f"{name} made {counter.stat_family} stat calls"
             assert counter.listings == 0, f"{name} read a directory"
 
-    @NATIVE_PREDICATES
     def test_the_documented_example_asks_three_times(self, tmp_path: pathlib.Path) -> None:
         path = tmp_path / "file.txt"
         path.write_text("contents", encoding="utf-8")
@@ -751,7 +793,6 @@ class TestOneSyscallPerPredicate:
         assert result.is_absolute()
         assert counter.stat_family == 0
 
-    @NATIVE_PREDICATES
     def test_a_predicate_does_not_read_the_directory_it_lives_in(
         self, tmp_path: pathlib.Path
     ) -> None:
@@ -848,14 +889,11 @@ class TestModificationRowsAreOneSyscall:
 
 @pytest.mark.skipif(sys.version_info < (3, 14), reason="Path.info is 3.14+")
 class TestPathInfoCaches:
-    """`PathInfo.exists()`, `is_dir()`, `is_file()` share one stat call;
-    `is_symlink()` takes one lstat; both are kept for the object's life."""
+    """`PathInfo.exists()`, `is_dir()`, `is_file()` share one stat call on
+    POSIX and take at most one native query each on Windows; `is_symlink()`
+    takes one more; every answer is kept for the object's life."""
 
-    @pytest.mark.skipif(
-        sys.platform == "win32",
-        reason="Windows PathInfo asks exists(), is_file() and is_dir() separately, "
-        "each through a native nt._path_* call rather than one shared stat",
-    )
+    @POSIX_ONLY
     def test_three_questions_cost_one_stat(self, tmp_path: pathlib.Path) -> None:
         target = tmp_path / "f.txt"
         target.write_text("x", encoding="utf-8")
@@ -875,6 +913,32 @@ class TestPathInfoCaches:
 
         assert (cached["stat"], cached["lstat"]) == (1, 0), cached
         assert (symlink["stat"], symlink["lstat"]) == (0, 1), symlink
+
+    @WINDOWS_ONLY
+    def test_on_windows_each_question_is_its_own_cached_query(self, tmp_path: pathlib.Path) -> None:
+        target = tmp_path / "f.txt"
+        target.write_text("x", encoding="utf-8")
+
+        info = target.info  # type: ignore[attr-defined]
+        with counting_syscalls() as counter:
+            info.exists()
+            info.is_file()
+            info.is_dir()
+        first = dict(counter.counts)
+        with counting_syscalls() as counter:
+            info.exists()
+            info.is_file()
+            info.is_dir()
+        again = dict(counter.counts)
+
+        with counting_syscalls() as counter:
+            info.is_symlink()
+            info.is_symlink()
+        symlink = dict(counter.counts)
+
+        assert (first["native"], first["stat"], first["lstat"]) == (3, 0, 0), first
+        assert sum(again.values()) == 0, again
+        assert (symlink["native"], symlink["stat"], symlink["lstat"]) == (1, 0, 0), symlink
 
     def test_the_attribute_itself_is_cached(self, tmp_path: pathlib.Path) -> None:
         assert tmp_path.info is tmp_path.info  # type: ignore[attr-defined]

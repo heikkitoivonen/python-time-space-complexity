@@ -154,7 +154,7 @@ Python 3.12+. Six tool slots, each with its own callbacks and event mask.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `sys.platform`, `sys.version`, `sys.hexversion`, `sys.api_version`, `sys.byteorder`, `sys.copyright`, `sys.float_repr_style`, `sys.abiflags` | O(1) | O(1) | Plain attribute reads, computed once at startup |
+| `sys.platform`, `sys.version`, `sys.hexversion`, `sys.api_version`, `sys.byteorder`, `sys.copyright`, `sys.float_repr_style`, `sys.abiflags` | O(1) | O(1) | Plain attribute reads, computed once at startup; Windows has no `sys.abiflags` |
 | `sys.executable`, `sys.prefix`, `sys.exec_prefix`, `sys.base_prefix`, `sys.base_exec_prefix`, `sys.platlibdir` | O(1) | O(1) | Paths resolved during startup |
 | `sys.argv`, `sys.orig_argv` | O(1) | O(1) | Lists built once; `orig_argv` keeps the interpreter's own options, which `argv` drops. Python 3.10+ |
 | `sys.warnoptions`, `sys._xoptions` | O(1) | O(1) | The `-W` and `-X` options as given on the command line |

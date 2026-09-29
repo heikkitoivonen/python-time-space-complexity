@@ -78,7 +78,7 @@ NSS) are outside every bound; O(1) means constant work, not that the call return
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `socket.getaddrinfo(host, port, family=0, type=0, proto=0, flags=0)` | O(r) | O(r) | Returns every record as one list; pass `family` and `type` to get fewer |
+| `socket.getaddrinfo(host, port, family=0, type=0, proto=0, flags=0)` | O(r) | O(r) | Returns every record as one list; pass `family` and `type` to get fewer. Windows returns one untyped record per address, so there only `family` narrows it |
 | `socket.gethostbyname(hostname)` | O(1) | O(1) | IPv4 only; `getaddrinfo()` handles IPv6 too |
 | `socket.gethostbyname_ex(hostname)`, `socket.gethostbyaddr(ip_address)` | O(r) | O(r) | The name, its aliases and its addresses |
 | `socket.getfqdn([name])` | O(r) | O(r) | One `gethostbyaddr()`, then a scan of the aliases it returned |
@@ -326,8 +326,8 @@ for sock in (client, connection, server):
 ### Resolving Addresses
 
 `getaddrinfo()` builds the whole list before returning. Asking for one family and socket type
-returns fewer records, and `AI_NUMERICHOST` rejects anything that is not a literal address
-instead of consulting the resolver.
+returns fewer records (on Windows only the family narrows it), and `AI_NUMERICHOST` rejects
+anything that is not a literal address instead of consulting the resolver.
 
 ```python
 import socket

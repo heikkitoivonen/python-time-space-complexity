@@ -397,9 +397,11 @@ module built into the interpreter, which has no file at all.
 ```python
 import inspect
 import collections
+import pathlib
 
 assert inspect.getsourcefile(inspect.getdoc).endswith('inspect.py')   # O(1)
-assert inspect.getfile(collections).endswith('collections/__init__.py')  # O(1)
+path = pathlib.PurePath(inspect.getfile(collections))                  # O(1)
+assert path.parts[-2:] == ('collections', '__init__.py')
 assert inspect.getmodulename('/tmp/thing.py') == 'thing'              # O(1)
 
 # A module with no Python source behind it has no file to point at

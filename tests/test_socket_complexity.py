@@ -59,7 +59,10 @@ Measurement scope:
   services and protocols databases for `getservbyname()`, `getservbyport()`
   and `getprotobyname()`; `if_nameindex()` against `if_nametoindex()` and
   `if_indextoname()`. `getaddrinfo()` returns a list, and filtering by family
-  and type returns fewer records than not filtering. `getfqdn()` is observed
+  and type returns fewer records than not filtering. On Windows a numeric
+  host gives one record with type 0 unfiltered and one `SOCK_STREAM` record
+  filtered, while the passive wildcard gives an IPv6 and an IPv4 record, and
+  only the IPv4 one with `AF_INET`. `getfqdn()` is observed
   to make one `gethostbyaddr()` call and return the first dotted alias.
 * `detach()` leaves the descriptor open; `dup()`, `socket.dup()` and
   `fromfd()` return different descriptors; `connect_ex()` returns
@@ -73,6 +76,9 @@ Measurement scope:
 
 Not settled here:
 
+* That on Windows `getaddrinfo()` returns untyped records and only `family`
+  narrows them: its test is guarded to Windows, and CI, which runs on Linux,
+  skips it.
 * Every waiting cost: network latency, blocking until a peer acts, and
   resolver backends (hosts file, DNS, NSS). That `create_connection()` gives
   each attempt the full timeout is read from Lib/socket.py, which sets it on
@@ -797,6 +803,20 @@ class TestNameResolutionOffline:
         assert isinstance(everything, list) and isinstance(streams, list)
         assert len(streams) < len(everything)
         assert streams[0][4] == ("127.0.0.1", 80)
+
+    @pytest.mark.skipif(sys.platform != "win32", reason="Windows-only behaviour")
+    def test_on_windows_only_the_family_narrows_it(self) -> None:
+        everything = socket.getaddrinfo("127.0.0.1", 80, flags=socket.AI_NUMERICHOST)
+        streams = socket.getaddrinfo(
+            "127.0.0.1", 80, socket.AF_INET, socket.SOCK_STREAM, flags=socket.AI_NUMERICHOST
+        )
+        both = socket.getaddrinfo(None, 80, flags=socket.AI_PASSIVE)
+        inet = socket.getaddrinfo(None, 80, socket.AF_INET, flags=socket.AI_PASSIVE)
+
+        assert [record[1] for record in everything] == [0], everything
+        assert [record[1] for record in streams] == [socket.SOCK_STREAM], streams
+        assert {record[0] for record in both} == {socket.AF_INET, socket.AF_INET6}, both
+        assert [record[0] for record in inet] == [socket.AF_INET], inet
 
     def test_numeric_host_rejects_a_name(self) -> None:
         with pytest.raises(socket.gaierror):

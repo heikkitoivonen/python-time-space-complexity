@@ -414,7 +414,7 @@ from xmlrpc.server import CGIXMLRPCRequestHandler
 handler = CGIXMLRPCRequestHandler()
 handler.register_function(len)  # O(1)
 
-stdout = io.TextIOWrapper(io.BytesIO(), encoding='utf-8')
+stdout = io.TextIOWrapper(io.BytesIO(), encoding='utf-8', newline='\n')
 with contextlib.redirect_stdout(stdout):
     handler.handle_request(dumps(([1, 2, 3],), 'len'))  # O(n)
     sys.stdout.flush()

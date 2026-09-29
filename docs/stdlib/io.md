@@ -221,12 +221,12 @@ try:
         assert isinstance(f, io.TextIOWrapper)
         assert isinstance(f.buffer, io.BufferedWriter)
         assert isinstance(f.buffer.raw, io.FileIO)
-        f.write("hello\n")  # O(k)
+        f.write("hello, world")  # O(k)
 
     with open(path, "rb") as f:
         assert isinstance(f, io.BufferedReader)
         assert f.peek(1).startswith(b"h")  # O(b) - consumes nothing
-        assert f.read() == b"hello\n"  # O(n)
+        assert f.read() == b"hello, world"  # O(n)
 
     with open(path, "rb", buffering=0) as f:
         assert isinstance(f, io.FileIO)
