@@ -151,6 +151,11 @@ LATER_MARKERS: dict[str, tuple[tuple[int, int], int]] = {
 }
 
 POSIX_ONLY = pytest.mark.skipif(os.name != "posix", reason="POSIX-only behaviour")
+# On Windows os.path.exists(), isfile() and isdir() are native nt._path_* calls
+# that never reach os.stat, so the syscall counter cannot see them.
+NATIVE_PREDICATES = pytest.mark.skipif(
+    sys.platform == "win32", reason="Windows predicates bypass os.stat via nt._path_* calls"
+)
 
 # gh-101362: from 3.12 PurePath keeps its arguments and parses them on first use.
 DEFERRED = sys.version_info >= (3, 12)
@@ -485,6 +490,7 @@ class TestJoiningCopiesTheSegments:
         assert peak_bytes(lambda: os.path.join("data", long_segment)) > 500_000
         assert peak_bytes(lambda: base / long_segment) < 10_000
 
+    @NATIVE_PREDICATES
     def test_the_filesystem_call_is_the_same_either_way(self, tmp_path: pathlib.Path) -> None:
         path = tmp_path / "file.txt"
 
@@ -676,6 +682,7 @@ class TestCountingHarness:
 class TestOneSyscallPerPredicate:
     """The O(1) rows of the Path table: one stat call each, counted."""
 
+    @NATIVE_PREDICATES
     def test_each_predicate_makes_exactly_one_stat_call(self, tmp_path: pathlib.Path) -> None:
         target = tmp_path / "f.txt"
         target.write_text("hello", encoding="utf-8")
@@ -701,6 +708,7 @@ class TestOneSyscallPerPredicate:
             assert counter.stat_family == 1, f"{name} made {counter.stat_family} stat calls"
             assert counter.listings == 0, f"{name} read a directory"
 
+    @NATIVE_PREDICATES
     def test_the_documented_example_asks_three_times(self, tmp_path: pathlib.Path) -> None:
         path = tmp_path / "file.txt"
         path.write_text("contents", encoding="utf-8")
@@ -743,6 +751,7 @@ class TestOneSyscallPerPredicate:
         assert result.is_absolute()
         assert counter.stat_family == 0
 
+    @NATIVE_PREDICATES
     def test_a_predicate_does_not_read_the_directory_it_lives_in(
         self, tmp_path: pathlib.Path
     ) -> None:
@@ -842,6 +851,11 @@ class TestPathInfoCaches:
     """`PathInfo.exists()`, `is_dir()`, `is_file()` share one stat call;
     `is_symlink()` takes one lstat; both are kept for the object's life."""
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="Windows PathInfo asks exists(), is_file() and is_dir() separately, "
+        "each through a native nt._path_* call rather than one shared stat",
+    )
     def test_three_questions_cost_one_stat(self, tmp_path: pathlib.Path) -> None:
         target = tmp_path / "f.txt"
         target.write_text("x", encoding="utf-8")

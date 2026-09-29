@@ -1673,7 +1673,9 @@ class TestThreadBridges:
                 nonlocal ticks
                 while True:
                     ticks += 1
-                    await asyncio.sleep(0.001)
+                    # sleep(0), not a timed sleep: Windows timers tick every
+                    # ~15.6 ms, which would cap the count, not the loop.
+                    await asyncio.sleep(0)
 
             counting = asyncio.create_task(ticker())
             result = await asyncio.to_thread(blocking)
@@ -2242,11 +2244,22 @@ def _run(source: str, cwd: Any) -> subprocess.CompletedProcess[str]:
 # being connected. `send`/`sendall` are deliberately left alone: the event
 # loop's self-pipe writes to itself with `send`, so blocking it deadlocks the
 # loop rather than catching anything, and reaching the network through it still
-# requires a `connect` this guard does refuse.
+# requires a `connect` this guard does refuse. `socketpair` keeps its real
+# `connect`: on Windows it builds the self-pipe by connecting to a listener of
+# its own on the loopback, which never leaves the process.
 _NETWORK_GUARD = (
     "import socket\n"
     "def _blocked(*args, **kwargs):\n"
     "    raise AssertionError('this example opened a socket')\n"
+    "_real_connect = socket.socket.connect\n"
+    "_real_socketpair = socket.socketpair\n"
+    "def _socketpair(*args, **kwargs):\n"
+    "    socket.socket.connect = _real_connect\n"
+    "    try:\n"
+    "        return _real_socketpair(*args, **kwargs)\n"
+    "    finally:\n"
+    "        socket.socket.connect = _blocked\n"
+    "socket.socketpair = _socketpair\n"
     "socket.socket.connect = _blocked\n"
     "socket.socket.sendto = _blocked\n"
     "socket.create_connection = _blocked\n"

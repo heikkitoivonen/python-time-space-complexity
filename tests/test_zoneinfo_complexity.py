@@ -57,7 +57,8 @@ transitions (13us for UTC against 22us for America/New_York with the C type).
 A hundredfold step from 1,000 to 100,000 transitions costs x126 with the C type
 and x94 with the Python one, against x1 for a constant parse and x10,000 for a
 quadratic one. The tests otherwise need a system zoneinfo database under one
-of the `TZPATH` directories, as CI's Ubuntu runners have.
+of the `TZPATH` directories, as CI's Ubuntu runners have. Windows has none,
+so there the tests that load zones by key skip.
 """
 
 import builtins
@@ -98,12 +99,18 @@ INSIDE = datetime(1990, 7, 1, 12)
 """A date inside New York's transition table and past Tokyo's."""
 
 
+NEEDS_TZPATH_DATABASE = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows has no system time zone database on TZPATH",
+)
+"""Tests that read the system database's files under TZPATH themselves."""
+
+
 PACKAGE_READERS = ("files", "open_text", "open_binary")
 """How zoneinfo reaches the packaged database: files() from 3.11, the other two on 3.10."""
 
 
-@pytest.fixture
-def no_packaged_database(monkeypatch: pytest.MonkeyPatch) -> None:
+def hide_packaged_database(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make the optional packaged database look absent, as the module tests for it."""
 
     def absent(*args: Any, **kwargs: Any) -> Any:
@@ -111,6 +118,11 @@ def no_packaged_database(monkeypatch: pytest.MonkeyPatch) -> None:
 
     for reader in PACKAGE_READERS:
         monkeypatch.setattr(importlib.resources, reader, absent, raising=False)
+
+
+@pytest.fixture
+def no_packaged_database(monkeypatch: pytest.MonkeyPatch) -> None:
+    hide_packaged_database(monkeypatch)
 
 
 def transitions(key: str) -> int:
@@ -272,11 +284,16 @@ class TestLoading:
         assert ZoneInfo.no_cache(MANY) is not cached
 
     def test_from_file_is_uncached_keyless_and_unpicklable(self) -> None:
-        path = next(
-            pathlib.Path(root) / MANY
-            for root in zoneinfo.TZPATH
-            if (pathlib.Path(root) / MANY).exists()
-        )
+        # The system database's file where there is one; Windows has none, so
+        # there the same TZif file comes from the tzdata package.
+        path: Any = next(
+            (
+                pathlib.Path(root) / MANY
+                for root in zoneinfo.TZPATH
+                if (pathlib.Path(root) / MANY).exists()
+            ),
+            None,
+        ) or importlib.resources.files("tzdata.zoneinfo").joinpath(*MANY.split("/"))
         with path.open("rb") as handle:
             zone = ZoneInfo.from_file(handle)
         with path.open("rb") as handle:
@@ -485,6 +502,7 @@ class TestAvailableTimezones:
         monkeypatch.setattr(builtins, "open", record)
         return opened
 
+    @NEEDS_TZPATH_DATABASE
     @pytest.mark.usefixtures("no_packaged_database")
     def test_opens_every_file_under_the_system_path_on_every_call(
         self, monkeypatch: pytest.MonkeyPatch
@@ -521,11 +539,7 @@ class TestAvailableTimezones:
     ) -> None:
         """Two roots with the same keys: a valid zone is opened in the first
         root only, an invalid file in both, and right/ and posix/ never."""
-        tzif = next(
-            (pathlib.Path(root) / FIXED).read_bytes()
-            for root in zoneinfo.TZPATH
-            if (pathlib.Path(root) / FIXED).exists()
-        )
+        tzif = synthetic_tzif(1)
         roots = [tmp_path / "first", tmp_path / "second"]
         for root in roots:
             (root / "Zone").mkdir(parents=True)
@@ -595,13 +609,16 @@ class TestTzpath:
             zoneinfo.reset_tzpath(["relative/path"])
         assert zoneinfo.TZPATH == before
 
-    @pytest.mark.usefixtures("no_packaged_database")
-    def test_cached_zones_survive_an_empty_path(self) -> None:
+    def test_cached_zones_survive_an_empty_path(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         cached = ZoneInfo(MANY)
+        hide_packaged_database(monkeypatch)
+        empty = str(tmp_path / "nonexistent")
         original = zoneinfo.TZPATH
         try:
-            zoneinfo.reset_tzpath(["/nonexistent"])
-            assert zoneinfo.TZPATH == ("/nonexistent",)
+            zoneinfo.reset_tzpath([empty])
+            assert zoneinfo.TZPATH == (empty,)
             assert ZoneInfo(MANY) is cached
             with pytest.raises(zoneinfo.ZoneInfoNotFoundError):
                 ZoneInfo.no_cache(MANY)
@@ -610,10 +627,10 @@ class TestTzpath:
         assert zoneinfo.TZPATH == original
 
     def test_a_relative_environment_entry_is_dropped_with_a_warning(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         original = zoneinfo.TZPATH
-        absolute = next(root for root in original if os.path.isabs(root))
+        absolute = str(tmp_path)
         monkeypatch.setenv("PYTHONTZPATH", os.pathsep.join(["relative/dir", absolute]))
         try:
             with pytest.warns(zoneinfo.InvalidTZPathWarning):

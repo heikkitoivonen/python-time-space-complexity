@@ -297,7 +297,14 @@ class TestFindChecksEachCandidate:
         assert found is not None and pathlib.Path(found).parent.parent.name == "fi"
 
     @pytest.mark.timing
-    def test_deduplication_is_quadratic_in_candidates(self) -> None:
+    def test_deduplication_is_quadratic_in_candidates(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        if sys.platform == "win32":
+            # Each os.path.exists() of a missing path costs about 5 us on
+            # Windows, a linear term that hides the quadratic one at 250 to
+            # 1,000 candidates; answering False isolates the deduplication.
+            monkeypatch.setattr(os.path, "exists", lambda path: False)
         sizes = (250, 1_000, 4_000)
         durations = []
         for size in sizes:

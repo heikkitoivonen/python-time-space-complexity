@@ -717,6 +717,9 @@ class TestLineModeHoldsOneLine:
             (b"x" * 8_192 + b"\n", True),
             ("\u00e9".encode() * 4_096 + b"\n", False),
         ],
+        # Short ids: pytest puts the id in an environment variable, and on
+        # Windows one is capped at 32,767 characters.
+        ids=["8191-lf", "8191-crlf", "8192-lf", "4096-e-acute-lf"],
     )
     def test_a_downloaded_line_over_the_cap_raises(
         self, server: FakeFTPServer, ftp: ftplib.FTP, line: bytes, raises: bool
@@ -739,6 +742,8 @@ class TestLineModeHoldsOneLine:
             (b"x" * 8_192 + b"\n", True),
             ("\u00e9".encode() * 4_096 + b"\n", True),
         ],
+        # Short ids, as for downloads above.
+        ids=["8191-lf", "8191-crlf", "8192-lf", "4096-e-acute-lf"],
     )
     def test_an_uploaded_line_over_the_cap_raises(
         self, server: FakeFTPServer, ftp: ftplib.FTP, line: bytes, raises: bool

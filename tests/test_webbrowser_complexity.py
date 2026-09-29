@@ -266,11 +266,13 @@ def _run_discovery(
     browser_after_first: str | None = None,
 ) -> dict[str, Any]:
     root = pathlib.Path(tempfile.mkdtemp(dir=tmp_path))
+    # PATH names the directories relative to the child's working directory, so
+    # 1,000 of them stay under Windows' 32,767-character variable limit.
     dirs = []
     for index in range(path_dirs):
         directory = root / f"path{index}"
         directory.mkdir()
-        dirs.append(str(directory))
+        dirs.append(directory.name)
     env = {
         key: value
         for key, value in os.environ.items()
@@ -283,6 +285,7 @@ def _run_discovery(
         argv.append(browser_after_first)
     result = subprocess.run(
         argv,
+        cwd=root,
         env=env,
         capture_output=True,
         text=True,
@@ -333,6 +336,10 @@ class TestDiscoveryRunsOnce:
         assert counts["second"]["check_output"] == 0
         assert counts["commands"][0][0] == "xdg-settings"
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="Windows registers its browsers without checking DISPLAY or TERM",
+    )
     def test_no_display_and_no_terminal_look_nothing_up(self, tmp_path: pathlib.Path) -> None:
         counts = _run_discovery(tmp_path, 3)
 
@@ -454,10 +461,13 @@ class TestGetLooksUpWithoutProbing:
     def test_a_path_to_a_registered_browser_is_found(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        bin_dir = _executables(tmp_path / "bin", ["mybrowser"])
+        # shutil.which() on Windows finds only PATHEXT extensions, and the
+        # name webbrowser looks up is the basename with that extension.
+        name = "mybrowser.bat" if sys.platform == "win32" else "mybrowser"
+        bin_dir = _executables(tmp_path / "bin", [name])
         monkeypatch.setenv("PATH", str(bin_dir))
-        webbrowser.register("mybrowser", None, webbrowser.GenericBrowser("mybrowser"))
-        path = str(bin_dir / "mybrowser")
+        webbrowser.register(name, None, webbrowser.GenericBrowser(name))
+        path = str(bin_dir / name)
 
         assert webbrowser.get(path).name == path
 

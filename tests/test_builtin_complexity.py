@@ -7,11 +7,23 @@ don't become O(n), etc.
 """
 
 import math
+import sys
 import time
 from collections.abc import Callable
 from typing import Any
 
 import pytest
+
+# The Windows heap hands a block above roughly 0.5-1 MB to VirtualAlloc and
+# returns it on free, so each call that allocates one pays for freshly committed,
+# zero-filled pages (about 6 ns per list item against 2 ns below it), and a
+# block near that size is either, run to run. A step whose result crosses it
+# costs x300 to x700 for 100x the items, where a step above it costs x100.
+FRESH_PAGES_ON_WINDOWS = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="on Windows a new block above roughly 0.5-1 MB is freshly committed, zero-filled "
+    "pages, so a step whose result crosses that size prices page faults, not the copy",
+)
 
 
 def trimmed_mean(samples: list[float], trim_fraction: float = 0.1) -> float:
@@ -240,6 +252,7 @@ class TestListComplexity:
         )
 
     @pytest.mark.timing
+    @FRESH_PAGES_ON_WINDOWS
     def test_copy_is_on(self) -> None:
         """list.copy() should be O(n) - shallow copy."""
         small_list = list(range(self.SMALL_SIZE))
@@ -287,6 +300,7 @@ class TestListComplexity:
         )
 
     @pytest.mark.timing
+    @FRESH_PAGES_ON_WINDOWS
     def test_extend_is_ok(self) -> None:
         """extend(iterable) should be O(k) where k = len(iterable)."""
         base_list: list[int] = []
@@ -480,6 +494,7 @@ class TestTupleComplexity:
         )
 
     @pytest.mark.timing
+    @FRESH_PAGES_ON_WINDOWS
     def test_concatenation_is_omn(self) -> None:
         """Concatenation should be O(m+n).
 
@@ -520,6 +535,7 @@ class TestTupleComplexity:
         )
 
     @pytest.mark.timing
+    @FRESH_PAGES_ON_WINDOWS
     def test_constructor_is_on(self) -> None:
         """tuple() constructor should be O(n)."""
         small_list = list(range(self.SMALL_SIZE))
@@ -533,6 +549,7 @@ class TestTupleComplexity:
         )
 
     @pytest.mark.timing
+    @FRESH_PAGES_ON_WINDOWS
     def test_repetition_is_on(self) -> None:
         """Repetition (t * n) should be O(n * len(t))."""
         base_tuple = tuple(range(100))
@@ -631,6 +648,7 @@ class TestStrComplexity:
         )
 
     @pytest.mark.timing
+    @FRESH_PAGES_ON_WINDOWS
     def test_split_is_on(self) -> None:
         """str.split() should be O(n) - single pass."""
         small_str = "a " * self.SMALL_SIZE
@@ -921,6 +939,7 @@ class TestFrozensetComplexity:
     SIZE_RATIO = LARGE_SIZE / SMALL_SIZE
 
     @pytest.mark.timing
+    @FRESH_PAGES_ON_WINDOWS
     def test_constructor_is_on(self) -> None:
         """frozenset(iterable) should be O(n)."""
         small_list = list(range(self.SMALL_SIZE))

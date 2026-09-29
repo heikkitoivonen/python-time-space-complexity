@@ -286,21 +286,32 @@ class TestTreeStorage:
     ) -> None:
         """Why the row is O(d·e) and not the whole tree's metadata: two trees
         of identical entry count peak several-fold apart."""
-        deep = build_tree(tmp_path / "deep", depth=50, width=40)
-        bushy = self._bushy(tmp_path / "bushy", siblings=50, width=40)
+        # Fifty levels outgrow Windows' 260-character MAX_PATH; the
+        # extended-length prefix lifts that limit.
+        base = pathlib.Path("\\\\?\\" + str(tmp_path)) if sys.platform == "win32" else tmp_path
+        deep = build_tree(base / "deep", depth=50, width=40)
+        bushy = self._bushy(base / "bushy", siblings=50, width=40)
 
         def entries(root: pathlib.Path) -> int:
             return sum(len(dirs) + len(files) for _, dirs, files in os.walk(root))
 
-        assert abs(entries(deep) - entries(bushy)) <= 2, "the two shapes must hold equal entries"
+        try:
+            assert abs(entries(deep) - entries(bushy)) <= 2, (
+                "the two shapes must hold equal entries"
+            )
 
-        deep_peak = peak_bytes(lambda: shutil.copytree(deep, tmp_path / "cd"))
-        bushy_peak = peak_bytes(lambda: shutil.copytree(bushy, tmp_path / "cb"))
+            deep_peak = peak_bytes(lambda: shutil.copytree(deep, base / "cd"))
+            bushy_peak = peak_bytes(lambda: shutil.copytree(bushy, base / "cb"))
 
-        assert deep_peak > bushy_peak * 1.5, (
-            f"equal entry counts peaked at {deep_peak} deep against {bushy_peak} bushy; "
-            "a whole-tree bound would call these the same"
-        )
+            assert deep_peak > bushy_peak * 1.5, (
+                f"equal entry counts peaked at {deep_peak} deep against {bushy_peak} bushy; "
+                "a whole-tree bound would call these the same"
+            )
+        finally:
+            # pytest's own cleanup would meet the long paths without the prefix.
+            if sys.platform == "win32":
+                for name in ("deep", "cd"):
+                    shutil.rmtree(base / name, ignore_errors=True)
 
     def test_rmtree_removes_everything(self, tmp_path: pathlib.Path) -> None:
         tree = build_tree(tmp_path / "doomed", depth=3, width=4)
@@ -402,15 +413,17 @@ class TestQuerying:
 
     def test_which_caches_nothing(self, tmp_path: pathlib.Path) -> None:
         """Which is why the page says not to call it in a loop."""
-        program = tmp_path / "demo"
-        program.write_text("#!/bin/sh\n")
+        # Windows finds a program by a PATHEXT extension, not an execute bit.
+        name = "demo.bat" if sys.platform == "win32" else "demo"
+        program = tmp_path / name
+        program.write_text("#!/bin/sh\n", encoding="utf-8")
         program.chmod(0o755)
 
-        assert shutil.which("demo", path=str(tmp_path)) == str(program)
+        assert shutil.which(name, path=str(tmp_path)) == str(program)
 
         program.unlink()
 
-        assert shutil.which("demo", path=str(tmp_path)) is None
+        assert shutil.which(name, path=str(tmp_path)) is None
 
     def test_get_terminal_size_answers_even_without_a_terminal(self) -> None:
         size = shutil.get_terminal_size()

@@ -22,7 +22,7 @@ def test_live_coverage(category: str) -> None:
 
 def _navigation_paths(root: Path) -> set[str]:
     # BaseLoader reads navigation without resolving MkDocs' Python-name tags.
-    config = yaml.load((root / "mkdocs.yml").read_text(), Loader=yaml.BaseLoader)
+    config = yaml.load((root / "mkdocs.yml").read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
 
     def paths(node: object) -> set[str]:
         if isinstance(node, str):

@@ -29,6 +29,8 @@ produced before anything can be done with them.
 | `os.path.isfile(path)` | O(1) | O(1) | One stat |
 | `os.path.isdir(path)` | O(1) | O(1) | One stat |
 | `os.path.islink(path)` | O(1) | O(1) | One lstat |
+| `os.path.isjunction(path)` | O(1) | O(1) | 3.12+; one lstat on Windows, and `False` without touching the disk elsewhere |
+| `os.path.isdevdrive(path)` | O(L + C) | O(L + C) | On Windows an `abspath()` then one volume query, `False` if that fails; O(1) and always `False` elsewhere. Windows 3.12+, every platform 3.13+ |
 | `os.path.ismount(path)` | O(R) | O(R) | From 3.13 two lstat calls over O(L) of text; through 3.12 a `realpath()` of the parent runs first, carrying its cost |
 | `os.path.getsize(path)` | O(1) | O(1) | One stat |
 | `os.path.getatime(path)` | O(1) | O(1) | One stat |
@@ -654,6 +656,7 @@ prefix live at a time.
   so depth stops costing a suspended frame per level — in the peak, and in the
   time, since results no longer pass up through one frame per level. Adds
   `os.setns()`, `os.unshare()`, `os.path.splitroot()`,
+  `os.path.isjunction()`, `os.path.isdevdrive()` (Windows only until 3.13),
   `DirEntry.is_junction()` and `stat_result.st_birthtime_ns`
 - **Python 3.13+**: `os.path.ismount()` lstats the parent directly and keeps
   `realpath()` only as a fallback, so it stops scaling with the parent's

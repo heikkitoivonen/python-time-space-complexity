@@ -63,6 +63,7 @@ import inspect
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 import textwrap
@@ -324,14 +325,17 @@ class TestRecursiveWalks:
 
     @staticmethod
     def fixed_width_chain(root: pathlib.Path, depth: int) -> list[pathlib.Path]:
-        """Twenty empty side directories and one child at every ancestor."""
+        """Twenty empty side directories and one child at every ancestor.
+
+        The side directories sort before the child "d", so a filesystem that
+        lists names in order (NTFS) walks them before descending."""
         root.mkdir()
         current = root
         ancestors = []
         for _ in range(depth):
             ancestors.append(current)
             for index in range(20):
-                (current / f"s{index:02}").mkdir()
+                (current / f"a{index:02}").mkdir()
             current = current / "d"
             current.mkdir()
         (current / "only.py").touch()
@@ -341,22 +345,31 @@ class TestRecursiveWalks:
     def test_recursive_space_grows_with_depth_at_fixed_width_and_match_count(
         self, tmp_path: pathlib.Path, api: str
     ) -> None:
+        # Eighty levels outgrow Windows' 260-character MAX_PATH; the
+        # extended-length prefix lifts that limit, and glob takes the
+        # \\?\C: drive literally rather than as a wildcard.
+        base = pathlib.Path("\\\\?\\" + str(tmp_path)) if sys.platform == "win32" else tmp_path
         peaks = []
-        for depth in (5, 80):
-            root = tmp_path / f"depth{depth}"
-            ancestors = self.fixed_width_chain(root, depth)
-            assert len(ancestors) == depth
-            assert {len(list(folder.iterdir())) for folder in ancestors} == {21}
-            pattern = str(root / "**" / "*.py")
-            assert glob.glob(pattern, recursive=True) == [str(ancestors[-1] / "d" / "only.py")]
+        try:
+            for depth in (5, 80):
+                root = base / f"depth{depth}"
+                ancestors = self.fixed_width_chain(root, depth)
+                assert len(ancestors) == depth
+                assert {len(list(folder.iterdir())) for folder in ancestors} == {21}
+                pattern = str(root / "**" / "*.py")
+                assert glob.glob(pattern, recursive=True) == [str(ancestors[-1] / "d" / "only.py")]
 
-            def exhaust(pattern: str = pattern) -> int:
-                if api == "glob":
-                    return len(glob.glob(pattern, recursive=True))
-                return sum(1 for _ in glob.iglob(pattern, recursive=True))
+                def exhaust(pattern: str = pattern) -> int:
+                    if api == "glob":
+                        return len(glob.glob(pattern, recursive=True))
+                    return sum(1 for _ in glob.iglob(pattern, recursive=True))
 
-            peaks.append(peak_bytes(exhaust))
-            assert exhaust() == 1
+                peaks.append(peak_bytes(exhaust))
+                assert exhaust() == 1
+        finally:
+            # pytest's own cleanup would meet the long paths without the prefix.
+            if sys.platform == "win32":
+                shutil.rmtree(base / "depth80", ignore_errors=True)
 
         assert peaks[1] > peaks[0] * 4, (
             f"{api}: depth 5 -> 80 at width 21 and one match peaked at {peaks}; "

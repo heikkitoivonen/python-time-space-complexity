@@ -135,6 +135,21 @@ def test_import_errors_are_unavailable_not_blocking(monkeypatch: pytest.MonkeyPa
     assert program["unavailable"]
 
 
+@pytest.mark.parametrize(("platform", "blocking"), [("win32", False), ("linux", True)])
+def test_posix_only_modules_are_unavailable_on_windows(
+    monkeypatch: pytest.MonkeyPatch, platform: str, blocking: bool
+) -> None:
+    def import_module(name: str) -> ModuleType:
+        raise AttributeError("module 'os' has no attribute 'WNOHANG'")
+
+    monkeypatch.setattr(audit.importlib, "import_module", import_module)
+    monkeypatch.setattr(audit.sys, "platform", platform)
+    result = audit.inspect_module_worker("multiprocessing.popen_fork")
+    assert result["available"] is False
+    assert bool(result["errors"]) is blocking
+    assert bool(result["unavailable"]) is not blocking
+
+
 def test_binding_import_errors_are_unavailable_and_others_block(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

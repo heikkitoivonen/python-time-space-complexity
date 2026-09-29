@@ -55,7 +55,7 @@ def test_mkdocs_yml_exists():
     assert mkdocs_file.exists(), "mkdocs.yml not found"
     assert mkdocs_file.is_file(), "mkdocs.yml is not a file"
     # Check it's readable and not empty
-    content = mkdocs_file.read_text()
+    content = mkdocs_file.read_text(encoding="utf-8")
     assert len(content) > 0, "mkdocs.yml is empty"
     assert "site_name" in content, "mkdocs.yml missing site_name"
     assert "theme" in content, "mkdocs.yml missing theme"
@@ -151,7 +151,7 @@ def test_translated_locales_configured():
     """Test that every docs/<locale>/ tree is declared in mkdocs.yml."""
     project_root = Path(__file__).parent.parent
     docs_dir = project_root / "docs"
-    mkdocs_content = (project_root / "mkdocs.yml").read_text()
+    mkdocs_content = (project_root / "mkdocs.yml").read_text(encoding="utf-8")
 
     # Locale directories are two-letter lowercase names holding markdown files.
     locale_dirs = [
@@ -169,7 +169,7 @@ def test_translated_locales_configured():
 def test_mkdocs_yaml_valid():
     """Test that mkdocs.yml has valid structure."""
     mkdocs_file = Path(__file__).parent.parent / "mkdocs.yml"
-    content = mkdocs_file.read_text()
+    content = mkdocs_file.read_text(encoding="utf-8")
 
     # Check for required top-level keys
     assert "site_name:" in content, "mkdocs.yml missing 'site_name:'"

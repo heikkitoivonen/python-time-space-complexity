@@ -426,10 +426,13 @@ class TestMainSharesOneSetOfKnownPaths:
         # one existence check per .pth path line, none for the 200 entries
         assert report["calls"]["exists"] == 3, report["calls"]
         added = [pathlib.Path(entry).name for entry in report["path"][len(padding) :]]
-        assert added == ["site-packages", "plugina"] + ["site-packages", "pluginb"] + [
-            "site-packages",
-            "pluginc",
-        ]
+        # The site directory is `.../site-packages` on POSIX and the prefix
+        # itself on Windows.
+        expected: list[str] = []
+        for prefix, name in zip(prefixes, ("a", "b", "c"), strict=True):
+            sitedir = pathlib.Path(site.getsitepackages([str(prefix)])[0])
+            expected += [sitedir.name, f"plugin{name}"]
+        assert added == expected
 
     def test_pth_import_lines_run_at_startup(self, tmp_path: pathlib.Path) -> None:
         prefix = self.prefix(tmp_path, "a")

@@ -46,6 +46,8 @@ dev = [
     "pyyaml",
     "pyright",
     "pytest-xdist>=3.8.0",
+    # Windows has no system time zone database for zoneinfo to read.
+    "tzdata; sys_platform == 'win32'",
 ]
 
 [project.urls]
@@ -62,6 +64,8 @@ dev = [
     "pyyaml",
     "pyright",
     "pytest-xdist>=3.8.0",
+    # Windows has no system time zone database for zoneinfo to read.
+    "tzdata; sys_platform == 'win32'",
 ]
 
 [tool.uv]
@@ -149,3 +153,6 @@ markers = [
 # in .venv. Code here must type-check on the oldest version the project
 # claims, and typeshed's 3.10 signatures are the narrowest it has to satisfy.
 pythonVersion = "3.10"
+# The platform CI checks, whatever the host. Windows-only code paths are
+# guarded at runtime and reach their attributes through getattr or ignores.
+pythonPlatform = "Linux"

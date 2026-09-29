@@ -371,6 +371,11 @@ class TestCopyingOut:
         assert extra >= strided.nbytes, f"the strided hex() allocated only {extra} bytes more"
 
     @pytest.mark.timing
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="on Windows a new buffer above about 1 MB is freshly committed, zero-filled "
+        "pages, so the 100 KB to 10 MB step crosses from cache-resident to page-faulting memory",
+    )
     def test_bytes_time_is_linear(self, buffers: tuple[bytes, bytes]) -> None:
         small, large = memoryview(buffers[0]), memoryview(buffers[1])
         ratio = growth(lambda: bytes(small), lambda: bytes(large))

@@ -201,6 +201,19 @@ LINEAR = 10  # a hundredfold input must cost at least this much more
 CONSTANT = 3  # ... and at most this much more when the row says O(1)
 QUADRATIC = 1_000  # ... and below this, where a quadratic one would be near x10,000
 
+# The Windows heap hands a block above about 1 MB to VirtualAlloc and returns it
+# on free, so each call that allocates one pays for freshly committed,
+# zero-filled pages, while a 100 KB result stays cache-resident. An operation
+# whose work is one bulk copy into a new buffer then costs x2,000 to x3,900 for
+# the 100x step from SMALL to LARGE, where it costs x10 for each 10x step above
+# the threshold. A 1 MB result lands on either side of it from run to run, so a
+# 10x step from there costs x10 or x400.
+FRESH_PAGES_ON_WINDOWS = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="on Windows a new buffer above about 1 MB is freshly committed, zero-filled pages, "
+    "so the step crosses from cache-resident to page-faulting memory",
+)
+
 
 def best_ns(func: Callable[[], Any], repeats: int = 7, inner: int = 1) -> float:
     """Fastest of `repeats` runs, in nanoseconds per call."""
@@ -302,6 +315,7 @@ class TestConstruction:
                 bytearray.fromhex(b"ab")  # type: ignore[arg-type]
 
     @pytest.mark.timing
+    @FRESH_PAGES_ON_WINDOWS
     def test_each_constructor_scales_with_its_source(self) -> None:
         def scaling(source: Callable[[int], Any], build: Callable[[Any], Any]) -> float:
             # One pair of sources alive at a time.
@@ -403,6 +417,7 @@ class TestSlicesCopyViewsShare:
         assert data == b"Abc\x00"
 
     @pytest.mark.timing
+    @FRESH_PAGES_ON_WINDOWS
     def test_a_slice_costs_its_own_length_not_the_buffer_s(self) -> None:
         small, large = letters(SMALL), letters(LARGE)
 
@@ -612,6 +627,7 @@ class TestAppendIsAmortized:
         assert_linear("appending one byte at a time", long_run / short_run)
 
     @pytest.mark.timing
+    @FRESH_PAGES_ON_WINDOWS
     def test_a_whole_run_of_chunks_stays_linear_too(self) -> None:
         """`+=` and `extend()` over a build, for the same reason as append."""
         chunk = bytes(100)
@@ -632,6 +648,7 @@ class TestAppendIsAmortized:
             assert_linear(f"building with {name} in 100-byte chunks", long / short)
 
     @pytest.mark.timing
+    @FRESH_PAGES_ON_WINDOWS
     def test_extend_scales_with_the_operand(self) -> None:
         small_bytes, large_bytes = bytes(SMALL), bytes(LARGE)
         small_list, large_list = [0] * (SMALL // 10), [0] * (LARGE // 10)
@@ -647,6 +664,7 @@ class TestAppendIsAmortized:
         assert_linear("extend(list)", from_list)
 
     @pytest.mark.timing
+    @FRESH_PAGES_ON_WINDOWS
     def test_bytes_concatenation_copies_everything_accumulated(self) -> None:
         small, large = bytes(SMALL), bytes(LARGE)
 
@@ -1142,6 +1160,7 @@ class TestTransformsReturnNewObjects:
         assert_linear("maketrans()", ratio)
 
     @pytest.mark.timing
+    @FRESH_PAGES_ON_WINDOWS
     def test_each_transform_scales_with_the_buffer(self) -> None:
         small, large = letters(SMALL), letters(LARGE)
         table = bytearray.maketrans(b"a", b"b")
@@ -1253,6 +1272,7 @@ class TestTransformsReturnNewObjects:
             assert wide > narrow * 10, f"{name} peaked at {narrow} and {wide} bytes"
 
     @pytest.mark.timing
+    @FRESH_PAGES_ON_WINDOWS
     def test_the_result_length_drives_what_a_transform_costs(self) -> None:
         """The same w term in time, which allocation alone cannot settle.
 
@@ -1335,6 +1355,7 @@ class TestSplittingAndJoining:
         assert peak > 2_000_000, f"200,000 empty parts peaked at {peak} bytes"
 
     @pytest.mark.timing
+    @FRESH_PAGES_ON_WINDOWS
     def test_join_scales_with_the_parts_and_with_the_result(self) -> None:
         few_parts, many_parts = [b"ab"] * 2_000, [b"ab"] * 200_000
         few_empty, many_empty = [b""] * 2_000, [b""] * 200_000
@@ -1382,6 +1403,7 @@ class TestPredicatesAndConversions:
         assert early_exit > LINEAR, f"a leading digit left isalpha() at x1/{early_exit:.0f}"
 
     @pytest.mark.timing
+    @FRESH_PAGES_ON_WINDOWS
     def test_conversions_scale_with_the_buffer(self) -> None:
         small, large = letters(SMALL), letters(LARGE)
 
@@ -1420,12 +1442,14 @@ class TestComparisonsIterationAndArithmetic:
         assert peak >= LARGE, f"bytes() of {LARGE} bytes peaked at {peak}"
 
     @pytest.mark.timing
+    @FRESH_PAGES_ON_WINDOWS
     def test_converting_to_bytes_scales_with_the_buffer(self) -> None:
         small, large = bytearray(SMALL), bytearray(LARGE)
 
         assert_linear("bytes(ba)", growth(lambda: bytes(small), lambda: bytes(large), inner=3))
 
     @pytest.mark.timing
+    @FRESH_PAGES_ON_WINDOWS
     def test_repeating_in_place_scales_in_both_dimensions(self) -> None:
         """`*=` grows the receiver, so each run needs a fresh one; the buffer
         is built outside the measurement."""
@@ -1458,6 +1482,7 @@ class TestComparisonsIterationAndArithmetic:
         assert data.__alloc__() <= 1, f"{data.__alloc__()} bytes still allocated"
 
     @pytest.mark.timing
+    @FRESH_PAGES_ON_WINDOWS
     def test_concatenation_copies_both_operands(self) -> None:
         """O(n + k): each side moves the cost on its own."""
         small, large = bytearray(SMALL), bytearray(LARGE)
@@ -1482,6 +1507,7 @@ class TestComparisonsIterationAndArithmetic:
         assert different < CONSTANT, f"== on different lengths cost x{different:.2f} on 100x"
 
     @pytest.mark.timing
+    @FRESH_PAGES_ON_WINDOWS
     def test_iteration_and_repetition_scale_with_their_output(self) -> None:
         small, large = letters(SMALL), letters(LARGE)
 

@@ -126,19 +126,16 @@ from __future__ import annotations
 
 import contextlib
 import errno
-import fcntl
 import functools
 import os
 import pathlib
 import pickle
-import pty
 import re
 import select
 import signal
 import struct
 import subprocess
 import sys
-import termios
 import textwrap
 import time
 import traceback
@@ -146,6 +143,13 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
+
+if sys.platform == "win32":  # pragma: no cover - the module is Unix only
+    pytest.skip("curses, pty, termios and fcntl are Unix-only modules", allow_module_level=True)
+
+import fcntl  # noqa: E402  (after the platform guard)
+import pty  # noqa: E402  (after the platform guard)
+import termios  # noqa: E402  (after the platform guard)
 
 PAGE = pathlib.Path(__file__).resolve().parents[1] / "docs" / "stdlib" / "curses.md"
 EXPECTED_BLOCKS = 5

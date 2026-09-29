@@ -229,6 +229,11 @@ class TestPackWritesTheWholeRecord:
         assert_grows_linearly("pack() in fields", small_ns, large_ns)
 
     @pytest.mark.timing
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="on Windows a new buffer above about 1 MB is freshly committed, zero-filled "
+        "pages, so the 100 KB to 10 MB step crosses from cache-resident to page-faulting memory",
+    )
     def test_pack_time_grows_with_bytes(self) -> None:
         small, large = struct.Struct("100000x"), struct.Struct("10000000x")
 

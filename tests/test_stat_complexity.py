@@ -291,6 +291,10 @@ class TestOneStatAnswersEveryQuestion:
         assert stat.filemode(mode)[0] == "-"
         assert len(calls) == 1
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="creating a symlink needs Developer Mode or admin on Windows",
+    )
     def test_stat_follows_a_link_and_lstat_does_not(self, tmp_path: pathlib.Path) -> None:
         target = tmp_path / "target.txt"
         target.write_text("")
@@ -448,6 +452,22 @@ def _blocks() -> list[tuple[int, str]]:
     return found
 
 
+# Blocks that cannot run on Windows, keyed by a snippet that identifies them.
+WINDOWS_SKIPPED_BLOCKS = {
+    "os.symlink(": "creating a symlink needs Developer Mode or admin on Windows",
+    "os.chmod(path, 0o644)": "Windows chmod sets read-only only",
+}
+
+
+def _skipped_here(source: str) -> str | None:
+    """The reason this block cannot run on this platform, or None."""
+    if sys.platform == "win32":
+        for needle, reason in WINDOWS_SKIPPED_BLOCKS.items():
+            if needle in source:
+                return reason
+    return None
+
+
 def _run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
     script = cwd / "block.py"
     script.write_text(source, encoding="utf-8")
@@ -467,8 +487,8 @@ class TestDocumentedExamples:
     the files it stats in a temporary directory, and asserts its own result.
     The symlink and permission blocks are POSIX: they need a platform where an
     unprivileged process may make links and `os.chmod()` sets every permission
-    bit, which Linux is. The runner is not guarded, so on Windows it fails
-    rather than skips; no run this project performs is on Windows."""
+    bit, which Linux is. On Windows the runner passes over them, listed in
+    `WINDOWS_SKIPPED_BLOCKS`."""
 
     def test_the_page_has_the_expected_blocks(self) -> None:
         assert len(_blocks()) == EXPECTED_BLOCKS
@@ -478,6 +498,8 @@ class TestDocumentedExamples:
         ran = 0
         for line, source in _blocks():
             ran += 1
+            if _skipped_here(source):
+                continue
             workdir = tmp_path / f"block{line}"
             workdir.mkdir()
             result = _run_block(source, workdir)

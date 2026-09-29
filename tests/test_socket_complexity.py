@@ -133,6 +133,9 @@ MIB = 1 << 20
 needs_fd_passing = pytest.mark.skipif(
     not hasattr(socket, "send_fds"), reason="descriptor passing is Unix-only"
 )
+needs_msg_calls = pytest.mark.skipif(
+    sys.platform == "win32", reason="sendmsg() and recvmsg() are POSIX-only"
+)
 
 
 def best_ns(func: Callable[[], Any], repeats: int = 7, inner: int = 1) -> float:
@@ -225,7 +228,7 @@ class TestReceivingAllocatesBufsize:
         [
             lambda sock, size: sock.recv(size),
             lambda sock, size: sock.recvfrom(size)[0],
-            lambda sock, size: sock.recvmsg(size)[0],
+            pytest.param(lambda sock, size: sock.recvmsg(size)[0], marks=needs_msg_calls),
         ],
         ids=["recv", "recvfrom", "recvmsg"],
     )
@@ -246,7 +249,9 @@ class TestReceivingAllocatesBufsize:
         [
             lambda sock, buffer: sock.recv_into(buffer),
             lambda sock, buffer: sock.recvfrom_into(buffer)[0],
-            lambda sock, buffer: sock.recvmsg_into([buffer])[0],
+            pytest.param(
+                lambda sock, buffer: sock.recvmsg_into([buffer])[0], marks=needs_msg_calls
+            ),
         ],
         ids=["recv_into", "recvfrom_into", "recvmsg_into"],
     )
@@ -303,6 +308,10 @@ class TestSendingCopiesNothing:
     """`send` may be partial; `sendall` and `sendmsg` work through the caller's
     buffers, so their space is O(1) in k and O(v + a) for `sendmsg`."""
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="Windows loopback buffers a whole non-blocking send instead of taking part of it",
+    )
     def test_a_non_blocking_send_can_be_partial(
         self, pair: tuple[socket.socket, socket.socket]
     ) -> None:
@@ -326,6 +335,7 @@ class TestSendingCopiesNothing:
 
         assert peak < 10_000, f"sendall of 32 MiB peaked at {peak}"
 
+    @needs_msg_calls
     def test_sendmsg_does_not_join_its_buffers(
         self, pair: tuple[socket.socket, socket.socket]
     ) -> None:
@@ -341,6 +351,7 @@ class TestSendingCopiesNothing:
         assert sent[0] > 0
         assert peak < 10_000, f"sendmsg of two 4 MiB buffers peaked at {peak}"
 
+    @needs_msg_calls
     def test_sendmsg_space_follows_the_buffer_count(
         self, pair: tuple[socket.socket, socket.socket]
     ) -> None:
@@ -427,6 +438,11 @@ class TestSendallTimeoutIsTotal:
         assert sent < len(payload), "the reader drained everything; the rig proves nothing"
 
     @pytest.mark.timing
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="Windows loopback accepts a whole 48 MiB send() at once, even with no reader, "
+        "so sendall() never waits",
+    )
     def test_sendall_times_out_while_the_reader_keeps_up(
         self, pair: tuple[socket.socket, socket.socket]
     ) -> None:
@@ -616,6 +632,11 @@ class TestJoinOnce:
         assert span > 64, f"16x the chunks cost x{span:.1f}; linear gives 16, quadratic 256"
 
     @pytest.mark.timing
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="on Windows the 2 MB joined result is freshly committed, zero-filled pages and "
+        "the 128 KB one is not, so the 16x step prices page faults, not the join",
+    )
     def test_joining_grows_linearly(self) -> None:
         durations = [best_ns(lambda n=n: self.join(n), repeats=5) for n in self.SIZES]
         span = durations[-1] / durations[0]
@@ -762,6 +783,11 @@ class TestNameResolutionOffline:
     """Resolution rows, exercised without a network: numeric hosts and the
     local services, protocols and interface tables."""
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="Windows getaddrinfo() returns one type-0 record for a numeric host, so a "
+        "type filter has nothing to remove",
+    )
     def test_getaddrinfo_returns_a_list_and_filters_shrink_it(self) -> None:
         everything = socket.getaddrinfo("127.0.0.1", 80, flags=socket.AI_NUMERICHOST)
         streams = socket.getaddrinfo(
@@ -822,9 +848,15 @@ class TestDescriptorsAndAttributes:
         fd = sock.detach()
         try:
             assert sock.fileno() == -1
-            os.fstat(fd)
+            # Querying a closed descriptor raises OSError. On Windows it is a
+            # socket handle, which os.fstat() cannot take, so ask the socket layer.
+            probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM, fileno=fd)
+            try:
+                assert probe.getsockopt(socket.SOL_SOCKET, socket.SO_TYPE) == socket.SOCK_STREAM
+            finally:
+                probe.detach()
         finally:
-            os.close(fd)
+            socket.close(fd)
 
     def test_every_duplicate_is_a_new_descriptor(
         self, pair: tuple[socket.socket, socket.socket]
@@ -837,7 +869,7 @@ class TestDescriptorsAndAttributes:
         finally:
             for copy in copies:
                 copy.close()
-            os.close(raw)
+            socket.close(raw)  # a socket handle on Windows, not an os-level descriptor
 
     def test_inheritable_flag_round_trips(self, pair: tuple[socket.socket, socket.socket]) -> None:
         left, _ = pair

@@ -143,6 +143,8 @@ import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "tarfile.md"
 EXPECTED_BLOCKS = 12
+# The start of an absolute path: a bare root is only absolute with a drive on Windows.
+ABSOLUTE_ROOT = "C:/" if sys.platform == "win32" else "/"
 
 # tarfile.open() with a mode built at run time, which the stub overloads cannot type
 open_tar: Callable[..., tarfile.TarFile] = tarfile.open
@@ -735,7 +737,10 @@ class TestFilters:
         ("info", "error"),
         [
             (member("../outside"), tarfile.OutsideDestinationError),
-            (member("link", tarfile.SYMTYPE, linkname="/etc/passwd"), tarfile.AbsoluteLinkError),
+            (
+                member("link", tarfile.SYMTYPE, linkname=f"{ABSOLUTE_ROOT}etc/passwd"),
+                tarfile.AbsoluteLinkError,
+            ),
             (
                 member("link", tarfile.SYMTYPE, linkname="../../outside"),
                 tarfile.LinkOutsideDestinationError,

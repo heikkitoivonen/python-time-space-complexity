@@ -94,6 +94,14 @@ PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "faulthandler.
 EXPECTED_BLOCKS = 4
 HAS_PROC_TASKS = pathlib.Path("/proc/self/task").is_dir()
 
+# os.kill() on Windows ends the process with TerminateProcess, so no signal
+# handler runs, and a real fault is a structured exception that faulthandler
+# reports as "Windows fatal exception", not as a signal.
+POSIX_SIGNALS = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="os.kill() on Windows terminates without delivering the signal to a handler",
+)
+
 FATAL_SIGNALS = {
     "SIGSEGV": "Segmentation fault",
     "SIGFPE": "Floating",  # hyphenated as "Floating-point" on some versions only
@@ -280,6 +288,7 @@ class TestEnablingInstallsFatalHandlers:
     Each signal is sent to a child; a child without `enable()` is the control.
     """
 
+    @POSIX_SIGNALS
     @pytest.mark.parametrize("name", sorted(FATAL_SIGNALS))
     def test_each_fatal_signal_dumps_and_kills(self, name: str) -> None:
         result = run_child(
@@ -294,12 +303,17 @@ class TestEnablingInstallsFatalHandlers:
         assert 'File "<string>"' in result.stderr
         assert result.returncode == -getattr(signal, name)
 
+    @POSIX_SIGNALS
     def test_without_enable_there_is_no_dump(self) -> None:
         result = run_child("import os, signal; os.kill(os.getpid(), signal.SIGSEGV)")
 
         assert "Fatal Python error" not in result.stderr
         assert result.returncode == -signal.SIGSEGV
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="Windows reports an access violation as a fatal exception, not SIGSEGV",
+    )
     def test_a_real_fault_is_dumped_and_still_kills(self) -> None:
         result = run_child(
             """
@@ -313,6 +327,7 @@ class TestEnablingInstallsFatalHandlers:
         assert "in string_at" in result.stderr
         assert result.returncode == -signal.SIGSEGV
 
+    @POSIX_SIGNALS
     def test_disable_restores_the_previous_handler(self) -> None:
         result = run_child(
             """
@@ -361,6 +376,7 @@ class TestEnablingInstallsFatalHandlers:
 
         assert result.stdout.strip() == expected, result.stderr
 
+    @POSIX_SIGNALS
     @pytest.mark.skipif(sys.version_info < (3, 14), reason="c_stack is Python 3.14+")
     @pytest.mark.parametrize(
         ("arguments", "shown"), [("", True), ("c_stack=True", True), ("c_stack=False", False)]
@@ -386,6 +402,9 @@ def test_dump_c_stack_arrives_in_3_14() -> None:
 
 
 @pytest.mark.skipif(sys.version_info < (3, 14), reason="dump_c_stack is Python 3.14+")
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="Windows builds print <cannot get C stack on this system>"
+)
 class TestDumpCStackIsCapped:
     """`dump_c_stack()` | O(1) | O(1): at most 32 C frames, however deep."""
 
@@ -643,9 +662,13 @@ class TestDocumentedExamples:
 
     def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
+        skipped: list[str] = []
         ran = 0
         for line, source in _blocks():
             ran += 1
+            if sys.platform == "win32" and "faulthandler.register(" in source:
+                skipped.append(f"{PAGE.name}:{line}: register() is not available on Windows")
+                continue
             workdir = tmp_path / f"block{line}"
             workdir.mkdir()
             result = _run_block(source, workdir)

@@ -542,6 +542,10 @@ class TestUnseekableOutput:
 
         assert sink.size == 44 + 800
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="the Windows C runtime lets a pipe seek, so the header patch does not fail",
+    )
     def test_a_wrong_length_on_a_pipe_raises(self) -> None:
         read_fd, write_fd = os.pipe()
         received = bytearray()

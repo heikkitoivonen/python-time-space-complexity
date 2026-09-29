@@ -654,7 +654,7 @@ class TestClassAndFunctionAttributes:
 
 
 def _blocks() -> list[tuple[int, str]]:
-    text = PAGE.read_text()
+    text = PAGE.read_text(encoding="utf-8")
     blocks: list[tuple[int, str]] = []
     for match in re.finditer(r"^```python\n(.*?)^```", text, re.M | re.S):
         line = text.count("\n", 0, match.start()) + 1

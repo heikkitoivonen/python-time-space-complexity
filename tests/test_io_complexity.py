@@ -141,6 +141,12 @@ import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "io.md"
 EXPECTED_BLOCKS = 9
+# Blocks that cannot run on Windows, keyed by a line they contain, with the reason.
+WINDOWS_SKIPPED_BLOCKS = {
+    'assert f.read() == b"hello\\n"  # O(n)': (
+        "text mode translates the written \\n to \\r\\n on Windows"
+    ),
+}
 
 SMALL_PEAK = 64_000
 TEN_MB = 10_000_000
@@ -472,14 +478,16 @@ class TestWhatOpenBuilds:
     @pytest.mark.skipif(sys.version_info < (3, 14), reason="128 KiB from 3.14")
     def test_the_default_buffer_is_128_kib(self, path: pathlib.Path) -> None:
         assert io.DEFAULT_BUFFER_SIZE == 128 * 1024
-        blksize = os.stat(path).st_blksize
+        # Windows has no st_blksize, and open() then uses DEFAULT_BUFFER_SIZE.
+        blksize = getattr(os.stat(path), "st_blksize", 0)
         with open(path, "rb") as f:
             assert len(f.peek(1)) == max(min(blksize, 8 * 1024 * 1024), io.DEFAULT_BUFFER_SIZE)
 
     @pytest.mark.skipif(sys.version_info >= (3, 14), reason="8 KiB before 3.14")
     def test_the_default_buffer_was_8_kib(self, path: pathlib.Path) -> None:
         assert io.DEFAULT_BUFFER_SIZE == 8 * 1024
-        blksize = os.stat(path).st_blksize
+        # Windows has no st_blksize, and open() then uses DEFAULT_BUFFER_SIZE.
+        blksize = getattr(os.stat(path), "st_blksize", 0)
         with open(path, "rb") as f:
             assert len(f.peek(1)) == (blksize if blksize > 1 else io.DEFAULT_BUFFER_SIZE)
 
@@ -579,9 +587,11 @@ class TestTextWrapperIsLazy:
 
         wrapper.write(text)
 
-        assert (buffer.getvalue() == text.encode()) is reaches_buffer
+        # The default newline=None writes "\n" as os.linesep ("\r\n" on Windows).
+        encoded = text.replace("\n", os.linesep).encode()
+        assert (buffer.getvalue() == encoded) is reaches_buffer
         wrapper.flush()
-        assert buffer.getvalue() == text.encode()
+        assert buffer.getvalue() == encoded
 
     def test_attributes(self) -> None:
         buffer = io.BytesIO(b"a\r\nb\n")
@@ -949,6 +959,11 @@ class TestBytesIOShares:
         assert target == b"cd"
 
     @pytest.mark.timing
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="on Windows the first call after committing a fresh 10 MB block costs 1-6 us "
+        "however small the stream it touches; the second call is back to 0.2 us",
+    )
     def test_seek_and_tell_do_not_grow_with_the_stream(self) -> None:
         def make(size: int) -> Callable[[], Callable[[], object]]:
             def build() -> Callable[[], object]:
@@ -961,6 +976,17 @@ class TestBytesIOShares:
         durations = [best_fresh_ns(make(size), repeats=7) for size in (100_000, TEN_MB)]
 
         assert durations[1] < durations[0] * 20, f"100x the bytes: {durations} ns"
+
+    @pytest.mark.serial
+    def test_seek_and_tell_copy_nothing(self) -> None:
+        """The same row by allocation, which a platform's first-touch cost
+        cannot blur: an O(n) copy of the 10 MB stream would show in the peak."""
+        stream = io.BytesIO()
+        stream.write(b"x" * TEN_MB)
+
+        peak = peak_bytes(lambda: (stream.seek(TEN_MB // 2), stream.tell()))
+
+        assert peak < 1_000, f"seek() and tell() on a 10 MB stream peaked at {peak} B"
 
 
 @pytest.mark.skipif(sys.implementation.name != "cpython", reason="CPython's in-place +=")
@@ -979,6 +1005,11 @@ class TestStrConcatenation:
         return text
 
     @pytest.mark.timing
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="each concatenation's Windows heap allocation costs about as much as the 5 KB "
+        "copy at 500 rows and varies with heap state, so the first 10x step runs x25 to x55",
+    )
     def test_an_aliased_loop_is_quadratic(self) -> None:
         durations = [best_ns(partial(self.build, rows), repeats=5) for rows in (500, 5_000, 50_000)]
         ratios = [larger / smaller for smaller, larger in pairwise(durations)]
@@ -1054,8 +1085,16 @@ class TestDocumentedExamples:
     def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
         ran = 0
+        skipped: list[str] = []
         for line, source in _blocks():
             ran += 1
+            if sys.platform == "win32":
+                reasons = [
+                    why for marker, why in WINDOWS_SKIPPED_BLOCKS.items() if marker in source
+                ]
+                if reasons:
+                    skipped.append(f"{PAGE.name}:{line}: {reasons[0]}")
+                    continue
             workdir = tmp_path / f"block{line}"
             workdir.mkdir()
             result = _run_block(source, workdir)
@@ -1063,6 +1102,8 @@ class TestDocumentedExamples:
                 failures.append(f"{PAGE.name}:{line}\n{result.stderr.strip()}")
 
         assert ran == EXPECTED_BLOCKS
+        if sys.platform == "win32":
+            assert len(skipped) == len(WINDOWS_SKIPPED_BLOCKS), skipped
         assert not failures, "\n\n".join(failures)
 
     def test_the_runner_notices_a_broken_assertion(self, tmp_path: pathlib.Path) -> None:

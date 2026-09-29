@@ -1275,6 +1275,23 @@ def _blocks() -> list[tuple[int, str]]:
     return found
 
 
+# Blocks that cannot run on Windows, keyed by a snippet that identifies them.
+WINDOWS_SKIPPED_BLOCKS = {
+    "base_url=directory + '/'": (
+        "base_url is joined with urljoin(), which reads a Windows drive letter as a URL scheme"
+    ),
+}
+
+
+def _skipped_here(source: str) -> str | None:
+    """The reason this block cannot run on this platform, or None."""
+    if sys.platform == "win32":
+        for needle, reason in WINDOWS_SKIPPED_BLOCKS.items():
+            if needle in source:
+                return reason
+    return None
+
+
 def _run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
     script = cwd / "block.py"
     script.write_text(source, encoding="utf-8")
@@ -1301,6 +1318,8 @@ class TestDocumentedExamples:
         ran = 0
         for line, source in _blocks():
             ran += 1
+            if _skipped_here(source):
+                continue
             workdir = tmp_path / f"block{line}"
             workdir.mkdir()
             result = _run_block(source, workdir)

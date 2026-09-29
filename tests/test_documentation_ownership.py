@@ -31,7 +31,7 @@ def test_collections_types_have_one_documentation_owner() -> None:
     """collections.md links each type with its own page from a section of its
     own, with no table there, and prices ChainMap and the User* wrappers in
     its own Complexity Reference."""
-    text = (DOCS / "collections.md").read_text()
+    text = (DOCS / "collections.md").read_text(encoding="utf-8")
     sections = dict(re.findall(r"^## ([^\n]+)\n(.*?)(?=^## |\Z)", text, re.M | re.S))
     subsections = dict(re.findall(r"^### ([^\n]+)\n(.*?)(?=^#{2,3} |\Z)", text, re.M | re.S))
     local = {"ChainMap", "UserDict", "UserList", "UserString"}
@@ -57,7 +57,7 @@ def test_collections_types_have_one_documentation_owner() -> None:
     ],
 )
 def test_package_overviews_delegate_api_details(page: str, targets: list[str]) -> None:
-    text = (DOCS / page).read_text()
+    text = (DOCS / page).read_text(encoding="utf-8")
     assert "```" not in text and "|" not in text
     for target in targets:
         assert f"]({target})" in text
@@ -70,14 +70,16 @@ def test_xml_parsers_expat_reexports_pyexpat() -> None:
     import pyexpat
     import xml.parsers.expat as expat
 
-    assert "`xml.parsers.expat`, which re-exports `pyexpat`" in (DOCS / "xml.md").read_text()
+    assert "`xml.parsers.expat`, which re-exports `pyexpat`" in (DOCS / "xml.md").read_text(
+        encoding="utf-8"
+    )
     assert expat is not pyexpat
     for name in ("ParserCreate", "ExpatError", "XMLParserType", "ErrorString", "errors", "model"):
         assert getattr(expat, name) is getattr(pyexpat, name)
 
 
 def _blocks(page: str) -> list[tuple[int, str]]:
-    text = (DOCS / page).read_text()
+    text = (DOCS / page).read_text(encoding="utf-8")
     return [
         (text.count("\n", 0, match.start()) + 1, textwrap.dedent(match.group(1)))
         for match in re.finditer(r"^```python\n(.*?)^```", text, re.M | re.S)

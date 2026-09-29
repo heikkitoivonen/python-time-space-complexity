@@ -141,7 +141,9 @@ import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "bdb.md"
 EXPECTED_BLOCKS = 8
-FAKE_FILE = "/nonexistent/bdb_complexity_target.py"
+# Already in `Bdb.canonic()` form, so a breakpoint registered under it is found
+# by name on every platform (on Windows `canonic()` adds a drive letter).
+FAKE_FILE = os.path.normcase(os.path.abspath("/nonexistent/bdb_complexity_target.py"))
 
 
 @pytest.fixture(autouse=True)

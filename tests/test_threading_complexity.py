@@ -596,7 +596,13 @@ class TestLockRows:
             lambda gate: threading.Event().wait(threading.TIMEOUT_MAX + 1),
             lambda gate: threading.Semaphore(0).acquire(timeout=threading.TIMEOUT_MAX + 1),
             lambda gate: threading.Barrier(2).wait(threading.TIMEOUT_MAX + 1),
-            lambda gate: spawn(gate.wait).join(threading.TIMEOUT_MAX + 1),
+            pytest.param(
+                lambda gate: spawn(gate.wait).join(threading.TIMEOUT_MAX + 1),
+                marks=pytest.mark.skipif(
+                    sys.platform == "win32",
+                    reason="Windows join() waits instead of rejecting the timeout",
+                ),
+            ),
         ],
         ids=["RLock", "Event", "Semaphore", "Barrier", "join"],
     )

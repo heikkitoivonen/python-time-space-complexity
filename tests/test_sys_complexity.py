@@ -2192,7 +2192,10 @@ class TestConstantTimeSurface:
         "api_version",
         "copyright",
         "float_repr_style",
-        "abiflags",
+        pytest.param(
+            "abiflags",
+            marks=pytest.mark.skipif(sys.platform == "win32", reason="sys.abiflags is POSIX-only"),
+        ),
         "prefix",
         "exec_prefix",
         "base_prefix",

@@ -232,6 +232,7 @@ class TestSettingsAreProcessWide:
         assert locale.setlocale(locale.LC_NUMERIC, "C") == "C"
         assert locale.getlocale(locale.LC_NUMERIC) == (None, None)
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="the Windows C runtime has no POSIX locale")
     def test_posix_is_always_there(self) -> None:
         locale.setlocale(locale.LC_NUMERIC, "POSIX")
 
@@ -297,8 +298,11 @@ class TestSettingsAreProcessWide:
     def test_categories_are_integers(self) -> None:
         for name in ("LC_CTYPE", "LC_COLLATE", "LC_TIME", "LC_MONETARY", "LC_NUMERIC"):
             assert isinstance(getattr(locale, name), int)
-        assert isinstance(locale.LC_MESSAGES, int)
         assert isinstance(locale.LC_ALL, int)
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="LC_MESSAGES is POSIX-only")
+    def test_lc_messages_is_an_integer(self) -> None:
+        assert isinstance(locale.LC_MESSAGES, int)
 
 
 class CountingDict(dict[str, str]):
@@ -387,6 +391,10 @@ class TestEncodingQueries:
 
         assert len(output) == 1
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="Windows has no nl_langinfo(CODESET), so getpreferredencoding() never calls setlocale",
+    )
     def test_do_setlocale_true_sets_lc_ctype_and_restores_it(self) -> None:
         output = _encoding_probe(utf8=0, do_setlocale=True)
 

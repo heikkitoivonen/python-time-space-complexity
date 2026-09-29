@@ -140,12 +140,14 @@ class Calls:
         self.directory = 0
         self.member = 0
         self.compiled = 0
+        self.archives_read: list[str] = []
         read_directory = zipimport._read_directory  # type: ignore[attr-defined]  # noqa: SLF001
         get_data = zipimport._get_data  # type: ignore[attr-defined]  # noqa: SLF001
         compile_source = zipimport._compile_source  # type: ignore[attr-defined]  # noqa: SLF001
 
         def counting_read_directory(archive: str) -> ProbeCountingDict:
             self.directory += 1
+            self.archives_read.append(archive)
             return ProbeCountingDict(read_directory(archive))
 
         def counting_get_data(*args: Any) -> Any:
@@ -162,6 +164,7 @@ class Calls:
 
     def reset(self) -> None:
         self.directory = self.member = self.compiled = 0
+        self.archives_read = []
 
 
 def directory_of(importer: zipimport.zipimporter) -> ProbeCountingDict:
@@ -488,7 +491,10 @@ class TestImportingThroughSysPath:
         assert importlib.util.find_spec("zipimport_probe_absent") is None
 
         assert 0 < files.probes <= 5, f"a miss probed {files.probes} names"
-        assert (calls.directory, calls.member) == (0, 0)
+        # Only this archive's reads: on Windows `pytest.exe` is itself a zip on
+        # sys.path, whose directory `syspath_prepend()` invalidated.
+        assert archive not in calls.archives_read
+        assert calls.member == 0
 
 
 class TestInvalidatingTheDirectory:

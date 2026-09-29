@@ -316,6 +316,10 @@ class TestTheDirectoryWalk:
 
     pytestmark = pytest.mark.usefixtures("in_tmp_path")
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="creating a symlink needs Developer Mode or admin on Windows",
+    )
     def test_what_the_walk_visits(self) -> None:
         root = pathlib.Path("tree")
         (root / "pkg").mkdir(parents=True)

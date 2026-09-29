@@ -263,7 +263,21 @@ class TestArithmeticFunctions:
         assert calendar.monthrange(2024, 2) == (calendar.THURSDAY, 29)
         assert calendar.monthrange(2023, 2) == (calendar.WEDNESDAY, 28)
 
-    @pytest.mark.parametrize("stamp", [-1_000_000_000, 0, 1_700_000_000, 4_000_000_000])
+    @pytest.mark.parametrize(
+        "stamp",
+        [
+            pytest.param(
+                -1_000_000_000,
+                marks=pytest.mark.skipif(
+                    sys.platform == "win32",
+                    reason="time.gmtime() rejects negative timestamps on Windows",
+                ),
+            ),
+            0,
+            1_700_000_000,
+            4_000_000_000,
+        ],
+    )
     def test_timegm_inverts_gmtime(self, stamp: int) -> None:
         assert calendar.timegm(time.gmtime(stamp)) == stamp
 

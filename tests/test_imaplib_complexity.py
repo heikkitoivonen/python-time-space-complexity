@@ -919,7 +919,10 @@ class TestConnections:
             ),
             encoding="utf-8",
         )
-        command = f"{shlex.quote(sys.executable)} {shlex.quote(str(script))}"
+        # IMAP4_stream runs the command through the shell: cmd.exe on Windows
+        # does not understand shlex's single quotes.
+        argv = [sys.executable, str(script)]
+        command = subprocess.list2cmdline(argv) if sys.platform == "win32" else shlex.join(argv)
 
         imap = imaplib.IMAP4_stream(command)
 

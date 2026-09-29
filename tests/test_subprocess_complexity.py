@@ -115,7 +115,12 @@ one descriptor; the count of output decodes, one by reading; Windows,
 where ``CreateProcess`` replaces the spawn, ``list2cmdline`` builds the
 command line, ``STARTUPINFO`` and the flags exist, the ``cmd.exe`` search
 of 3.10.11, 3.11.3 and 3.12 and the 3.13 flags apply, and
-``communicate()`` uses threads. Not settled either: the account
+``communicate()`` uses threads. TestStartupinfoRow runs only there: it
+checks the attributes are the keyword arguments, that two redirected spawns
+leave the caller's ``STARTUPINFO`` unchanged, and that a child reaches an
+inheritable pipe handle only when ``handle_list`` names it. The O(h) that
+list adds to ``Popen()`` is ``_filter_handle_list``'s one pass in
+Lib/subprocess.py, not measured. Not settled either: the account
 database lookups behind a ``user``, ``group`` or group name, which are the
 NSS backend's. Not varied: more than one passed descriptor, argument lists
 beyond four items, ``env`` beyond one entry, output beyond 4 MiB, encodings
@@ -205,11 +210,17 @@ def _finished() -> subprocess.Popen[bytes]:
 
 
 def _module_names() -> set[str]:
-    """Public names of the module that are not the modules it imports."""
+    """Public names of the module that are not the modules it imports.
+
+    Where ``import fcntl`` fails, on Windows, the module binds ``fcntl = None``
+    in its place, which is still the import and not an API.
+    """
     return {
         name
         for name in dir(subprocess)
-        if not name.startswith("_") and not inspect.ismodule(getattr(subprocess, name))
+        if not name.startswith("_")
+        and not inspect.ismodule(getattr(subprocess, name))
+        and not (name == "fcntl" and subprocess.fcntl is None)  # type: ignore[attr-defined]
     }
 
 
@@ -258,6 +269,8 @@ def _public_members(owner: str) -> set[str]:
 
 
 def _has_member(owner: str, member: str) -> bool:
+    if owner in WINDOWS_ONLY_NAMES:
+        return sys.platform != "win32" or hasattr(getattr(subprocess, owner)(), member)
     if hasattr(CLASSES[owner], member):
         return True
     return owner in INSTANCES and hasattr(INSTANCES[owner](), member)
@@ -346,7 +359,8 @@ class TestEveryPublicNameIsDocumented:
         unknown_members = sorted(
             f"{owner}.{member}"
             for owner, member in members
-            if owner not in CLASSES or not _has_member(owner, member)
+            if (owner not in CLASSES and owner not in WINDOWS_ONLY_NAMES)
+            or not _has_member(owner, member)
         )
 
         assert not unknown_names, f"the table names attributes subprocess lacks: {unknown_names}"
@@ -389,6 +403,69 @@ class TestEveryPublicNameIsDocumented:
         assert "check_returncode" in _public_members("CompletedProcess")
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="STARTUPINFO is Windows-only")
+class TestStartupinfoRow:
+    """`STARTUPINFO.dwFlags/.../lpAttributeList` | O(1) | O(1).
+
+    The attributes are the keyword arguments stored as given. `Popen()` works
+    on a copy, which a caller's object left unchanged after a redirected spawn
+    separates from filling in the caller's own; `handle_list` is shown to
+    limit inheritance by a child that can use an inheritable handle only when
+    the list names it.
+    """
+
+    def test_the_attributes_are_the_keyword_arguments(self) -> None:
+        startupinfo_class: Any = getattr(subprocess, "STARTUPINFO")  # noqa: B009 - Windows-only
+        default = startupinfo_class()
+        assert (default.dwFlags, default.wShowWindow) == (0, 0)
+        assert (default.hStdInput, default.hStdOutput, default.hStdError) == (None, None, None)
+        assert default.lpAttributeList == {"handle_list": []}
+
+        attributes = {"handle_list": [1]}
+        given = startupinfo_class(dwFlags=1, wShowWindow=2, lpAttributeList=attributes)
+        assert (given.dwFlags, given.wShowWindow) == (1, 2)
+        assert given.lpAttributeList is attributes, "stored, not copied"
+
+    def test_popen_fills_in_a_copy(self) -> None:
+        startupinfo = getattr(subprocess, "STARTUPINFO")()  # noqa: B009 - Windows-only
+        for _ in range(2):
+            result = _run("print('ok')", startupinfo=startupinfo)
+            assert result.stdout.strip() == b"ok"
+        assert startupinfo.dwFlags == 0, "STARTF_USESTDHANDLES went on the copy"
+        assert startupinfo.hStdOutput is None
+        assert startupinfo.lpAttributeList == {"handle_list": []}
+
+    def test_the_handle_list_limits_what_the_child_inherits(self) -> None:
+        import msvcrt
+
+        read_fd, write_fd = os.pipe()
+        os.set_inheritable(write_fd, True)
+        handle = msvcrt.get_osfhandle(write_fd)  # type: ignore[attr-defined]
+        child = f"""
+            import msvcrt, os
+            try:
+                os.write(msvcrt.open_osfhandle({handle}, 0), b"inherited")
+            except OSError:
+                pass
+        """
+        try:
+            listed = getattr(subprocess, "STARTUPINFO")(  # noqa: B009 - Windows-only
+                lpAttributeList={"handle_list": [handle]}
+            )
+            _run(child, startupinfo=listed, close_fds=True, check=True)
+            os.write(write_fd, b"|")
+            assert os.read(read_fd, 64) == b"inherited|"
+
+            # Without the list the child cannot reach the pipe, so only the
+            # parent's marker is in it.
+            _run(child, close_fds=True, check=True)
+            os.write(write_fd, b"|")
+            assert os.read(read_fd, 64) == b"|"
+        finally:
+            os.close(read_fd)
+            os.close(write_fd)
+
+
 class TestPopenRow:
     """What Popen() encodes, searches, closes, polls and runs before the spawn."""
 
@@ -396,7 +473,7 @@ class TestPopenRow:
         args: list[Any] = [
             PY,
             "-c",
-            "import sys; print(sys.argv[1:])",
+            "import sys; sys.stdout.write(ascii(sys.argv[1:]))",
             "ä",
             b"b",
             pathlib.Path("c"),
@@ -406,8 +483,12 @@ class TestPopenRow:
         output, _ = process.communicate(timeout=WAIT)
 
         assert process.args is args
-        assert output.decode() == "['ä', 'b', 'c']\n"
+        assert output == b"['\\xe4', 'b', 'c']"
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="Windows hands a str command to CreateProcess as a command line",
+    )
     def test_a_str_command_is_one_program_name_unless_shell_is_true(self) -> None:
         with pytest.raises(FileNotFoundError) as excinfo:
             subprocess.Popen(f"{PY} -c pass")
@@ -417,6 +498,10 @@ class TestPopenRow:
 
         assert result.stdout.strip().endswith("sh")
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="CreateProcess searches the parent's PATH, not the one in env",
+    )
     def test_a_program_without_a_directory_is_looked_up_on_path(
         self, tmp_path: pathlib.Path
     ) -> None:
@@ -433,6 +518,9 @@ class TestPopenRow:
         assert absolute.wait(WAIT) == 0
 
     @pytest.mark.timing
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="CreateProcess searches the parent's PATH, not env's"
+    )
     def test_the_path_search_scales_with_the_directories_listed(self) -> None:
         """Spawn `true` with 2 and 15002 PATH directories, and by absolute path
         through the long one. Measured: the search through 15000 missing
@@ -466,11 +554,18 @@ class TestPopenRow:
     ) -> None:
         calls = 0
 
+        # A pass over the mapping: the POSIX path calls items(), and Windows'
+        # _winapi.CreateProcess calls keys() and then looks each key up.
         class Env(dict[str, str]):
             def items(self) -> Any:
                 nonlocal calls
                 calls += 1
                 return super().items()
+
+            def keys(self) -> Any:
+                nonlocal calls
+                calls += 1
+                return super().keys()
 
         code = "import os; print(os.environ.get('SUBPROCESS_PAGE_PROBE'))"
         monkeypatch.setenv("SUBPROCESS_PAGE_PROBE", "inherited")
@@ -523,6 +618,10 @@ class TestPopenRow:
         encoded = sys.version_info < (3, 13) and cast(Any, subprocess)._USE_POSIX_SPAWN
         assert (iterations > 0) is bool(encoded), iterations
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="pass_fds and inheriting descriptors by number are POSIX-only",
+    )
     def test_close_fds_closes_all_but_pass_fds_and_false_passes_the_inheritable(self) -> None:
         inheritable, write_end = os.pipe()
         plain, other_write_end = os.pipe()
@@ -548,6 +647,7 @@ class TestPopenRow:
         assert not_closing == ["open", "closed"]
         assert passed == ["open", "open"]
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="extra_groups is POSIX-only")
     def test_extra_groups_is_read_once_in_the_parent(self) -> None:
         """The child's setgroups() needs privilege, so an unprivileged run raises
         PermissionError from the child after the parent has listed the groups."""
@@ -567,6 +667,7 @@ class TestPopenRow:
 
         assert reads == (os.getgroups()[:2] or [os.getgid()])
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="preexec_fn is POSIX-only")
     def test_preexec_fn_runs_once_in_the_child(self, tmp_path: pathlib.Path) -> None:
         record = tmp_path / "preexec.txt"
 
@@ -581,6 +682,10 @@ class TestPopenRow:
         assert pids == [str(process.pid)]
         assert process.pid != os.getpid()
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="Windows keeps no _active list: subprocess._cleanup() is a no-op there",
+    )
     def test_a_popen_dropped_unwaited_is_polled_by_later_constructors_until_it_exits(
         self,
     ) -> None:
@@ -729,6 +834,11 @@ class TestCommunicateRow:
         assert seen == [b"done"]
         assert len(error) == MIB
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="Windows communicate() writes str input through the TextIOWrapper, "
+        "which encodes in C without calling str.encode()",
+    )
     def test_text_input_is_encoded_once_and_output_decoded(self) -> None:
         encodes = 0
 
@@ -769,6 +879,10 @@ class TestCommunicateRow:
 
         assert 3 * one <= four <= 6 * one, (one, four)
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="Windows communicate() raises TimeoutExpired without the output read so far",
+    )
     def test_a_timeout_keeps_the_output_so_far_and_the_next_call_continues(
         self, reaper: list[Any]
     ) -> None:
@@ -824,6 +938,10 @@ class TestWaitPollAndSignalRows:
         assert excinfo.value.timeout == SHORT
         assert blocked.poll() is None
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="terminate() and kill() call TerminateProcess on Windows, not os.kill()",
+    )
     def test_terminate_and_kill_send_their_signals_without_waiting(
         self, reaper: list[Any], monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -920,6 +1038,7 @@ class TestRunAndFriendsRows:
         assert excinfo.value.cmd is result.args
         assert subprocess.CompletedProcess(["true"], 0).check_returncode() is None
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="preexec_fn is POSIX-only")
     def test_a_run_timeout_kills_and_collects_the_child(self, tmp_path: pathlib.Path) -> None:
         """The child's pid is recorded by preexec_fn, which runs before the exec,
         so it is known whether or not the child got to print anything."""
@@ -963,6 +1082,10 @@ class TestRunAndFriendsRows:
             )
         assert (excinfo.value.output, excinfo.value.stderr) == (b"out", b"err")
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="the command runs under cmd.exe on Windows, not a POSIX shell",
+    )
     def test_getstatusoutput_merges_stderr_and_strips_one_newline(self) -> None:
         status = subprocess.getstatusoutput("printf 'a\\nb\\n\\n'; echo err 1>&2; exit 7")
 
@@ -1108,8 +1231,23 @@ class TestDocumentedExamples:
             ('["true"]', ["0", "'hello\\n'", "Command failed"]),
             ('["wc", "-w"]', ["3", "1"]),
             ('["cat"]', ["None", "'hello\\n'", "0"]),
-            ('["sleep", "10"]', ["['sleep', '10']", "-9"]),
-            ('["grep", "beta"]', ["'beta\\n'"]),
+            pytest.param(
+                '["sleep", "10"]',
+                ["['sleep', '10']", "-9"],
+                marks=pytest.mark.skipif(
+                    sys.platform == "win32",
+                    reason="kill() is TerminateProcess on Windows, so the code is 1, not -9",
+                ),
+            ),
+            pytest.param(
+                '["grep", "beta"]',
+                ["'beta\\n'"],
+                marks=pytest.mark.skipif(
+                    sys.platform == "win32",
+                    reason="Windows passes argv as one command line, and the newlines "
+                    "in echo's argument do not survive it",
+                ),
+            ),
         ],
         ids=["basic", "communication", "popen", "timeouts", "chaining"],
     )

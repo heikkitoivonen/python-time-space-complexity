@@ -81,11 +81,9 @@ Not settled here:
 
 from __future__ import annotations
 
-import fcntl
 import os
 import pathlib
 import re
-import resource
 import select
 import subprocess
 import sys
@@ -97,6 +95,15 @@ from functools import partial
 from typing import Any
 
 import pytest
+
+if sys.platform == "win32":  # pragma: no cover - these tests are Unix only
+    pytest.skip(
+        "select() on Windows takes only sockets, and these tests use pipes, fcntl and resource",
+        allow_module_level=True,
+    )
+
+import fcntl  # noqa: E402  (after the platform guard)
+import resource  # noqa: E402  (after the platform guard)
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "select.md"
 EXPECTED_BLOCKS = 6

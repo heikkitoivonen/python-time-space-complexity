@@ -2237,6 +2237,9 @@ class TestWatchedFileHandler:
 
         assert len(stats) == 5
 
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="Windows cannot rename a file the handler holds open"
+    )
     def test_a_replaced_file_is_reopened(self, tmp_path: pathlib.Path) -> None:
         path = tmp_path / "w.log"
         handler = logging.handlers.WatchedFileHandler(str(path))
@@ -2359,6 +2362,7 @@ class TestSocketHandlers:
 class TestSysLogHandler:
     """`SysLogHandler.emit()` | O(k) plus one send: priority, ident, text, NUL."""
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="socket.AF_UNIX is missing on Windows")
     def test_a_missing_unix_socket_does_not_raise(self, tmp_path: pathlib.Path) -> None:
         handler = logging.handlers.SysLogHandler(address=str(tmp_path / "missing.sock"))
         try:
@@ -2367,8 +2371,9 @@ class TestSysLogHandler:
         finally:
             handler.close()
 
-    def test_priorities_are_lookups(self, tmp_path: pathlib.Path) -> None:
-        handler = logging.handlers.SysLogHandler(address=str(tmp_path / "missing.sock"))
+    def test_priorities_are_lookups(self) -> None:
+        # A UDP handler sends nothing until emit(), and works where AF_UNIX is missing.
+        handler = logging.handlers.SysLogHandler(address=("127.0.0.1", 0))
         try:
             assert handler.encodePriority("user", "info") == 14
             assert handler.encodePriority(1, 6) == 14
@@ -2378,7 +2383,14 @@ class TestSysLogHandler:
             handler.close()
 
     def test_one_send_per_record(self, tmp_path: pathlib.Path) -> None:
-        handler = logging.handlers.SysLogHandler(address=str(tmp_path / "missing.sock"))
+        if sys.platform == "win32":
+            # socket.AF_UNIX is missing on Windows; a UDP handler formats the
+            # same way and sends each record with one sendto() instead.
+            handler = logging.handlers.SysLogHandler(address=("127.0.0.1", 0))
+            if handler.socket is not None:
+                handler.socket.close()
+        else:
+            handler = logging.handlers.SysLogHandler(address=str(tmp_path / "missing.sock"))
         fake = FakeSocket()
         handler.socket = fake  # type: ignore[assignment]
         handler.ident = "app: "

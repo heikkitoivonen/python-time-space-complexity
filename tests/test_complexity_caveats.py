@@ -395,6 +395,11 @@ class TestDecimalIsNotAConstantFactorOverFloat:
     """docs/builtins/round.md called Decimal "a constant factor over float,
     not a change in complexity". It is a change in complexity."""
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="the Windows build's multiplication grows about 2.0-2.5x per doubling "
+        "from 10,000 digits, straddling the superlinear bound this test uses",
+    )
     @pytest.mark.timing
     def test_multiplication_scales_with_the_digit_count(self) -> None:
         precision = getcontext().prec

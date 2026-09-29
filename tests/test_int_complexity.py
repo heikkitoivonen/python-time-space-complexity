@@ -102,6 +102,16 @@ FUNCTION_PAGE = PAGE_DIR / "int_func.md"
 LINEAR_AT_4X = 4.0
 """What a linear operation costs for four times the input."""
 
+FRESH_PAGES_ON_WINDOWS = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="on Windows a new result above about 1 MB is freshly committed, zero-filled pages, "
+    "so a step to it from a cache-resident smaller result prices page faults",
+)
+"""The Windows heap hands a block above about 1 MB to VirtualAlloc and returns
+it on free. A result below that stays cache-resident, one above it is freshly
+committed pages on every call, and one near it is either, run to run: a step
+that crosses it costs x10 to x30 more than the growth class."""
+
 
 def best_time(func: Callable[[], Any], repeats: int = 5) -> float:
     """Return the fastest of several runs, which is the least noisy estimate."""
@@ -431,9 +441,9 @@ class TestBitwise:
             pytest.param(lambda x: x >> 100, id="rshift"),
             pytest.param(lambda x: x.bit_count(), id="bit_count"),
             pytest.param(lambda x: hash(x), id="hash"),
-            pytest.param(bin, id="bin"),
-            pytest.param(hex, id="hex"),
-            pytest.param(oct, id="oct"),
+            pytest.param(bin, id="bin", marks=FRESH_PAGES_ON_WINDOWS),
+            pytest.param(hex, id="hex", marks=FRESH_PAGES_ON_WINDOWS),
+            pytest.param(oct, id="oct", marks=FRESH_PAGES_ON_WINDOWS),
         ],
     )
     def test_linear_in_the_bit_length(self, operation: Callable[[int], Any]) -> None:
@@ -444,6 +454,7 @@ class TestBitwise:
         assert 2.5 < growth < 7, f"x{growth:.1f} for 4x the bits"
 
     @pytest.mark.timing
+    @FRESH_PAGES_ON_WINDOWS
     def test_a_left_shift_of_one_is_linear_in_the_shift(self) -> None:
         """A shift of 1 is an allocation and little else, so the step is 16x
         to keep the measurement above timer noise: linear predicts 16."""
@@ -635,6 +646,7 @@ class TestIdentities:
             value.to_bytes(124, "big")
 
     @pytest.mark.timing
+    @FRESH_PAGES_ON_WINDOWS
     def test_to_bytes_is_linear_in_the_requested_length(self) -> None:
         """Vary padding over two 10x steps; linear predicts 10x, quadratic 100x."""
         value = random_bits(1_000)

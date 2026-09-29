@@ -128,6 +128,17 @@ Not settled by execution:
   macOS ones (st_flags, st_gen, st_rsize, st_creator, st_type, st_birthtime,
   st_birthtime_ns), os.chflags, os.lchflags, os.lchmod and os.plock. The
   POSIX-only tests below skip on Windows rather than assert.
+* os.path.isjunction and os.path.isdevdrive on Windows. The tests there run
+  only on Windows and check behaviour: a junction made with
+  _winapi.CreateJunction answers True where its target answers False, and
+  isdevdrive passes its argument through abspath() and returns False for a
+  volume that cannot be queried. The O(1) and O(L + C) bounds follow from
+  Lib/ntpath.py, where isjunction is nt._path_isjunction (one lstat) and
+  isdevdrive is abspath() then nt._path_isdevdrive; neither C call is
+  observable from Python, so no syscall is counted. Off Windows both only
+  call os.fspath() and return False (Lib/posixpath.py on 3.12,
+  Lib/genericpath.py from 3.13), which the POSIX tests count at zero
+  syscalls.
 """
 
 import os
@@ -156,6 +167,16 @@ EXPECTED_BLOCKS = 7
 
 POSIX_ONLY = pytest.mark.skipif(os.name != "posix", reason="POSIX-only behaviour")
 LINUX_ONLY = pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux-only")
+# Without the LongPathsEnabled policy, Windows refuses a path past 260 characters.
+DEEP_CHAINS = pytest.mark.skipif(
+    sys.platform == "win32", reason="the chain passes Windows' 260-character MAX_PATH"
+)
+# ntpath's exists, isfile and isdir are the C builtins nt._path_*, which never
+# call os.stat, so counting_syscalls() cannot see them.
+NT_PATH_PREDICATES = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="ntpath's exists, isfile and isdir are C builtins that bypass os.stat",
+)
 HAS_PROC_FD = pytest.mark.skipif(
     not os.path.isdir("/proc/self/fd"), reason="needs /proc/self/fd to count descriptors"
 )
@@ -552,6 +573,7 @@ class TestWalkSpaceNeedsBothTerms:
                 f"costs the space: {deep_peak} B deep against {wide_peak} B wide"
             )
 
+    @DEEP_CHAINS
     def test_bottom_up_puts_depth_back_into_the_peak(self, tmp_path: pathlib.Path) -> None:
         """The topdown=False caveat on the page.
 
@@ -863,6 +885,7 @@ class TestDirectoryHelperTimeIsPathWork:
             f"far more: {totals} characters"
         )
 
+    @DEEP_CHAINS
     def test_removedirs_parses_just_as_much(self, tmp_path: pathlib.Path) -> None:
         """Iteration buys space, not time: the split work is the same."""
         depth = 200
@@ -972,6 +995,10 @@ class TestPathOperationsAreStringWork:
         assert splitroot("/a/b") == ("", "/", "a/b")
         assert splitroot("a/b") == ("", "", "a/b")
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="ntpath.abspath() resolves through nt._getfullpathname, not os.getcwd()",
+    )
     def test_abspath_calls_getcwd_only_for_a_relative_path(self) -> None:
         with counting_syscalls() as relative:
             os.path.abspath("some/relative/path")
@@ -981,6 +1008,10 @@ class TestPathOperationsAreStringWork:
         assert relative.getcwd == 1, f"expected one getcwd, got {relative.getcwd}"
         assert absolute.getcwd == 0, "an absolute path needs no getcwd"
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="ntpath.abspath() resolves through nt._getfullpathname, not os.getcwd()",
+    )
     def test_relpath_calls_getcwd_once_per_relative_argument(self) -> None:
         """`os.path.relpath(path, start)` | O(L + S), and one getcwd each.
 
@@ -1004,7 +1035,7 @@ class TestPathOperationsAreStringWork:
         """The distinction the two rows draw."""
         paths = ["/usr/lib", "/usr/libexec"]
 
-        assert os.path.commonpath(paths) == "/usr"
+        assert os.path.commonpath(paths) == os.path.normpath("/usr")  # backslashed on Windows
         assert os.path.commonprefix(paths) == "/usr/lib", "character-wise, mid-component"
 
     def test_expandvars_output_follows_the_substituted_value(self) -> None:
@@ -1017,6 +1048,10 @@ class TestPathOperationsAreStringWork:
 
         assert len(expanded) == 5_000, "a 15-character input produced a 5,000-character result"
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="ntpath.ismount() asks GetVolumePathName, not lstat on the parent",
+    )
     def test_ismount_stops_scaling_with_the_parent_at_313(self, tmp_path: pathlib.Path) -> None:
         """`os.path.ismount(path)` | O(R) - and R disappears at 3.13.
 
@@ -1216,6 +1251,7 @@ class TestScandirCarriesTheType:
         for index in range(dirs):
             (root / f"sub{index}").mkdir()
 
+    @NT_PATH_PREDICATES
     def test_listdir_needs_a_stat_per_entry(self, tmp_path: pathlib.Path) -> None:
         self._populate(tmp_path, files=50, dirs=5)
 
@@ -1394,6 +1430,7 @@ class TestScandirCarriesTheType:
 class TestAvoidingASecondStat:
     """The narrative section: two stat calls against one."""
 
+    @NT_PATH_PREDICATES
     def test_exists_then_getsize_stats_twice(self, tmp_path: pathlib.Path) -> None:
         target = tmp_path / "f.txt"
         target.write_text("content", encoding="utf-8")
@@ -1476,6 +1513,9 @@ class TestSingleSyscallOperations:
             "getatime": os.path.getatime,
             "getctime": os.path.getctime,
         }
+        if sys.platform == "win32":  # C builtins there, which never call os.stat
+            for name in ("exists", "isfile", "isdir"):
+                del helpers[name]
 
         for name, helper in helpers.items():
             with counting_syscalls() as counter:
@@ -1497,6 +1537,71 @@ class TestSingleSyscallOperations:
         os.unlink(target)
         assert os.path.lexists(link), "a broken link still exists as a link"
         assert not os.path.exists(link), "but exists() follows it and finds nothing"
+
+    @pytest.mark.skipif(sys.version_info < (3, 12), reason="os.path.isjunction is 3.12+")
+    @POSIX_ONLY
+    def test_isjunction_touches_nothing_on_posix(self, tmp_path: pathlib.Path) -> None:
+        """`os.path.isjunction(path)` - `False` without touching the disk elsewhere."""
+        isjunction = getattr(os.path, "isjunction")  # noqa: B009 - typeshed 3.12+
+        with counting_syscalls() as counter:
+            assert isjunction(tmp_path) is False
+            assert isjunction(tmp_path / "missing") is False
+        assert counter.total == 0, f"made {counter.total} calls"
+
+    @pytest.mark.skipif(
+        sys.platform != "win32" or sys.version_info < (3, 12),
+        reason="os.path.isjunction is 3.12+, and junctions are Windows-only",
+    )
+    def test_isjunction_tells_a_junction_from_its_target(self, tmp_path: pathlib.Path) -> None:
+        """`os.path.isjunction(path)` - one lstat, so the link, not its target, answers."""
+        import _winapi
+
+        target = tmp_path / "target"
+        target.mkdir()
+        junction = tmp_path / "junction"
+        _winapi.CreateJunction(str(target), str(junction))  # type: ignore[attr-defined]
+        isjunction = getattr(os.path, "isjunction")  # noqa: B009 - typeshed 3.12+
+
+        assert isjunction(junction) is True
+        assert isjunction(target) is False
+        assert isjunction(tmp_path / "missing") is False
+        assert os.path.isdir(junction), "stat follows the junction to its target"
+
+    @pytest.mark.skipif(sys.version_info < (3, 13), reason="isdevdrive is everywhere from 3.13")
+    @POSIX_ONLY
+    def test_isdevdrive_is_false_without_touching_the_disk(self, tmp_path: pathlib.Path) -> None:
+        """`os.path.isdevdrive(path)` - O(1) and always `False` off Windows."""
+        isdevdrive = getattr(os.path, "isdevdrive")  # noqa: B009 - typeshed 3.12+ Windows
+        with counting_syscalls() as counter:
+            assert isdevdrive(tmp_path) is False
+            assert isdevdrive("relative/missing") is False
+        assert counter.total == 0, f"made {counter.total} calls"
+
+    @pytest.mark.skipif(
+        sys.platform != "win32" or sys.version_info < (3, 12),
+        reason="Windows implementation is 3.12+",
+    )
+    def test_isdevdrive_resolves_the_path_and_swallows_failure(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`os.path.isdevdrive(path)` - `abspath()` first, `False` if the query fails."""
+        resolved: list[str] = []
+        real_abspath = os.path.abspath
+
+        def abspath(path: Any) -> str:
+            resolved.append(os.fspath(path))
+            return real_abspath(path)
+
+        monkeypatch.setattr(os.path, "abspath", abspath)
+        isdevdrive = getattr(os.path, "isdevdrive")  # noqa: B009 - typeshed 3.12+ Windows
+        assert isinstance(isdevdrive(tmp_path), bool)
+        assert resolved == [str(tmp_path)]
+
+        def fails(path: str) -> bool:
+            raise OSError("volume query failed")
+
+        monkeypatch.setattr(os.path, "_path_isdevdrive", fails)
+        assert isdevdrive(tmp_path) is False
 
     def test_a_crowded_directory_does_not_change_the_cost(self, tmp_path: pathlib.Path) -> None:
         """O(1) means the neighbours do not matter."""
@@ -1910,7 +2015,7 @@ class TestDescriptorOperations:
         try:
             os.write(descriptor, b"payload")
             os.fsync(descriptor)
-            if sys.platform != "darwin":
+            if sys.platform != "darwin" and sys.platform != "win32":
                 os.fdatasync(descriptor)
         finally:
             os.close(descriptor)
@@ -2167,6 +2272,7 @@ class TestProcessAndEnvironment:
         assert clock.user >= 0 and clock.system >= 0
         assert len(os.getloadavg()) == 3
 
+    @DEEP_CHAINS
     def test_getcwd_output_tracks_the_path_length(self, tmp_path: pathlib.Path) -> None:
         """`os.getcwd()` | O(L) | O(L) - L is the result, which is the output."""
         original = os.getcwd()
@@ -2190,9 +2296,10 @@ class TestProcessAndEnvironment:
         )
 
     def test_umask_round_trips(self) -> None:
-        original = os.umask(0o022)
+        mask = 0o200 if sys.platform == "win32" else 0o022  # Windows keeps only S_IWRITE
+        original = os.umask(mask)
         try:
-            assert os.umask(0o022) == 0o022, "the call returns the previous value"
+            assert os.umask(mask) == mask, "the call returns the previous value"
         finally:
             os.umask(original)
 

@@ -237,6 +237,15 @@ import pytest
 # after the 3.10 signatures this file is checked against.
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "mailbox.md"
 EXPECTED_BLOCKS = 17
+# Blocks that cannot run on Windows, keyed by a line they contain, with the reason.
+WINDOWS_SKIPPED_BLOCKS = {
+    "box.flush()  # O(1) - the size check comes before any copying": (
+        "the block leaves the mbox open, and Windows cannot delete an open file"
+    ),
+    "maildir.set_flags(key, 'SR')          # O(f log f) plus one rename": (
+        "Maildir's default ':' info separator is not allowed in a Windows filename"
+    ),
+}
 
 
 def best_ns(func: Callable[[], Any], repeats: int = 7, inner: int = 1) -> float:
@@ -1116,8 +1125,16 @@ class TestKeyedMaildirFlags:
     so the test asserts the stored file was renamed and never opened.
     """
 
+    @staticmethod
+    def maildir(tmp_path: pathlib.Path) -> mailbox.Maildir:
+        maildir = mailbox.Maildir(str(tmp_path / "md"))
+        if sys.platform == "win32":
+            # ':' is not allowed in a Windows filename; '!' is the usual stand-in.
+            maildir.colon = "!"
+        return maildir
+
     def test_setting_flags_renames_the_file(self, tmp_path: pathlib.Path) -> None:
-        maildir: Any = mailbox.Maildir(str(tmp_path / "md"))
+        maildir: Any = self.maildir(tmp_path)
         key = maildir.add(message())
         before = set(os.listdir(tmp_path / "md" / "new"))
 
@@ -1132,7 +1149,7 @@ class TestKeyedMaildirFlags:
     def test_neither_reading_nor_setting_flags_opens_the_message(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        maildir: Any = mailbox.Maildir(str(tmp_path / "md"))
+        maildir: Any = self.maildir(tmp_path)
         key = maildir.add(message())
         maildir.set_flags(key, "S")
 
@@ -1155,7 +1172,7 @@ class TestKeyedMaildirFlags:
         assert set(maildir.get_flags(key)) == {"S", "F"}
 
     def test_flag_edits_are_set_operations(self, tmp_path: pathlib.Path) -> None:
-        maildir: Any = mailbox.Maildir(str(tmp_path / "md"))
+        maildir: Any = self.maildir(tmp_path)
         key = maildir.add(message())
 
         maildir.add_flag(key, "F")
@@ -1166,7 +1183,7 @@ class TestKeyedMaildirFlags:
         assert maildir.get_flags(key) == "S"
 
     def test_info_survives_a_round_trip(self, tmp_path: pathlib.Path) -> None:
-        maildir: Any = mailbox.Maildir(str(tmp_path / "md"))
+        maildir: Any = self.maildir(tmp_path)
         key = maildir.add(message())
 
         maildir.set_info(key, "2,FS")
@@ -1176,7 +1193,7 @@ class TestKeyedMaildirFlags:
         assert maildir.get_flags(key) == ""
 
     def test_a_non_string_is_rejected(self, tmp_path: pathlib.Path) -> None:
-        maildir: Any = mailbox.Maildir(str(tmp_path / "md"))
+        maildir: Any = self.maildir(tmp_path)
         key = maildir.add(message())
 
         with pytest.raises(TypeError):
@@ -2055,8 +2072,16 @@ class TestDocumentedExamples:
     def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
         ran = 0
+        skipped: list[str] = []
         for line, source in _blocks():
             ran += 1
+            if sys.platform == "win32":
+                reasons = [
+                    why for marker, why in WINDOWS_SKIPPED_BLOCKS.items() if marker in source
+                ]
+                if reasons:
+                    skipped.append(f"{PAGE.name}:{line}: {reasons[0]}")
+                    continue
             workdir = tmp_path / f"block{line}"
             workdir.mkdir()
             result = _run_block(source, workdir)
@@ -2064,6 +2089,8 @@ class TestDocumentedExamples:
                 failures.append(f"{PAGE.name}:{line}\n{result.stderr.strip()}")
 
         assert ran == EXPECTED_BLOCKS
+        if sys.platform == "win32":
+            assert len(skipped) == len(WINDOWS_SKIPPED_BLOCKS), skipped
         assert not failures, "\n\n".join(failures)
 
     def test_the_runner_notices_a_broken_assertion(self, tmp_path: pathlib.Path) -> None:

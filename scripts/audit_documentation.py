@@ -224,6 +224,13 @@ SPECIAL_BUILTINS = {"__import__"}
 # Importing these runs a program (antigravity opens a web browser, idlelib.idle starts
 # IDLE), so their names are read from source instead.
 PROGRAM_MODULES = {"antigravity", "idlelib.idle"}
+# POSIX start methods read os.WNOHANG at import, so on Windows they raise
+# AttributeError rather than ImportError; they are unavailable there, not broken.
+POSIX_ONLY_MODULES = {
+    "multiprocessing.popen_fork",
+    "multiprocessing.popen_forkserver",
+    "multiprocessing.popen_spawn_posix",
+}
 BUILTIN_PAGES = {
     "bytearray": "bytearray_func",
     "complex": "complex_func",
@@ -756,7 +763,9 @@ def inspect_module_worker(name: str) -> dict[str, Any]:
         # A module that cannot be imported here (another platform, an optional
         # extension this build lacks) is unavailable, not a coverage failure.
         message = f"{name}: {type(exc).__name__}: {exc}"
-        failed = isinstance(exc, ImportError)
+        failed = isinstance(exc, ImportError) or (
+            name in POSIX_ONLY_MODULES and sys.platform == "win32"
+        )
         return {
             "items": [],
             "errors": [] if failed else [message],
@@ -1237,6 +1246,9 @@ def main() -> None:
         help="Fail on missing pages, API misses, or unknown coverage other than import errors",
     )
     args = parser.parse_args()
+    # The report prints emoji, which Windows' default cp1252 stdout cannot encode.
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(encoding="utf-8")
     if args.pages_only and args.page:
         parser.error("--page requires the public API audit")
     if args.inspect:

@@ -279,10 +279,14 @@ class TestConstructionReadsTheRcFiles:
     """
 
     def test_both_rc_files_are_read_and_breakpoints_copied(self, tmp_path: pathlib.Path) -> None:
-        (tmp_path / ".pdbrc").write_text("".join(f"alias a{i} p {i}\n" for i in range(7)))
+        (tmp_path / ".pdbrc").write_text(
+            "".join(f"alias a{i} p {i}\n" for i in range(7)), encoding="utf-8"
+        )
         work = tmp_path / "work"
         work.mkdir()
-        (work / ".pdbrc").write_text("".join(f"alias b{i} p {i}\n" for i in range(5)))
+        (work / ".pdbrc").write_text(
+            "".join(f"alias b{i} p {i}\n" for i in range(5)), encoding="utf-8"
+        )
 
         script = work / "script.py"
         script.write_text(PRELUDE + textwrap.dedent(self.SOURCE), encoding="utf-8")
@@ -293,7 +297,8 @@ class TestConstructionReadsTheRcFiles:
             text=True,
             timeout=120,
             stdin=subprocess.DEVNULL,
-            env={**os.environ, "HOME": str(tmp_path)},
+            # `~` reads USERPROFILE on Windows.
+            env={**os.environ, "HOME": str(tmp_path), "USERPROFILE": str(tmp_path)},
             check=False,
         )
         assert result.returncode == 0, result.stderr

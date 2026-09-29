@@ -1,0 +1,4 @@
+# Check text files out with LF everywhere. The translation hashes, the
+# documentation tests and the example runners read files byte for byte, so a
+# CRLF checkout (Git for Windows defaults to core.autocrlf=true) breaks them.
+* text=auto eol=lf

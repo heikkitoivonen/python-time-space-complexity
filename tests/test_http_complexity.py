@@ -831,6 +831,10 @@ class TestPathTranslation:
         assert translated == os.path.join(str(tmp_path), "etc", "passwd")
         assert str(tmp_path) in translated
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="creating a symlink needs Developer Mode or admin on Windows",
+    )
     def test_a_symlink_inside_the_root_still_resolves_outside_it(
         self, tmp_path: pathlib.Path
     ) -> None:

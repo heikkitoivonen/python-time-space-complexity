@@ -69,7 +69,6 @@ Not settled by running code:
 """
 
 import errno
-import fcntl
 import os
 import pathlib
 import re
@@ -77,13 +76,18 @@ import select
 import struct
 import subprocess
 import sys
-import termios
 import textwrap
 import threading
 from collections.abc import Iterator
 from typing import Any
 
 import pytest
+
+if sys.platform == "win32":  # pragma: no cover - the module is Unix only
+    pytest.skip("fcntl and termios are Unix-only modules", allow_module_level=True)
+
+import fcntl  # noqa: E402  (after the platform guard)
+import termios  # noqa: E402  (after the platform guard)
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "fcntl.md"
 

@@ -177,6 +177,9 @@ import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "urllib.md"
 EXPECTED_BLOCKS = 11
+URLRETRIEVE_FILE_PATH = (
+    "urlretrieve() hands back a file: URL's path as written (///C:/...), not a Windows path"
+)
 
 # RFC 9309 was backported to these maintenance releases, not to 3.10-3.12.
 ROBOT_RFC_9309 = sys.version_info >= (3, 14, 5) or ((3, 13, 14) <= sys.version_info < (3, 14))
@@ -646,10 +649,15 @@ class TestUrlretrieveCopiesInBlocks:
         source = tmp_path / "source.txt"
         source.write_text("body")
         monkeypatch.setattr(urllib.request, "_url_tempfiles", [])
+        if sys.platform == "win32":
+            # URLRETRIEVE_FILE_PATH: an absolute URL comes back as ///C:/...,
+            # so name the file relative to the working directory instead.
+            monkeypatch.chdir(tmp_path)
+            url = "file:source.txt"
+        else:
+            url = "file:" + urllib.request.pathname2url(str(source))
 
-        local, message = urllib.request.urlretrieve(
-            "file:" + urllib.request.pathname2url(str(source))
-        )
+        local, message = urllib.request.urlretrieve(url)
 
         assert os.path.samefile(local, source)
         assert urllib.request._url_tempfiles == []  # type: ignore[attr-defined]
@@ -1673,6 +1681,24 @@ def _blocks() -> list[tuple[int, str]]:
     return found
 
 
+# Blocks that cannot run on Windows, keyed by a snippet that identifies them.
+WINDOWS_SKIPPED_BLOCKS = {
+    "response.headers['Content-Length'] == '23'": (
+        "write_text() writes each newline as CRLF on Windows, so the file is 25 bytes"
+    ),
+    "os.path.samefile(local, source)": URLRETRIEVE_FILE_PATH,
+}
+
+
+def _skipped_here(source: str) -> str | None:
+    """The reason this block cannot run on this platform, or None."""
+    if sys.platform == "win32":
+        for needle, reason in WINDOWS_SKIPPED_BLOCKS.items():
+            if needle in source:
+                return reason
+    return None
+
+
 def _run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
     script = cwd / "block.py"
     script.write_text(source, encoding="utf-8")
@@ -1700,6 +1726,8 @@ class TestDocumentedExamples:
         ran = 0
         for line, source in _blocks():
             ran += 1
+            if _skipped_here(source):
+                continue
             workdir = tmp_path / f"block{line}"
             workdir.mkdir()
             result = _run_block(source, workdir)

@@ -194,7 +194,9 @@ def test_vendored_fonts_span_every_weight_the_theme_uses():
     import material
 
     theme_css = sorted(Path(material.__file__).parent.rglob("assets/stylesheets/main.*.min.css"))
-    used = {int(w) for w in re.findall(r"font-weight:(\d+)", theme_css[0].read_text())}
+    used = {
+        int(w) for w in re.findall(r"font-weight:(\d+)", theme_css[0].read_text(encoding="utf-8"))
+    }
     assert used, "no font-weight declarations found in the theme stylesheet"
 
     for face in hooks.FONTS:
@@ -214,7 +216,7 @@ def test_fonts_block_still_suppresses_the_theme_default():
     """
     import material
 
-    base = (Path(material.__file__).parent / "templates" / "base.html").read_text()
+    base = (Path(material.__file__).parent / "templates" / "base.html").read_text(encoding="utf-8")
     assert "{% block fonts %}" in base, "the theme no longer has a `fonts` block to override"
     assert "fonts.googleapis.com" in base, "the theme no longer links Google Fonts"
     assert "{% block fonts %}" in OVERRIDE, "our override no longer replaces it"

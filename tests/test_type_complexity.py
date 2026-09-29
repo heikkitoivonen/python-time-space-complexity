@@ -187,7 +187,7 @@ def run_example(source: str, workdir: pathlib.Path) -> subprocess.CompletedProce
 
 
 def test_all_examples_execute_independently(tmp_path: pathlib.Path) -> None:
-    text = PAGE.read_text()
+    text = PAGE.read_text(encoding="utf-8")
     blocks = list(re.finditer(r"```python\n(.*?)```", text, re.DOTALL))
     assert len(blocks) == 10
     for index, block in enumerate(blocks):
@@ -199,7 +199,7 @@ def test_all_examples_execute_independently(tmp_path: pathlib.Path) -> None:
 
 
 def test_example_runner_detects_a_broken_mro_assertion(tmp_path: pathlib.Path) -> None:
-    block = re.search(r"```python\n(.*?)```", PAGE.read_text(), re.DOTALL)
+    block = re.search(r"```python\n(.*?)```", PAGE.read_text(encoding="utf-8"), re.DOTALL)
     assert block is not None
     source = block[1]
     broken = source.replace("[Child, Base, object]", "[Base, Child, object]")

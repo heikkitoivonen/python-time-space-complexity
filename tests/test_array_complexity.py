@@ -101,6 +101,28 @@ EXPECTED_BLOCKS = 10
 SMALL = 20_000
 LARGE = 2_000_000
 
+# The Windows heap hands a block above about 1 MB to VirtualAlloc and returns it
+# on free, so each call that allocates one pays for freshly committed,
+# zero-filled pages, while a 160 KB result at SMALL stays cache-resident. A row
+# whose work is one bulk copy into a new buffer then costs about x2,000 for the
+# 100x step, and x10 for each further 10x step above the threshold.
+FRESH_PAGES_ON_WINDOWS = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="on Windows a new buffer above about 1 MB is freshly committed, zero-filled pages, "
+    "so the 100x step crosses from cache-resident to page-faulting memory",
+)
+BULK_COPY_ROWS = {
+    "slice",
+    "a + b",
+    "a * 2",
+    "copy.copy",
+    "copy.deepcopy",
+    "tobytes",
+    "frombytes",
+    "fromfile",
+    "fromunicode",
+}
+
 
 def best_ns(func: Callable[[], Any], repeats: int = 7, inner: int = 1) -> float:
     """Fastest of `repeats` runs, in nanoseconds per call."""
@@ -217,6 +239,14 @@ CONSTANT: dict[str, Callable[[int], Callable[[], Any]]] = {
 }
 
 
+def _rows(builders: dict[str, Callable[[int], Callable[[], Any]]]) -> list[Any]:
+    """One parameter per row, the bulk copies marked to skip on Windows."""
+    return [
+        pytest.param(name, marks=FRESH_PAGES_ON_WINDOWS) if name in BULK_COPY_ROWS else name
+        for name in builders
+    ]
+
+
 def _growth(builder: Callable[[int], Callable[[], Any]], small: int, large: int) -> float:
     operations = [builder(small), builder(large)]
     for operation in operations:
@@ -230,7 +260,7 @@ class TestLinearRows:
     which a constant (x1) and a quadratic (x10,000) both miss."""
 
     @pytest.mark.timing
-    @pytest.mark.parametrize("name", list(LINEAR))
+    @pytest.mark.parametrize("name", _rows(LINEAR))
     def test_a_hundred_times_the_items_costs_about_a_hundred_times(self, name: str) -> None:
         ratio = _growth(LINEAR[name], SMALL, LARGE)
 
@@ -238,7 +268,7 @@ class TestLinearRows:
 
     @pytest.mark.timing
     @pytest.mark.skipif(sys.version_info < (3, 13), reason="'w' was added in 3.13")
-    @pytest.mark.parametrize("name", list(UNICODE_LINEAR))
+    @pytest.mark.parametrize("name", _rows(UNICODE_LINEAR))
     def test_the_unicode_conversions_are_linear(self, name: str) -> None:
         ratio = _growth(UNICODE_LINEAR[name], SMALL, LARGE)
 

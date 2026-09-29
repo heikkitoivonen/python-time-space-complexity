@@ -698,16 +698,18 @@ class TestRowValues:
         assert moment.astimezone(offset).hour == 17
 
     def test_a_naive_timestamp_is_local_time(self) -> None:
+        # Two days past the epoch: `timestamp()` probes the local offset a day
+        # either side, and Windows' localtime() rejects a negative time.
         env = dict(os.environ, TZ="EST5")
         output = run_isolated(
             """
             from datetime import datetime
-            print(datetime(1970, 1, 1).timestamp())
+            print(datetime(1970, 1, 3).timestamp())
             """,
             env,
         )
 
-        assert float(output) == 5 * 3_600
+        assert float(output) == 2 * 86_400 + 5 * 3_600
 
     def test_timedelta_normalises_and_rounds(self) -> None:
         delta = timedelta(hours=25, milliseconds=1)

@@ -145,13 +145,15 @@ import io
 import json
 import json.encoder
 import math
+import os
 import pathlib
+import queue
 import random
 import re
-import select
 import subprocess
 import sys
 import textwrap
+import threading
 import time
 import tracemalloc
 from collections.abc import Callable
@@ -1029,34 +1031,68 @@ class TestJsonTool:
         """A pipe held open after the first line separates the two readers:
         a line-at-a-time reader prints the first line while the pipe is open,
         a `readlines()` reader prints nothing until it closes. `-u` keeps the
-        child's stdout from buffering the evidence."""
+        child's stdout from buffering the evidence. A thread hands over each
+        chunk of stdout the moment it arrives, as select() would report it,
+        but on Windows pipes too."""
         process = subprocess.Popen(
             [sys.executable, "-u", "-m", "json.tool", "--json-lines", "--no-indent"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True,
         )
         assert process.stdin is not None and process.stdout is not None
+        assert process.stderr is not None
+        chunks: queue.Queue[bytes] = queue.Queue()
+        stdout_fd = process.stdout.fileno()
+
+        def pump() -> None:
+            while chunk := os.read(stdout_fd, 65536):
+                chunks.put(chunk)
+            chunks.put(b"")
+
+        def received(timeout: float) -> bytes | None:
+            try:
+                return chunks.get(timeout=timeout)
+            except queue.Empty:
+                return None
+
+        reader = threading.Thread(target=pump, daemon=True)
+        reader.start()
+        output = b""
         try:
-            process.stdin.write('{"a": 1}\n')
+            process.stdin.write(b'{"a": 1}\n')
             process.stdin.flush()
 
             if READS_ALL_LINES_FIRST:
-                ready, _, _ = select.select([process.stdout], [], [], 5)
-                assert not ready, "this release should read every line before printing one"
-                first = ""
+                early = received(5)
+                assert early is None, "this release should read every line before printing one"
             else:
-                ready, _, _ = select.select([process.stdout], [], [], 60)
-                assert ready, "no output within 60s of the first line; the tool waited for more"
-                first = process.stdout.readline()
-                assert first == '{"a": 1}\n'
+                while b"\n" not in output:
+                    chunk = received(60)
+                    assert chunk, "no output within 60s of the first line; the tool waited for more"
+                    output += chunk
+                assert output.replace(b"\r\n", b"\n") == b'{"a": 1}\n'
 
-            stdout, stderr = process.communicate(input='{"b": 2}\n', timeout=60)
+            process.stdin.write(b'{"b": 2}\n')
+            process.stdin.close()
+            while chunk := received(60):
+                output += chunk
+            assert chunk == b"", "stdout did not reach end of file within 60s"
+            # Reap the child first: once it has exited, reading stderr cannot block.
+            process.wait(timeout=60)
+            stderr = process.stderr.read()
         finally:
-            process.kill()
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=60)
+            if not process.stdin.closed:
+                process.stdin.close()
+            reader.join(timeout=60)
+            process.stdout.close()
+            process.stderr.close()
 
-        assert (first + stdout, stderr, process.returncode) == ('{"a": 1}\n{"b": 2}\n', "", 0)
+        stdout = output.decode().replace("\r\n", "\n")
+        assert (stdout, stderr, process.returncode) == ('{"a": 1}\n{"b": 2}\n', b"", 0)
 
 
 def _blocks() -> list[tuple[int, str]]:

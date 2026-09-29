@@ -217,7 +217,20 @@ class TestOneShotCompress:
     """`compress(data, compresslevel=9, *, mtime=0)` | O(m) | O(n): linear at
     every level, and memory follows the output, not the input."""
 
-    @pytest.mark.parametrize("level", [1, 9])
+    @pytest.mark.parametrize(
+        "level",
+        [
+            pytest.param(
+                1,
+                marks=pytest.mark.skipif(
+                    sys.platform == "win32",
+                    reason="Windows builds link zlib-ng, whose level 1 packs 20 MB of one byte "
+                    "into ~190 KB, so the output is not negligible",
+                ),
+            ),
+            9,
+        ],
+    )
     def test_memory_follows_the_output_not_the_input(self, level: int) -> None:
         data = b"x" * 20_000_000
         small = b"x" * 1_000

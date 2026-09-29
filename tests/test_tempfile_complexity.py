@@ -269,7 +269,9 @@ class TestNameAttemptsRetryOnCollision:
         names: Callable[[list[str]], ScriptedNames],
     ) -> None:
         create, _ = CREATORS[creator]
-        (tmp_path / "ptaken").mkdir()
+        # A file, not a directory: on Windows opening a directory's name raises
+        # PermissionError, which the last attempt lets escape.
+        (tmp_path / "ptaken").touch()
         monkeypatch.setattr(tempfile, "TMP_MAX", 5)
         scripted = names(["taken"] * 100)
 

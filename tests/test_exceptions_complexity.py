@@ -168,6 +168,12 @@ import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "builtins" / "exceptions.md"
 EXPECTED_BLOCKS = 21
+# Blocks that cannot run on Windows, keyed by a line they contain, with the reason.
+WINDOWS_SKIPPED_BLOCKS = {
+    'read(".")  # a directory, so a different errno': (
+        "opening a directory raises PermissionError (EACCES), not IsADirectoryError, on Windows"
+    ),
+}
 
 # The group classes are Python 3.11 builtins. Naming them directly would not
 # lint or type-check against the 3.10 floor this project supports, so the
@@ -1311,7 +1317,8 @@ class TestTheHierarchy:
 
     def test_the_tree_names_every_public_exception_class_once(self) -> None:
         drawn = [child for _, child in self._tree_edges()] + ["BaseException"]
-        aliases = {"EnvironmentError", "IOError"}  # bound to OSError, drawn as a note
+        # Bound to OSError, drawn as a note; WindowsError exists on Windows only.
+        aliases = {"EnvironmentError", "IOError", "WindowsError"}
 
         assert len(drawn) == len(set(drawn)), "a class is drawn twice in the tree"
         # A name this release does not have is a later version's class, not a
@@ -1414,7 +1421,9 @@ class TestPageCoversTheClasses:
         missing = sorted(
             name
             for name in TestTheHierarchy._public_exception_classes()
-            if not re.search(rf"(?<![\w]){re.escape(name)}(?![\w])", text)
+            # The page does not name the Windows-only OSError alias.
+            if name != "WindowsError"
+            and not re.search(rf"(?<![\w]){re.escape(name)}(?![\w])", text)
         )
 
         assert missing == []
@@ -1461,8 +1470,16 @@ class TestDocumentedExamples:
     def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
         ran = 0
+        skipped: list[str] = []
         for line, source in _blocks():
             ran += 1
+            if sys.platform == "win32":
+                reasons = [
+                    why for marker, why in WINDOWS_SKIPPED_BLOCKS.items() if marker in source
+                ]
+                if reasons:
+                    skipped.append(f"{PAGE.name}:{line}: {reasons[0]}")
+                    continue
             workdir = tmp_path / f"block{line}"
             workdir.mkdir()
             result = _run_block(source, workdir)
@@ -1470,6 +1487,8 @@ class TestDocumentedExamples:
                 failures.append(f"{PAGE.name}:{line}\n{result.stderr.strip()}")
 
         assert ran == EXPECTED_BLOCKS
+        if sys.platform == "win32":
+            assert len(skipped) == len(WINDOWS_SKIPPED_BLOCKS), skipped
         assert not failures, "\n\n".join(failures)
 
     def test_the_runner_notices_a_broken_assertion(self, tmp_path: pathlib.Path) -> None:

@@ -69,7 +69,6 @@ from __future__ import annotations
 import os
 import pathlib
 import re
-import resource
 import select
 import selectors
 import socket
@@ -84,8 +83,16 @@ from typing import Any
 
 import pytest
 
+if sys.platform != "win32":
+    import resource
+
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "selectors.md"
 EXPECTED_BLOCKS = 7
+
+# select() on Windows accepts only sockets, as the page's version notes say.
+PIPES_ARE_UNIX_ONLY = pytest.mark.skipif(
+    sys.platform == "win32", reason="select() on Windows accepts only sockets, not pipes"
+)
 
 
 def best_ns(func: Callable[[], Any], repeats: int = 7, inner: int = 1) -> float:
@@ -408,6 +415,7 @@ class TestSelectReturnsReadyPairs:
     def classes() -> list[type[selectors.BaseSelector]]:
         return [selectors.SelectSelector, *poll_like_classes()]
 
+    @PIPES_ARE_UNIX_ONLY
     def test_one_ready_among_many(self, pipes: Callable[[int], list[tuple[int, int]]]) -> None:
         made = pipes(200)
         os.write(made[57][1], b"x")
@@ -436,12 +444,21 @@ class TestSelectReturnsReadyPairs:
             left.close()
             right.close()
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="select() on Windows raises WinError 10022 when given no sockets at all",
+    )
     def test_nothing_ready_is_an_empty_list(self) -> None:
         for cls in self.classes():
             with cls() as sel:
                 assert sel.select(timeout=0) == []
 
     @pytest.mark.skipif(not hasattr(select, "select"), reason="needs select()")
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="resource is Unix-only, and Windows FD_SETSIZE limits the socket count, "
+        "not descriptor numbers",
+    )
     def test_select_selector_rejects_a_high_descriptor(self) -> None:
         soft, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
         high = 1100
@@ -499,6 +516,7 @@ class TestSelectScaling:
         return times, peaks
 
     @pytest.mark.timing
+    @PIPES_ARE_UNIX_ONLY
     def test_select_selector_is_linear_in_time_and_space(
         self, pipes: Callable[[int], list[tuple[int, int]]]
     ) -> None:
@@ -582,9 +600,13 @@ class TestDocumentedExamples:
 
     def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
+        skipped: list[str] = []
         ran = 0
         for line, source in _blocks():
             ran += 1
+            if sys.platform == "win32" and "os.pipe()" in source:
+                skipped.append(f"{PAGE.name}:{line}: select() on Windows accepts only sockets")
+                continue
             workdir = tmp_path / f"block{line}"
             workdir.mkdir()
             result = _run_block(source, workdir)

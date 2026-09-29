@@ -295,7 +295,7 @@ def import_state() -> Iterator[None]:
 
 def write_module(directory: pathlib.Path, name: str, source: str) -> pathlib.Path:
     path = directory / f"{name}.py"
-    path.write_text(source, encoding="utf-8")
+    path.write_text(source, encoding="utf-8", newline="\n")  # the same bytes on Windows
     return path
 
 
@@ -734,7 +734,7 @@ class TestBytecodeCaching:
         del sys.modules["cached_mod"]
         compiled.clear()
         read.clear()
-        source.write_text("VALUE = 3\n", encoding="utf-8")
+        source.write_text("VALUE = 3\n", encoding="utf-8", newline="\n")  # the same size
         os.utime(source, (1_000_000_000, 1_000_000_000))
         assert importlib.import_module("cached_mod").VALUE == 1
         assert compiled == [] and read == [pyc]
@@ -749,7 +749,7 @@ class TestBytecodeCaching:
         del sys.modules["cached_mod"]
         compiled.clear()
         read.clear()
-        source.write_text("VALUE = 22\n", encoding="utf-8")
+        source.write_text("VALUE = 22\n", encoding="utf-8", newline="\n")
         os.utime(source, (1_000_000_100, 1_000_000_100))
         assert importlib.import_module("cached_mod").VALUE == 22
         assert compiled == ["cached_mod.py"]

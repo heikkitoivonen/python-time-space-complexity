@@ -227,7 +227,8 @@ def in_deep_stack(func: Callable[[], Any]) -> Any:
         finally:
             sys.setrecursionlimit(limit)
 
-    previous = threading.stack_size(256 * 1024 * 1024)
+    # Windows accepts only sizes below 256 MiB, so ask for 255 MiB everywhere.
+    previous = threading.stack_size(255 * 1024 * 1024)
     try:
         worker = threading.Thread(target=run)
         worker.start()
