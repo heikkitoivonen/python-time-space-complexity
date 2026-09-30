@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [ main ]
 
+# Always a uv-managed interpreter. Otherwise uv picks up whatever Python the
+# runner has that matches .python-version - Homebrew's on macOS, which has no
+# tkinter, links the system libedit and moves the stdlib behind a symlink.
+env:
+  UV_PYTHON_PREFERENCE: only-managed
+
 permissions:
   contents: read
   pages: write
@@ -68,8 +74,10 @@ jobs:
         include:
           - os: ubuntu-latest
             missing: ""
+          # Its interpreter has no C-library gettext, and links the system
+          # libedit, which lacks append_history.
           - os: macos-latest
-            missing: ""
+            missing: "libintl readline-append-history"
           # Hosted Windows runners have no sound card.
           - os: windows-latest
             missing: "audio"

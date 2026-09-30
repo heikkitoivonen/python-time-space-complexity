@@ -34,8 +34,10 @@ Measurement scope:
   0.3 s after the thread signals it is about to write; `TCOON` lets the
   next write, or the waiting one, through to the master. CPython's own
   Lib/test/test_termios.py runs its suspend-and-resume test on Linux only.
-  `TCIOFF` and `TCION` deliver the slave's `cc[VSTOP]` and `cc[VSTART]`
-  bytes to the master.
+  On Linux `TCIOFF` and `TCION` deliver the slave's `cc[VSTOP]` and
+  `cc[VSTART]` bytes to the master; on macOS the master is asserted to
+  receive nothing within 0.5 s, which the macOS CI job verifies. Why macOS
+  withholds them is not settled here.
 * On Linux, `tcdrain()` returns within a second with 100 bytes the master
   has not read, and `tcsendbreak(fd, 0)` within 0.2 s, under the 0.25 s a
   serial break lasts; both are timing tests. On macOS `tcdrain()` is
@@ -367,6 +369,10 @@ class TestQueueControl:
         assert not writer.is_alive()
         assert read_exactly(master, 4) == b"held"
 
+    @pytest.mark.skipif(
+        sys.platform == "darwin",
+        reason="a macOS pseudo-terminal master receives neither byte (observed in macOS CI)",
+    )
     def test_tcioff_and_tcion_send_stop_and_start(self, pair: tuple[int, int]) -> None:
         master, slave = pair
         control = termios.tcgetattr(slave)[6]
@@ -376,6 +382,15 @@ class TestQueueControl:
 
         termios.tcflow(slave, termios.TCION)
         assert read_exactly(master, 1) == control[termios.VSTART]
+
+    @pytest.mark.skipif(sys.platform != "darwin", reason="the macOS pseudo-terminal")
+    def test_tcioff_and_tcion_reach_no_master_on_macos(self, pair: tuple[int, int]) -> None:
+        master, slave = pair
+
+        termios.tcflow(slave, termios.TCIOFF)
+        termios.tcflow(slave, termios.TCION)
+
+        assert not readable(master, 0.5)
 
     @pytest.mark.skipif(
         sys.platform == "darwin",

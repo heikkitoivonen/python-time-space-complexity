@@ -122,8 +122,9 @@ list: it limits the file, and each of the two writers enforces it by passing ove
 after writing. With a limit set, `append_history_file()` costs O(F) like the full write.
 
 !!! warning "Truncated files on libedit"
-    When libedit truncates a history file to the length limit, it drops the file's header line,
-    and `read_history_file()` then raises `OSError` for that file. Under libedit, cap the history
+    Depending on its version, libedit drops the file's header line when it truncates a history
+    file to the length limit, and `read_history_file()` then raises `OSError` for that file; the
+    older libedit macOS ships keeps the file readable. Under libedit, cap the history
     yourself before writing rather than relying on `set_history_length()`.
 
 ```python
@@ -144,7 +145,8 @@ with tempfile.TemporaryDirectory() as directory:
     assert readline.get_current_history_length() == 5
 
     readline.add_history('line 5')
-    readline.append_history_file(1, path)  # O(k) - no length is set
+    if hasattr(readline, 'append_history_file'):  # only if the library provides it
+        readline.append_history_file(1, path)  # O(k) - no length is set
 
     # The limit applies to the file only
     readline.set_history_length(3)  # O(1)
@@ -222,6 +224,9 @@ def load(path):
     return readline.get_current_history_length()  # O(1)
 
 def save(path, start):
+    if not hasattr(readline, 'append_history_file'):  # only if the library provides it
+        readline.write_history_file(path)  # O(F) - rewrites the whole file instead
+        return
     new = readline.get_current_history_length() - start
     readline.append_history_file(new, path)  # O(new entries)
 

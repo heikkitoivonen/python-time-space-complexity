@@ -2344,7 +2344,8 @@ class TestConstantTimeSurface:
             """
             import sys
             print(sys.argv[0])
-            print(sys.orig_argv[0] == sys.executable, "-c" in sys.orig_argv)
+            # [0] is whatever binary ran, which a macOS framework build re-executes
+            print(sys.orig_argv[1] == "-c", len(sys.orig_argv) == 3)
             """
         )
 

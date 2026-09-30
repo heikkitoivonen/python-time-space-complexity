@@ -27,7 +27,7 @@ terminal's, not work done here.
 |-----------|------|-------|-------|
 | `termios.tcdrain(fd)` | O(1) | O(1) | Blocks until the output written to `fd` has been transmitted; how long depends on the device and on what is queued |
 | `termios.tcflush(fd, queue)` | O(1) | O(1) | Discards input not yet read (`TCIFLUSH`), output not yet transmitted (`TCOFLUSH`), or both (`TCIOFLUSH`) |
-| `termios.tcflow(fd, action)` | O(1) | O(1) | Returns at once. `TCOOFF` suspends output until `TCOON`; on a Linux pseudo-terminal a write in between waits, or raises `BlockingIOError` on a non-blocking descriptor; `TCIOFF` and `TCION` send the terminal's STOP and START characters |
+| `termios.tcflow(fd, action)` | O(1) | O(1) | Returns at once. `TCOOFF` suspends output until `TCOON`; on a Linux pseudo-terminal a write in between waits, or raises `BlockingIOError` on a non-blocking descriptor; `TCIOFF` and `TCION` send the terminal's STOP and START characters, which the master of a Linux pseudo-terminal reads; a macOS master received neither within 5 seconds in testing |
 | `termios.tcsendbreak(fd, duration)` | O(1) | O(1) | A zero `duration` holds a serial line in the break state for 0.25 to 0.5 seconds; a nonzero one has a system-dependent meaning |
 
 ### Window size

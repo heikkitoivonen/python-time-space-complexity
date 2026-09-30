@@ -414,11 +414,12 @@ class TestReadingTheWholeHistory:
 def assert_truncated_to(path: str, expected: list[str]) -> None:
     """Read back a file the length limit truncated.
 
-    GNU readline keeps it readable. libedit drops the header line when it
+    GNU readline, and the older libedit macOS ships, keep it readable. The
+    libedit the Linux interpreters bundle drops the header line when it
     truncates, and the file no longer reads.
     """
     empty_history()
-    if LIBEDIT:
+    if LIBEDIT and sys.platform != "darwin":
         with pytest.raises(OSError):
             readline.read_history_file(path)
         lines = pathlib.Path(path).read_text().splitlines()

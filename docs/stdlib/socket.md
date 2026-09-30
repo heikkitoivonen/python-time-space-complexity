@@ -420,7 +420,7 @@ def recv_exactly(sock, size):
     return buffer
 
 left, right = socket.socketpair()
-message = b'x' * 10_000
+message = b'x' * 4_000  # nothing reads until sendall() returns, so it fits one buffer
 left.sendall(struct.pack('!I', len(message)) + message)
 
 (length,) = struct.unpack('!I', recv_exactly(right, 4))
