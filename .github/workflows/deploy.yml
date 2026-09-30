@@ -68,6 +68,8 @@ jobs:
   # pass on all three, so a failure on any one of them fails the run.
   test:
     needs: checks
+    # A hang otherwise holds the runner for GitHub's six-hour default.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:

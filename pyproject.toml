@@ -131,6 +131,9 @@ python_files = ["test_*.py", "*_test.py"]
 # normalization test skips on an unpatched interpreter, and a bare "s" in
 # the progress line is too easy to read as a pass.
 addopts = "-v --tb=short --strict-markers -ra"
+# A test still running after ten minutes has every thread's stack printed, so
+# a hang names itself instead of stalling the run silently. It is not failed.
+faulthandler_timeout = 600
 markers = [
     # xdist communication threads can allocate while tracemalloc is active.
     # Exact allocation assertions need the main process with no workers.
