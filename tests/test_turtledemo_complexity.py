@@ -136,6 +136,7 @@ Not settled here:
 from __future__ import annotations
 
 import builtins
+import idlelib
 import importlib
 import itertools
 import math
@@ -150,7 +151,6 @@ import time
 import tracemalloc
 import turtle
 import turtledemo
-import turtledemo.__main__ as viewer
 import types
 import zlib
 from collections.abc import Callable, Iterator
@@ -170,6 +170,13 @@ from typing import Any
 import pytest
 
 from tests.test_turtle_complexity import FakeCanvas
+
+# turtledemo.__main__ imports IDLE's colorizer, whose config module creates
+# ~/.idlerc on import. Parallel workers race to create it, and IDLE exits when
+# the mkdir fails. With `testing` set, as CPython's own IDLE tests set it, IDLE
+# reads only its default configuration and creates no user config directory.
+idlelib.testing = True
+import turtledemo.__main__ as viewer  # noqa: E402
 
 # The module's private singletons, and the demos, seen without their inferred types.
 TurtleClass: Any = turtle.Turtle
