@@ -19,10 +19,13 @@ Measurement scope:
   each function returns its message unchanged.
 * `find()` is observed to check the four variants of `fi_FI.UTF-8` in order
   and the eight of `sr_RS.UTF-8@latin`, the most a language expands to, to stop at the first hit unless `all=True`, to stop at `C`, and to read
-  `LANGUAGE` before `LANG`. Its O(d²) is a timing test over 250, 1,000 and
-  4,000 distinct languages that expand to one candidate each, against a
-  nonexistent directory: every 4x step costs more than 5x, where linear
-  predicts 4x, and the 16x span more than 50x, where linear predicts 16x.
+  `LANGUAGE` before `LANG`. Its O(d²) is a timing test over 1,000, 4,000 and
+  16,000 distinct languages that expand to one candidate each, with
+  `os.path.exists()` answering False, so the filesystem probes are stubbed out
+  and the quadratic deduplication term dominates:
+  every 4x step costs more than 8x (linear 4x, quadratic 16x; measured x12.9
+  to x15.7 on 3.10 to 3.14) and the 16x span more than 64x (linear 16x,
+  quadratic 256x; measured x175 to x208).
 * `translation()` returns a new object per call sharing the parsed catalog
   and `info()` dictionary; a file rewritten after the first call is not
   reread; a different `class_` parses it again; with no file it raises
@@ -304,12 +307,11 @@ class TestFindChecksEachCandidate:
     def test_deduplication_is_quadratic_in_candidates(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        if sys.platform == "win32":
-            # Each os.path.exists() of a missing path costs about 5 us on
-            # Windows, a linear term that hides the quadratic one at 250 to
-            # 1,000 candidates; answering False isolates the deduplication.
-            monkeypatch.setattr(os.path, "exists", lambda path: False)
-        sizes = (250, 1_000, 4_000)
+        # Each os.path.exists() of a missing path is a linear term of its own
+        # (about 5 us on Windows) that blurs the quadratic one; answering
+        # False isolates the deduplication.
+        monkeypatch.setattr(os.path, "exists", lambda path: False)
+        sizes = (1_000, 4_000, 16_000)
         durations = []
         for size in sizes:
             languages = [f"x{index}" for index in range(size)]
@@ -319,8 +321,8 @@ class TestFindChecksEachCandidate:
 
         steps = [durations[1] / durations[0], durations[2] / durations[1]]
         span = durations[2] / durations[0]
-        assert all(step > 5 for step in steps), f"4x candidates: {durations} ns, steps {steps}"
-        assert span > 50, f"16x candidates cost x{span:.1f}; linear predicts x16"
+        assert all(step > 8 for step in steps), f"4x candidates: {durations} ns, steps {steps}"
+        assert span > 64, f"16x candidates cost x{span:.1f}; linear predicts x16"
 
 
 class CountingTranslations(gettext.GNUTranslations):

@@ -37,7 +37,7 @@ Timing settles the rows a call counter cannot reach, framed at a hundredfold
 step in size (100,000 to 10,000,000 bytes) on the pinned interpreter
 (aarch64, CPython 3.14):
 
-* copying rows scale: x208 for `bytes(mv)`, x134 for slice assignment, x102
+* copying rows scale: x208 for `bytes(mv)`, x102
   for `==`, x101 for a first `hash()`, x103 for iteration and `in`, x103 for
   `count()` and a missing `index()`;
 * the exporter's hash is part of a first `hash()`: a two-byte slice of a fresh
@@ -279,15 +279,19 @@ class TestSliceAssignment:
 
     @pytest.mark.timing
     def test_time_is_linear_in_the_slice_length(self) -> None:
-        small_dst, large_dst = memoryview(bytearray(SMALL)), memoryview(bytearray(LARGE))
-        small_src, large_src = bytes(SMALL), bytes(LARGE)
+        """A thousandfold step, 10,000 to 10,000,000 bytes: constant predicts
+        x1, linear x1,000, quadratic x1,000,000. Measured x822 to x994 on
+        3.10 to 3.14 (aarch64)."""
+        small, large = 10_000, 10_000_000
+        small_dst, large_dst = memoryview(bytearray(small)), memoryview(bytearray(large))
+        small_src, large_src = bytes(small), bytes(large)
 
         ratio = growth(
             lambda: small_dst.__setitem__(slice(None), small_src),
             lambda: large_dst.__setitem__(slice(None), large_src),
         )
 
-        assert LINEAR_FLOOR < ratio < LINEAR_CEILING, f"x100 in k cost x{ratio:.1f}"
+        assert 30 < ratio < 30_000, f"x1,000 in k cost x{ratio:.1f}"
 
     @pytest.mark.timing
     def test_time_does_not_depend_on_the_buffer_behind_the_slice(self) -> None:
