@@ -182,7 +182,8 @@ def interactive(setup: str, keys: list[bytes], report: str, reads: int | None = 
     """Run `input()` `reads` times on a pseudo-terminal, typing `keys`.
 
     `setup` runs first. Each entry of `keys` is typed, with a pause after it,
-    once the child prints READY; `reads` defaults to the carriage returns typed.
+    once the prompt of the line it belongs to is shown; `reads` defaults to
+    the carriage returns typed.
     `report` is an expression whose repr the child prints after its last
     line, and may use `line`, the last line read. Returns that repr.
     """
@@ -209,7 +210,7 @@ def interactive(setup: str, keys: list[bytes], report: str, reads: int | None = 
     os.close(slave)
     output = b""
 
-    def read_until(pattern: bytes, seconds: float = 60) -> None:
+    def read_until(pattern: bytes, seconds: float = 60) -> bool:
         nonlocal output
         deadline = time.monotonic() + seconds
         while not re.search(pattern, output) and time.monotonic() < deadline:
@@ -218,12 +219,20 @@ def interactive(setup: str, keys: list[bytes], report: str, reads: int | None = 
                 try:
                     output += os.read(master, 65536)
                 except OSError:
-                    return
+                    break
+        return re.search(pattern, output) is not None
 
     try:
         read_until(rb"READY")
+        typed_lines = 0
         for key in keys:
+            # readline prints the prompt once it has put the terminal in its own
+            # mode. Keys typed before that meet the terminal's line editing
+            # instead: ^U erases the line and Tab is only a character.
+            prompt = rb"(?s)(?:> .*?){%d}" % (typed_lines + 1)
+            assert read_until(prompt), f"no prompt for line {typed_lines + 1}:\n{output!r}"
             os.write(master, key)
+            typed_lines += key.count(b"\r")
             time.sleep(0.2)
         read_until(rb"RESULT [^\n]*\n")
         process.wait(timeout=10)
