@@ -796,8 +796,9 @@ class TestDocumentedExamples:
         assert not failures, "\n\n".join(failures)
 
     def test_the_runner_notices_a_broken_assertion(self, tmp_path: pathlib.Path) -> None:
-        line, source = next((n, s) for n, s in _blocks() if "== 'Sunday'" in s)
-        mutated = source.replace("== 'Sunday'", "== 'Monday'", 1)
+        # A block with no platform check, so the broken assertion runs everywhere
+        line, source = next((n, s) for n, s in _blocks() if "== '1234.50 of 7'" in s)
+        mutated = source.replace("== '1234.50 of 7'", "== '1234.50 of 8'", 1)
 
         assert mutated != source, f"the mutation matched nothing in {PAGE.name}:{line}"
         assert _run_block(mutated, tmp_path).returncode != 0

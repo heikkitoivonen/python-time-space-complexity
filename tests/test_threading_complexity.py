@@ -862,7 +862,9 @@ class TestEventRows:
         assert not event.is_set()
         start = time.perf_counter()
         assert event.wait(SHORT) is False
-        assert time.perf_counter() - start >= SHORT
+        # Windows times the wait in whole milliseconds on a coarser clock than
+        # perf_counter(), and it measured 49.4 ms for 50 ms on a CI runner.
+        assert time.perf_counter() - start >= SHORT * 0.9
 
     def test_set_wakes_every_waiter(self) -> None:
         event = threading.Event()

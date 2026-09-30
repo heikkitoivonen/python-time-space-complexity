@@ -52,7 +52,11 @@ Measurement scope:
   `GetHandleInformation` then rejects; `int()` and `bool()` read `handle`;
   `HKEYType` is the type `OpenKey()` returns and `error` is OSError.
 * `SaveKey()` and `LoadKey()` without the backup and restore privileges
-  enabled raise OSError with winerror 1314. `QueryReflectionKey()` returns a
+  enabled raise OSError with winerror 1314; `PrivilegeCheck()` says which
+  the token holds. With the backup privilege enabled, as on a CI runner,
+  `SaveKey()` writes the hive file instead. `LoadKey()` is not called with
+  the restore privilege enabled, since it would mount a hive for the whole
+  machine. `QueryReflectionKey()` returns a
   bool and the other two reflection calls None on a 64-bit build.
 * Every fenced block on the page runs in its own subprocess, and a mutated
   assertion in one of them is asserted to fail.
@@ -77,6 +81,7 @@ Not settled here:
 
 from __future__ import annotations
 
+import ctypes
 import gc
 import importlib
 import os
@@ -126,6 +131,65 @@ def peak_bytes(func: Callable[[], Any]) -> int:
 def winerror(error: OSError) -> int:
     """The Windows error code, an attribute typeshed declares only on Windows."""
     return getattr(error, "winerror")  # noqa: B009
+
+
+def privilege_enabled(name: str) -> bool:
+    """Whether this process's token holds `name` enabled, by `PrivilegeCheck()`."""
+    import ctypes.wintypes as wintypes
+
+    class Luid(ctypes.Structure):
+        _fields_ = [("LowPart", wintypes.DWORD), ("HighPart", wintypes.LONG)]
+
+    class LuidAndAttributes(ctypes.Structure):
+        _fields_ = [("Luid", Luid), ("Attributes", wintypes.DWORD)]
+
+    class PrivilegeSet(ctypes.Structure):
+        _fields_ = [
+            ("PrivilegeCount", wintypes.DWORD),
+            ("Control", wintypes.DWORD),
+            ("Privilege", LuidAndAttributes * 1),
+        ]
+
+    windll: Any = getattr(ctypes, "WinDLL")  # noqa: B009 - absent from typeshed on Linux
+    win_error: Any = getattr(ctypes, "WinError")  # noqa: B009 - the same
+    last_error: Any = getattr(ctypes, "get_last_error")  # noqa: B009 - the same
+    advapi32 = windll("advapi32", use_last_error=True)
+    kernel32 = windll("kernel32", use_last_error=True)
+    handle_out = ctypes.POINTER(wintypes.HANDLE)
+    for function, argtypes, restype in (
+        (
+            advapi32.LookupPrivilegeValueW,
+            [wintypes.LPCWSTR, wintypes.LPCWSTR, ctypes.POINTER(Luid)],
+            wintypes.BOOL,
+        ),
+        (advapi32.OpenProcessToken, [wintypes.HANDLE, wintypes.DWORD, handle_out], wintypes.BOOL),
+        (
+            advapi32.PrivilegeCheck,
+            [wintypes.HANDLE, ctypes.POINTER(PrivilegeSet), ctypes.POINTER(wintypes.BOOL)],
+            wintypes.BOOL,
+        ),
+        (kernel32.GetCurrentProcess, [], wintypes.HANDLE),
+        (kernel32.CloseHandle, [wintypes.HANDLE], wintypes.BOOL),
+    ):
+        function.argtypes, function.restype = argtypes, restype
+
+    luid = Luid()
+    token = wintypes.HANDLE()
+    if not advapi32.LookupPrivilegeValueW(None, name, ctypes.byref(luid)):
+        raise win_error(last_error())
+    token_query = 0x0008
+    if not advapi32.OpenProcessToken(
+        kernel32.GetCurrentProcess(), token_query, ctypes.byref(token)
+    ):
+        raise win_error(last_error())
+    try:
+        wanted = PrivilegeSet(1, 0, (LuidAndAttributes * 1)(LuidAndAttributes(luid, 0)))
+        held = wintypes.BOOL()
+        if not advapi32.PrivilegeCheck(token, ctypes.byref(wanted), ctypes.byref(held)):
+            raise win_error(last_error())
+        return bool(held.value)
+    finally:
+        kernel32.CloseHandle(token)
 
 
 def delete_tree(parent: Any, name: str) -> None:
@@ -365,16 +429,23 @@ class TestEnumerationIsOneCallPerEntry:
 
 @WINDOWS
 class TestHiveFilesAndReflection:
-    """The hive rows need privileges a test process does not hold; reflection
+    """The hive rows need the backup and restore privileges enabled, which an
+    ordinary token does not have and an elevated CI runner's does; reflection
     is observable on a 64-bit build."""
 
-    def test_savekey_and_loadkey_need_privileges(
-        self, scratch: Any, tmp_path: pathlib.Path
-    ) -> None:
+    def test_savekey_needs_the_backup_privilege(self, scratch: Any, tmp_path: pathlib.Path) -> None:
+        hive = tmp_path / "hive"
+        if privilege_enabled("SeBackupPrivilege"):  # an elevated CI runner's token
+            winreg.SaveKey(scratch, str(hive))
+            assert hive.stat().st_size > 0
+            return
         with pytest.raises(OSError) as save:
-            winreg.SaveKey(scratch, str(tmp_path / "hive"))
+            winreg.SaveKey(scratch, str(hive))
         assert winerror(save.value) == 1314
 
+    def test_loadkey_needs_the_restore_privilege(self, tmp_path: pathlib.Path) -> None:
+        if privilege_enabled("SeRestorePrivilege"):
+            pytest.skip("missing unprivileged-token: loading would mount a hive under HKEY_USERS")
         with pytest.raises(OSError) as load:
             winreg.LoadKey(winreg.HKEY_USERS, "python-complexity", str(tmp_path / "hive"))
         assert winerror(load.value) == 1314

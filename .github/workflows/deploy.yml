@@ -78,9 +78,11 @@ jobs:
           # libedit, which lacks append_history.
           - os: macos-latest
             missing: "libintl readline-append-history"
-          # Hosted Windows runners have no sound card.
+          # Hosted Windows runners have no sound card, the Windows C runtime
+          # has no C.UTF-8 locale, and the runner's token holds the restore
+          # privilege enabled.
           - os: windows-latest
-            missing: "audio"
+            missing: "audio c-utf8-locale unprivileged-token"
     runs-on: ${{ matrix.os }}
     env:
       # What this runner lacks. tests/conftest.py fails a skip for any other

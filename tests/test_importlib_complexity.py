@@ -1262,17 +1262,28 @@ class TestLoaderAbcs:
         assert loader.name == "compiled_only" and loader.path == str(pyc)
 
     def test_extension_loader_finder_side_methods_load_nothing(self) -> None:
-        dynload = pathlib.Path(sysconfig.get_paths()["stdlib"]) / "lib-dynload"
-        suffixes = tuple(importlib.machinery.EXTENSION_SUFFIXES)
-        candidates = (
-            sorted(path for path in dynload.glob("*") if path.name.endswith(suffixes))
-            if dynload.is_dir()
-            else []
+        # lib-dynload on Linux and macOS, DLLs on Windows: both are on sys.path
+        names = sorted(
+            path.name.split(".")[0]
+            for entry in sys.path
+            if pathlib.Path(entry).is_dir()
+            and pathlib.Path(entry)
+            .resolve()
+            .is_relative_to(pathlib.Path(sys.base_prefix).resolve())
+            for path in pathlib.Path(entry).iterdir()
+            if path.name.endswith(tuple(importlib.machinery.EXTENSION_SUFFIXES))
+            and not path.name.startswith("_test")
         )
+        specs = (importlib.util.find_spec(name) for name in names)
+        candidates = [
+            spec
+            for spec in specs
+            if spec is not None and isinstance(spec.loader, importlib.machinery.ExtensionFileLoader)
+        ]
         if not candidates:
-            pytest.skip("missing extension-modules: no extension module in lib-dynload")
-        path = candidates[0]
-        name = path.name.split(".")[0]
+            pytest.skip("missing extension-modules: no extension module outside the binary")
+        name = candidates[0].name
+        path = pathlib.Path(str(candidates[0].origin))
         loader = importlib.machinery.ExtensionFileLoader(name, str(path))
 
         assert loader.get_code(name) is None

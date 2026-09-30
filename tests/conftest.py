@@ -63,6 +63,7 @@ CAPABILITIES = {
     "unfrozen-gc": "a garbage collector with nothing frozen yet",
     "installed-interpreter": "an installed interpreter, not a source-tree build",
     "user-database": "a user database entry for the current uid",
+    "unprivileged-token": "a Windows token without the restore privilege enabled",
     "uv": "the uv executable on PATH",
     "xattr": "a filesystem that supports user extended attributes",
     "zstd": "the compression.zstd module",

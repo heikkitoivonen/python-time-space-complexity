@@ -489,12 +489,17 @@ class TestModulesWithoutSource:
         assert pyclbr.readmodule_ex("sys") == {}
 
     def test_an_extension_module_is_empty(self) -> None:
-        dynload = [pathlib.Path(p) for p in sys.path if p.endswith("lib-dynload")]
+        # lib-dynload on Linux and macOS, DLLs on Windows: both are on sys.path
         names = sorted(
             path.name.split(".")[0]
-            for directory in dynload
-            for path in directory.glob("*.so")
-            if not path.name.startswith("_test")
+            for entry in sys.path
+            if pathlib.Path(entry).is_dir()
+            and pathlib.Path(entry)
+            .resolve()
+            .is_relative_to(pathlib.Path(sys.base_prefix).resolve())
+            for path in pathlib.Path(entry).iterdir()
+            if path.name.endswith(tuple(importlib.machinery.EXTENSION_SUFFIXES))
+            and not path.name.startswith("_test")
         )
         spec = next(
             (

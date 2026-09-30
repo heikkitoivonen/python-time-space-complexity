@@ -921,11 +921,17 @@ class TestRealpath:
 
     def test_a_sharing_violation_is_walked_too(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A real file the process cannot open: the page file or another
-        system file held without sharing at the root of the system drive."""
-        drive = os.environ.get("SYSTEMDRIVE", "C:") + "\\"
+        system file held without sharing at the root of a drive. Cloud VMs
+        often keep the page file on a temporary drive, not the system one."""
+        roots = [f"{letter}:\\" for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"]
         refused = None
-        for name in ("pagefile.sys", "swapfile.sys", "DumpStack.log.tmp"):
-            candidate = ntpath.join(drive, name)
+        for root, name in (
+            (root, name)
+            for root in roots
+            if os.path.isdir(root)
+            for name in ("pagefile.sys", "swapfile.sys", "DumpStack.log.tmp")
+        ):
+            candidate = ntpath.join(root, name)
             try:
                 nt._getfinalpathname(candidate)
             except OSError as error:
@@ -938,7 +944,9 @@ class TestRealpath:
             )
 
         result, calls = self._calls(monkeypatch, refused)
-        _, missing_calls = self._calls(monkeypatch, ntpath.join(drive, "nt-page-missing"))
+        _, missing_calls = self._calls(
+            monkeypatch, ntpath.join(ntpath.dirname(refused), "nt-page-missing")
+        )
 
         assert ntpath.normcase(result) == ntpath.normcase(refused)
         assert calls["readlink"] == 1, calls

@@ -357,6 +357,9 @@ class FakeCanvas:
     def call(self, *args: Any) -> None:
         pass
 
+    def wm_attributes(self, *args: Any, **kwargs: Any) -> None:
+        """What `TurtleScreen()` calls on macOS to raise its window, from 3.14.7."""
+
     def winfo_rgb(self, color: str) -> tuple[int, int, int]:
         if color.startswith("#") and len(color) == 7:
             red, green, blue = (int(color[i : i + 2], 16) * 257 for i in (1, 3, 5))
