@@ -30,8 +30,9 @@ Measurement scope:
   two languages found are chained in the order given.
 * `GNUTranslations(fp)` reads the file to its end at construction, and its
   catalog dictionary holds every message, decoded, before any lookup. Its traced peak grows more than 50x from 1,000 to 100,000
-  messages, and in a timing test each 10x step in messages costs between 5x
-  and 30x, which is linear and excludes quadratic's 100x. A bad magic number,
+  messages, and in a timing test 100x the messages costs between 30x and
+  1,000x (x120 to x165 measured on 3.14), which is linear and excludes
+  quadratic's 10,000x. A bad magic number,
   an unknown major version and a message running past the end each raise
   `OSError`.
 * A `gettext()` hit on a 1,000,000-character message id, probed with an equal
@@ -126,14 +127,17 @@ def make_mo(messages: dict[str, str], header: str = HEADER, version: int = 0) ->
     """Encode {msgid: msgstr} as a little-endian GNU .mo file."""
     entries = sorted({"": header, **messages}.items())
     count = len(entries)
-    tables, strings = [b"", b""], b""
+    tables: list[bytes] = []
+    strings: list[bytes] = []
+    offset = 28 + 16 * count
     for column in (0, 1):
         for entry in entries:
             data = entry[column].encode()
-            tables[column] += struct.pack("<2I", len(data), 28 + 16 * count + len(strings))
-            strings += data + b"\0"
+            tables.append(struct.pack("<2I", len(data), offset))
+            strings.append(data + b"\0")
+            offset += len(data) + 1
     head = struct.pack("<7I", 0x950412DE, version, count, 28, 28 + 8 * count, 0, 0)
-    return head + tables[0] + tables[1] + strings
+    return head + b"".join(tables) + b"".join(strings)
 
 
 def catalog(messages: dict[str, str], header: str = HEADER) -> gettext.GNUTranslations:
@@ -428,21 +432,20 @@ class TestParsingReadsTheWholeFile:
 
         assert peaks[1] > peaks[0] * 50, f"100x the messages peaked at {peaks}"
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.timing
     def test_parsing_is_linear_in_the_file(self) -> None:
         files = [
             make_mo({f"m{index}": f"v{index}" for index in range(count)})
-            for count in (1_000, 10_000, 100_000)
+            for count in (1_000, 100_000)
         ]
         durations = [
             best_ns(lambda data=data: gettext.GNUTranslations(io.BytesIO(data)), repeats=3)
             for data in files
         ]
 
-        steps = [durations[1] / durations[0], durations[2] / durations[1]]
-        assert all(5 < step < 30 for step in steps), (
-            f"10x the messages: {durations} ns, steps {steps}; linear is x10, quadratic x100"
+        ratio = durations[1] / durations[0]
+        assert 30 < ratio < 1_000, (
+            f"100x the messages: {durations} ns, x{ratio:.0f}; linear is x100, quadratic x10,000"
         )
 
     @pytest.mark.parametrize(

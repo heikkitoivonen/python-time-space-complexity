@@ -217,7 +217,7 @@ class TestAGuessFollowsTheName:
     @pytest.mark.parametrize("method", ["guess_type", "guess_file_type"])
     def test_a_long_name_allocates_with_its_length(self, method: str) -> None:
         if method == "guess_file_type" and sys.version_info < (3, 13):
-            pytest.skip("guess_file_type is 3.13+")
+            pytest.skip("version: guess_file_type is 3.13+")
         guess = getattr(mimetypes.MimeTypes(), method)
         path = "/" + "d" * 1_000_000 + "/report.pdf"
 
@@ -230,7 +230,7 @@ class TestAGuessFollowsTheName:
     @pytest.mark.parametrize("method", ["guess_type", "guess_file_type"])
     def test_a_long_name_takes_longer(self, method: str) -> None:
         if method == "guess_file_type" and sys.version_info < (3, 13):
-            pytest.skip("guess_file_type is 3.13+")
+            pytest.skip("version: guess_file_type is 3.13+")
         guess = getattr(mimetypes.MimeTypes(), method)
         short = "/" + "d" * 1_000 + "/report.pdf"
         long = "/" + "d" * 1_000_000 + "/report.pdf"

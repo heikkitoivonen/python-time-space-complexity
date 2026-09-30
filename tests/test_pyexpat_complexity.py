@@ -322,7 +322,6 @@ class TestErrors:
         assert parser.ErrorByteIndex == 11
         assert errors.messages[error.code] == errors.XML_ERROR_TAG_MISMATCH
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_error_string_is_the_messages_table(self) -> None:
         assert errors.messages
         for code, message in errors.messages.items():

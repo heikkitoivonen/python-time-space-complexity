@@ -100,10 +100,10 @@ Not settled by execution:
   `sys.winver` and `sys._enablelegacywindowsfsencoding()` on Windows, the
   absence of `sys.abiflags` there, `sys.getandroidapilevel()` on Android,
   `sys._emscripten_info` on Emscripten
-  - each have a test guarded by `sys.platform`. Every one of those guards
-  skips on Linux and on CI, so no run this project performs verifies those
-  rows; the guard is there so a reader on that platform gets an answer rather
-  than a red suite.
+  - each have a test guarded by `sys.platform`. The Windows ones run in the
+  Windows CI job; no run this project performs is on Android or Emscripten,
+  so those two guards are there so a reader on that platform gets an answer
+  rather than a red suite.
 * `sys._debugmallocstats()`'s O(a) in the allocator's arenas, and
   `sys._clear_internal_caches()`'s O(x) in the tier-2 executors. Both calls are
   exercised. A program does influence both counts, but not in a way it can
@@ -398,7 +398,6 @@ class TestExceptionReporting:
 
         assert deep - shallow == 3, f"3-deep printed {shallow}, 6-deep printed {deep}"
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_the_source_line_is_read_for_every_frame_that_has_one(self) -> None:
         """The s in the row: each printed frame carries its source line, which
         the hook has to go to the file for.
@@ -2101,7 +2100,9 @@ class TestRemoteExec:
         head start, so a slow machine cannot turn this into a flake.
         """
         if not sys_attr("is_remote_debug_enabled")():
-            pytest.skip("remote debugging is disabled in this interpreter")
+            pytest.skip(
+                "missing remote-debugging: remote debugging is disabled in this interpreter"
+            )
 
         marker = tmp_path / "marker.txt"
         script = tmp_path / "payload.py"
@@ -2141,7 +2142,7 @@ class TestRemoteExec:
             try:
                 sys_attr("remote_exec")(child.pid, str(script))
             except PermissionError:  # pragma: no cover - depends on the sandbox
-                pytest.skip("this process may not attach to another one here")
+                pytest.skip("missing ptrace: this process may not attach to another one here")
             deadline = time.monotonic() + 20
             while time.monotonic() < deadline and not marker.exists():
                 time.sleep(0.05)

@@ -52,6 +52,7 @@ Not settled here:
 
 from __future__ import annotations
 
+import importlib
 import pathlib
 import queue
 import re
@@ -65,7 +66,9 @@ from typing import Any
 
 import pytest
 
-interpreters: Any = pytest.importorskip("concurrent.interpreters")
+if sys.version_info < (3, 14):
+    pytest.skip("version: concurrent.interpreters is new in Python 3.14", allow_module_level=True)
+interpreters: Any = importlib.import_module("concurrent.interpreters")
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "concurrent.interpreters.md"
 EXPECTED_BLOCKS = 4

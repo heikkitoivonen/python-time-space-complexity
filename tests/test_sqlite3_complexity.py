@@ -525,7 +525,7 @@ class TestTransactions:
     @pytest.mark.parametrize("setter", ["isolation_level", "autocommit"])
     def test_switching_to_autocommit_commits(self, setter: str) -> None:
         if setter == "autocommit" and sys.version_info < (3, 12):
-            pytest.skip("Connection.autocommit is Python 3.12+")
+            pytest.skip("version: Connection.autocommit is Python 3.12+")
         connection = sqlite3.connect(":memory:")
         try:
             issued = trace(connection)
@@ -1223,7 +1223,7 @@ class TestCallbacks:
 
     def test_limits_round_trip(self) -> None:
         if not hasattr(sqlite3.Connection, "setlimit"):
-            pytest.skip("Connection.setlimit is Python 3.11+")
+            pytest.skip("version: Connection.setlimit is Python 3.11+")
         connection: Any = sqlite3.connect(":memory:")
         try:
             category = sqlite3.SQLITE_LIMIT_SQL_LENGTH  # type: ignore[attr-defined]
@@ -1300,7 +1300,9 @@ class TestCopyingADatabase:
         connection: Any = self._filled(1_000, width=1_000)
         if not hasattr(connection, "serialize"):
             connection.close()
-            pytest.skip("Connection.serialize needs Python 3.11+ and SQLite's serialize API")
+            if sys.version_info < (3, 11):
+                pytest.skip("version: Connection.serialize is Python 3.11+")
+            pytest.skip("missing sqlite-serialize: this SQLite has no serialize API")
         copy: Any = sqlite3.connect(":memory:")
         try:
             image = connection.serialize()

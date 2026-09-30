@@ -617,7 +617,7 @@ class TestUsingAnEnvironmentWithoutActivating:
 
         bash = shutil.which("bash")
         if bash is None:
-            pytest.skip("bash is needed to source the activate script")
+            pytest.skip("missing bash: bash is needed to source the activate script")
 
         output = subprocess.run(
             [bash, "-c", '. "$1" && printf "%s\\n" "$PATH"', "bash", str(env / "bin" / "activate")],

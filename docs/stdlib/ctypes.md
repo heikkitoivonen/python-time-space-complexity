@@ -406,6 +406,7 @@ no buffer to allocate per call.
 import ctypes
 
 libc = ctypes.CDLL(None)
+libc.snprintf.argtypes = [ctypes.c_char_p, ctypes.c_size_t, ctypes.c_char_p]  # the fixed ones
 libc.snprintf.restype = ctypes.c_int
 
 buffer = ctypes.create_string_buffer(32)  # O(n) once

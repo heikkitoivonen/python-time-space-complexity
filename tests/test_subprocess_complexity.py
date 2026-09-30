@@ -762,9 +762,12 @@ class TestPopenAttributesRow:
         assert binary.pipesize == -1
 
     def test_pipesize_sizes_the_pipes_where_the_platform_allows(self) -> None:
-        fcntl = pytest.importorskip("fcntl")
+        if sys.platform == "win32":
+            pytest.skip("platform: fcntl is Unix-only")
+        import fcntl
+
         if not hasattr(fcntl, "F_GETPIPE_SZ"):
-            pytest.skip("only Linux sizes pipes")
+            pytest.skip("platform: only Linux sizes pipes")
 
         read_end, write_end = os.pipe()
         default = fcntl.fcntl(read_end, fcntl.F_GETPIPE_SZ)
@@ -776,7 +779,9 @@ class TestPopenAttributesRow:
                 [PY, "-c", "pass"], stdout=subprocess.PIPE, pipesize=asked
             )
         except PermissionError:
-            pytest.skip("this kernel does not let the user enlarge a pipe fourfold")
+            pytest.skip(
+                "missing large-pipes: this kernel does not let the user enlarge a pipe fourfold"
+            )
         sized.wait(WAIT)
 
         assert sized.pipesize == asked

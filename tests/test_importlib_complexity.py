@@ -1270,7 +1270,7 @@ class TestLoaderAbcs:
             else []
         )
         if not candidates:
-            pytest.skip("no extension module in lib-dynload")
+            pytest.skip("missing extension-modules: no extension module in lib-dynload")
         path = candidates[0]
         name = path.name.split(".")[0]
         loader = importlib.machinery.ExtensionFileLoader(name, str(path))

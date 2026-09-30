@@ -642,7 +642,10 @@ def test_deduplication_across_workers_and_alias_documentation(
 
 
 def test_real_reexports_have_process_independent_identities() -> None:
-    pytest.importorskip("tkinter")
+    try:
+        import tkinter  # noqa: F401
+    except ImportError:
+        pytest.skip("missing tkinter: this build has no tkinter")
     _, root = audit.inspect_module("tkinter")
     _, child = audit.inspect_module("tkinter.simpledialog")
     assert not root["errors"]
@@ -812,7 +815,7 @@ def test_documented_module_attribute_can_be_inspected() -> None:
     import sys
 
     if not hasattr(sys, "monitoring"):
-        pytest.skip("sys.monitoring is available from Python 3.12")
+        pytest.skip("version: sys.monitoring is available from Python 3.12")
     result = audit.inspect_module_worker("sys.monitoring")
     assert result["available"]
     assert not result["errors"]
@@ -833,7 +836,7 @@ def test_inspection_uses_stdlib_distutils() -> None:
     import sys
 
     if sys.version_info >= (3, 12):
-        pytest.skip("distutils is removed from the standard library in Python 3.12")
+        pytest.skip("version: distutils is removed from the standard library in Python 3.12")
     _, result = audit.inspect_module("distutils.bcppcompiler")
     assert result["available"]
     assert not result["errors"]

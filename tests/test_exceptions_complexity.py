@@ -1359,7 +1359,7 @@ class TestTheHierarchy:
 
     def test_pythonfinalizationerror_is_a_runtimeerror(self) -> None:
         if sys.version_info < (3, 13):
-            pytest.skip("PythonFinalizationError is Python 3.13+")
+            pytest.skip("version: PythonFinalizationError is Python 3.13+")
 
         assert issubclass(builtins.PythonFinalizationError, RuntimeError)
 

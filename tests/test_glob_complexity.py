@@ -317,7 +317,7 @@ class TestRecursiveWalks:
         try:
             (tree / "link").symlink_to(tree / "src", target_is_directory=True)
         except OSError:
-            pytest.skip("this filesystem does not allow symlinks")
+            pytest.skip("missing symlinks: this filesystem does not allow symlinks")
 
         found = glob.glob(str(tree / "**" / "deep.py"), recursive=True)
 
@@ -388,8 +388,10 @@ class TestRecursiveWalks:
         listings: list[tuple[str, weakref.ReferenceType[Names]]] = []
         original = glob._listdir  # type: ignore[attr-defined]
 
+        # Sorted, so every level's side directories are walked before its
+        # child "d" whatever order the filesystem lists them in.
         def tracked_listdir(dirname: str, *args: Any, **kwargs: Any) -> list[str]:
-            names = Names(original(dirname, *args, **kwargs))
+            names = Names(sorted(original(dirname, *args, **kwargs)))
             listings.append((dirname, weakref.ref(names)))
             return names
 

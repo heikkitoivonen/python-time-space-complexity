@@ -76,7 +76,7 @@ from unittest import mock
 import pytest
 
 if sys.platform == "win32":  # pragma: no cover - the module is Unix only
-    pytest.skip("pty is a Unix-only module", allow_module_level=True)
+    pytest.skip("platform: pty is a Unix-only module", allow_module_level=True)
 
 import pty  # noqa: E402  (after the platform guard)
 
@@ -100,7 +100,7 @@ def _pty_is_usable() -> bool:
 @pytest.fixture(autouse=True)
 def _needs_a_pty() -> None:
     if not _pty_is_usable():  # pragma: no cover - only on a build without ptys
-        pytest.skip("pty needs a working pseudo-terminal")
+        pytest.skip("missing pty: pty needs a working pseudo-terminal")
 
 
 @pytest.fixture

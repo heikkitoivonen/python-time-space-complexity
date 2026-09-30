@@ -78,7 +78,7 @@ Not settled here:
   that the audit lists as unresolved; `SimpleHandler._write`'s O(len(data)) is
   read from source, including its retry loop on partial writes.
 * `read_environ()`'s Windows branches (IIS, Apache, other servers) only run
-  on Windows; no run this project performs reaches them.
+  on Windows; no test here exercises them.
 * `log_exception()`'s O(f) and `demo_app()`'s O(e log e) are read from source;
   only the frame cap and the one-line-per-entry output are observed.
 * `wsgiref.types` exists from 3.11; the test is skipped on 3.10.

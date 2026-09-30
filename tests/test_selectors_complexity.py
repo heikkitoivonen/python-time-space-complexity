@@ -178,7 +178,7 @@ class TestDefaultSelector:
     @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux picks epoll")
     def test_it_is_epoll_on_linux(self) -> None:
         if sys.platform != "linux":
-            pytest.skip("Linux picks epoll")
+            pytest.skip("platform: Linux picks epoll")
         assert selectors.DefaultSelector is selectors.EpollSelector
 
     def test_every_implementation_is_a_base_selector(self) -> None:
@@ -221,7 +221,7 @@ class TestDefaultSelector:
     @pytest.mark.skipif(not hasattr(selectors, "EpollSelector"), reason="needs epoll")
     def test_close_releases_the_kernel_object_not_the_files(self) -> None:
         if sys.platform != "linux":
-            pytest.skip("EpollSelector is Linux-only")
+            pytest.skip("platform: EpollSelector is Linux-only")
         left, right = socket.socketpair()
         try:
             with selectors.EpollSelector() as sel:
@@ -463,7 +463,9 @@ class TestSelectReturnsReadyPairs:
         soft, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
         high = 1100
         if soft <= high:
-            pytest.skip(f"open-file limit {soft} is too low to place a descriptor at {high}")
+            pytest.skip(
+                f"missing open-files: open-file limit {soft} is too low to place a descriptor at {high}"
+            )
         with pytest.raises(OSError):
             os.fstat(high)  # dup2 must not replace a descriptor in use
         r, w = os.pipe()
@@ -539,7 +541,7 @@ class TestSelectScaling:
         self, pipes: Callable[[int], list[tuple[int, int]]]
     ) -> None:
         if sys.platform != "linux":
-            pytest.skip("EpollSelector is Linux-only")
+            pytest.skip("platform: EpollSelector is Linux-only")
         times, peaks = self.measure(selectors.EpollSelector, (20, 2_000), pipes)
         assert times[1] < 4 * times[0], f"epoll times {times}"
         assert peaks[1] > 50 * max(peaks[0], 1), f"epoll peaks {peaks}"

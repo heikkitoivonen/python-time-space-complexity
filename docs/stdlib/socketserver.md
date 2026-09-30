@@ -340,10 +340,10 @@ class Size(socketserver.DatagramRequestHandler):
 
 with socketserver.UDPServer(("127.0.0.1", 0), Size) as server:
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    client.sendto(b"x" * 10000, server.server_address)
+    client.sendto(b"x" * 9000, server.server_address)
     server.handle_request()  # O(b) - one recvfrom
     reply, _ = client.recvfrom(1024)
-    assert reply == b"8192 bytes"  # max_packet_size, not 10000; one datagram back
+    assert reply == b"8192 bytes"  # max_packet_size, not 9000; one datagram back
     client.close()
 ```
 

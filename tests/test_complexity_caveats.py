@@ -44,6 +44,8 @@ from typing import Any
 
 import pytest
 
+from tests.patched_python import require_patched_normalization
+
 # How much faster a doubled input may get before we call it superlinear. The
 # measured ratios are around 4x, so this leaves a wide margin for a loaded
 # machine while still failing if an operation becomes genuinely linear.
@@ -118,7 +120,7 @@ def _b2j(matcher: "SequenceMatcher[str]") -> dict[str, list[int]]:
     """Return SequenceMatcher's index of the second sequence, or skip."""
     index = getattr(matcher, "b2j", None)
     if index is None:
-        pytest.skip("SequenceMatcher no longer exposes its b2j index")
+        pytest.skip("version: this release's SequenceMatcher no longer exposes its b2j index")
     return index
 
 
@@ -300,29 +302,7 @@ class TestUnicodeDataCaveats:
         interpreters measured 350-400x here (3.11.14, 3.12.3, 3.13.11, 3.14.2),
         so the excluded end is not theoretical.
         """
-        # 3.15 and later shipped with the fix, so a minor absent from this map
-        # is treated as patched. A distributor that backports while keeping an
-        # older version number is skipped rather than run -- the wrong call for
-        # coverage, but the safe one, since the alternative fails a Python that
-        # is not actually vulnerable.
-        fixed_releases = {
-            (3, 10): (3, 10, 21),
-            (3, 11): (3, 11, 16),
-            (3, 12): (3, 12, 14),
-            (3, 13): (3, 13, 14),
-            (3, 14): (3, 14, 6),
-        }
-        release = fixed_releases.get(sys.version_info[:2])
-        if release is not None and sys.version_info[:3] < release:
-            version = ".".join(str(part) for part in sys.version_info[:3])
-            needed = ".".join(str(part) for part in release)
-            message = f"Python {version} predates the CVE-2026-3276 fix in {needed}"
-            # The `timing` job pins a patched interpreter so that this runs. A
-            # skip there means the pin drifted, not that the claim cannot be
-            # checked -- and a drifted pin is invisible if it stays a skip.
-            if os.environ.get("COMPLEXITY_REQUIRE_PATCHED_PYTHON"):
-                pytest.fail(f"{message}, but this job pins one to check the claim")
-            pytest.skip(message)
+        require_patched_normalization()
 
         def run(marks: int) -> Callable[[], str]:
             text = "a" + "".join(chr(0x0300 + (i % 40)) for i in range(marks))

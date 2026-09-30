@@ -56,7 +56,8 @@ their elapsed-time assertions do not compete with other tests.
 
 The `serial` marker isolates exact allocation assertions: xdist communication
 threads can allocate while `tracemalloc` is measuring. CI runs these tests serially
-in the required build job; timing tests remain in their separate reporting job.
+in the required test job on Linux, macOS and Windows; timing tests remain in their
+separate reporting job.
 
 For a focused change, run the relevant test file directly:
 

@@ -1,4 +1,4 @@
-<!-- source_sha: 9f5e66723312da84fded429bb1bdeacd75a7e832eb9f31a851cb1260b3013083 -->
+<!-- source_sha: fd83aedcf1a38e8cd5db4050ab395d1d72e19248db0ca1d86a9e91ccc95ac94d -->
 <!-- translated: machine -->
 
 [English](CONTRIBUTING.md) | **简体中文**
@@ -50,7 +50,8 @@
 计时测试始终不使用并行工作进程，以免其耗时断言受到其他测试争用资源的影响。
 
 `serial` 标记用于隔离精确的内存分配断言：xdist 的通信线程可能在 `tracemalloc`
-测量期间分配内存。CI 在必须通过的构建任务中串行运行这些测试；计时测试仍在独立的结果报告任务中运行。
+测量期间分配内存。CI 在 Linux、macOS 和 Windows 上必须通过的测试任务中串行运行这些测试；
+计时测试仍在独立的结果报告任务中运行。
 
 对于范围较小的修改，可以直接运行相关测试文件：
 

@@ -95,8 +95,9 @@ Measurement scope:
   `Straße` and `a` followed by two out-of-order combining marks, and timed
   at 1,000 and 100,000 characters on soft-hyphenated `Bücher` and on `a`
   followed by alternating U+0315 and U+0300, the run of combining marks
-  that NFKC reorders; this holds on security-patched releases only (see the
-  unicodedata page), which are the ones this project runs.
+  that NFKC reorders; the marks case holds on releases carrying the
+  CVE-2026-3276 fix only (see the unicodedata page) and is skipped on others
+  by `tests/patched_python.py`.
 * `utf-8-sig` is asserted by output: every whole encode writes a BOM, also
   for `''` and ahead of a leading U+FEFF; decode skips one leading BOM and
   keeps a second or a later one; the incremental encoder writes the BOM on
@@ -127,12 +128,12 @@ Not settled here:
   handlers, are not timed here; `test_codecs_complexity.py` times more of them.
 * `search_function('UTF-8')` returning `None` depends on imports matching
   module names by case, which is observed on Linux only.
-* `win32_code_page_search_function()` is Windows-only, so no run this project
-  performs verifies its rows; its test skips everywhere else.
+* `win32_code_page_search_function()` is Windows-only: its test runs in the
+  Windows CI job and skips everywhere else.
 * `encodings.mbcs` is Windows-only (category D): its row, O(n) through the
   ANSI code page, is read from Lib/encodings/mbcs.py and
-  Objects/unicodeobject.c, and its round-trip test skips everywhere else,
-  so no run this project performs verifies it. The audit lists it, and
+  Objects/unicodeobject.c, and its round-trip test runs in the Windows CI
+  job and skips everywhere else. The audit lists it, and
   `encodings.oem`, under import errors on Linux; `encodings.oem` is not in
   the official inventory and its codec functions are priced on the codecs
   page.
@@ -170,6 +171,8 @@ from encodings.aliases import aliases
 from typing import Any
 
 import pytest
+
+from tests.patched_python import require_patched_normalization
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "encodings.md"
 EXPECTED_BLOCKS = 5
@@ -790,10 +793,11 @@ class TestNameprep:
         assert idna.nameprep("Stra\u00dfe\u00ad") == "strasse"
         assert idna.nameprep("a\u0315\u0300") == "\u00e0\u0315"
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.timing
     @pytest.mark.parametrize("unit", ["Bücher\u00ad", "\u0315\u0300"], ids=["text", "marks"])
     def test_time_is_linear_in_the_label(self, unit: str) -> None:
+        if unit == "\u0315\u0300":
+            require_patched_normalization()
         small, large = ("a" + unit * (length // len(unit)) for length in (1_000, 100_000))
 
         assert_hundredfold_is_linear(

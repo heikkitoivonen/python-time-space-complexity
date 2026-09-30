@@ -99,6 +99,17 @@ import pytest
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "dbm.md"
 EXPECTED_BLOCKS = 16
 HAS_SQLITE_BACKEND = sys.version_info >= (3, 13)
+
+
+def importable_ndbm() -> Any:
+    if sys.platform == "win32":
+        pytest.skip("platform: Windows builds have no dbm.ndbm")
+    try:
+        return importlib.import_module("dbm.ndbm")
+    except ImportError:
+        pytest.skip("missing ndbm: this build has no ndbm")
+
+
 SQLITE_ONLY = pytest.mark.skipif(not HAS_SQLITE_BACKEND, reason="dbm.sqlite3 is 3.13+")
 BIG = 10_000_000
 
@@ -152,7 +163,7 @@ def build(path: pathlib.Path, keys: int) -> pathlib.Path:
 @pytest.fixture(scope="module")
 def databases(tmp_path_factory: pytest.TempPathFactory) -> tuple[pathlib.Path, pathlib.Path]:
     if not HAS_SQLITE_BACKEND:
-        pytest.skip("dbm.sqlite3 is 3.13+")
+        pytest.skip("version: dbm.sqlite3 is 3.13+")
     directory = tmp_path_factory.mktemp("dbm")
     return build(directory / "small.sqlite", 1_000), build(directory / "large.sqlite", 100_000)
 
@@ -394,7 +405,7 @@ class TestBackendsDiffer:
     """Which backends iterate, and `dbm.dumb`'s O(n) open and delete."""
 
     def test_ndbm_lists_keys_but_does_not_iterate(self, tmp_path: pathlib.Path) -> None:
-        ndbm = pytest.importorskip("dbm.ndbm", reason="this build has no ndbm")
+        ndbm = importable_ndbm()
         with ndbm.open(str(tmp_path / "ndbm"), "c") as db:
             db[b"a"] = b"1"
             db[b"b"] = b"2"
@@ -471,7 +482,7 @@ class TestVersionNotes:
         assert dbm.whichdb(str(path)) == "dbm.sqlite3"
 
     def test_ndbm_gains_clear_in_313(self, tmp_path: pathlib.Path) -> None:
-        ndbm = pytest.importorskip("dbm.ndbm", reason="this build has no ndbm")
+        ndbm = importable_ndbm()
         with ndbm.open(str(tmp_path / "ndbm"), "c") as db:
             assert hasattr(db, "clear") == HAS_SQLITE_BACKEND
 

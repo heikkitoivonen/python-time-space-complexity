@@ -145,7 +145,9 @@ from typing import Any
 import pytest
 
 if sys.platform == "win32":  # pragma: no cover - the module is Unix only
-    pytest.skip("curses, pty, termios and fcntl are Unix-only modules", allow_module_level=True)
+    pytest.skip(
+        "platform: curses, pty, termios and fcntl are Unix-only modules", allow_module_level=True
+    )
 
 import fcntl  # noqa: E402  (after the platform guard)
 import pty  # noqa: E402  (after the platform guard)
@@ -484,7 +486,9 @@ pytestmark = pytest.mark.serial
 @pytest.fixture(autouse=True)
 def _needs_a_terminal() -> None:
     if not _terminal_is_usable():  # pragma: no cover - only on a build without terminfo
-        pytest.skip("curses needs a pseudo-terminal and a terminfo entry for TERM")
+        pytest.skip(
+            "missing terminfo: curses needs a pseudo-terminal and a terminfo entry for TERM"
+        )
 
 
 class TestTheHarness:
@@ -1947,12 +1951,15 @@ class TestAscii:
         assert ascii_.alt(ord("A")) == 0xC1
         assert ascii_.ascii(0xC1) == ord("A")
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_the_two_unctrl_spellings_differ(self) -> None:
         def compare(stdscr: Any) -> dict[str, Any]:
             import curses
             import curses.ascii
+            import locale
 
+            # ncurses returns a byte from 160 to 255 unchanged when isprint()
+            # accepts it, which macOS's does for 200 in a UTF-8 locale.
+            locale.setlocale(locale.LC_CTYPE, "C")
             return {
                 "module": curses.unctrl(1),
                 "ascii": curses.ascii.unctrl(1),

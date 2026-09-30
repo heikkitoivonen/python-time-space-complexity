@@ -161,10 +161,16 @@ def _wave_output_devices() -> int:
     return windll("winmm").waveOutGetNumDevs()
 
 
-AUDIO = pytest.mark.skipif(
-    sys.platform != "win32" or _wave_output_devices() == 0,
-    reason="playing a sound needs Windows and a wave output device",
+NO_WAVE_DEVICE = pytest.mark.skipif(
+    sys.platform == "win32" and _wave_output_devices() == 0,
+    reason="missing audio: playing a sound needs a wave output device",
 )
+
+
+def AUDIO(obj: Any) -> Any:
+    """Windows and a wave output device; the device is probed only on Windows."""
+    return WINDOWS(NO_WAVE_DEVICE(obj))
+
 
 WINDOWS_11 = sys.platform == "win32" and getattr(sys, "getwindowsversion")().build >= 22_000  # noqa: B009
 
@@ -767,7 +773,7 @@ class TestConstants:
     @pytest.mark.parametrize("flag", ["SND_APPLICATION", "SND_SYNC", "SND_SENTRY", "SND_SYSTEM"])
     def test_the_flag_is_accepted_from_memory(self, flag: str) -> None:
         if not hasattr(winsound, flag):
-            pytest.skip(f"{flag} is Python 3.14+")
+            pytest.skip(f"version: {flag} is Python 3.14+")
         winsound.PlaySound(silent_wav(0.05), memory_flags(flag))
 
 

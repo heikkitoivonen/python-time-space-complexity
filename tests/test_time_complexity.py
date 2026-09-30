@@ -159,7 +159,7 @@ def require(*names: str) -> None:
     """Skip when the running platform lacks one of these names."""
     missing = [name for name in names if not hasattr(time, name)]
     if missing:
-        pytest.skip(f"unavailable here: {', '.join(missing)}")
+        pytest.skip(f"platform: unavailable here: {', '.join(missing)}")
 
 
 def table_rows() -> list[str]:
@@ -313,7 +313,7 @@ class TestPosixClocks:
 
     def test_pthread_getcpuclockid_returns_a_readable_clock(self) -> None:
         if sys.platform != "linux":
-            pytest.skip("typeshed declares pthread_getcpuclockid on Linux only")
+            pytest.skip("platform: typeshed declares pthread_getcpuclockid on Linux only")
         require("pthread_getcpuclockid", "clock_gettime")
         clock_id = time.pthread_getcpuclockid(threading.get_ident())
 

@@ -4,7 +4,8 @@ The page prices only IDLE's public surface: importing the package and
 starting the application from the command line. There is no display here or
 in CI, so nothing creates a Tk window. Startup is instead driven through the
 real `idlelib.pyshell.main()` in a subprocess whose Tk root, icon images
-and `PyShellFileList` are recording stand-ins, and a file load
+and `PyShellFileList` are recording stand-ins, and whose Tk type is preset
+so that `idlelib.macosx` does not create a root of its own on macOS, and a file load
 through the real `IOBinding.loadfile()` with a recording editor window. Every
 subprocess runs with `HOME` set to its own temporary directory, because
 loading IDLE's configuration creates `~/.idlerc`, and without `DISPLAY` or
@@ -96,18 +97,19 @@ try:
 except ImportError:
     HAS_TK = False
 
-needs_tk = pytest.mark.skipif(not HAS_TK, reason="this build has no tkinter")
+needs_tk = pytest.mark.skipif(not HAS_TK, reason="missing tkinter: this build has no tkinter")
 linux_only = pytest.mark.skipif(
     not sys.platform.startswith("linux"), reason="Tk needs DISPLAY only on X11"
 )
 
 
 def quiet_env(home: pathlib.Path) -> dict[str, str]:
-    """The environment with no display and `home` as the home directory."""
+    """The environment with no display and `home` as the home directory everywhere."""
     env = dict(os.environ)
     for name in ("DISPLAY", "WAYLAND_DISPLAY"):
         env.pop(name, None)
     env["HOME"] = str(home)
+    env["USERPROFILE"] = str(home)  # what expanduser("~") reads on Windows
     return env
 
 
@@ -229,6 +231,7 @@ pyshell.NoDefaultRoot = lambda: None
 pyshell.PhotoImage = lambda **kwargs: None
 pyshell.PyShellFileList = FileList
 macosx.setupApp = lambda root, flist: None
+macosx._tk_type = "other"  # on macOS, isAquaTk() would otherwise create a real Tk()
 
 sys.argv = ["idle", *ARGS]
 pyshell.main()
@@ -304,7 +307,6 @@ class TestStartupOpensOneWindowPerFile:
     the stand-in file list's `open()` calls; the read is `loadfile()`'s one
     insert of the whole text; the growth is `sys.path` after `main()`."""
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.parametrize("count", [3, 30])
     def test_each_file_named_is_opened_once_in_order(
         self, tmp_path: pathlib.Path, count: int
@@ -315,7 +317,6 @@ class TestStartupOpensOneWindowPerFile:
 
         assert calls == [("Tk",), *(("open", name) for name in names), ("destroy",)]
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_each_new_directory_joins_the_front_of_sys_path_once(
         self, tmp_path: pathlib.Path
     ) -> None:

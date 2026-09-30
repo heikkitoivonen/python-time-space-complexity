@@ -847,7 +847,9 @@ class TestDecodingHooks:
     def test_an_integer_past_the_digit_limit_raises_in_both_directions(self) -> None:
         limit = sys.get_int_max_str_digits()
         if limit == 0:
-            pytest.skip("the integer digit limit is disabled in this interpreter")
+            pytest.skip(
+                "missing int-digit-limit: the integer digit limit is disabled in this interpreter"
+            )
         literal = "1" * (limit + 1)
 
         with pytest.raises(ValueError, match="Exceeds the limit"):

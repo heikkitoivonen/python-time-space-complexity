@@ -423,8 +423,10 @@ class TestLenIsTheBackends:
     @pytest.mark.timing
     def test_ndbm_counts_its_keys_after_a_write(self, tmp_path: pathlib.Path) -> None:
         ndbm = importable("dbm.ndbm")
+        if sys.platform == "win32":
+            pytest.skip("platform: Windows builds have no dbm.ndbm")
         if ndbm is None:
-            pytest.skip("dbm.ndbm is not built into this interpreter")
+            pytest.skip("missing ndbm: dbm.ndbm is not built into this interpreter")
         durations = []
         for size in (1_000, 32_000):
             database = ndbm.open(str(tmp_path / f"n{size}"), "n")
@@ -581,9 +583,11 @@ class TestClear:
     def test_backend_clear_deletes_key_by_key_and_flag_n_does_not(
         self, name: str, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        if name == "dbm.sqlite3" and sys.version_info < (3, 13):
+            pytest.skip("version: dbm.sqlite3 is 3.13+")
         module = importable(name)
         if module is None:
-            pytest.skip(f"{name} is not available")
+            pytest.skip(f"missing sqlite3: {name} needs the sqlite3 extension module")
         database_class: Any = module._Database  # noqa: SLF001
         deletes: list[bytes] = []
         original = database_class.__delitem__

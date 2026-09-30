@@ -93,7 +93,7 @@ def test_availability() -> None:
 @pytest.fixture
 def imp() -> Iterator[Any]:
     if sys.version_info >= (3, 12):
-        pytest.skip("imp was removed in Python 3.12")
+        pytest.skip("version: imp was removed in Python 3.12")
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
         yield importlib.import_module("imp")
@@ -414,7 +414,7 @@ def test_load_dynamic_reads_nothing_in_python(
     imp: Any, modules: Callable[[str], None], reads: dict[str, int]
 ) -> None:
     if imp.load_dynamic is None:
-        pytest.skip("dynamic loading is not supported on this platform")
+        pytest.skip("platform: dynamic loading is not supported on this platform")
     dynload = Path(sysconfig.get_paths()["stdlib"]) / "lib-dynload"
     suffixes = tuple(imp.machinery.EXTENSION_SUFFIXES)
     candidates = sorted(path for path in dynload.iterdir() if path.name.endswith(suffixes))
@@ -431,7 +431,7 @@ def test_load_dynamic_reads_nothing_in_python(
         assert isinstance(module, types.ModuleType) and sys.modules[name] is module
         assert reads == {}
         return
-    pytest.skip("no loadable extension module in lib-dynload")
+    pytest.skip("missing extension-modules: no loadable extension module in lib-dynload")
 
 
 def test_reload_recompiles_only_changed_source(
@@ -577,7 +577,7 @@ def test_examples(tmp_path: Path, index: int) -> None:
     blocks = re.findall(r"```python\n(.*?)```", text, re.DOTALL)
     assert len(blocks) == 2
     if index == 0 and sys.version_info >= (3, 12):
-        pytest.skip("the imp example needs Python 3.10 or 3.11")
+        pytest.skip("version: the imp example needs Python 3.10 or 3.11")
     line = text[: text.index(blocks[index])].count("\n") + 1
     result = subprocess.run(
         [sys.executable, "-W", "ignore::DeprecationWarning", "-c", blocks[index]],

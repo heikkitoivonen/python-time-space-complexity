@@ -138,7 +138,9 @@ def best_ns(func: Callable[[], Any], repeats: int = 7, inner: int = 1) -> float:
 def peak_bytes(func: Callable[[], Any]) -> int:
     """Peak traced allocation while func runs."""
     if tracemalloc.is_tracing():
-        pytest.skip("tracemalloc is already tracing; a peak here would include its traces")
+        pytest.skip(
+            "missing untraced-process: tracemalloc is already tracing; a peak here would include its traces"
+        )
     tracemalloc.start()
     try:
         func()
@@ -180,7 +182,9 @@ def baseline_frozen() -> Iterator[None]:
     already froze objects is left alone rather than having them released.
     """
     if gc.get_freeze_count():
-        pytest.skip("objects were already frozen; unfreezing would release them")
+        pytest.skip(
+            "missing unfrozen-gc: objects were already frozen; unfreezing would release them"
+        )
     gc.collect()
     gc.freeze()
     try:

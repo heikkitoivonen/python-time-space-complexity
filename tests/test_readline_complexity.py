@@ -94,6 +94,7 @@ Not settled here:
 
 from __future__ import annotations
 
+import importlib
 import os
 import pathlib
 import re
@@ -109,7 +110,9 @@ from typing import Any
 
 import pytest
 
-readline = pytest.importorskip("readline")
+if sys.platform == "win32":
+    pytest.skip("platform: Windows builds have no readline module", allow_module_level=True)
+readline: Any = importlib.import_module("readline")
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "readline.md"
 EXPECTED_BLOCKS = 5
@@ -119,10 +122,12 @@ TAB_BINDING = "bind ^I rl_complete" if LIBEDIT else "tab: complete"
 libedit_only = pytest.mark.skipif(not LIBEDIT, reason="libedit's history list")
 gnu_only = pytest.mark.skipif(LIBEDIT, reason="GNU readline's history array")
 needs_clear = pytest.mark.skipif(
-    not hasattr(readline, "clear_history"), reason="the library lacks clear_history"
+    not hasattr(readline, "clear_history"),
+    reason="missing readline-clear-history: the library lacks clear_history",
 )
 needs_append = pytest.mark.skipif(
-    not hasattr(readline, "append_history_file"), reason="the library lacks append_history"
+    not hasattr(readline, "append_history_file"),
+    reason="missing readline-append-history: the library lacks append_history",
 )
 
 
@@ -443,7 +448,6 @@ class TestHistoryFiles:
         with pytest.raises(FileNotFoundError):
             readline.read_history_file(str(tmp_path / "missing"))
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_the_length_caps_the_file_not_the_list(self, tmp_path: pathlib.Path) -> None:
         path = str(tmp_path / "history")
         fill(6)
@@ -689,7 +693,6 @@ class TestCompletion:
     `get_endidx`, `get_line_buffer` and `get_completion_type` describe the word
     being completed; `set_completer_delims` decides where it starts."""
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_the_completer_is_asked_until_it_returns_none(self) -> None:
         setup = "WORDS = ['apple', 'apricot', 'banana']" + COMPLETER
         result = interactive(setup, [b"ap\t", b"\x15\r"], "[c[:2] for c in calls]")
@@ -817,7 +820,6 @@ class TestDocumentedExamples:
     def test_the_page_has_the_expected_blocks(self) -> None:
         assert len(_blocks()) == EXPECTED_BLOCKS
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
         ran = 0

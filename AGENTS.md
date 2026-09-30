@@ -190,8 +190,9 @@ make check          # Run lint + types + tests (recommended before commit)
 ### Python Versions
 
 `make test` uses the interpreter in `.python-version`, the newest supported
-patch release. That is the default for local work. CI runs the full supported
-matrix on every push, so do not reproduce the matrix by hand before a commit.
+patch release. That is the default for local work. CI runs the suite on that
+interpreter on Linux, macOS and Windows, and the timing tests on every supported
+version, so do not reproduce the matrix by hand before a commit.
 
 Run another interpreter only for the tests whose claim is about that version -
 a version-gated skip, a bound that moves at a release, an API added or removed:
@@ -331,10 +332,23 @@ otherwise.
 
 **D. Only another platform can settle it.** A `winreg`, `msvcrt` or
 `os.startfile` row. Guard the test with `sys.platform`, the way a
-version-specific claim is guarded with `sys.version_info`. A test left failing
-because it asserts another platform's behaviour is a broken test, not a
-finding. The skip is not coverage either: record it in the docstring beside
-the C entries, because no run this project performs verifies it.
+version-specific claim is guarded with `sys.version_info`. CI runs the suite on
+Linux, macOS and Windows, so the test is verified on its own platform there;
+locally it is a skip, so name the platform in the file's docstring.
+
+A platform guard skips exactly the platforms its mechanism applies to, and its
+reason names that mechanism ("macOS's PATH_MAX is 1,024 bytes"), never just the
+platform ("Linux-only"). A test with no platform-specific subject has no guard:
+it passes on all three or it is a bug. Before guarding a failure seen on one
+machine, find the mechanism - a result from a checkout shared with another host
+can come from pytest's rewritten-module cache in `tests/__pycache__`, which
+records the other host's paths.
+
+Every skip decided while a test runs - `pytest.skip()`, a module-level skip -
+starts with `platform: `, `version: ` or `missing <capability>: `, and a marker
+that probes the environment uses the `missing` form too. `tests/conftest.py`
+fails any other, and in CI fails a `missing` skip for a capability the runner
+is not declared to lack. See that file for the list of capabilities.
 
 Claims are not the only thing that breaks. Two of the three pages spot-checked
 so far shipped examples that raised on the first line - one of them a

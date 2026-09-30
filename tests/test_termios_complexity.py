@@ -23,20 +23,25 @@ Measurement scope:
 * `tcsetattr()` is asserted to apply a cleared `ICANON` (one byte then reads
   without a newline), to reject a list that is not seven entries long with
   `TypeError`, and, with `TCSAFLUSH`, to discard a line already readable on
-  the slave while `TCSANOW` keeps one. `tcflush(TCIFLUSH)` discards a
+  the slave while `TCSANOW` keeps one. The `TCSAFLUSH` test turns `ECHO` off
+  first: on macOS the flush waits until the master has read any echoed
+  output, and nothing reads it there. `tcflush(TCIFLUSH)` discards a
   readable line in the same way. Readability is waited for with `select()`
   before the flush, and its absence is checked with a 0.2 s `select()`
   afterwards.
-* `tcflow(TCOOFF)` makes a non-blocking write to the slave raise
+* On Linux, `tcflow(TCOOFF)` makes a non-blocking write to the slave raise
   `BlockingIOError` and keeps a blocking one in a thread unfinished for
   0.3 s after the thread signals it is about to write; `TCOON` lets the
-  next write, or the waiting one, through to the master. `TCIOFF` and
-  `TCION` deliver the slave's `cc[VSTOP]` and `cc[VSTART]` bytes to the
-  master.
-* `tcdrain()` returns within a second with 100 bytes the master has not read,
-  and `tcsendbreak(fd, 0)` within 0.2 s, under the 0.25 s a serial break
-  lasts. These are the pseudo-terminal's behaviour on Linux, and both are
-  timing tests.
+  next write, or the waiting one, through to the master. CPython's own
+  Lib/test/test_termios.py runs its suspend-and-resume test on Linux only.
+  `TCIOFF` and `TCION` deliver the slave's `cc[VSTOP]` and `cc[VSTART]`
+  bytes to the master.
+* On Linux, `tcdrain()` returns within a second with 100 bytes the master
+  has not read, and `tcsendbreak(fd, 0)` within 0.2 s, under the 0.25 s a
+  serial break lasts; both are timing tests. On macOS `tcdrain()` is
+  asserted to be still waiting 0.5 s after 100 bytes were written, and to
+  return within 5 s once the master reads them; `tcsendbreak(fd, 0)` to take
+  at least 0.3 s. Those two run only on macOS, in the macOS CI job.
 * `tcgetwinsize()` and `tcsetwinsize()` (3.11+, guarded on
   `sys.version_info`) round-trip `(rows, columns)`, and the master reports
   what was set on the slave; on 3.10 the two names are asserted absent.
@@ -57,15 +62,19 @@ Not settled here:
   characters. What the kernel does inside those calls is not priced.
 * How long `TCSADRAIN`, `tcdrain()` and `tcsendbreak()` wait on a real
   device depends on the line's speed and what is queued; a pseudo-terminal
-  has no line, so only its immediate return is observed. The 0.25 to 0.5 s
-  break is the official documentation's, for a zero `duration`.
+  has no line, so only its behaviour is observed. The 0.25 to 0.5 s
+  break is the official documentation's, for a zero `duration`. The macOS
+  behaviour follows from the BSD terminal driver's `ttywait()`, which
+  `tcdrain()` and `TCSADRAIN`/`TCSAFLUSH` wait in until the output queue is
+  empty - on a pseudo-terminal, until the master has read it - and from the
+  BSD libc `tcsendbreak()`, which sleeps about 0.4 s in `select()` between
+  `TIOCSBRK` and `TIOCCBRK` whatever the device.
 * `tcflush(TCOFLUSH)` is not observed: on a Linux pseudo-terminal a write to
   the slave has already reached the master, so there is no untransmitted
   output to discard.
-* Which constants exist and their values are the platform's. Only Linux is
-  run; the pseudo-terminal behaviours above (the blocked write under
-  `TCOOFF`, the STOP and START bytes, the prompt drain and break, the shared
-  window size) are not checked on macOS or the BSDs.
+* Which constants exist and their values are the platform's. The tests
+  other than the Linux-only and macOS-only ones above hold on both, which
+  the Linux and macOS CI jobs verify. The BSDs are not considered.
 * The module does not exist on Windows, so the whole file skips there.
 """
 
@@ -87,7 +96,7 @@ from collections.abc import Iterator
 import pytest
 
 if sys.platform == "win32":  # pragma: no cover - the module is Unix only
-    pytest.skip("termios is a Unix-only module", allow_module_level=True)
+    pytest.skip("platform: termios is a Unix-only module", allow_module_level=True)
 
 import termios  # noqa: E402  (after the platform guard)
 
@@ -116,7 +125,7 @@ def pair() -> Iterator[tuple[int, int]]:
     try:
         master, slave = os.openpty()
     except OSError:  # pragma: no cover - only on a build without ptys
-        pytest.skip("termios tests need a working pseudo-terminal")
+        pytest.skip("missing pty: termios tests need a working pseudo-terminal")
     try:
         yield master, slave
     finally:
@@ -225,13 +234,15 @@ class TestTcsetattr:
         with pytest.raises(TypeError, match="7 element list"):
             termios.tcsetattr(slave, termios.TCSANOW, termios.tcgetattr(slave)[:6])
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_tcsaflush_discards_a_waiting_line(self, pair: tuple[int, int]) -> None:
         master, slave = pair
+        quiet = termios.tcgetattr(slave)
+        quiet[3] &= ~termios.ECHO  # no echoed output for TCSAFLUSH to wait on
+        termios.tcsetattr(slave, termios.TCSANOW, quiet)
         os.write(master, b"typed ahead\n")
         assert readable(slave, 5)
 
-        termios.tcsetattr(slave, termios.TCSAFLUSH, termios.tcgetattr(slave))
+        termios.tcsetattr(slave, termios.TCSAFLUSH, quiet)
 
         assert not readable(slave, 0.2)
 
@@ -309,7 +320,11 @@ class TestQueueControl:
 
         assert not readable(slave, 0.2)
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
+    @pytest.mark.skipif(
+        sys.platform != "linux",
+        reason="a write held by TCOOFF is Linux pty behaviour; BSD queues it "
+        "(CPython's Lib/test/test_termios.py runs this on Linux only)",
+    )
     def test_tcooff_holds_writes_until_tcoon(self, pair: tuple[int, int]) -> None:
         master, slave = pair
 
@@ -325,7 +340,11 @@ class TestQueueControl:
 
         assert read_exactly(master, 4) == b"sent"
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
+    @pytest.mark.skipif(
+        sys.platform != "linux",
+        reason="a write held by TCOOFF is Linux pty behaviour; BSD queues it "
+        "(CPython's Lib/test/test_termios.py runs this on Linux only)",
+    )
     def test_a_blocking_write_waits_for_tcoon(self, pair: tuple[int, int]) -> None:
         master, slave = pair
         termios.tcflow(slave, termios.TCOOFF)
@@ -348,7 +367,6 @@ class TestQueueControl:
         assert not writer.is_alive()
         assert read_exactly(master, 4) == b"held"
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_tcioff_and_tcion_send_stop_and_start(self, pair: tuple[int, int]) -> None:
         master, slave = pair
         control = termios.tcgetattr(slave)[6]
@@ -359,7 +377,10 @@ class TestQueueControl:
         termios.tcflow(slave, termios.TCION)
         assert read_exactly(master, 1) == control[termios.VSTART]
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
+    @pytest.mark.skipif(
+        sys.platform == "darwin",
+        reason="BSD ttywait() blocks tcdrain until the master reads the queued output",
+    )
     @pytest.mark.timing
     def test_tcdrain_returns_at_once_on_a_pseudo_terminal(self, pair: tuple[int, int]) -> None:
         _, slave = pair
@@ -371,7 +392,10 @@ class TestQueueControl:
 
         assert elapsed < 1, f"tcdrain took {elapsed:.3f}s on a pseudo-terminal"
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
+    @pytest.mark.skipif(
+        sys.platform == "darwin",
+        reason="macOS libc tcsendbreak sleeps ~0.4 s in select() between TIOCSBRK and TIOCCBRK",
+    )
     @pytest.mark.timing
     def test_tcsendbreak_returns_at_once_on_a_pseudo_terminal(self, pair: tuple[int, int]) -> None:
         _, slave = pair
@@ -381,6 +405,38 @@ class TestQueueControl:
         elapsed = time.perf_counter() - start
 
         assert elapsed < 0.2, f"a zero-duration break took {elapsed:.3f}s on a pseudo-terminal"
+
+    @pytest.mark.skipif(sys.platform != "darwin", reason="the BSD terminal driver's ttywait()")
+    def test_tcdrain_waits_for_the_master_to_read_on_macos(self, pair: tuple[int, int]) -> None:
+        master, slave = pair
+        os.write(slave, b"q" * 100)
+        started = threading.Event()
+        drained = threading.Event()
+
+        def drain() -> None:
+            started.set()
+            termios.tcdrain(slave)
+            drained.set()
+
+        threading.Thread(target=drain, daemon=True).start()
+        assert started.wait(5), "the draining thread never started"
+        waited = not drained.wait(0.5)
+        received = read_exactly(master, 100)
+
+        assert waited, "tcdrain returned while the master had read nothing"
+        assert drained.wait(5), "tcdrain still waiting after the master read everything"
+        assert received == b"q" * 100
+
+    @pytest.mark.skipif(sys.platform != "darwin", reason="the BSD libc tcsendbreak()")
+    @pytest.mark.timing
+    def test_tcsendbreak_sleeps_on_macos(self, pair: tuple[int, int]) -> None:
+        _, slave = pair
+
+        start = time.perf_counter()
+        termios.tcsendbreak(slave, 0)
+        elapsed = time.perf_counter() - start
+
+        assert elapsed >= 0.3, f"a zero-duration break took {elapsed:.3f}s on macOS"
 
 
 class TestWindowSize:
@@ -458,7 +514,6 @@ class TestDocumentedExamples:
         assert len(_blocks()) == EXPECTED_BLOCKS
         assert sum(WINDOW_SIZE_BLOCK in source for _, source in _blocks()) == 1
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
         ran = 0

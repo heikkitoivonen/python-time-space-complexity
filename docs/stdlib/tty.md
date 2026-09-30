@@ -53,7 +53,9 @@ try:
         assert not mode[tty.OFLAG] & termios.OPOST
     finally:
         termios.tcsetattr(terminal, termios.TCSADRAIN, saved)  # O(1)
-    assert termios.tcgetattr(terminal) == saved
+    restored = termios.tcgetattr(terminal)
+    restored[tty.LFLAG] &= ~termios.PENDIN  # macOS sets it when canonical mode returns
+    assert restored == saved
 finally:
     os.close(terminal)
     os.close(controller)

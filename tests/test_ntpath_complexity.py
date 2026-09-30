@@ -482,7 +482,13 @@ class TestIsabsReadsThePrefix:
 
 class TestStringFunctionsAreLinear:
     """The O(L) and O(B) rows, timed: each 10x step in the input costs under
-    30x, where linear predicts 10x and quadratic 100x."""
+    30x, where linear predicts 10x and quadratic 100x.
+
+    The largest input is 100,000 characters. Several of these functions copy
+    the whole path, and a copy past glibc's 128 KiB mmap threshold is served
+    fresh, zero-filled pages on every call, which adds page faults that are
+    not the function's work: 300,000 characters measured x53 on the second
+    step on 3.12."""
 
     @staticmethod
     def cases() -> dict[str, Callable[[int], Callable[[], Any]]]:
@@ -511,7 +517,7 @@ class TestStringFunctionsAreLinear:
     )
     def test_ten_times_the_input_costs_about_ten_times(self, name: str) -> None:
         make = self.cases()[name]
-        durations = [best_ns(make(size), repeats=5) for size in (3_000, 30_000, 300_000)]
+        durations = [best_ns(make(size), repeats=5) for size in (1_000, 10_000, 100_000)]
         ratios = [durations[1] / durations[0], durations[2] / durations[1]]
 
         assert all(ratio < 30 for ratio in ratios), f"{name}: {durations} ns, x{ratios}"
@@ -927,7 +933,9 @@ class TestRealpath:
                     refused = candidate
                     break
         if refused is None:
-            pytest.skip("no system file held with a sharing violation on this machine")
+            pytest.skip(
+                "missing locked-system-file: no system file held with a sharing violation on this machine"
+            )
 
         result, calls = self._calls(monkeypatch, refused)
         _, missing_calls = self._calls(monkeypatch, ntpath.join(drive, "nt-page-missing"))

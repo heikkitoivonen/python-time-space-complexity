@@ -891,7 +891,7 @@ class TestLogin:
         assert self._auth_exchanges(network, smtp) == 2
         smtp.close()
 
-    @pytest.mark.skipif(not md5_available(), reason="MD5 is unavailable in this build")
+    @pytest.mark.skipif(not md5_available(), reason="missing md5: MD5 is unavailable in this build")
     def test_cram_md5_is_preferred_and_two_exchanges(self, network: Network) -> None:
         smtp = self._tls(network, auth="LOGIN PLAIN CRAM-MD5")
 

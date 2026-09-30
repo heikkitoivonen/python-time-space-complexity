@@ -71,6 +71,7 @@ Not settled here:
 
 from __future__ import annotations
 
+import importlib
 import io
 import pathlib
 import re
@@ -85,7 +86,9 @@ from typing import Any
 
 import pytest
 
-tomllib: Any = pytest.importorskip("tomllib")
+if sys.version_info < (3, 11):
+    pytest.skip("version: tomllib is new in Python 3.11", allow_module_level=True)
+tomllib: Any = importlib.import_module("tomllib")
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "tomllib.md"
 EXPECTED_BLOCKS = 7

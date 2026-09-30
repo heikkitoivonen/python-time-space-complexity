@@ -190,7 +190,7 @@ class TestTheFirstImportOpensTheComicOnce:
 
     def test_the_import_runs_discovery_when_nothing_has(self, tmp_path: pathlib.Path) -> None:
         if not sys.platform.startswith("linux"):
-            pytest.skip("discovery registers the system browser outside Linux")
+            pytest.skip("platform: discovery registers the system browser outside Linux")
         result = run_python(
             """
             import subprocess
@@ -220,7 +220,7 @@ class TestTheFirstImportOpensTheComicOnce:
 
     def test_the_import_skips_discovery_that_has_already_run(self, tmp_path: pathlib.Path) -> None:
         if not sys.platform.startswith("linux"):
-            pytest.skip("discovery registers the system browser outside Linux")
+            pytest.skip("platform: discovery registers the system browser outside Linux")
         result = run_python(
             """
             import subprocess

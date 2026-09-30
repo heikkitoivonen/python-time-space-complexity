@@ -212,11 +212,16 @@ def drain_queued(sock: socket.socket) -> None:
         sock.setblocking(True)
 
 
-def refusing_address() -> tuple[socket.socket, tuple[str, int]]:
-    """A loopback port that is bound but not listening, so connecting is refused."""
-    holder = socket.socket()
-    holder.bind(("127.0.0.1", 0))
-    return holder, holder.getsockname()
+def refusing_address() -> tuple[str, int]:
+    """A loopback port that no socket owns, so connecting to it is refused.
+
+    The port is bound to pick a free one and closed again. A port that a bound,
+    non-listening socket still owns is refused by Linux, but BSD-derived stacks
+    such as macOS drop the SYN silently and the connect times out instead.
+    """
+    with socket.socket() as holder:
+        holder.bind(("127.0.0.1", 0))
+        return holder.getsockname()
 
 
 def stream_record(address: tuple[str, int]) -> tuple[Any, ...]:
@@ -282,7 +287,7 @@ class TestReceivingAllocatesBufsize:
         self, pair: tuple[socket.socket, socket.socket]
     ) -> None:
         if sys.platform != "linux":
-            pytest.skip("Linux demand-paging probe")
+            pytest.skip("platform: Linux demand-paging probe")
         import resource  # noqa: PLC0415 - unavailable on Windows
 
         # A fresh mapping provides a control independent of Python's allocator.
@@ -479,7 +484,7 @@ class TestSendfileHoldsNoCopy:
         self, pair: tuple[socket.socket, socket.socket], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         if not hasattr(os, "sendfile"):
-            pytest.skip("os.sendfile is unavailable")
+            pytest.skip("platform: os.sendfile is unavailable")
         left, right = pair
         calls: list[int] = []
         original = os.sendfile
@@ -664,13 +669,8 @@ class TestCreateConnectionTriesInOrder:
                 server.close()
 
     @pytest.fixture
-    def refusing(self) -> Iterator[list[tuple[str, int]]]:
-        held = [refusing_address() for _ in range(2)]
-        try:
-            yield [address for _, address in held]
-        finally:
-            for holder, _ in held:
-                holder.close()
+    def refusing(self) -> list[tuple[str, int]]:
+        return [refusing_address() for _ in range(2)]
 
     @staticmethod
     def resolve_to(monkeypatch: pytest.MonkeyPatch, addresses: list[tuple[str, int]]) -> None:
@@ -707,7 +707,6 @@ class TestCreateConnectionTriesInOrder:
     # gaierror, before any lookup, so the two failures can be told apart.
     UNCONVERTIBLE = ("::1", 80)
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.parametrize("unconvertible_first", [True, False])
     def test_total_failure_raises_the_last_error(
         self,
@@ -726,7 +725,6 @@ class TestCreateConnectionTriesInOrder:
 
         assert type(caught.value) is expected
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.skipif(sys.version_info < (3, 11), reason="all_errors was added in 3.11")
     def test_all_errors_collects_every_attempt(
         self, monkeypatch: pytest.MonkeyPatch, refusing: list[tuple[str, int]]
@@ -916,14 +914,10 @@ class TestDescriptorsAndAttributes:
                     assert address == client.getsockname()
                     assert connection.getpeername() == client.getsockname()
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_connect_ex_returns_the_error_number(self) -> None:
-        holder, address = refusing_address()
-        try:
-            with socket.socket() as sock:
-                assert sock.connect_ex(address) == errno.ECONNREFUSED
-        finally:
-            holder.close()
+        with socket.socket() as sock:
+            sock.settimeout(5)
+            assert sock.connect_ex(refusing_address()) == errno.ECONNREFUSED
 
     def test_connect_ex_still_raises_for_a_bad_address(self) -> None:
         with socket.socket() as sock:  # AF_INET, handed an IPv6 literal
@@ -987,13 +981,13 @@ class TestAfAlg:
 
     def test_two_buffers_encrypt_as_one_message(self) -> None:
         if sys.platform != "linux":
-            pytest.skip("AF_ALG is Linux-only")
+            pytest.skip("platform: AF_ALG is Linux-only")
         if not hasattr(socket, "AF_ALG"):
-            pytest.skip("this build has no AF_ALG")
+            pytest.skip("missing kernel-crypto: this build has no AF_ALG")
         try:
             algorithm = socket.socket(socket.AF_ALG, socket.SOCK_SEQPACKET)
         except OSError as error:
-            pytest.skip(f"AF_ALG unavailable: {error}")
+            pytest.skip(f"missing kernel-crypto: AF_ALG unavailable: {error}")
 
         def run(op: int, buffers: list[bytes]) -> bytes:
             assert sys.platform == "linux", "a nested scope needs its own narrowing"
@@ -1009,7 +1003,7 @@ class TestAfAlg:
             with algorithm:
                 algorithm.bind(("skcipher", "ecb(aes)"))
         except OSError as error:
-            pytest.skip(f"ecb(aes) unavailable: {error}")
+            pytest.skip(f"missing kernel-crypto: ecb(aes) unavailable: {error}")
 
         ciphertext = run(socket.ALG_OP_ENCRYPT, [b"a" * 8, b"b" * 8])
 
@@ -1085,18 +1079,35 @@ def _run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[st
     )
 
 
+# Blocks that `test_every_block_runs` does not run on Windows, keyed by a line
+# unique to each. `socketpair()` there is a TCP loopback pair, and Windows
+# loopback buffers a whole non-blocking or timed send instead of taking part of
+# it; `sendmsg()`, `AF_UNIX` pairs and `send_fds()` do not exist there.
+WINDOWS_SKIPPED_BLOCKS = {
+    "sent = left.send(payload)": "a non-blocking send is taken whole",
+    "left.sendall(b'x' * 50_000_000)": "a timed send is taken whole with no reader",
+    "left.sendmsg([header, body])": "no sendmsg()",
+    "socket.send_fds(left, [b'fd'], [read_end])": "no AF_UNIX socketpair or send_fds()",
+}
+
+
 class TestDocumentedExamples:
     """Each block runs in its own subprocess over `socketpair()` or loopback,
-    with a timeout, and asserts its own result."""
+    with a timeout, and asserts its own result. On Windows the blocks in
+    `WINDOWS_SKIPPED_BLOCKS` are not run."""
 
     def test_the_page_has_the_expected_blocks(self) -> None:
         assert len(_blocks()) == EXPECTED_BLOCKS
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
         ran = 0
+        skipped: set[str] = set()
         for line, source in _blocks():
+            marker = next((m for m in WINDOWS_SKIPPED_BLOCKS if m in source), None)
+            if sys.platform == "win32" and marker is not None:
+                skipped.add(marker)
+                continue
             ran += 1
             workdir = tmp_path / f"block{line}"
             workdir.mkdir()
@@ -1104,7 +1115,9 @@ class TestDocumentedExamples:
             if result.returncode != 0:
                 failures.append(f"{PAGE.name}:{line}\n{result.stderr.strip()}")
 
-        assert ran == EXPECTED_BLOCKS
+        if sys.platform == "win32":
+            assert skipped == set(WINDOWS_SKIPPED_BLOCKS), "a Windows skip matched no block"
+        assert ran + len(skipped) == EXPECTED_BLOCKS
         assert not failures, "\n\n".join(failures)
 
     def test_the_runner_notices_a_broken_assertion(self, tmp_path: pathlib.Path) -> None:

@@ -157,41 +157,45 @@ assert locale.strxfrm('apple') == 'apple'  # O(s) - C locale: an ASCII string is
 
 `nl_langinfo()` answers one fixed key at a time from the C library's tables for the category the
 key belongs to: day and month names follow `LC_TIME`, the radix character follows `LC_NUMERIC`.
-It is Unix only.
+It is Unix only, so the example checks for it first.
 
 ```python
 import locale
 
-locale.setlocale(locale.LC_TIME, 'C')
-locale.setlocale(locale.LC_NUMERIC, 'C')
+if hasattr(locale, 'nl_langinfo'):
+    locale.setlocale(locale.LC_TIME, 'C')
+    locale.setlocale(locale.LC_NUMERIC, 'C')
 
-assert locale.nl_langinfo(locale.DAY_1) == 'Sunday'  # O(1)
-assert locale.nl_langinfo(locale.ABMON_1) == 'Jan'
-assert locale.nl_langinfo(locale.RADIXCHAR) == '.'
+    assert locale.nl_langinfo(locale.DAY_1) == 'Sunday'  # O(1)
+    assert locale.nl_langinfo(locale.ABMON_1) == 'Jan'
+    assert locale.nl_langinfo(locale.RADIXCHAR) == '.'
 
-try:
-    locale.nl_langinfo(-1)
-except ValueError as error:
-    assert 'unsupported langinfo constant' in str(error)
-else:
-    raise AssertionError('an unknown key was answered')
+    try:
+        locale.nl_langinfo(-1)
+    except ValueError as error:
+        assert 'unsupported langinfo constant' in str(error)
+    else:
+        raise AssertionError('an unknown key was answered')
 ```
 
 ## C Library Message Catalogues
 
 `gettext()`, `dgettext()` and `dcgettext()` translate through the C library's catalogues, the
 ones C extensions use. Python code usually wants the [gettext](gettext.md) module instead, which
-reads catalogues itself and does not depend on the process locale.
+reads catalogues itself and does not depend on the process locale. The module has these functions
+only where Python was built against a C library that provides them, and `LC_MESSAGES` only on
+Unix, so the example checks for both first.
 
 ```python
 import locale
 
-locale.setlocale(locale.LC_MESSAGES, 'C')
+if hasattr(locale, 'dcgettext') and hasattr(locale, 'LC_MESSAGES'):
+    locale.setlocale(locale.LC_MESSAGES, 'C')
 
-assert locale.gettext('Hello') == 'Hello'  # no catalogue: the message comes back
-assert locale.dgettext(None, 'Hello') == 'Hello'
-assert locale.dcgettext(None, 'Hello', locale.LC_MESSAGES) == 'Hello'
-assert locale.textdomain(None) == locale.textdomain(None)  # None only queries
+    assert locale.gettext('Hello') == 'Hello'  # no catalogue: the message comes back
+    assert locale.dgettext(None, 'Hello') == 'Hello'
+    assert locale.dcgettext(None, 'Hello', locale.LC_MESSAGES) == 'Hello'
+    assert locale.textdomain(None) == locale.textdomain(None)  # None only queries
 ```
 
 ## Common Patterns

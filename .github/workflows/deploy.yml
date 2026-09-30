@@ -12,7 +12,8 @@ permissions:
   id-token: write
 
 jobs:
-  build:
+  # Everything that does not depend on the operating system runs once, here.
+  checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -36,16 +37,6 @@ jobs:
       - name: Type check
         run: uv run pyright
 
-      # Everything except the stopwatch tests. Those are correct but not
-      # reliable on a shared runner, and a mis-timed measurement is not a
-      # reason to stop publishing documentation -- three deploys were lost
-      # that way. They run in the `timing` job below, which does not gate
-      # the deploy. `make check` still runs the whole suite before a commit.
-      - name: Run tests
-        run: |
-          uv run pytest -m "not timing and not serial" -n auto --dist=loadfile
-          uv run pytest -m "serial and not timing" -n 0
-
       - name: Check documentation coverage on newest supported Python
         # Its own environment: `uv run --python` replaces `.venv`, which would
         # hand the site build an interpreter no earlier step exercised.
@@ -67,7 +58,54 @@ jobs:
           path: 'site'
           include-hidden-files: true
 
-  # Reports, but deliberately does not gate: `deploy` needs `build` only.
+  # The suite on each operating system. A test with no platform guard must
+  # pass on all three, so a failure on any one of them fails the run.
+  test:
+    needs: checks
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            missing: ""
+          - os: macos-latest
+            missing: ""
+          # Hosted Windows runners have no sound card.
+          - os: windows-latest
+            missing: "audio"
+    runs-on: ${{ matrix.os }}
+    env:
+      # What this runner lacks. tests/conftest.py fails a skip for any other
+      # missing capability, because there it would hide a test that should run.
+      COMPLEXITY_MISSING_CAPABILITIES: ${{ matrix.missing }}
+      # The curses tests need a terminfo entry, and a job has no TERM.
+      TERM: xterm-256color
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.1.0
+        with:
+          version: "latest"
+          enable-cache: false
+
+      - name: Install dependencies
+        run: uv sync
+
+      # Everything except the stopwatch tests. Those are correct but not
+      # reliable on a shared runner, and a mis-timed measurement is not a
+      # reason to stop publishing documentation -- three deploys were lost
+      # that way. They run in the `timing` job below, which does not gate
+      # the deploy. `make check` still runs the whole suite before a commit.
+      - name: Run tests
+        run: |
+          uv run pytest -m "not timing and not serial" -n auto --dist=loadfile
+          uv run pytest -m "serial and not timing" -n 0
+
+  # Reports, but deliberately does not gate: `deploy` does not need it.
   # A red run here means a complexity claim needs looking at -- check whether
   # the measurement missed by a hair (noise) or by a wide margin (the claim).
   timing:
@@ -84,6 +122,8 @@ jobs:
       # release cannot quietly put this job back to verifying nothing.
       # Local runs still skip, and `make check` stays green off a patch.
       COMPLEXITY_REQUIRE_PATCHED_PYTHON: "1"
+      # The runner lacks nothing a timing test needs; see tests/conftest.py.
+      COMPLEXITY_MISSING_CAPABILITIES: ""
     steps:
       - uses: actions/checkout@v7
 
@@ -114,7 +154,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-    needs: build
+    needs: [checks, test]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - name: Deploy to GitHub Pages

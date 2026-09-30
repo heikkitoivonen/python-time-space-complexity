@@ -620,7 +620,7 @@ def _usable_cpus() -> int:
 
 
 @pytest.mark.timing
-@pytest.mark.skipif(_usable_cpus() < 2, reason="parallel speedup needs two CPUs")
+@pytest.mark.skipif(_usable_cpus() < 2, reason="missing two-cpus: parallel speedup needs two CPUs")
 class TestUpdateReleasesTheGil:
     """`update()` from 2048 bytes runs without the GIL: large buffers hash in
     parallel across threads, small updates do not."""

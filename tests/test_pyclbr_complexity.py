@@ -506,7 +506,9 @@ class TestModulesWithoutSource:
             None,
         )
         if spec is None:
-            pytest.skip("this interpreter has no extension modules outside the binary")
+            pytest.skip(
+                "missing extension-modules: this interpreter has no extension modules outside the binary"
+            )
         assert pyclbr.readmodule_ex(spec.name) == {}
 
     def test_a_module_with_only_bytecode_is_empty(self, tmp_path: pathlib.Path) -> None:
@@ -537,7 +539,9 @@ class TestModulesWithoutSource:
             if getattr(importlib.util.find_spec(name), "origin", None) == "frozen"
         ]
         if not frozen:
-            pytest.skip("this interpreter does not run os, io or codecs frozen")
+            pytest.skip(
+                "missing frozen-modules: this interpreter does not run os, io or codecs frozen"
+            )
         assert {name: pyclbr.readmodule_ex(name) for name in frozen} == dict.fromkeys(frozen, {})
 
     @pytest.mark.skipif(sys.version_info < (3, 11), reason="frozen os starts in 3.11")

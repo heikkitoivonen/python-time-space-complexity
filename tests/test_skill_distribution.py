@@ -171,7 +171,7 @@ def test_skill_workflow_preserves_lockfile_without_local_uv_config(tmp_path: Pat
     """
     uv = shutil.which("uv")
     if uv is None:
-        pytest.skip("uv not found")
+        pytest.skip("missing uv: uv not found")
     workflow = yaml.load(
         (ROOT / ".github/workflows/skills.yml").read_text(), Loader=yaml.BaseLoader
     )

@@ -95,7 +95,7 @@ def _material_css() -> str:
 
     found = sorted(Path(material.__file__).parent.rglob("assets/stylesheets/main.*.min.css"))
     if not found:  # pragma: no cover - only if the theme layout changes
-        pytest.skip("mkdocs-material stylesheet not found")
+        pytest.fail("mkdocs-material stylesheet not found; the theme layout changed")
     return found[0].read_text(encoding="utf-8")
 
 
@@ -447,7 +447,7 @@ def test_translated_nav_labels_do_not_point_two_ways(locale):
         re.DOTALL,
     )
     if block is None:
-        pytest.skip(f"{locale} has no nav_translations")
+        return  # no translated labels, so none can point two ways
 
     seen: dict[str, list[str]] = {}
     for english, translated in re.findall(r"^\s+(.+?):\s*(.+?)\s*$", block.group(1), re.MULTILINE):

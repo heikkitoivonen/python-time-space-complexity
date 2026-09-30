@@ -694,7 +694,7 @@ class TestProcessRows:
     @pytest.mark.parametrize("method", ["fork", "spawn", "forkserver"])
     def test_start_pickles_the_arguments_under_spawn_and_forkserver_only(self, method: str) -> None:
         if method not in multiprocessing.get_all_start_methods():
-            pytest.skip(f"the {method} start method is not available here")
+            pytest.skip(f"platform: the {method} start method is not available here")
         context = multiprocessing.get_context(method)
         argument = Counting("argument")
         PICKLES.clear()
@@ -1695,7 +1695,7 @@ class TestSynchronizationRows:
         self, method: str, factory: str
     ) -> None:
         if method not in multiprocessing.get_all_start_methods():
-            pytest.skip(f"the {method} start method is not available here")
+            pytest.skip(f"platform: the {method} start method is not available here")
         source = f"""
             import multiprocessing
             from multiprocessing import resource_tracker
@@ -1958,7 +1958,7 @@ class TestSharedMemoryRows:
         self, method: str, factory: str
     ) -> None:
         if method not in multiprocessing.get_all_start_methods():
-            pytest.skip(f"the {method} start method is not available here")
+            pytest.skip(f"platform: the {method} start method is not available here")
         create = {
             "SharedMemory": "shared_memory.SharedMemory(create=True, size=64).unlink()",
             "SharedMemoryManager": "managers.SharedMemoryManager()",
@@ -2282,7 +2282,7 @@ class TestModuleFunctionRows:
 
     def test_fork_warns_when_the_parent_has_threads_from_3_12(self) -> None:
         if "fork" not in multiprocessing.get_all_start_methods():
-            pytest.skip("the fork start method is not available here")
+            pytest.skip("platform: the fork start method is not available here")
         release = threading.Event()
         helper = spawn_thread(release.wait, WAIT)
         try:
@@ -2302,7 +2302,7 @@ class TestModuleFunctionRows:
 
     def test_the_first_forkserver_start_launches_the_server_once(self) -> None:
         if "forkserver" not in multiprocessing.get_all_start_methods():
-            pytest.skip("the forkserver start method is not available here")
+            pytest.skip("platform: the forkserver start method is not available here")
         result = run_python(
             """
             import multiprocessing

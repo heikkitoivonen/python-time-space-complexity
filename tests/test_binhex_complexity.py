@@ -34,7 +34,7 @@ def test_availability() -> None:
 @pytest.fixture
 def module():
     if sys.version_info >= (3, 11):
-        pytest.skip("binhex was removed in Python 3.11")
+        pytest.skip("version: binhex was removed in Python 3.11")
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
         yield importlib.import_module("binhex")

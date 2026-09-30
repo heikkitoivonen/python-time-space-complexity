@@ -402,11 +402,11 @@ class TestTemporaryFileNeedsNoName:
         self, tmp_path: pathlib.Path, names: Callable[[list[str]], ScriptedNames]
     ) -> None:
         if sys.platform != "linux":
-            pytest.skip("O_TMPFILE is Linux-only")
+            pytest.skip("platform: O_TMPFILE is Linux-only")
         try:
             os.close(os.open(tmp_path, os.O_RDWR | os.O_TMPFILE))
         except OSError:
-            pytest.skip("this filesystem does not support O_TMPFILE")
+            pytest.skip("missing o-tmpfile: this filesystem does not support O_TMPFILE")
         scripted = names(["unused"])
 
         with tempfile.TemporaryFile(dir=tmp_path) as f:

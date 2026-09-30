@@ -19,9 +19,16 @@ except ImportError:
 
 
 def linear_time_list(data: list[int]):
-    """O(n) operation taking a list."""
+    """O(n) operation taking a list, without touching its elements.
+
+    Iterating the list itself would write the reference count of each of its
+    distinct ints (about 8 MB at n = 256,000), so the per-element cost would
+    rise with each cache level the data outgrows and push the fitted exponent
+    towards the O(n log n) boundary. Counting to len(data) keeps the work per
+    element the same at every n.
+    """
     x = 0
-    for _ in data:
+    for _ in range(len(data)):
         x += 1
     return x
 
@@ -160,7 +167,6 @@ class TestComplexityEstimator:
         complexity, _ = estimate_complexity.detect_complexity(n_values, times)
         assert complexity == "O(1) (Constant)", f"{complexity=}, {times=}"
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.timing
     def test_integration_linear_list(self):
         """Run measurement on linear function (List[int] hint).
@@ -170,16 +176,17 @@ class TestComplexityEstimator:
         factor, and log grows so slowly that a narrow range leaves no signal:
         over 1000..16000 the decision boundary sits at an exponent of 1.06 and
         measured slopes scatter across 0.91-1.11, so the verdict is decided by
-        noise. Over 1000..256000 the same slopes land in 1.00-1.04. Taking the
-        fastest of three batches excludes runner interruptions; widening the
-        range still matters far more than adding iterations to one batch.
+        noise. Over 1000..256000 the boundary is 1.052. Each size takes the
+        fastest of 25 two-call batches: a batch short enough to run between
+        interruptions keeps a loaded machine from inflating the largest sizes
+        most. On a 4-core box at load 5, 30 runs gave slopes of 1.00-1.02.
         """
         n_values = [1000, 4000, 16000, 64000, 256000]
         times = []
         for n in n_values:
             t = min(
-                estimate_complexity.measure_execution_time(linear_time_list, n, iterations=50)
-                for _ in range(3)
+                estimate_complexity.measure_execution_time(linear_time_list, n, iterations=2)
+                for _ in range(25)
             )
             times.append(t)
 

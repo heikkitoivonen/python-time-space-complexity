@@ -116,7 +116,7 @@ def test_the_module_exists_only_before_3_12() -> None:
 @pytest.fixture
 def asynchat() -> Iterator[Any]:
     if sys.version_info >= (3, 12):
-        pytest.skip("asynchat was removed in Python 3.12")
+        pytest.skip("version: asynchat was removed in Python 3.12")
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
         yield importlib.import_module("asynchat")

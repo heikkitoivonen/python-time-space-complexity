@@ -141,6 +141,8 @@ from typing import Any, SupportsIndex
 import pytest
 
 PY = sys.executable
+# The first patch release of each minor whose as_bytes() verifies folded headers.
+BYTES_HEADER_CHECK = {(3, 10): 20, (3, 11): 15, (3, 12): 13, (3, 13): 12, (3, 14): 3}
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "email.md"
 EXPECTED_BLOCKS = 3
 
@@ -986,7 +988,11 @@ class TestGenerator:
         assert deep_output < flat_output * 1.1
         assert deep_total > flat_total * 5, f"{deep_total} vs {flat_total} at depth 4"
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
+    @pytest.mark.skipif(
+        sys.version_info[2] < BYTES_HEADER_CHECK.get(sys.version_info[:2], 0),
+        reason="version: as_bytes() header verification arrived in "
+        "3.10.20, 3.11.15, 3.12.13, 3.13.12 and 3.14.3",
+    )
     def test_a_folded_header_passes_verification_and_as_bytes_checks_too(self) -> None:
         message = Message()
         message["Subject"] = " ".join(["word"] * 40)

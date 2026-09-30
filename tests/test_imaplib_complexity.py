@@ -799,7 +799,7 @@ class TestAuthenticate:
         try:
             hmac.new(b"key", b"msg", "md5")
         except ValueError:
-            pytest.skip("HMAC-MD5 is not available in this build")
+            pytest.skip("missing md5: HMAC-MD5 is not available in this build")
         server = FakeServer()
         imap = FakeIMAP4(server)
 

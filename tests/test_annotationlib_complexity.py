@@ -57,8 +57,10 @@ nesting, attributes, operators or literals), the cost of a
 call made inside an annotation, and the number of type parameters, closure
 cells and wrapper layers an evaluation consults, none of which carries a
 term on the page. The `l` term is timed on `ForwardRef.evaluate()` twice:
-a given `locals` of 10 against 100,000 names costs x10,000 with a class
-owner against x1 with no owner, and the `FORWARDREF` retry merges it again.
+a given `locals` of 10 against 1,000,000 names costs x480 to x740 with a
+class owner against x1 with no owner (the fixed cost of an evaluation hides
+the copy at 100,000 names, where the class-owner step falls to x40), and the
+`FORWARDREF` retry merges it again.
 The copy is made when the type parameters are not `None`, which a class or
 function owner's `__type_params__` tuple satisfies even when empty and a
 module owner does not, or when the reference carries closure cells or extra
@@ -75,6 +77,7 @@ every 3.14 patch.
 """
 
 import gc
+import importlib
 import pathlib
 import re
 import subprocess
@@ -88,7 +91,9 @@ from typing import Any
 
 import pytest
 
-annotationlib: Any = pytest.importorskip("annotationlib")
+if sys.version_info < (3, 14):
+    pytest.skip("version: annotationlib is new in Python 3.14", allow_module_level=True)
+annotationlib: Any = importlib.import_module("annotationlib")
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "annotationlib.md"
 
@@ -546,10 +551,9 @@ class TestSizeTerms:
         )
         assert given < 10, f"with locals given, x{given:.1f} ({l_small:.2e}s to {l_large:.2e}s)"
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_evaluate_copies_a_given_locals_with_a_class_owner_and_not_without(self) -> None:
         small = {f"name{i}": i for i in range(10)}
-        large = {f"name{i}": i for i in range(100_000)}
+        large = {f"name{i}": i for i in range(1_000_000)}
         owned = ForwardRef("int", owner=type("Owner", (), {}))
         free = ForwardRef("int")
 
@@ -561,7 +565,7 @@ class TestSizeTerms:
         without = f_large / f_small
 
         assert 20 < with_owner < 20_000, (
-            f"x10,000 in l cost x{with_owner:.1f} ({o_small:.2e}s to {o_large:.2e}s)"
+            f"x100,000 in l cost x{with_owner:.1f} ({o_small:.2e}s to {o_large:.2e}s)"
         )
         assert without < 10, f"without an owner, x{without:.1f} ({f_small:.2e}s to {f_large:.2e}s)"
 
@@ -578,7 +582,6 @@ class TestSizeTerms:
             f"x10,000 in l cost x{ratio:.1f} ({t_small:.2e}s to {t_large:.2e}s)"
         )
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_evaluate_forwardref_fallback_grows_with_the_globals(self) -> None:
         small = {f"name{i}": i for i in range(10)}
         large = {f"name{i}": i for i in range(100_000)}

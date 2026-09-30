@@ -86,6 +86,7 @@ from __future__ import annotations
 
 import builtins
 import cmd
+import importlib
 import io
 import os
 import pathlib
@@ -116,6 +117,13 @@ def best_ns(func: Callable[[], Any], repeats: int = 7, inner: int = 1) -> float:
         best = elapsed if best is None else min(best, elapsed)
     assert best is not None
     return best
+
+
+def _readline() -> Any:
+    """The readline module, which Windows builds do not include."""
+    if sys.platform == "win32":
+        pytest.skip("platform: Windows builds have no readline module")
+    return importlib.import_module("readline")
 
 
 class NullStream(io.StringIO):
@@ -690,7 +698,7 @@ class TestCompletion:
 
     @pytest.fixture
     def line_buffer(self, monkeypatch: pytest.MonkeyPatch) -> Callable[[str], None]:
-        readline = pytest.importorskip("readline")
+        readline = _readline()
 
         def set_line(line: str) -> None:
             begin = len(line) - len(line.split(" ")[-1])
@@ -778,11 +786,11 @@ class TestTabBinding:
 
     @staticmethod
     def libedit() -> bool:
-        readline = pytest.importorskip("readline")
+        readline = _readline()
         return "libedit" in (readline.__doc__ or "")
 
     def test_the_binding_cmdloop_asks_for(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        readline = pytest.importorskip("readline")
+        readline = _readline()
         bindings: list[str] = []
         completers: list[Any] = []
         previous = object()
@@ -806,7 +814,7 @@ class TestTabBinding:
 
     @pytest.mark.skipif(sys.platform == "win32", reason="needs a pseudo-terminal")
     def test_tab_completes_a_command_name(self) -> None:
-        pytest.importorskip("readline")
+        _readline()
         child = textwrap.dedent(
             """
             import cmd

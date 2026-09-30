@@ -412,7 +412,6 @@ class TestTheFrameWalk:
 
         assert caught[0].lineno == caller.__code__.co_firstlineno + 1
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.skipif(sys.version_info < (3, 12), reason="skip_file_prefixes added in 3.12")
     def test_skip_file_prefixes_walks_past_the_named_files(self) -> None:
         namespace: dict[str, Any] = {"warnings": warnings}

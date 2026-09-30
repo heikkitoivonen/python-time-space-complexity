@@ -116,7 +116,8 @@ os.close(slave)
 
 The `when` argument decides what happens to data already queued. `TCSANOW` changes the settings
 at once, `TCSADRAIN` waits for queued output first, and `TCSAFLUSH` also throws away input that has
-arrived but not been read.
+arrived but not been read. The example turns echo off first: on macOS both wait until the
+other end of a pseudo-terminal has read the output queued for it, and here nothing reads it.
 
 ```python
 import os
@@ -125,6 +126,8 @@ import termios
 
 master, slave = os.openpty()
 attributes = termios.tcgetattr(slave)
+attributes[3] &= ~termios.ECHO  # nothing is echoed for TCSAFLUSH to wait on
+termios.tcsetattr(slave, termios.TCSANOW, attributes)  # O(1)
 
 os.write(master, b"typed ahead\n")
 assert select.select([slave], [], [], 5)[0]  # the line is waiting to be read
@@ -139,27 +142,34 @@ os.close(slave)
 ## Queue Control
 
 `tcflush()` throws queued data away and `tcflow()` suspends or resumes transmission, and both
-return at once. `tcdrain()` and `tcsendbreak()` return when the device is done, which on a pseudo-terminal is
-at once and on a slow serial line can be a noticeable wait.
+return at once. `tcdrain()` and `tcsendbreak()` return when the device is done, which on a slow
+serial line can be a noticeable wait. On a Linux pseudo-terminal both return at once. On macOS
+`tcdrain()` waits until the other end has read the queued output, and `tcsendbreak()` sleeps about
+0.4 seconds whatever the device.
 
 ```python
 import os
 import select
+import sys
 import termios
 
 master, slave = os.openpty()
+attributes = termios.tcgetattr(slave)
+attributes[3] &= ~termios.ECHO  # nothing is echoed for tcdrain() to wait on
+termios.tcsetattr(slave, termios.TCSANOW, attributes)  # O(1)
 
-# Suspend output: a non-blocking write cannot proceed until it resumes
-termios.tcflow(slave, termios.TCOOFF)  # O(1)
-os.set_blocking(slave, False)
-try:
-    os.write(slave, b"held")
-except BlockingIOError:
-    pass
-else:
-    raise AssertionError('a write went through while output was suspended')
+termios.tcflow(slave, termios.TCOOFF)  # O(1) - suspend output
+if sys.platform == "linux":
+    # A Linux pseudo-terminal holds writes until output resumes
+    os.set_blocking(slave, False)
+    try:
+        os.write(slave, b"held")
+    except BlockingIOError:
+        pass
+    else:
+        raise AssertionError('a write went through while output was suspended')
+    os.set_blocking(slave, True)
 termios.tcflow(slave, termios.TCOON)  # O(1)
-os.set_blocking(slave, True)
 os.write(slave, b"sent")
 assert select.select([master], [], [], 5)[0]
 assert os.read(master, 100) == b"sent"

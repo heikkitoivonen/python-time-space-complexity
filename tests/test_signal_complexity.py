@@ -621,7 +621,7 @@ class TestSetsOfSignals:
     @linux_only
     def test_numbers_without_a_name_stay_plain_ints(self) -> None:
         if sys.platform != "linux":
-            pytest.skip("SIGRTMIN is Linux-only")
+            pytest.skip("platform: SIGRTMIN is Linux-only")
         valid = signal.valid_signals()
         plain = [number for number in valid if not isinstance(number, signal.Signals)]
 

@@ -105,6 +105,7 @@ strings and one callable, more than one interpreter, and the Tcl side of
 """
 
 import gc
+import importlib
 import inspect
 import os
 import pathlib
@@ -121,14 +122,17 @@ from typing import Any, cast
 
 import pytest
 
-tkinter = pytest.importorskip("tkinter")
-ttk = pytest.importorskip("tkinter.ttk")
+try:
+    tkinter: Any = importlib.import_module("tkinter")
+    ttk: Any = importlib.import_module("tkinter.ttk")
+except ImportError:
+    pytest.skip("missing tkinter: this build has no tkinter", allow_module_level=True)
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "tkinter.md"
 EXPECTED_BLOCKS = 3
 
 SUBMODULES: dict[str, types.ModuleType] = {
-    name: pytest.importorskip(f"tkinter.{name}")
+    name: importlib.import_module(f"tkinter.{name}")
     for name in (
         "ttk",
         "font",
@@ -734,16 +738,18 @@ class TestVariables:
         assert root.tk.call("info", "exists", tcl_name) == 0
         assert not _command_exists(root, command)
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_the_legacy_trace_methods_warn_from_3_14_and_fail_under_tcl_9(self) -> None:
         root = _tcl()
         var = tkinter.StringVar(master=root)
         outcomes: list[str] = []
+        added: list[str] = []
 
+        # trace_vdelete() deletes the Tcl command it is named, so under Tcl 8.6 it
+        # needs the name trace_variable() returned; under Tcl 9 there is none.
         for call in (
-            lambda: var.trace_variable("w", lambda *args: None),
+            lambda: added.append(var.trace_variable("w", lambda *args: None)),
             lambda: var.trace_vinfo(),
-            lambda: var.trace_vdelete("w", "nosuchcommand"),
+            lambda: var.trace_vdelete("w", added[0] if added else "never-added"),
         ):
             with warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter("always")
@@ -935,7 +941,6 @@ class TestDocumentedExamples:
         )
         assert len(_stated_outputs()) == EXPECTED_BLOCKS
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_every_block_compiles_and_runs_or_needs_a_display(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
         for (line, source), stated in zip(_blocks(), _stated_outputs(), strict=True):

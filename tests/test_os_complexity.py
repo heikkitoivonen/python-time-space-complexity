@@ -164,16 +164,25 @@ from typing import Any
 
 import pytest
 
+from tests.windows_paths import long_paths_enabled
+
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "os.md"
 
 # Every block on the page uses relative paths, so all of them run.
 EXPECTED_BLOCKS = 7
 
 POSIX_ONLY = pytest.mark.skipif(os.name != "posix", reason="POSIX-only behaviour")
-LINUX_ONLY = pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux-only")
 # Without the LongPathsEnabled policy, Windows refuses a path past 260 characters.
+SHORT_WINDOWS_PATHS = sys.platform == "win32" and not long_paths_enabled()
 DEEP_CHAINS = pytest.mark.skipif(
-    sys.platform == "win32", reason="the chain passes Windows' 260-character MAX_PATH"
+    SHORT_WINDOWS_PATHS,
+    reason="the chain passes Windows' 260-character MAX_PATH, and long paths are off",
+)
+# macOS refuses a path argument past PATH_MAX, 1,024 bytes, with ENAMETOOLONG.
+LONG_PATHS = pytest.mark.skipif(
+    sys.platform == "darwin" or SHORT_WINDOWS_PATHS,
+    reason="the path passes macOS's 1,024-byte PATH_MAX, or Windows' 260-character "
+    "MAX_PATH with long paths off",
 )
 # ntpath's exists, isfile and isdir are the C builtins nt._path_*, which never
 # call os.stat, so counting_syscalls() cannot see them.
@@ -420,7 +429,7 @@ class TestWalkSpaceNeedsBothTerms:
             f"bound: {small_peak} B against {large_peak} B"
         )
 
-    @LINUX_ONLY
+    @LONG_PATHS
     def test_peak_grows_with_the_depth(self, tmp_path: pathlib.Path) -> None:
         """The d term, at a fixed breadth of 1.
 
@@ -537,7 +546,7 @@ class TestWalkSpaceNeedsBothTerms:
         assert len(visited) == 21, "the root plus each subdirectory"
         assert sum(len(files) for _, _, files in visited) == 1
 
-    @LINUX_ONLY
+    @LONG_PATHS
     def test_equal_entry_counts_differ_by_shape(self, tmp_path: pathlib.Path) -> None:
         """Why the space column is O(P) and not O(n).
 
@@ -746,7 +755,7 @@ class TestMakedirsRecurses:
 
         assert not (tmp_path / "z").exists(), "removedirs should have unwound the chain"
 
-    @LINUX_ONLY
+    @LONG_PATHS
     def test_makedirs_keeps_every_prefix_at_once(self, tmp_path: pathlib.Path) -> None:
         """The L in O(n·L): frames hold prefixes, not just frames.
 
@@ -769,7 +778,7 @@ class TestMakedirsRecurses:
             f"are not the whole bound: {peaks} bytes for 1 and 80 character components"
         )
 
-    @LINUX_ONLY
+    @LONG_PATHS
     def test_removedirs_holds_one_prefix_at_a_time(self, tmp_path: pathlib.Path) -> None:
         """The contrast: O(L), not O(n·L) and not O(1).
 
@@ -857,12 +866,22 @@ class TestDirectoryHelperTimeIsPathWork:
 
         assert len(lengths) == 1, "the counter has to see the call it wraps"
 
-    @LINUX_ONLY
-    def test_makedirs_parses_more_than_linearly_in_the_depth(self, tmp_path: pathlib.Path) -> None:
-        """2x the components is about 4x the characters parsed."""
+    @DEEP_CHAINS
+    def test_makedirs_parses_more_than_linearly_in_the_depth(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """2x the components is about 4x the characters parsed.
+
+        The target is relative to tmp_path, so every character counted is one
+        the chain adds. An absolute target would add the temporary directory's
+        own length to every split, a linear term that pulls the ratio toward
+        2x as that directory's path grows: x3.07 at a 79-character base and
+        x2.72 at 168. Relative, the ratio is x3.9 whatever the base.
+        """
+        monkeypatch.chdir(tmp_path)
         totals = []
         for depth in (100, 200):
-            target = tmp_path.joinpath(f"d{depth}", *["y"] * depth)
+            target = os.path.join(f"d{depth}", *["y"] * depth)
             with self._counting_split() as lengths:
                 os.makedirs(target)
             totals.append(sum(lengths))
@@ -873,7 +892,7 @@ class TestDirectoryHelperTimeIsPathWork:
             f"cannot be the time bound: {totals} characters"
         )
 
-    @LINUX_ONLY
+    @LONG_PATHS
     def test_makedirs_parses_in_proportion_to_the_path_length(self, tmp_path: pathlib.Path) -> None:
         """The L term, with the component count held at 100."""
         totals = []
@@ -2081,7 +2100,11 @@ class TestDescriptorOperations:
 
         assert stat_module.S_IMODE(os.stat(target).st_mode) == 0o640
 
-    @LINUX_ONLY
+    @pytest.mark.skipif(
+        sys.platform != "linux",
+        reason="sendfile() to a regular file: macOS needs a socket out_fd, Windows has no "
+        "os.sendfile",
+    )
     def test_the_kernel_copies_move_no_bytes_through_python(self, tmp_path: pathlib.Path) -> None:
         """The O(1) space on sendfile, copy_file_range and splice.
 
@@ -2121,10 +2144,10 @@ class TestDescriptorOperations:
         )
         assert (tmp_path / "dst8000000.bin").read_bytes() == source.read_bytes()
 
-    @LINUX_ONLY
+    @pytest.mark.skipif(sys.platform != "linux", reason="os.copy_file_range is Linux-only")
     def test_copy_file_range_also_stays_in_the_kernel(self, tmp_path: pathlib.Path) -> None:
         if sys.platform != "linux":
-            pytest.skip("os.copy_file_range is Linux-only")
+            pytest.skip("platform: os.copy_file_range is Linux-only")
         source = tmp_path / "src.bin"
         source.write_bytes(b"y" * 4_000_000)
         destination = tmp_path / "dst.bin"
@@ -2142,11 +2165,14 @@ class TestDescriptorOperations:
         assert peak_bytes(copy) < 100_000, "4 MB moved without a 4 MB buffer"
         assert destination.read_bytes() == source.read_bytes()
 
-    @LINUX_ONLY
+    @pytest.mark.skipif(
+        sys.platform != "linux",
+        reason="os.pipe2, eventfd, memfd_create and pidfd_open are Linux-only",
+    )
     def test_the_linux_descriptor_factories(self) -> None:
         """The O(1) rows for eventfd, memfd_create, pipe2 and pidfd_open."""
         if sys.platform != "linux":
-            pytest.skip("the descriptor factories are Linux-only")
+            pytest.skip("platform: the descriptor factories are Linux-only")
         read_end, write_end = os.pipe2(os.O_CLOEXEC)
         try:
             assert os.get_inheritable(read_end) is False, "O_CLOEXEC was applied"
@@ -2215,10 +2241,10 @@ class TestDescriptorOperations:
         assert len(os.urandom(4_096)) == 4_096
         assert os.urandom(32) != os.urandom(32)
 
-    @LINUX_ONLY
+    @pytest.mark.skipif(sys.platform != "linux", reason="os.getrandom is Linux-only")
     def test_getrandom_returns_what_it_was_asked_for(self) -> None:
         if sys.platform != "linux":
-            pytest.skip("os.getrandom is Linux-only")
+            pytest.skip("platform: os.getrandom is Linux-only")
         assert len(os.getrandom(64)) == 64
 
 
@@ -2281,11 +2307,13 @@ class TestProcessAndEnvironment:
             if machine is not None and available is not None:
                 assert available <= machine, "the affinity mask can only narrow it"
 
-    @LINUX_ONLY
+    @pytest.mark.skipif(
+        sys.platform != "linux", reason="os.sched_getaffinity and sched_setaffinity are Linux-only"
+    )
     def test_sched_affinity_and_parameters(self) -> None:
         """`os.sched_getaffinity(pid)` | O(c) - the set it builds."""
         if sys.platform != "linux":
-            pytest.skip("the sched_* affinity calls are Linux-only")
+            pytest.skip("platform: the sched_* affinity calls are Linux-only")
         mask = os.sched_getaffinity(0)
 
         assert isinstance(mask, set) and mask
@@ -2523,17 +2551,33 @@ class TestExitStatusMacros:
         assert os.WCOREDUMP(status | 0x80), "and the flag is the bit that sets it"
         assert os.waitstatus_to_exitcode(status) == -signal.SIGTERM
 
-    @LINUX_ONLY
     @POSIX_ONLY
     def test_stopped_and_continued_statuses(self) -> None:
         import signal
 
+        # The macros are the C library's own, passed the int unchanged. A
+        # stopped status is the signal above a low byte of 0177 under both
+        # glibc (WIFSTOPPED: low byte 0x7f) and macOS (WIFSTOPPED: low bits
+        # 0177 and a signal other than 0x13; WSTOPSIG: status >> 8).
         stopped = (int(signal.SIGSTOP) << 8) | 0x7F
 
         assert os.WIFSTOPPED(stopped)
         assert os.WSTOPSIG(stopped) == signal.SIGSTOP
-        assert os.WIFCONTINUED(0xFFFF), "the continued status word"
-        assert not os.WIFCONTINUED(3 << 8), "and a normal exit is not it"
+        assert not os.WIFCONTINUED(3 << 8), "a normal exit is not a continued status"
+
+        # The continued status word is where the two differ. glibc's
+        # WIFCONTINUED is `status == 0xffff`; macOS's is low bits 0177 with
+        # 0x13 above them, which is SIGCONT (19) in the stop-signal position.
+        if sys.platform == "linux":
+            continued = 0xFFFF
+        elif sys.platform == "darwin":
+            continued = (int(signal.SIGCONT) << 8) | 0x7F
+        else:
+            pytest.skip(
+                "platform: the continued status word is encoded here only for glibc and macOS"
+            )
+        assert os.WIFCONTINUED(continued), "the continued status word"
+        assert not os.WIFSTOPPED(continued), "which is not also a stopped one"
 
 
 class TestSystemConfiguration:
@@ -2630,7 +2674,7 @@ class TestSystemConfiguration:
         assert isinstance(os.ctermid(), str)
 
 
-@LINUX_ONLY
+@pytest.mark.skipif(sys.platform != "linux", reason="os.getxattr and friends are Linux-only")
 class TestExtendedAttributes:
     """`os.getxattr` and friends. Skipped where the filesystem refuses them."""
 
@@ -2647,11 +2691,11 @@ class TestExtendedAttributes:
 
     def test_value_and_name_lengths_are_the_bounds(self, tmp_path: pathlib.Path) -> None:
         if sys.platform != "linux":
-            pytest.skip("os.*xattr is Linux-only")
+            pytest.skip("platform: os.*xattr is Linux-only")
         target = tmp_path / "f.txt"
         target.write_text("x", encoding="utf-8")
         if not self._supported(target):
-            pytest.skip("this filesystem does not support user extended attributes")
+            pytest.skip("missing xattr: this filesystem does not support user extended attributes")
 
         os.setxattr(target, b"user.short", b"a")
         os.setxattr(target, b"user.long", b"b" * 4_000)

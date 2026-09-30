@@ -84,7 +84,7 @@ from typing import Any
 import pytest
 
 if sys.platform == "win32":  # pragma: no cover - the module is Unix only
-    pytest.skip("fcntl and termios are Unix-only modules", allow_module_level=True)
+    pytest.skip("platform: fcntl and termios are Unix-only modules", allow_module_level=True)
 
 import fcntl  # noqa: E402  (after the platform guard)
 import termios  # noqa: E402  (after the platform guard)
@@ -296,7 +296,7 @@ class TestEveryPublicNameIsDocumented:
         self, version: tuple[int, int]
     ) -> None:
         if sys.version_info >= version:
-            pytest.skip(f"{sys.version_info[:2]} may define these")
+            pytest.skip(f"version: {sys.version_info[:2]} may define these")
 
         present = sorted(ADDED_IN[version] & _public_names())
 

@@ -20,8 +20,10 @@ Measurement scope:
   no `which()` call; three `BROWSER` entries add exactly three. With `DISPLAY`
   set there are `which()` calls, and `subprocess.check_output()` runs once on
   the first `get()` and not on the second, with `xdg-settings` as its
-  program; without a display it does not run. A `BROWSER` command line set
-  after the first call is not found; set before it, it is. With `TERM` set,
+  program; without a display it does not run. That display probe exists
+  outside Windows, and outside macOS from 3.13. A `BROWSER` command line set
+  after the first call is not the controller `get()` returns, on either
+  call; set before it, it is. With `TERM` set,
   a `lynx` placed on `PATH` after discovery leaves `get()` raising `Error`,
   and a fresh discovery over the same `PATH` finds it.
 * `open()` is observed on recording controllers: with 10 and 1,000 failing
@@ -242,9 +244,10 @@ for label in ("first", "second"):
     before = {"which": counts["which"], "exists": counts["exists"],
               "check_output": len(counts["check_output"])}
     try:
-        webbrowser.get()
+        chosen = getattr(webbrowser.get(), "name", None)
         found = True
     except webbrowser.Error:
+        chosen = None
         found = False
     if label == "first" and len(sys.argv) > 1:
         os.environ["BROWSER"] = sys.argv[1]
@@ -253,6 +256,7 @@ for label in ("first", "second"):
         "exists": counts["exists"] - before["exists"],
         "check_output": len(counts["check_output"]) - before["check_output"],
         "found": found,
+        "chosen": chosen,
     }
 result["commands"] = counts["check_output"]
 print(json.dumps(result))
@@ -327,7 +331,11 @@ class TestDiscoveryRunsOnce:
 
         assert with_entries["first"]["which"] == plain["first"]["which"] + 3
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
+    @pytest.mark.skipif(
+        sys.platform == "win32" or (sys.platform == "darwin" and sys.version_info >= (3, 13)),
+        reason="webbrowser reads DISPLAY and runs xdg-settings only outside Windows, "
+        "and outside macOS from 3.13 (gh-87277)",
+    )
     def test_a_display_runs_xdg_settings_once(self, tmp_path: pathlib.Path) -> None:
         counts = _run_discovery(tmp_path, 3, {"DISPLAY": ":99"})
 
@@ -346,15 +354,16 @@ class TestDiscoveryRunsOnce:
         assert counts["first"]["check_output"] == 0
         assert counts["first"]["which"] == 0
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_browser_set_after_discovery_is_not_seen(self, tmp_path: pathlib.Path) -> None:
+        # macOS and Windows always register a default browser, so the check is
+        # which controller get() returns, not whether it finds one.
         command = shlex.join([sys.executable, "-c", "pass"]) + " %s"
         late = _run_discovery(tmp_path, 3, browser_after_first=command)
         early = _run_discovery(tmp_path, 3, {"BROWSER": command})
 
-        assert late["first"]["found"] is False
-        assert late["second"]["found"] is False
-        assert early["first"]["found"] is True
+        assert late["first"]["chosen"] != sys.executable
+        assert late["second"]["chosen"] != sys.executable
+        assert early["first"]["chosen"] == sys.executable
 
 
 @pytest.mark.usefixtures("registry")

@@ -488,7 +488,9 @@ class TestThreadsAndTasks:
 
     def test_a_default_thread_starts_empty(self) -> None:
         if getattr(sys.flags, "thread_inherit_context", 0):
-            pytest.skip("threads inherit a copy of the caller's context on this build")
+            pytest.skip(
+                "missing isolated-thread-context: threads inherit a copy of the caller's context on this build"
+            )
         variable: ContextVar[str] = ContextVar("variable", default="unset")
         seen: list[str] = []
 

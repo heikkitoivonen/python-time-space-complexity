@@ -183,6 +183,9 @@ PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "http.md"
 
 EXPECTED_BLOCKS = 6
 
+# The first patch release of each minor whose Morsel rejects control characters.
+MORSEL_CONTROL_CHECK = {(3, 10): 20, (3, 11): 15, (3, 12): 13, (3, 13): 12, (3, 14): 3}
+
 
 class FakeSocket:
     """A socket that records writes and replays a canned response."""
@@ -985,7 +988,7 @@ class TestCGIHandler:
 
     def test_it_does_not_warn_before_3_13(self) -> None:
         if sys.version_info >= (3, 13):
-            pytest.skip("deprecated from 3.13")
+            pytest.skip("version: deprecated from 3.13")
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             with contextlib.suppress(TypeError):
@@ -1748,7 +1751,11 @@ class TestCodexReviewFindings:
         assert sorted(http.cookies.SimpleCookie("a=1; b=2").keys()) == ["a", "b"]
         assert list(http.cookies.SimpleCookie().keys()) == []
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
+    @pytest.mark.skipif(
+        sys.version_info[2] < MORSEL_CONTROL_CHECK.get(sys.version_info[:2], 0),
+        reason="version: Morsel's control-character check arrived in "
+        "3.10.20, 3.11.15, 3.12.13, 3.13.12 and 3.14.3",
+    )
     def test_morsel_set_validates_the_name_and_keeps_the_value(self) -> None:
         """O(len(key) + v) time: the values are checked, then stored by reference."""
         morsel = http.cookies.Morsel()
@@ -1941,7 +1948,7 @@ class TestCodexReviewFindings:
         """
         cap = getattr(http.client, "_MAXINTERIMRESPONSES", None)  # patch-release cap
         if cap is None:
-            pytest.skip("this patch release reads interim responses without a cap")
+            pytest.skip("version: this patch release reads interim responses without a cap")
         final = b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi"
         interim = b"HTTP/1.1 100 Continue\r\n\r\n"
 

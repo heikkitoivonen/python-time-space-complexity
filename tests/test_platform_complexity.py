@@ -61,10 +61,10 @@ Not settled here:
 * The Windows rows: that `uname()` builds its first result from
   `win32_ver()` rather than `os.uname()`, that `win32_ver()` queries WMI or
   runs `ver` on every call, and that `win32_edition()` is one registry read are
-  read from Lib/platform.py; no run this project performs reaches them.
+  read from Lib/platform.py; no test here exercises them.
 * `ios_ver()` and `android_ver()` on their own systems, and `platform()`'s
   macOS branch through `mac_ver()`, are read from Lib/platform.py. The macOS
-  `mac_ver()` test runs only on macOS, which CI does not.
+  `mac_ver()` test runs only on macOS, in the macOS CI job.
 * `libc_ver()` without glibc scans `sys.executable`; that fallback is the same
   scan measured above with the interpreter as the file, and is not run here.
 * Pricing operating-system values - `uname` fields, the plist, registry and
@@ -137,6 +137,11 @@ class RecordingFile:
 
     def __iter__(self) -> Iterator[Any]:
         return iter(self._inner)
+
+    def __getattr__(self, name: str) -> Any:
+        # Everything else a reader needs, such as the seek(0) plistlib.load
+        # makes after sniffing the header, goes to the real file uncounted.
+        return getattr(self._inner, name)
 
     def __enter__(self) -> RecordingFile:
         return self
@@ -296,7 +301,7 @@ class TestLibcVer:
         except (AttributeError, ValueError, OSError):
             answer = None
         if not answer:
-            pytest.skip("not a glibc system")
+            pytest.skip("platform: not a glibc system")
         paths, _ = opened
         asked: list[str] = []
         real_confstr = os.confstr
@@ -491,7 +496,6 @@ class TestOtherOperatingSystems:
         deprecated = [w for w in caught if issubclass(w.category, DeprecationWarning)]
         assert len(deprecated) == (1 if sys.version_info >= (3, 13) else 0)
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.skipif(sys.platform != "darwin", reason="macOS-only plist")
     def test_mac_ver_reads_the_plist_every_call(self, opened: tuple[list[str], list[int]]) -> None:
         platform.mac_ver()

@@ -136,9 +136,12 @@ from typing import Any
 import pytest
 
 if sys.version_info < (3, 14):
-    pytest.skip("the compression package is new in Python 3.14", allow_module_level=True)
+    pytest.skip("version: the compression package is new in Python 3.14", allow_module_level=True)
 
-zstd: Any = pytest.importorskip("compression.zstd")
+try:
+    zstd: Any = importlib.import_module("compression.zstd")
+except ImportError:
+    pytest.skip("missing zstd: this build has no compression.zstd", allow_module_level=True)
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "compression.md"
 EXPECTED_BLOCKS = 8

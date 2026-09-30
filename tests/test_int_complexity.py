@@ -53,10 +53,10 @@ Measured on one aarch64 machine under CPython 3.14.7:
   1,000-bit value into 125,000, 1,250,000 and 12,500,000 bytes is batched
   20 calls per sample. Each 10x length step must cost between 3x and 30x,
   separating linear from constant and quadratic at a fixed value width;
-* `str`, `repr` and `f"{x}"` of 1,000 then 4,000 decimal digits: x17-x18,
-  quadratic on every version
-  because 4,000 digits is under the 3.12 fast path's 1,000-digit (30-bit)
-  threshold; 20,000 then 80,000 digits: x8.5 on 3.14.7 and x15.8 on 3.10.21;
+* `str`, `repr` and `f"{x}"` of 250 then 4,000 decimal digits: x217-x275 on
+  3.10.21 and 3.14.7, against a floor of x64 between linear's x16 and
+  quadratic's x256; quadratic on every version because 4,000 digits is under
+  the 3.12 fast path's 1,000-digit (30-bit) threshold; 20,000 then 80,000 digits: x8.5 on 3.14.7 and x15.8 on 3.10.21;
 * `int(str)` in base 16 for 100,000 then 400,000 characters: x4.2, and base
   2: x4.1; base 3 for 5,000 then 20,000: x15.7, base 36: x16.8, base 10 for
   1,000 then 4,000: x15.7; base 10 for 20,000 then 80,000: x9.0 on 3.14.7
@@ -560,13 +560,12 @@ class TestDecimalConversion:
             pytest.param(lambda value: f"{value}", id="format"),
         ],
     )
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_quadratic_under_the_fast_path_threshold(self, convert: Callable[[int], str]) -> None:
-        small, large = int("9" * 1_000), int("9" * 4_000)
+        small, large = int("9" * 250), int("9" * 4_000)
 
         growth = ratio(lambda: convert(small), lambda: convert(large))
 
-        assert growth > 10, f"x{growth:.1f} for 4x the digits; linear would be 4"
+        assert growth > 64, f"x{growth:.1f} for 16x the digits; linear 16, quadratic 256"
 
     @pytest.mark.timing
     def test_str_growth_above_the_threshold(self, uncapped_digits: None) -> None:

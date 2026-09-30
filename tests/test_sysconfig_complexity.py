@@ -247,7 +247,9 @@ class TestPathsAreExpandedFromEveryVariable:
     @pytest.mark.parametrize("name", list(_expansions()))
     def test_the_peak_grows_with_the_cache(self, name: str, grow_cache: Callable[[], None]) -> None:
         if name.endswith("filename") and sysconfig.is_python_build():
-            pytest.skip("a source-tree build does not resolve these through get_path()")
+            pytest.skip(
+                "missing installed-interpreter: a source-tree build does not resolve these through get_path()"
+            )
         operation = _expansions()[name]
         operation()
         small = peak_bytes(operation)

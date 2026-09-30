@@ -16,7 +16,9 @@ Measurement scope:
   `ICANON`, `ISIG` and `OPOST`; cbreak clears `ECHO` and `ICANON` and keeps
   `ISIG` and `OPOST`. From 3.12 each returns a list equal to what
   `tcgetattr()` read before the call, and restoring that list with
-  `tcsetattr()` gives back the original attributes.
+  `tcsetattr()` gives back the original attributes, apart from `PENDIN`,
+  which the macOS terminal driver sets when `ICANON` comes back on; that
+  bit is masked before comparing, here and in the page's first block.
 * `cfmakeraw()` and `cfmakecbreak()` (3.12+) are asserted to return `None`,
   to leave the list they were given as the same object, and to make no
   `tcgetattr()` or `tcsetattr()` call: both names are replaced, in `tty` and in
@@ -36,6 +38,8 @@ Not settled here:
   `TCSAFLUSH`, `tcsetattr()` waits for queued output to be sent (and
   `TCSAFLUSH` also discards unread input). Nothing is written to the terminal
   before a mode change here, so that wait is not exercised.
+* That macOS sets `PENDIN` is read from the BSD terminal driver's `ttioctl()`,
+  and observed only by the macOS CI job; Linux leaves the bit clear.
 * The module is Unix-only; on Windows this file skips at import.
 """
 
@@ -52,7 +56,9 @@ from typing import Any
 
 import pytest
 
-termios = pytest.importorskip("termios", reason="tty is a Unix-only module")
+if sys.platform == "win32":
+    pytest.skip("platform: tty is a Unix-only module", allow_module_level=True)
+import termios  # noqa: E402  (after the platform guard)
 import tty  # noqa: E402  (after the platform guard)
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "tty.md"
@@ -67,7 +73,7 @@ def terminal() -> Iterator[int]:
     try:
         controller, slave = os.openpty()
     except OSError:  # pragma: no cover - only on a build without ptys
-        pytest.skip("needs a working pseudo-terminal")
+        pytest.skip("missing pty: needs a working pseudo-terminal")
     try:
         yield slave
     finally:
@@ -100,6 +106,14 @@ def counted(monkeypatch: pytest.MonkeyPatch) -> CallCounter:
     monkeypatch.setattr(tty, "tcgetattr", get)
     monkeypatch.setattr(tty, "tcsetattr", put)
     return counter
+
+
+def without_pendin(mode: list[Any]) -> list[Any]:
+    """`mode` with `PENDIN` cleared: the BSD terminal driver on macOS sets it in
+    `lflag` when a `tcsetattr()` turns `ICANON` back on, and Linux never does."""
+    mode = list(mode)
+    mode[tty.LFLAG] &= ~termios.PENDIN
+    return mode
 
 
 def flag_words(mode: list[Any]) -> tuple[int, int, int, int]:
@@ -135,7 +149,6 @@ class TestModeChangesAreOneReadAndOneWrite:
         assert mode[tty.LFLAG] & termios.ISIG
         assert mode[tty.OFLAG] & termios.OPOST
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @CFMAKE_ONLY
     @pytest.mark.parametrize("change", [tty.setraw, tty.setcbreak])
     def test_the_replaced_attributes_are_returned_and_restore_the_terminal(
@@ -148,7 +161,7 @@ class TestModeChangesAreOneReadAndOneWrite:
         termios.tcsetattr(terminal, termios.TCSANOW, saved)
 
         assert saved == before
-        assert termios.tcgetattr(terminal) == before
+        assert without_pendin(termios.tcgetattr(terminal)) == before
 
 
 @CFMAKE_ONLY
@@ -242,7 +255,6 @@ class TestDocumentedExamples:
     def test_the_page_has_the_expected_blocks(self) -> None:
         assert len(_blocks()) == EXPECTED_BLOCKS
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
         ran = 0

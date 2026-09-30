@@ -13,7 +13,8 @@ and servers are exercised over loopback with a client connected before
 
 Measurement scope:
 
-* Construction: `BaseServer()` makes no socket; `TCPServer()` is listening
+* Construction, with listening probed by a non-blocking `accept()`:
+  `BaseServer()` makes no socket; `TCPServer()` is listening
   with a nonzero port read back into `server_address`, and with
   `bind_and_activate=False` is unbound and not listening; `UDPServer()` is
   bound and not listening. `fileno()` is the socket's descriptor. The class
@@ -59,8 +60,9 @@ Measurement scope:
   `recv_into()` calls. `readline()` returns a whole 1,000,000-byte line,
   and `readline(64)` 64 bytes. `timeout` and `disable_nagle_algorithm` reach
   the connection in `setup()`.
-* Datagrams: 10,000 bytes arrive as 8,192 under the default
-  `max_packet_size` and whole at 20,000; receiving a 10-byte datagram with
+* Datagrams: 9,000 bytes arrive as 8,192 under the default
+  `max_packet_size` and whole at 20,000 (9,000 stays within the 9,216 bytes
+  macOS sends in one UDP datagram by default); receiving a 10-byte datagram with
   `max_packet_size` at 1,000,000 peaks over 900 KB, so the receive buffer is
   the limit, not the datagram; two writes come back as one
   datagram, sent only after `handle()` returns; `setup()` succeeds over a
@@ -84,12 +86,13 @@ Not settled here:
 * `handle_error()`'s O(f) is `traceback.print_exc()`'s, read from source;
   only that the traceback is printed is observed.
 * `ForkingMixIn` and the `Forking*` servers exist only where `os.fork` does,
-  and the `Unix*` servers only where `AF_UNIX` does; their tests skip
-  elsewhere, and no run this project performs is on such a platform. That
+  and the `Unix*` servers only where `AF_UNIX` does; their tests skip on
+  Windows, which has neither. That
   Windows fails an oversized datagram's receive rather than truncating it,
   so the request is dropped, is read from the Winsock `WSAEMSGSIZE`
   contract and the `OSError` guard in `_handle_request_noblock()`; the
-  truncation test skips there.
+  truncation test, the page's datagram block and its mutation test skip
+  there.
 * The audit's API inventory lists `max_children`, `block_on_close` and
   `daemon_threads` under `ThreadingMixIn`, following the official docs'
   shared directive for both mix-ins; `max_children` exists only on
@@ -127,6 +130,11 @@ LOOPBACK = ("127.0.0.1", 0)
 
 HAS_FORK = hasattr(os, "fork")
 HAS_UNIX = hasattr(socket, "AF_UNIX")
+
+# Over the default `max_packet_size` of 8192, and within the 9216 bytes macOS
+# sends in one UDP datagram by default (`net.inet.udp.maxdgram`); a larger
+# datagram fails `sendto()` there with EMSGSIZE.
+LONG_DATAGRAM = 9000
 
 
 class FakeRequest:
@@ -185,6 +193,27 @@ def connect(server: socketserver.TCPServer) -> socket.socket:
     return socket.create_connection((host, port))
 
 
+def is_listening(sock: socket.socket) -> bool:
+    """Whether `sock` is listening, probed with a non-blocking `accept()`.
+
+    A listening socket with nothing queued raises `BlockingIOError`; one that is
+    not listening raises another `OSError` (EINVAL unbound or unlistened,
+    EOPNOTSUPP for a datagram socket, and the WSA equivalents on Windows).
+    `getsockopt(SO_ACCEPTCONN)` is not a portable probe.
+    """
+    timeout = sock.gettimeout()
+    sock.setblocking(False)
+    try:
+        sock.accept()
+    except BlockingIOError:
+        return True
+    except OSError:
+        return False
+    finally:
+        sock.settimeout(timeout)
+    raise AssertionError("accept() returned a connection nobody made")
+
+
 def run_handler(handler: type[socketserver.BaseRequestHandler], request: Any) -> None:
     """Handle one request the way `finish_request()` does, with no server behind it."""
     handler(request, ("peer", 0), None)  # type: ignore[arg-type]
@@ -208,33 +237,33 @@ class TestConstruction:
         assert not hasattr(server, "socket")
         assert server.server_address == LOOPBACK
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_tcp_server_binds_and_listens(self) -> None:
         with socketserver.TCPServer(LOOPBACK, socketserver.BaseRequestHandler) as server:
-            listening = server.socket.getsockopt(socket.SOL_SOCKET, socket.SO_ACCEPTCONN)
-
-            assert listening == 1
+            assert is_listening(server.socket)
             assert server.server_address[1] != 0
             assert server.server_address == server.socket.getsockname()
             assert server.fileno() == server.socket.fileno()
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_without_bind_and_activate_only_the_socket_exists(self) -> None:
         server = socketserver.TCPServer(
             LOOPBACK, socketserver.BaseRequestHandler, bind_and_activate=False
         )
         try:
-            assert server.socket.getsockname()[1] == 0
-            assert server.socket.getsockopt(socket.SOL_SOCKET, socket.SO_ACCEPTCONN) == 0
+            if sys.platform == "win32":
+                # Winsock getsockname() fails with WSAEINVAL on an unbound socket.
+                with pytest.raises(OSError):
+                    server.socket.getsockname()
+            else:
+                assert server.socket.getsockname()[1] == 0
+            assert not is_listening(server.socket)
         finally:
             server.server_close()
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_udp_server_binds_without_listening(self) -> None:
         with socketserver.UDPServer(LOOPBACK, socketserver.BaseRequestHandler) as server:
             assert server.socket.type == socket.SOCK_DGRAM
             assert server.server_address[1] != 0
-            assert server.socket.getsockopt(socket.SOL_SOCKET, socket.SO_ACCEPTCONN) == 0
+            assert not is_listening(server.socket)
 
     def test_class_attribute_defaults(self) -> None:
         assert socketserver.TCPServer.request_queue_size == 5
@@ -819,14 +848,12 @@ class TestDatagrams:
             client.close()
         return lengths[0]
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.skipif(sys.platform == "win32", reason="Windows fails the receive instead")
     def test_a_long_datagram_is_truncated(self) -> None:
-        assert self.received_length(8192, 10_000) == 8192
+        assert self.received_length(8192, LONG_DATAGRAM) == 8192
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_a_larger_limit_admits_it(self) -> None:
-        assert self.received_length(20_000, 10_000) == 10_000
+        assert self.received_length(20_000, LONG_DATAGRAM) == LONG_DATAGRAM
 
     def test_the_receive_buffer_is_max_packet_size_whatever_arrives(self) -> None:
         class Server(socketserver.UDPServer):
@@ -951,17 +978,20 @@ class TestServerFamilies:
         with Reusing(LOOPBACK, socketserver.BaseRequestHandler) as server:
             assert server.socket.getsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT) != 0
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.skipif(not HAS_UNIX, reason="needs AF_UNIX")
-    def test_a_unix_socket_file_survives_close(self, tmp_path: pathlib.Path) -> None:
-        path = tmp_path / "server.sock"
+    def test_a_unix_socket_file_survives_close(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A relative path fits macOS's 104-byte sun_path; tmp_path under a
+        # macOS $TMPDIR does not.
+        monkeypatch.chdir(tmp_path)
 
         with socketserver.UnixStreamServer(  # type: ignore[attr-defined]
-            str(path), socketserver.BaseRequestHandler
+            "server.sock", socketserver.BaseRequestHandler
         ) as server:
-            assert server.server_address == str(path)
+            assert server.server_address == "server.sock"
 
-        assert path.exists()
+        assert (tmp_path / "server.sock").exists()
 
 
 def _blocks() -> list[tuple[int, str]]:
@@ -995,18 +1025,32 @@ def _run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[st
     )
 
 
+# The datagram block relies on POSIX truncating a datagram longer than
+# `max_packet_size`. Winsock fails that `recvfrom()` with WSAEMSGSIZE, the
+# server drops the request, and the block's client waits for a reply forever.
+DATAGRAM_BLOCK = 'reply == b"8192 bytes"'
+skip_datagram_block_on_windows = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Winsock fails an oversized datagram's recvfrom() with WSAEMSGSIZE, so the "
+    "datagram block gets no reply",
+)
+
+
 class TestDocumentedExamples:
     """Each block runs in its own subprocess, with its own loopback ports, and
-    asserts its own result."""
+    asserts its own result. On Windows the datagram block is not run."""
 
     def test_the_page_has_the_expected_blocks(self) -> None:
         assert len(_blocks()) == EXPECTED_BLOCKS
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
         ran = 0
+        skipped = 0
         for line, source in _blocks():
+            if sys.platform == "win32" and DATAGRAM_BLOCK in source:
+                skipped += 1
+                continue
             ran += 1
             workdir = tmp_path / f"block{line}"
             workdir.mkdir()
@@ -1014,13 +1058,14 @@ class TestDocumentedExamples:
             if result.returncode != 0:
                 failures.append(f"{PAGE.name}:{line}\n{result.stderr.strip()}")
 
-        assert ran == EXPECTED_BLOCKS
+        assert skipped == (1 if sys.platform == "win32" else 0)
+        assert ran + skipped == EXPECTED_BLOCKS
         assert not failures, "\n\n".join(failures)
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
+    @skip_datagram_block_on_windows
     def test_the_runner_notices_a_broken_assertion(self, tmp_path: pathlib.Path) -> None:
-        line, source = next((n, s) for n, s in _blocks() if 'reply == b"8192 bytes"' in s)
-        mutated = source.replace('reply == b"8192 bytes"', 'reply == b"10000 bytes"', 1)
+        line, source = next((n, s) for n, s in _blocks() if DATAGRAM_BLOCK in s)
+        mutated = source.replace(DATAGRAM_BLOCK, 'reply == b"9000 bytes"', 1)
 
         assert mutated != source, f"the mutation matched nothing in {PAGE.name}:{line}"
         result = _run_block(mutated, tmp_path)

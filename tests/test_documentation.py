@@ -70,7 +70,7 @@ def test_mkdocs_build_valid(tmp_path):
     real output with a differently-shaped one.
     """
     if not shutil.which("uv"):
-        pytest.skip("uv not found")
+        pytest.skip("missing uv: uv not found")
 
     project_root = Path(__file__).parent.parent
 
@@ -95,7 +95,7 @@ def test_per_locale_build_valid(tmp_path):
     index and no other language's pages in it.
     """
     if not shutil.which("uv"):
-        pytest.skip("uv not found")
+        pytest.skip("missing uv: uv not found")
 
     project_root = Path(__file__).parent.parent
     out = tmp_path / "ja"
@@ -131,7 +131,7 @@ def test_per_locale_build_valid(tmp_path):
 def test_translations_valid():
     """Test that localized pages match their English source structurally and aren't stale."""
     if not shutil.which("uv"):
-        pytest.skip("uv not found")
+        pytest.skip("missing uv: uv not found")
 
     project_root = Path(__file__).parent.parent
 

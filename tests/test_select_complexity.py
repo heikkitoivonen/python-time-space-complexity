@@ -98,7 +98,7 @@ import pytest
 
 if sys.platform == "win32":  # pragma: no cover - these tests are Unix only
     pytest.skip(
-        "select() on Windows takes only sockets, and these tests use pipes, fcntl and resource",
+        "platform: select() on Windows takes only sockets, and these tests use pipes, fcntl and resource",
         allow_module_level=True,
     )
 
@@ -154,7 +154,7 @@ def fd_limit() -> Iterator[Callable[[int], None]]:
         if soft == resource.RLIM_INFINITY or soft >= wanted:
             return
         if hard != resource.RLIM_INFINITY and hard < wanted:
-            pytest.skip(f"open-file hard limit {hard} is below {wanted}")
+            pytest.skip(f"missing open-files: open-file hard limit {hard} is below {wanted}")
         resource.setrlimit(resource.RLIMIT_NOFILE, (wanted, hard))
 
     yield at_least
@@ -188,7 +188,9 @@ class TestSelectWalksEveryDescriptor:
     @staticmethod
     def low(fds: list[int]) -> list[int]:
         if max(fds) >= 1024:
-            pytest.skip("the process already holds too many descriptors for select()")
+            pytest.skip(
+                "missing open-files: the process already holds too many descriptors for select()"
+            )
         return fds
 
     @pytest.mark.timing
@@ -333,7 +335,7 @@ class TestEpollReturnsOnlyWhatIsReady:
     @staticmethod
     def epoll_over(fds: list[int], mask: int | None = None) -> Any:
         if sys.platform != "linux":
-            pytest.skip("epoll is Linux-only")
+            pytest.skip("platform: epoll is Linux-only")
         ep = select.epoll()
         for fd in fds:
             ep.register(fd, select.EPOLLIN if mask is None else mask)
@@ -372,7 +374,7 @@ class TestEpollReturnsOnlyWhatIsReady:
         self, pipe: tuple[int, int], dups: Callable[[int, int], list[int]]
     ) -> None:
         if sys.platform != "linux":
-            pytest.skip("epoll is Linux-only")
+            pytest.skip("platform: epoll is Linux-only")
         writers = dups(pipe[1], 1_100)
         with self.epoll_over(writers, select.EPOLLOUT) as ep:
             assert len(ep.poll(0)) == 1023
@@ -382,7 +384,7 @@ class TestEpollReturnsOnlyWhatIsReady:
 
     def test_registration_errors(self, pipe: tuple[int, int], tmp_path: pathlib.Path) -> None:
         if sys.platform != "linux":
-            pytest.skip("epoll is Linux-only")
+            pytest.skip("platform: epoll is Linux-only")
         r, _ = pipe
         regular = tmp_path / "file"
         regular.write_bytes(b"")
@@ -399,7 +401,7 @@ class TestEpollReturnsOnlyWhatIsReady:
 
     def test_a_closed_object_refuses_io_and_registration(self, pipe: tuple[int, int]) -> None:
         if sys.platform != "linux":
-            pytest.skip("epoll is Linux-only")
+            pytest.skip("platform: epoll is Linux-only")
         r, _ = pipe
         ep = select.epoll()
         ep.register(r, select.EPOLLIN)
@@ -420,7 +422,7 @@ class TestEpollReturnsOnlyWhatIsReady:
 
     def test_fromfd_wraps_an_existing_epoll_descriptor(self, pipe: tuple[int, int]) -> None:
         if sys.platform != "linux":
-            pytest.skip("epoll is Linux-only")
+            pytest.skip("platform: epoll is Linux-only")
         r, w = pipe
         os.write(w, b"x")
         with select.epoll() as ep:
@@ -432,7 +434,7 @@ class TestEpollReturnsOnlyWhatIsReady:
 
     def test_epoll_descriptors_are_close_on_exec_whatever_the_flags(self) -> None:
         if sys.platform != "linux":
-            pytest.skip("epoll is Linux-only")
+            pytest.skip("platform: epoll is Linux-only")
         with select.epoll() as plain, select.epoll(flags=select.EPOLL_CLOEXEC) as flagged:
             assert not os.get_inheritable(plain.fileno())
             assert not os.get_inheritable(flagged.fileno())

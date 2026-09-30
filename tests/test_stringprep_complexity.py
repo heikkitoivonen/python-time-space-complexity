@@ -36,7 +36,9 @@ Measurement scope:
   linear pass and the x256 of a quadratic one; about x16 was measured on
   3.10 and 3.14. That excludes quadratic growth for this input family over
   this interval; it does not separate O(n) from O(n log n), and other
-  reordering shapes are not measured.
+  reordering shapes are not measured. It runs only on releases carrying the
+  CVE-2026-3276 fix (see `tests/patched_python.py`): without it, NFKC
+  insertion-sorts the run and 3.14.2 measured x87 to x93.
 * Every fenced Python block runs in its own subprocess, and a mutated
   assertion in one of them is asserted to fail.
 
@@ -71,6 +73,8 @@ from encodings import idna
 from functools import partial
 
 import pytest
+
+from tests.patched_python import require_patched_normalization
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "stringprep.md"
 EXPECTED_BLOCKS = 4
@@ -260,12 +264,12 @@ class TestNameprepAppliesTheTables:
         assert len(b1) == length
         assert len(b2) == length - label.count("\u00ad")
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.timing
     def test_reordering_combining_marks_stays_linear(self) -> None:
         """Alternating U+0315 (class 232) and U+0300 (class 230) is the shape
         canonical reordering must sort: 16x the marks predicts x16 if linear
         and x256 if quadratic."""
+        require_patched_normalization()
         labels = ["a" + "\u0315\u0300" * pairs for pairs in (1_000, 16_000)]
         assert unicodedata.ucd_3_2_0.normalize("NFD", labels[0])[1] == "\u0300"
 

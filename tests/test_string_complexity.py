@@ -49,9 +49,10 @@ Measurement scope:
   per 10x step; its whitespace and separator behaviour, and the uncased
   characters where `str.title()` starts a word and it does not, are asserted
   by output.
-* `templatelib.Template(*args)` (3.14+): 1,000 against 8,000 alternating
-  arguments costs less than 20x, and the same counts of consecutive
-  ten-character strings more than 20x (quadratic predicts 64x). `+` of a
+* `templatelib.Template(*args)` (3.14+): 500 against 16,000 alternating
+  arguments costs less than 150x (x25-x28 measured; linear predicts 32x), and
+  the same counts of consecutive ten-character strings more than 150x
+  (x555-x582 measured; quadratic predicts 1,024x). `+` of a
   one-part template to one of 200 and of 20,000 interpolations peaks more
   than 20x higher for the larger, and 500 against 4,000 `+=` steps costs
   more than 20x (quadratic predicts 64x, linear 8x). `values` is a new tuple
@@ -667,14 +668,13 @@ class TestTemplatelib:
 
         assert peaks[0] * 20 < peaks[1] < peaks[0] * 300, f"100x the interpolations: {peaks}"
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     @pytest.mark.timing
     def test_consecutive_strings_cost_quadratic_time(self) -> None:
         Template = _templatelib("Template")
 
         consecutive: list[float] = []
         alternating: list[float] = []
-        for count in (1_000, 8_000):
+        for count in (500, 16_000):
             strings = ["x" * 10] * count
             mixed = [
                 part for field in self.interpolations(count // 2) for part in ("x" * 10, field)
@@ -684,8 +684,8 @@ class TestTemplatelib:
 
         consecutive_ratio = consecutive[1] / consecutive[0]
         alternating_ratio = alternating[1] / alternating[0]
-        assert consecutive_ratio > 20, f"8x strings: x{consecutive_ratio:.1f}, {consecutive}"
-        assert alternating_ratio < 20, f"8x alternating: x{alternating_ratio:.1f}, {alternating}"
+        assert consecutive_ratio > 150, f"32x strings: x{consecutive_ratio:.1f}, {consecutive}"
+        assert alternating_ratio < 150, f"32x alternating: x{alternating_ratio:.1f}, {alternating}"
 
     @pytest.mark.timing
     def test_growing_one_template_in_a_loop_is_quadratic(self) -> None:

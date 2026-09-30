@@ -68,7 +68,7 @@ import textwrap
 import pytest
 
 if sys.platform == "win32":  # pragma: no cover - the module is Unix only
-    pytest.skip("posix is a Unix-only module", allow_module_level=True)
+    pytest.skip("platform: posix is a Unix-only module", allow_module_level=True)
 
 import posix  # noqa: E402  (after the platform guard)
 

@@ -147,6 +147,8 @@ from typing import Any
 
 import pytest
 
+from tests.windows_paths import long_paths_enabled
+
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "pathlib.md"
 EXPECTED_BLOCKS = 16
 # Blocks calling an API newer than the oldest supported interpreter run only
@@ -160,6 +162,13 @@ LATER_MARKERS: dict[str, tuple[tuple[int, int], int]] = {
 
 POSIX_ONLY = pytest.mark.skipif(os.name != "posix", reason="POSIX-only behaviour")
 WINDOWS_ONLY = pytest.mark.skipif(sys.platform != "win32", reason="Windows-only behaviour")
+# macOS refuses a path argument past PATH_MAX, 1,024 bytes, with ENAMETOOLONG, and
+# without the LongPathsEnabled policy Windows refuses one past 260 characters.
+LONG_PATHS = pytest.mark.skipif(
+    sys.platform == "darwin" or (sys.platform == "win32" and not long_paths_enabled()),
+    reason="the path passes macOS's 1,024-byte PATH_MAX, or Windows' 260-character "
+    "MAX_PATH with long paths off",
+)
 
 # gh-101362: from 3.12 PurePath keeps its arguments and parses them on first use.
 DEFERRED = sys.version_info >= (3, 12)
@@ -480,7 +489,6 @@ class TestJoiningCopiesTheSegments:
         str(path)
         return path
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
     def test_joining_onto_a_grown_path_copies_it(self) -> None:
         grown = self._grown(10_000)
 
@@ -772,7 +780,9 @@ class TestOneSyscallPerPredicate:
                 with counting_syscalls() as counter:
                     call()
             except KeyError:
-                pytest.skip(f"this uid has no {name} entry in the user database")
+                pytest.skip(
+                    f"missing user-database: this uid has no {name} entry in the user database"
+                )
             assert counter.stat_family == 1, f"{name} made {counter.stat_family} stat calls"
 
     def test_samefile_makes_two(self, tmp_path: pathlib.Path) -> None:
@@ -808,7 +818,7 @@ class TestOneSyscallPerPredicate:
     @POSIX_ONLY
     def test_is_junction_is_false_off_windows(self, tmp_path: pathlib.Path) -> None:
         if not hasattr(pathlib.Path, "is_junction"):
-            pytest.skip("Path.is_junction() is 3.12+")
+            pytest.skip("version: Path.is_junction() is 3.12+")
 
         assert tmp_path.is_junction() is False  # type: ignore[attr-defined]
 
@@ -1086,7 +1096,7 @@ class TestRecursiveGlobSpace:
 
         assert large_peak > 3 * small_peak, f"the w term: {small_peak} B against {large_peak} B"
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
+    @LONG_PATHS
     @pytest.mark.parametrize("spelling", ["rglob", "glob"])
     def test_the_peak_grows_with_the_depth(self, tmp_path: pathlib.Path, spelling: str) -> None:
         """32x the depth at a breadth of one: x171 on 3.10 and x2.1 on 3.14.
@@ -1212,7 +1222,7 @@ class TestMkdirParents:
         assert 5 <= nested <= 10, f"five missing components, {nested} mkdir calls"
         assert (tmp_path / "a" / "b" / "c" / "d" / "e").is_dir()
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only")
+    @LONG_PATHS
     def test_the_peak_grows_faster_than_the_depth(self, tmp_path: pathlib.Path) -> None:
         """7x the missing components of fixed length: over x12, where O(k)
         would give x7 and O(k·L) x49."""
