@@ -97,6 +97,7 @@ Not settled here:
 
 from __future__ import annotations
 
+import functools
 import gc
 import json
 import pathlib
@@ -174,18 +175,39 @@ def restore_gc_state() -> Iterator[None]:
             gc.disable()
 
 
+@functools.cache
+def parked_by_the_collector() -> int:
+    """How many objects a collection itself leaves in the permanent generation.
+
+    3.12's collector moves immortal objects there (`update_refs()` in
+    Modules/gcmodule.c): 375 of them on 3.12.3 to 3.12.14, however many modules
+    are imported, and the next collection moves them back after `unfreeze()`.
+    Other versions park none. Counted in a fresh interpreter with no site or
+    startup hooks, so no deliberate freeze is included.
+    """
+    result = subprocess.run(
+        [sys.executable, "-I", "-S", "-c", "import gc; gc.collect(); print(gc.get_freeze_count())"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=True,
+    )
+    return int(result.stdout)
+
+
 @contextmanager
 def baseline_frozen() -> Iterator[None]:
     """Freeze everything alive now, so only what the test builds is visited.
 
     `unfreeze()` releases the whole permanent generation, so a process that
     already froze objects is left alone rather than having them released.
+    What the collector parks there itself does not count as frozen.
     """
-    if gc.get_freeze_count():
+    gc.collect()
+    if gc.get_freeze_count() > parked_by_the_collector():
         pytest.skip(
             "missing unfrozen-gc: objects were already frozen; unfreezing would release them"
         )
-    gc.collect()
     gc.freeze()
     try:
         yield
