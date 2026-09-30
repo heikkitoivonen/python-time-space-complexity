@@ -45,12 +45,13 @@ Most of them can be settled by observation:
   characters, and 1,000 statements 100 then 400 blocks deep x3.9; the test
   asserts the character count, which is exact, and the growth in nodes
   separately;
-* `literal_eval()` of parsed set trees with 500 then 8,000 integer keys:
-  colliding keys (multiples of `sys.hash_info.modulus`) cost more than x64,
-  while distinct hashes cost less than x64. Linear growth predicts x16
-  and quadratic growth x256. Parsing and warm-up happen outside timing;
-  the integer widths remain bounded to the same few machine words. That a
-  string is parsed and a tree is not is settled by counting `parse()` calls;
+* `literal_eval()` of constructed set trees with 32, 320 and 3,200 integer
+  keys: an int subclass counts hashing and equality while retaining int's
+  results. Each key is hashed once. Colliding keys (multiples of
+  `sys.hash_info.modulus`) require between c * (c - 1) / 2 and 2 * c²
+  comparisons; distinct hashes require none. Only flat sets and bounded
+  integer widths are varied. A string is parsed and a tree is not, settled
+  separately by counting `parse()` calls;
 * `compare()` stops at the first difference: a value in a later statement
   whose `__eq__` counts its calls is never consulted when the first
   statement already differs. `compare_attributes=True` is separated from the
@@ -937,37 +938,49 @@ class TestLiteralEval:
         with pytest.raises(TypeError):
             ast.literal_eval("{[]: 1}")
 
-    @pytest.mark.timing
     def test_colliding_keys_make_a_set_quadratic(self) -> None:
-        """Isolate set reconstruction with parsed trees and a 16x size step.
+        """Count set reconstruction work at 32, 320 and 3,200 keys.
 
-        Linear and quadratic growth are separated by the x64 threshold.
-        CPython 3.14.7 measures x15.5 for distinct hashes and x283 for
-        collisions. Parsing is covered separately; only integer keys and
-        flat sets are varied here.
+        Instrumented integers preserve int hashing and equality. Collisions
+        require quadratic comparisons, while distinct hashes require none;
+        both hash each key once. Parsing and arbitrary key costs are outside
+        this measurement.
         """
+
+        class CountingInt(int):
+            hashes = 0
+            comparisons = 0
+
+            def __hash__(self) -> int:
+                CountingInt.hashes += 1
+                return int.__hash__(self)
+
+            def __eq__(self, other: object) -> bool:
+                CountingInt.comparisons += 1
+                return int.__eq__(self, other)
+
         modulus = sys.hash_info.modulus
+        for count in (32, 320, 3_200):
+            for spread in (0, 1):
+                values = [k * modulus + k * spread for k in range(1, count + 1)]
+                assert len({hash(value) for value in values}) == (count if spread else 1)
+                tree = ast.Set(elts=[ast.Constant(value=CountingInt(value)) for value in values])
+                CountingInt.hashes = CountingInt.comparisons = 0
 
-        def keys(count: int, spread: int) -> ast.Expression:
-            values = [k * modulus + k * spread for k in range(1, count + 1)]
-            assert len({hash(value) for value in values}) == (count if spread else 1)
-            source = "{" + ", ".join(map(str, values)) + "}"
-            tree = ast.parse(source, mode="eval")
-            assert ast.literal_eval(tree) == set(values)
-            return tree
+                result = ast.literal_eval(tree)
 
-        colliding_small, colliding_large = keys(500, 0), keys(8_000, 0)
-        distinct_small, distinct_large = keys(500, 1), keys(8_000, 1)
-
-        colliding = ratio(
-            lambda: ast.literal_eval(colliding_small), lambda: ast.literal_eval(colliding_large), 3
-        )
-        distinct = ratio(
-            lambda: ast.literal_eval(distinct_small), lambda: ast.literal_eval(distinct_large), 3
-        )
-
-        assert colliding > 64, f"x{colliding:.1f} for 16x colliding keys; quadratic would be 256"
-        assert distinct < 64, f"x{distinct:.1f} for 16x distinct keys; linear would be 16"
+                hashes, comparisons = CountingInt.hashes, CountingInt.comparisons
+                assert hashes == count, f"{hashes} hashes for {count} keys, {spread=}"
+                if spread:
+                    assert comparisons == 0, (
+                        f"{comparisons} comparisons for {count} distinct hashes"
+                    )
+                else:
+                    assert count * (count - 1) // 2 <= comparisons < 2 * count**2, (
+                        f"{comparisons} comparisons for {count} colliding keys"
+                    )
+                assert len(result) == count
+                assert sorted(map(int, result)) == values
 
 
 class TestMain:
