@@ -11,9 +11,12 @@ where the claim is a growth class, always as a ratio between two sizes.
 Measurement scope:
 
 * `codecs.encode()` and `codecs.decode()` are timed for utf-8, utf-16,
-  latin-1, cp1252, utf-7 and unicode_escape at 10,000 and 1,000,000
-  characters of mixed Latin-1 text; 100x the input must cost under 1,000x
-  (quadratic would be 10,000x). `punycode` is timed at a fixed 2,000
+  latin-1, cp1252, utf-7 and unicode_escape at 1,000 and 1,000,000
+  characters of mixed Latin-1 text; 1,000x the input must cost under
+  100,000x (linear would be 1,000x, quadratic 1,000,000x). The step is that
+  wide because memory effects dwarf a narrow one: on a Linux CI runner,
+  10,000 against 1,000,000 characters of `ascii_encode` cost 1,425x, where
+  linear predicts 100x. `punycode` is timed at a fixed 2,000
   characters with one distinct non-ASCII character against 2,000 distinct
   ones (over 20x apart), and at 250 against 2,000 distinct characters (8x
   the input, over 25x the time; linear would be 8x, n·u 64x). `punycode`
@@ -79,8 +82,8 @@ Measurement scope:
   1,000,000x).
 * Charmap, helper-function and BOM rows are asserted by output. The UTF,
   ASCII, Latin-1, `unicode_escape` and `raw_unicode_escape` helper functions
-  are each timed at 10,000 and
-  1,000,000 characters and must cost under 1,000x for 100x the input.
+  are each timed at 1,000 and 1,000,000 characters and must cost under
+  100,000x for 1,000x the input; measured at most about 1,300x.
   Every small timing repeats the call 50 times and keeps the fastest run.
 * Every fenced Python block runs in its own subprocess with warnings raised
   as errors, and a mutated assertion in one of them is asserted to fail.
@@ -199,8 +202,8 @@ class TestEncodingIsLinear:
 
     @pytest.mark.timing
     @pytest.mark.parametrize("encoding", CODECS)
-    def test_a_hundred_times_the_input_is_far_from_quadratic(self, encoding: str) -> None:
-        texts = ["héllo wörld " * (size // 12) for size in (10_000, 1_000_000)]
+    def test_a_thousand_times_the_input_is_far_from_quadratic(self, encoding: str) -> None:
+        texts = ["héllo wörld " * (size // 12) for size in (1_000, 1_000_000)]
         datas = [codecs.encode(text, encoding) for text in texts]
 
         ratios = {
@@ -209,7 +212,7 @@ class TestEncodingIsLinear:
         }
 
         for name, ratio in ratios.items():
-            assert ratio < 1_000, f"{encoding} {name}: 100x the input cost x{ratio:.1f}"
+            assert ratio < 100_000, f"{encoding} {name}: 1,000x the input cost x{ratio:.1f}"
 
     @pytest.mark.timing
     def test_punycode_grows_with_distinct_non_ascii_characters(self) -> None:
@@ -1065,17 +1068,17 @@ class TestHelperFunctions:
 
     @pytest.mark.timing
     @pytest.mark.parametrize(("name", "text"), HELPERS)
-    def test_a_hundred_times_the_input_is_far_from_quadratic(self, name: str, text: str) -> None:
+    def test_a_thousand_times_the_input_is_far_from_quadratic(self, name: str, text: str) -> None:
         encode = getattr(codecs, f"{name}_encode")
         decode = getattr(codecs, f"{name}_decode")
-        inputs = [text * (size // len(text)) for size in (10_000, 1_000_000)]
+        inputs = [text * (size // len(text)) for size in (1_000, 1_000_000)]
         outputs = [encode(value)[0] for value in inputs]
 
         encode_ratio = growth(*(partial(encode, value) for value in inputs))
         decode_ratio = growth(*(partial(decode, value) for value in outputs))
 
-        assert encode_ratio < 1_000, f"{name}_encode: 100x the input cost x{encode_ratio:.1f}"
-        assert decode_ratio < 1_000, f"{name}_decode: 100x the input cost x{decode_ratio:.1f}"
+        assert encode_ratio < 100_000, f"{name}_encode: 1,000x the input cost x{encode_ratio:.1f}"
+        assert decode_ratio < 100_000, f"{name}_decode: 1,000x the input cost x{decode_ratio:.1f}"
 
 
 class TestConstants:
