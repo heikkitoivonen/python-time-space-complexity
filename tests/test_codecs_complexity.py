@@ -256,7 +256,7 @@ class TestEncodingIsLinear:
 
         original = encodings.punycode.insertion_sort
 
-        def counting_sort(base: str, extended: str, errors: str) -> str:
+        def counting_sort(base: str, extended: bytes, errors: str) -> str:
             return original(CountingText(base), extended, errors)
 
         monkeypatch.setattr(encodings.punycode, "insertion_sort", counting_sort)
