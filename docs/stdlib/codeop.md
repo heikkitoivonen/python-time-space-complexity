@@ -21,7 +21,7 @@ the syntax tree and the code object - is O(n), and so is everything here that co
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `codeop.Compile()` | O(1) | O(1) | |
-| Calling a `Compile` instance: `compiler(source, filename, symbol)` | O(n) | O(n) | Signature of the built-in `compile()`; `__future__` statements it has compiled stay in force for later calls |
+| Calling a `Compile` instance: `compiler(source, filename, symbol)` | O(n) | O(n) | Takes the source, filename and mode arguments of the built-in `compile()`; `__future__` statements it has compiled stay in force for later calls |
 
 ### CommandCompiler
 
@@ -54,7 +54,7 @@ else:
 ## Remembering `__future__` Statements
 
 `compile_command()` starts afresh on every call. A `CommandCompiler` - or a `Compile`, for the
-signature of `compile()` - keeps the compiler flags that a `__future__` statement turned on and
+source, filename and mode arguments of `compile()` - keeps the compiler flags that a `__future__` statement turned on and
 applies them to every later input, which is what an interpreter session needs.
 
 ```python

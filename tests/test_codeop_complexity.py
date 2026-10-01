@@ -20,6 +20,10 @@ Measurement scope:
 * `compile_command()` and a `CommandCompiler` return a code object for
   `print("hello")`, `None` for `if True:` and raise `SyntaxError` for
   `if True`.
+* A `Compile` instance compiles with source, filename and mode passed
+  positionally - the filename lands in `co_filename`, and two statements
+  compile in `exec` mode but not in `eval` - and raises `TypeError` when `compile()`'s `dont_inherit` is
+  passed as a fifth positional argument.
 * `__future__` flags are read from `co_flags` with the `annotations` feature:
   set on later input for a `CommandCompiler` and a `Compile` after they have
   compiled the import, and clear for `compile_command()` on the same later
@@ -174,6 +178,23 @@ class TestThreeAnswers:
         assert check("if True:") is None
         with pytest.raises(SyntaxError):
             check("if True")
+
+
+class TestCompileTakesThreeOfCompilesArguments:
+    """`Compile` takes the source, filename and mode arguments of `compile()`, not all of them."""
+
+    def test_source_filename_and_mode_are_honoured(self) -> None:
+        compiled = codeop.Compile()("x = 1\ny = 2\n", "<page>", "exec")
+
+        assert isinstance(compiled, types.CodeType)
+        assert compiled.co_filename == "<page>"
+        with pytest.raises(SyntaxError):
+            codeop.Compile()("x = 1\ny = 2\n", "<page>", "eval")
+
+    def test_dont_inherit_is_not_accepted_positionally(self) -> None:
+        compiler: Any = codeop.Compile()
+        with pytest.raises(TypeError):
+            compiler("x = 1", "<input>", "exec", 0, True)
 
 
 class TestFutureStatementsAreRemembered:
