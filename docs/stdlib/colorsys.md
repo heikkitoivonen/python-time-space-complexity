@@ -1,286 +1,150 @@
-# Colorsys Module
+# colorsys Module Complexity
 
-The `colorsys` module provides conversions between color systems (RGB, HSV, HLS, YIQ).
+The `colorsys` module converts one colour at a time between RGB and three other coordinate systems:
+YIQ, HLS and HSV. Each function is a fixed sequence of float arithmetic on three components and
+returns a new 3-tuple; nothing is cached or validated.
+
+Every function takes and returns three floats, so every bound is O(1): no input has a size. The
+model treats float arithmetic as O(1). `n` is colours, in the sections that convert many of them.
+Components are expected in [0, 1] (I and Q range a little wider); RGB in 0-255 has to be scaled
+first.
 
 ## Complexity Reference
 
+### RGB and YIQ
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `rgb_to_hls()` | O(1) | O(1) | RGB → HLS |
-| `hls_to_rgb()` | O(1) | O(1) | HLS → RGB |
-| `rgb_to_hsv()` | O(1) | O(1) | RGB → HSV |
-| `hsv_to_rgb()` | O(1) | O(1) | HSV → RGB |
-| `rgb_to_yiq()` | O(1) | O(1) | RGB → YIQ |
-| `yiq_to_rgb()` | O(1) | O(1) | YIQ → RGB |
+| `colorsys.rgb_to_yiq(r, g, b)` | O(1) | O(1) | |
+| `colorsys.yiq_to_rgb(y, i, q)` | O(1) | O(1) | Clamps each channel to [0, 1], so an out-of-gamut YIQ colour does not round-trip |
 
-## Common Operations
+### RGB and HLS
 
-### RGB to HSV Conversion
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `colorsys.rgb_to_hls(r, g, b)` | O(1) | O(1) | A grey returns hue and saturation 0.0 |
+| `colorsys.hls_to_rgb(h, l, s)` | O(1) | O(1) | Hue wraps modulo 1, negative values included |
+
+### RGB and HSV
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `colorsys.rgb_to_hsv(r, g, b)` | O(1) | O(1) | A grey returns hue and saturation 0.0 |
+| `colorsys.hsv_to_rgb(h, s, v)` | O(1) | O(1) | Hue wraps above 1, but a negative hue can give a channel outside [0, 1]: reduce it with `% 1.0` first |
+
+## Converting a Colour
+
+Each conversion is a constant amount of arithmetic on one colour. A round trip returns the same
+colour up to float rounding, so compare the result with `math.isclose()` rather than `==`, with an
+`abs_tol` for components near 0.
+
+```python
+import colorsys
+import math
+
+r, g, b = 255 / 255, 128 / 255, 64 / 255   # scale 0-255 to [0, 1] first
+
+h, s, v = colorsys.rgb_to_hsv(r, g, b)     # O(1)
+assert (round(h, 2), round(s, 2), v) == (0.06, 0.75, 1.0)
+
+back = colorsys.hsv_to_rgb(h, s, v)        # O(1)
+assert all(math.isclose(x, y, abs_tol=1e-12) for x, y in zip(back, (r, g, b)))
+
+h, l, s = colorsys.rgb_to_hls(r, g, b)     # O(1)
+back = colorsys.hls_to_rgb(h, l, s)        # O(1)
+assert all(math.isclose(x, y, abs_tol=1e-12) for x, y in zip(back, (r, g, b)))
+
+assert colorsys.rgb_to_hsv(0.5, 0.5, 0.5) == (0.0, 0.0, 0.5)  # a grey has no hue
+```
+
+### Out-of-range Input
+
+Nothing is validated. `yiq_to_rgb()` clamps its result into [0, 1], and the two hue-taking
+functions treat a negative hue differently.
 
 ```python
 import colorsys
 
-# O(1) - convert RGB to HSV
-# RGB values: 0-1 range (or 0-255 scaled)
-r, g, b = 255, 128, 64  # Orange-ish
-r_norm = r / 255.0
-g_norm = g / 255.0
-b_norm = b / 255.0
+# A YIQ colour outside the RGB gamut is clamped, not rejected
+assert colorsys.yiq_to_rgb(0.5, 0.6, 0.0) == (1.0, 0.33512741222061304, 0.0)  # O(1)
 
-# O(1) conversion
-h, s, v = colorsys.rgb_to_hsv(r_norm, g_norm, b_norm)
-print(f"HSV: H={h:.2f}, S={s:.2f}, V={v:.2f}")
-# HSV: H=0.04, S=0.75, V=1.00
-
-# O(1) - convert back to RGB
-r2, g2, b2 = colorsys.hsv_to_rgb(h, s, v)
-print(f"RGB: {r2:.2f}, {g2:.2f}, {b2:.2f}")
+# hls_to_rgb wraps any hue; hsv_to_rgb does not reliably wrap a negative one
+assert colorsys.hls_to_rgb(-0.1, 0.5, 1.0) == colorsys.hls_to_rgb(0.9, 0.5, 1.0)
+assert colorsys.hsv_to_rgb(-0.1, 1.0, 1.0)[1] < 0
+assert colorsys.hsv_to_rgb(-0.1 % 1.0, 1.0, 1.0) == colorsys.hsv_to_rgb(0.9, 1.0, 1.0)
 ```
 
-### RGB to HLS Conversion
+## Converting Many Colours
+
+There is no batch form: converting n colours is n calls, O(n) time. Scale each colour as it is
+converted rather than building a normalised copy of the list first, which costs O(n) extra memory.
 
 ```python
 import colorsys
 
-# O(1) - convert RGB to HLS (Hue, Lightness, Saturation)
-r, g, b = 0.5, 0.3, 0.7  # Purple-ish
+colors = [(255, 100, 50), (0, 128, 255), (30, 30, 30)]
 
-# O(1) conversion
-h, l, s = colorsys.rgb_to_hls(r, g, b)
-print(f"HLS: H={h:.2f}, L={l:.2f}, S={s:.2f}")
+# O(n) time, one result per colour and no intermediate list
+hsvs = [colorsys.rgb_to_hsv(r / 255, g / 255, b / 255) for r, g, b in colors]
 
-# O(1) - convert back
-r2, g2, b2 = colorsys.hls_to_rgb(h, l, s)
-print(f"RGB: {r2:.2f}, {g2:.2f}, {b2:.2f}")
+assert len(hsvs) == 3
+assert hsvs[2][:2] == (0.0, 0.0)  # the grey
 ```
 
-## Common Use Cases
+## Common Patterns
 
-### Creating Color Variations
+### Hue Rotation
+
+A palette of n hues is one conversion into HSV and n back out, O(n) in all.
 
 ```python
 import colorsys
 
-def create_color_palette(base_rgb, num_colors):
-    """Create color palette from base - O(n)"""
-    # O(1) to normalize
-    r, g, b = base_rgb
-    r_norm = r / 255.0
-    g_norm = g / 255.0
-    b_norm = b / 255.0
-    
-    # O(1) to convert to HSV
-    h, s, v = colorsys.rgb_to_hsv(r_norm, g_norm, b_norm)
-    
-    palette = []
-    
-    # O(n) to create variations
-    for i in range(num_colors):
-        # Vary hue
-        h_varied = (h + (i / num_colors)) % 1.0
-        
-        # O(1) to convert back
-        r2, g2, b2 = colorsys.hsv_to_rgb(h_varied, s, v)
-        
-        # Convert to 0-255 range
-        palette.append((int(r2*255), int(g2*255), int(b2*255)))
-    
-    return palette
+def palette(base_rgb, count):
+    """count colours evenly spaced in hue - O(count)"""
+    h, s, v = colorsys.rgb_to_hsv(*(x / 255 for x in base_rgb))  # O(1)
+    result = []
+    for i in range(count):
+        r, g, b = colorsys.hsv_to_rgb((h + i / count) % 1.0, s, v)  # O(1)
+        result.append((round(r * 255), round(g * 255), round(b * 255)))
+    return result
 
-# Usage - O(n)
-colors = create_color_palette((255, 100, 50), 5)
-for color in colors:
-    print(color)
+colors = palette((255, 100, 50), 2)
+assert colors[0] == (255, 100, 50)
+assert colors[1] == (50, 205, 255)  # the complement, half a turn away
 ```
 
-### Brightness Adjustment
+### Adjusting Brightness and Saturation
 
 ```python
 import colorsys
 
-def adjust_brightness(rgb, factor):
-    """Adjust color brightness - O(1)"""
-    r, g, b = rgb
-    r_norm = r / 255.0
-    g_norm = g / 255.0
-    b_norm = b / 255.0
-    
-    # O(1) to convert to HSV
-    h, s, v = colorsys.rgb_to_hsv(r_norm, g_norm, b_norm)
-    
-    # O(1) to adjust value (brightness)
-    v = min(1.0, v * factor)
-    
-    # O(1) to convert back
-    r2, g2, b2 = colorsys.hsv_to_rgb(h, s, v)
-    
-    return (int(r2*255), int(g2*255), int(b2*255))
+def adjust(rgb, brightness=1.0, saturation=1.0):
+    """Scale value and saturation in HSV - O(1)"""
+    h, s, v = colorsys.rgb_to_hsv(*(x / 255 for x in rgb))   # O(1)
+    s = min(1.0, s * saturation)
+    v = min(1.0, v * brightness)
+    return tuple(round(x * 255) for x in colorsys.hsv_to_rgb(h, s, v))  # O(1)
 
-# Usage - O(1)
-original = (200, 100, 50)
-brighter = adjust_brightness(original, 1.2)  # 20% brighter
-darker = adjust_brightness(original, 0.8)    # 20% darker
+assert adjust((200, 100, 50), brightness=0.5) == (100, 50, 25)
+assert adjust((200, 100, 50), saturation=0.0) == (200, 200, 200)
 ```
 
-### Saturation Control
+## Performance Best Practices
 
-```python
-import colorsys
+✅ **Do**:
 
-def adjust_saturation(rgb, factor):
-    """Adjust color saturation - O(1)"""
-    r, g, b = [x/255.0 for x in rgb]
-    
-    # O(1) to convert
-    h, s, v = colorsys.rgb_to_hsv(r, g, b)
-    
-    # O(1) to adjust saturation
-    s = min(1.0, s * factor)
-    
-    # O(1) to convert back
-    r2, g2, b2 = colorsys.hsv_to_rgb(h, s, v)
-    
-    return tuple(int(x*255) for x in (r2, g2, b2))
+- Scale 0-255 input to [0, 1] inline as each colour is converted
+- Reduce a computed hue with `% 1.0` before `hsv_to_rgb()`
+- Compare round-tripped components with `math.isclose()` and an `abs_tol`
 
-# Usage - O(1)
-vivid = adjust_saturation((100, 150, 200), 1.5)  # More vivid
-muted = adjust_saturation((100, 150, 200), 0.5)  # More muted
-```
+❌ **Avoid**:
 
-### Grayscale Conversion
+- Building a normalised copy of a colour list before converting it - O(n) extra memory for the
+  same O(n) calls
+- Passing 0-255 values to an `rgb_to_*` function: nothing is validated, so the result is wrong or
+  the call raises
 
-```python
-import colorsys
+## Related Modules
 
-def to_grayscale(rgb):
-    """Convert to grayscale using lightness - O(1)"""
-    r, g, b = [x/255.0 for x in rgb]
-    
-    # O(1) to get lightness
-    h, l, s = colorsys.rgb_to_hls(r, g, b)
-    
-    # O(1) to convert back with zero saturation
-    r2, g2, b2 = colorsys.hls_to_rgb(h, l, 0.0)
-    
-    gray = int(l * 255)  # Use lightness as gray value
-    
-    return gray
-
-# Usage - O(1)
-color = (255, 100, 50)
-gray = to_grayscale(color)  # Returns 0-255 grayscale value
-print(f"Grayscale: {gray}")
-```
-
-### Complementary Colors
-
-```python
-import colorsys
-
-def get_complementary_color(rgb):
-    """Get complementary color - O(1)"""
-    r, g, b = [x/255.0 for x in rgb]
-    
-    # O(1) to convert
-    h, s, v = colorsys.rgb_to_hsv(r, g, b)
-    
-    # O(1) - opposite hue (180 degrees)
-    h_comp = (h + 0.5) % 1.0
-    
-    # O(1) to convert back
-    r2, g2, b2 = colorsys.hsv_to_rgb(h_comp, s, v)
-    
-    return tuple(int(x*255) for x in (r2, g2, b2))
-
-# Usage - O(1)
-original = (255, 100, 50)      # Orange
-complement = get_complementary_color(original)  # Cyan-ish
-print(f"Complement: {complement}")
-```
-
-### Color Distance
-
-```python
-import colorsys
-
-def color_distance_hsl(rgb1, rgb2):
-    """Calculate distance in HSL space - O(1)"""
-    # Normalize to 0-1
-    r1, g1, b1 = [x/255.0 for x in rgb1]
-    r2, g2, b2 = [x/255.0 for x in rgb2]
-    
-    # O(1) to convert both
-    h1, l1, s1 = colorsys.rgb_to_hls(r1, g1, b1)
-    h2, l2, s2 = colorsys.rgb_to_hls(r2, g2, b2)
-    
-    # O(1) to calculate distance
-    # Handle hue wraparound
-    h_dist = min(abs(h1 - h2), 1.0 - abs(h1 - h2))
-    l_dist = abs(l1 - l2)
-    s_dist = abs(s1 - s2)
-    
-    # Weighted Euclidean distance
-    distance = (h_dist**2 + l_dist**2 + s_dist**2) ** 0.5
-    
-    return distance
-
-# Usage - O(1)
-color1 = (255, 0, 0)      # Red
-color2 = (0, 255, 0)      # Green
-dist = color_distance_hsl(color1, color2)
-print(f"Distance: {dist:.2f}")
-```
-
-## Performance Tips
-
-### Cache Conversions for Repeated Use
-
-```python
-import colorsys
-
-class ColorCache:
-    """Cache color conversions - O(1) lookup"""
-    
-    def __init__(self):
-        self._cache = {}
-    
-    def rgb_to_hsv(self, rgb):
-        """O(1) cached or O(1) new conversion"""
-        if rgb not in self._cache:
-            r, g, b = [x/255.0 for x in rgb]
-            # O(1) conversion
-            h, s, v = colorsys.rgb_to_hsv(r, g, b)
-            self._cache[rgb] = (h, s, v)
-        
-        return self._cache[rgb]
-
-# Usage
-cache = ColorCache()
-hsv = cache.rgb_to_hsv((255, 100, 50))  # O(1)
-hsv = cache.rgb_to_hsv((255, 100, 50))  # O(1) - cached
-```
-
-### Batch Conversions
-
-```python
-import colorsys
-
-# Bad: Individual conversions - O(n)
-for rgb in colors:
-    hsv = colorsys.rgb_to_hsv(rgb[0]/255, rgb[1]/255, rgb[2]/255)
-
-# Good: List comprehension - still O(n) but more efficient
-normalized = [(r/255, g/255, b/255) for r, g, b in colors]
-hsvs = [colorsys.rgb_to_hsv(r, g, b) for r, g, b in normalized]
-```
-
-## Version Notes
-
-- **Python 2.6+**: All functions available
-- **Python 3.x**: Full support
-- **Range**: Values typically 0-1 or 0-255 (depends on function)
-
-## Related Documentation
-
-- [Math Module](math.md) - Mathematical operations
-- [Statistics Module](statistics.md) - Color analysis
+- **[math](math.md)** - `math.isclose()` for comparing round-tripped components
