@@ -104,7 +104,7 @@ the process ends.
 import atexit
 import sys
 
-atexit.register(lambda: print("3. atexit handler"))   # O(1) to register
+atexit.register(lambda: print("3. atexit handler"))
 
 class Resource:
     def __enter__(self):
