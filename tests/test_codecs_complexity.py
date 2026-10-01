@@ -20,8 +20,10 @@ Measurement scope:
   characters with one distinct non-ASCII character against 2,000 distinct
   ones (over 20x apart), and at 250 against 2,000 distinct characters (8x
   the input, over 25x the time; linear would be 8x, n·u 64x). `punycode`
-  decoding of 5,000 against 160,000 repeated `é` must cost over 70x for 32x
-  the input; linear would be 32x, and the measured ratio is about 140x.
+  decoding is observed with a counting string passed into `insertion_sort`:
+  50, 500 and 5,000 repeated `é` concatenate exactly sum(2..n) characters
+  with nonempty operands. Empty-operand concatenations are excluded. The
+  decoded result is checked against the original text at every size.
 * `lookup()` is observed through a registered counting search function:
   `My-Codec`, `my codec` and `MY_CODEC` reach it once, as `my_codec`, and
   return one object; an unknown name reaches it on every lookup; after
@@ -115,6 +117,7 @@ from __future__ import annotations
 
 import codecs
 import encodings.cp1252
+import encodings.punycode
 import io
 import pathlib
 import re
@@ -236,15 +239,34 @@ class TestEncodingIsLinear:
 
         assert ratio > 25, f"8x distinct characters cost x{ratio:.1f}; n·u predicts 64"
 
-    @pytest.mark.timing
-    def test_punycode_decoding_is_superlinear(self) -> None:
-        small, large = (codecs.encode("é" * size, "punycode") for size in (5_000, 160_000))
+    def test_punycode_decoding_copies_the_growing_result(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        copied = 0
 
-        ratio = best_ns(partial(codecs.decode, large, "punycode"), 3) / best_ns(
-            partial(codecs.decode, small, "punycode"), 3, inner=5
-        )
+        class CountingText(str):
+            def __getitem__(self, key: Any) -> CountingText:
+                return CountingText(super().__getitem__(key))
 
-        assert ratio > 70, f"32x the input cost x{ratio:.1f}; linear would be 32"
+            def __add__(self, other: str) -> CountingText:
+                nonlocal copied
+                if self and other:
+                    copied += len(self) + len(other)
+                return CountingText(super().__add__(other))
+
+        original = encodings.punycode.insertion_sort
+
+        def counting_sort(base: str, extended: str, errors: str) -> str:
+            return original(CountingText(base), extended, errors)
+
+        monkeypatch.setattr(encodings.punycode, "insertion_sort", counting_sort)
+        for size in (50, 500, 5_000):
+            text = "é" * size
+            encoded = codecs.encode(text, "punycode")
+            copied = 0
+
+            assert codecs.decode(encoded, "punycode") == text
+            assert copied == size * (size + 1) // 2 - 1, (size, copied)
 
     def test_punycode_and_idna_outputs(self) -> None:
         assert codecs.encode("bücher", "punycode") == b"bcher-kva"

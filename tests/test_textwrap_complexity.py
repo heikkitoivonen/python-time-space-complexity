@@ -4,16 +4,19 @@ The page prices every function at one pass over the whole text, with one
 exception: a word longer than a line is broken one line at a time, and each
 break copies the rest of the word. Space bounds and the claims that
 `shorten()` and `max_lines` still split the whole text are settled by traced
-allocation at a fixed width while the text grows; the long-word term and the
-linear functions are settled by timing ratios across a 16x or 10x size step;
-the option and output claims are settled by observation.
+allocation at a fixed width while the text grows; long-word copying by slice
+counts, and whitespace and linear functions by timing ratios over 16x or 10x
+steps; the option and output claims are settled by observation.
 
 Measurement scope:
 
-* The long-word term: at width 8, one word grown from 25,000 to 400,000
-  characters costs more than 40x (linear predicts 16x, quadratic 256x), while
-  7-letter words over the same lengths cost under 32x, and so does the long
-  word with `break_long_words=False`. A run of whitespace between two letters
+* The long-word term: a counting string returned by `_split()` records the
+  remainder slices for words of 80, 800 and 8,000 characters at width 8.
+  Their lengths are exactly n-8, n-16, ..., 8; their sum is quadratic in n.
+  With `break_long_words=False` no remainder is sliced, and both modes return
+  the expected lines. Timing 7-letter words from 25,000 to 400,000 characters
+  costs under 32x, and so does a long word with `break_long_words=False`.
+  A run of whitespace between two letters
   over the same lengths costs more than 40x with `drop_whitespace=False` and
   under 32x without it; a run at the start of the text, grown from 6,250 to
   100,000 characters, costs more than 40x. The mechanism, `chunk[end:]` in
@@ -57,7 +60,7 @@ Not settled here:
   `width`, are definitional choices. The output repeats the indent on every line, so a long indent
   adds its length times the lines produced.
 * The O(n + n·k/w) bound with several long words sums one O(k²/w) term per
-  word and is read from Lib/textwrap.py; only a single long word is timed.
+  word and is read from Lib/textwrap.py; only a single long word is measured.
 * Whether `wordsep_re` stays linear on adversarial input. The timed inputs
   are 7-letter words, one run of a single letter and runs of spaces; hyphens,
   punctuation and mixed whitespace are not varied.
@@ -138,11 +141,32 @@ class TestLongWordsAreCopiedPerLine:
         large_ns = best_ns(lambda: textwrap.wrap(large, 8, **kwargs), repeats=3)
         return large_ns / small_ns
 
-    @pytest.mark.timing
-    def test_one_long_word_grows_faster_than_linear(self) -> None:
-        ratio = self.growth(lambda size: "x" * size)
+    @pytest.mark.parametrize("size", [80, 800, 8_000])
+    @pytest.mark.parametrize("break_long_words", [False, True])
+    def test_one_long_word_copies_each_remainder(self, size: int, break_long_words: bool) -> None:
+        remainders: list[int] = []
 
-        assert ratio > 40, f"16x the word cost x{ratio:.1f}; linear is 16, quadratic 256"
+        class CountingWord(str):
+            def __getitem__(self, key: Any) -> CountingWord:
+                result = super().__getitem__(key)
+                if isinstance(key, slice) and key.start and key.stop is None:
+                    remainders.append(len(result))
+                return CountingWord(result)
+
+        class CountingWrapper(textwrap.TextWrapper):
+            def _split(self, text: str) -> list[str]:
+                return [CountingWord(chunk) for chunk in super()._split(text)]
+
+        wrapper = CountingWrapper(width=8, break_long_words=break_long_words)
+        lines = wrapper.wrap("x" * size)
+
+        if break_long_words:
+            assert lines == ["x" * 8] * (size // 8)
+            assert remainders == list(range(size - 8, 0, -8))
+            assert sum(remainders) == size * (size // 8 - 1) // 2
+        else:
+            assert lines == ["x" * size]
+            assert remainders == []
 
     @pytest.mark.timing
     def test_ordinary_words_grow_linearly(self) -> None:

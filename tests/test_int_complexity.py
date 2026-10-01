@@ -47,8 +47,10 @@ Measured on one aarch64 machine under CPython 3.14.7:
   each sample runs the call 200 times and the sizes are 1M against 64M bits
   rather than 4M: linear would be x64, and every one measured x1.0;
 * `bin`, `hex`, `oct`: x4.1, x4.1, x3.9;
-* comparing equal 4M-bit values against 16M-bit ones: x4.0; comparing values
-  of different widths: x1.0;
+* comparing distinct equal values at 64,000, 640,000 and 6,400,000 bits is
+  batched 20 calls per sample. Each 10x width step must cost between 3x and
+  30x, excluding constant and quadratic growth; comparing values of different
+  widths: x1.0;
 * `hash`: x4.0; `bit_count`: x3.9; `from_bytes`: x4.1; `to_bytes` of a fixed
   1,000-bit value into 125,000, 1,250,000 and 12,500,000 bytes is batched
   20 calls per sample. Each 10x length step must cost between 3x and 30x,
@@ -80,6 +82,7 @@ covered; and no test runs on a 15-bit-digit build, which no supported CI
 platform uses.
 """
 
+import operator
 import pathlib
 import re
 import subprocess
@@ -514,12 +517,19 @@ class TestBitwise:
 class TestComparison:
     @pytest.mark.timing
     def test_equal_widths_compare_digit_by_digit(self) -> None:
-        small, large = random_bits(4_000_000), random_bits(16_000_000)
-        small_copy, large_copy = small + 0, large + 0
+        times = []
+        for bits in (64_000, 640_000, 6_400_000):
+            value = random_bits(bits)
+            copy = value + 0
+            assert value == copy and value is not copy
+            operation = batched(partial(operator.eq, value, copy), 20)
+            operation()
+            times.append(best_time(operation, repeats=7))
 
-        growth = ratio(lambda: small == small_copy, lambda: large == large_copy, repeats=20)
-
-        assert 2.5 < growth < 7, f"x{growth:.1f} for 4x the bits"
+        steps = [later / earlier for earlier, later in zip(times, times[1:], strict=False)]
+        assert all(3 < step < 30 for step in steps), (
+            f"10x bit-width steps took {times} seconds, ratios {steps}"
+        )
 
     @pytest.mark.timing
     def test_different_widths_compare_in_constant_time(self) -> None:

@@ -10,10 +10,13 @@ behave - is settled by observation, with no tolerance.
 
 Measurement scope:
 
-* With 499 idle threads started beside the test thread, the fastest of seven
-  batches of `getrusage(RUSAGE_SELF)` costs more than 8x what it does with
-  none; `RUSAGE_THREAD`, `RUSAGE_CHILDREN` and `getrlimit()` each stay under
-  3x. Linux only, where the kernel's getrusage walks the thread group.
+* The fastest of seven batches of `getrusage(RUSAGE_SELF)` is measured with
+  0, 49 and 499 extra idle threads. Subtracting the zero-thread baseline
+  separates the thread walk from fixed syscall and Python result-building
+  costs. The added cost must grow between 3x and 30x from 49 to 499 threads:
+  linear predicts about 10x, quadratic about 100x. `RUSAGE_THREAD`,
+  `RUSAGE_CHILDREN` and `getrlimit()` each stay under 3x their baseline at
+  both thread counts. Linux only, where getrusage walks the thread group.
 * `getrusage()` returns a new `struct_rusage` on every call, 16 items long,
   each attribute equal to the item at its documented index; the two times are
   floats and the other fourteen ints.
@@ -153,12 +156,12 @@ def idle_threads(count: int) -> tuple[threading.Event, list[threading.Thread]]:
 class TestRusageSelfWalksEveryThread:
     """`getrusage(RUSAGE_SELF)` | O(t); `RUSAGE_THREAD`, `RUSAGE_CHILDREN` | O(1).
 
-    The same process is timed with no extra threads and with 499 idle ones.
-    A thread walk grows with them; the controls read one thread or one
-    running total and stay flat.
+    The same process is timed with 0, 49 and 499 extra idle threads.
+    Baseline subtraction isolates the growing thread walk; the controls
+    read one thread or one running total and stay flat.
     """
 
-    THREADS = 499
+    THREADS = (49, 499)
 
     def _measure(self) -> dict[str, float]:
         calls: dict[str, Callable[[], Any]] = {
@@ -172,37 +175,36 @@ class TestRusageSelfWalksEveryThread:
         return {name: best_ns(call) for name, call in calls.items()}
 
     @pytest.fixture
-    def costs(self) -> Iterator[tuple[dict[str, float], dict[str, float]]]:
-        alone = self._measure()
-        stop, threads = idle_threads(self.THREADS)
-        try:
-            crowded = self._measure()
-        finally:
-            stop.set()
-            for thread in threads:
-                thread.join()
-        yield alone, crowded
+    def costs(self) -> list[dict[str, float]]:
+        measurements = [self._measure()]
+        for count in self.THREADS:
+            stop, threads = idle_threads(count)
+            try:
+                measurements.append(self._measure())
+            finally:
+                stop.set()
+                for thread in threads:
+                    thread.join()
+        return measurements
 
-    def test_rusage_self_grows_with_threads(
-        self, costs: tuple[dict[str, float], dict[str, float]]
-    ) -> None:
-        alone, crowded = costs
-        ratio = crowded["self"] / alone["self"]
-        assert ratio > 8, (
-            f"RUSAGE_SELF cost {alone['self']:.0f}ns alone and {crowded['self']:.0f}ns "
-            f"beside {self.THREADS} threads (x{ratio:.1f}); a thread walk grows far more"
+    def test_rusage_self_grows_with_threads(self, costs: list[dict[str, float]]) -> None:
+        alone, medium, crowded = (measurement["self"] for measurement in costs)
+        assert medium > alone, f"49 extra threads must add work: {costs}"
+        ratio = (crowded - alone) / (medium - alone)
+        assert 3 < ratio < 30, (
+            f"RUSAGE_SELF cost {alone:.0f}, {medium:.0f}, {crowded:.0f}ns with "
+            f"0, 49, 499 extra threads; baseline-subtracted growth x{ratio:.1f}"
         )
 
     @pytest.mark.parametrize("name", ["thread", "children", "getrlimit"])
-    def test_the_controls_do_not(
-        self, costs: tuple[dict[str, float], dict[str, float]], name: str
-    ) -> None:
-        alone, crowded = costs
-        ratio = crowded[name] / alone[name]
-        assert ratio < 3, (
-            f"{name} cost {alone[name]:.0f}ns alone and {crowded[name]:.0f}ns beside "
-            f"{self.THREADS} threads (x{ratio:.1f}); it should not depend on them"
-        )
+    def test_the_controls_do_not(self, costs: list[dict[str, float]], name: str) -> None:
+        alone = costs[0][name]
+        for count, measurement in zip(self.THREADS, costs[1:], strict=True):
+            ratio = measurement[name] / alone
+            assert ratio < 3, (
+                f"{name} cost {alone:.0f}ns alone and {measurement[name]:.0f}ns beside "
+                f"{count} threads (x{ratio:.1f}); it should not depend on them"
+            )
 
 
 @UNIX_ONLY

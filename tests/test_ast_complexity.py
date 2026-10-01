@@ -79,8 +79,9 @@ CPython 3.14.7 with 1,000 then 4,000 assignment statements unless stated:
   chain's output grows x16 in characters (2.0 MB to 32 MB) and the time x101,
   the N * h² shape, and x550 for 250 then 2,000 deep, which is what the test
   measures;
-* `unparse`: x3.9 wide and x3.7 for the deep chain, so it is linear in both
-  outside f-strings;
+* `unparse`: x3.9 wide; deep chains of 100, 1,000 and 10,000 unary minuses
+  are timed with cyclic GC disabled by `timeit`, with 3x to 30x growth per
+  10x depth step (linear predicts 10x, quadratic 100x);
 * `get_source_segment` of the last statement: x16-x17 on 3.11.14 and 3.14.7
   for 16x the source (1,000 then 16,000 fixed-width lines), after warm-up;
   of the first statement: x1.3 on 3.14 and x4.2 on 3.10.21, which has no
@@ -144,6 +145,7 @@ import time
 import timeit
 import warnings
 from collections.abc import Callable
+from functools import partial
 from typing import Any, SupportsIndex, cast
 
 import pytest
@@ -531,13 +533,23 @@ class TestDump:
 class TestUnparse:
     @pytest.mark.timing
     def test_linear_in_a_deep_chain(self) -> None:
-        small, large = deep_chain(1_000), deep_chain(4_000)
+        trees = [deep_chain(depth) for depth in (100, 1_000, 10_000)]
 
-        growth = in_deep_stack(
-            lambda: ratio(lambda: ast.unparse(small), lambda: ast.unparse(large), repeats=3)
+        def measure() -> list[float]:
+            for tree in trees:
+                ast.unparse(tree)
+            # timeit restores cyclic GC's state after each measurement.
+            return [
+                min(timeit.repeat(partial(ast.unparse, tree), number=3, repeat=5)) / 3
+                for tree in trees
+            ]
+
+        times = in_deep_stack(measure)
+        steps = [later / earlier for earlier, later in zip(times, times[1:], strict=False)]
+
+        assert all(3 < step < 30 for step in steps), (
+            f"10x depth steps took {times} seconds, ratios {steps}; quadratic predicts 100x"
         )
-
-        assert 2.5 < growth < 7, f"x{growth:.1f} for 4x the depth"
 
     def test_nested_blocks_emit_quadratic_indentation(self) -> None:
         small, large = nested_blocks(250), nested_blocks(1_000)

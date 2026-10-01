@@ -3,9 +3,9 @@
 The page prices the lexer per character read plus the square of each token's
 length, because a token grows by one string concatenation per character. The
 quadratic term is read from Lib/shlex.py's `self.token += nextchar` and
-checked by timing: at a fixed total length, one token against many short ones,
-and that gap widening as the total grows; construction, laziness and the
-per-token space are settled by traced allocation and stream positions, which
+checked by counting the lengths of concatenated strings for bare and quoted
+tokens at three sizes, with one-character tokens as the control. Construction,
+laziness and per-token space are settled by traced allocation and stream positions, which
 need no tolerance; the stack, pushback and attribute rows are settled by
 observation.
 
@@ -13,11 +13,11 @@ Measurement scope:
 
 * `split()` over tokens of one character grows each time the input grows 4x,
   from 40,000 to 160,000 to 640,000 characters, by under 8x per step: linear
-  predicts 4x and quadratic 16x. At 200,000 characters, one token costs more
-  than 4x what 100,000 one-character tokens of the same total cost, bare and
-  double-quoted, and that gap is more than twice the one at 25,000 characters:
-  the k² term predicts 8x, a shape-dependent constant 1x. Locally the gaps are
-  about 2x and 12x. The peak allocation of `split()` grows more than 20x from 10,000
+  predicts 4x and quadratic 16x. A counting string assigned to the lexer's
+  `token` records concatenation lengths for tokens of 50, 500 and 5,000
+  characters, bare and double-quoted. Nonempty operands copy exactly
+  sum(2..k) characters for one k-character token and none for one-character
+  tokens. The peak allocation of `split()` grows more than 20x from 10,000
   to 1,000,000 characters.
 * `get_token()` on a stream of 1,000,000 characters in short tokens peaks
   under 5 KB, and a 100,000-character token peaks above 100 KB, so its space is
@@ -66,7 +66,7 @@ Not settled here:
   dominate every bound.
 * Streams other than `io.StringIO`, non-ASCII text, comment-heavy input and
   `punctuation_chars` runs are not varied in the timing tests; the quadratic
-  token is measured in POSIX mode with `whitespace_split` on, as `split()`
+  token is observed in POSIX mode with `whitespace_split` on, as `split()`
   runs it.
 """
 
@@ -157,36 +157,43 @@ class TestSplitIsLinearForShortTokens:
 
 
 class TestALongTokenIsQuadratic:
-    """`split` and `get_token` pay O(k²) for a k-character token. At a fixed
-    total length, one token costs far more than many one-character ones, and
-    that gap widens as the total grows: a k² term predicts 8x wider for 8x the
-    total, and a shape-dependent constant predicts no change."""
+    """A growing token concatenates its whole prefix once per character.
 
-    @staticmethod
-    def gap(total: int, quoted: bool) -> float:
-        one = "x" * total
-        if quoted:
-            one = '"' + one[2:] + '"'
-        many = short_tokens(total)
-        assert len(one) == len(many)
-        assert len(shlex.split(one)) == 1
-        assert len(shlex.split(many)) == total // 2
+    Count the characters in nonempty concatenations, excluding the empty
+    operand fast path. The stream and the token values retain str behavior.
+    """
 
-        one_ns = best_ns(lambda: shlex.split(one))
-        many_ns = best_ns(lambda: shlex.split(many))
-        return one_ns / many_ns
-
-    @pytest.mark.timing
     @pytest.mark.parametrize("quoted", [False, True], ids=["bare", "quoted"])
-    def test_one_token_s_extra_cost_grows_with_its_length(self, quoted: bool) -> None:
-        small = self.gap(25_000, quoted)
-        large = self.gap(200_000, quoted)
+    def test_one_token_copies_its_growing_prefix(
+        self, quoted: bool, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        copied = 0
 
-        assert large > 4, f"one 200,000-character token cost x{large:.2f} of short tokens"
-        assert large > small * 2, (
-            f"the one-token gap went from x{small:.2f} at 25,000 characters to "
-            f"x{large:.2f} at 200,000; a k² term predicts 8x wider, a constant 1x"
-        )
+        class CountingToken(str):
+            def __add__(self, other: str) -> str:
+                nonlocal copied
+                if self and other:
+                    copied += len(self) + len(other)
+                return super().__add__(other)
+
+        class CountingLexer(shlex.shlex):
+            def __setattr__(self, name: str, value: Any) -> None:
+                if name == "token":
+                    value = CountingToken(value)
+                super().__setattr__(name, value)
+
+        monkeypatch.setattr(shlex, "shlex", CountingLexer)
+        for size in (50, 500, 5_000):
+            token = "x" * size
+            one = '"' + token + '"' if quoted else token
+            many = ('"x" ' if quoted else "x ") * size
+            copied = 0
+            assert shlex.split(one) == [token]
+            assert copied == size * (size + 1) // 2 - 1, (size, copied)
+
+            copied = 0
+            assert shlex.split(many) == ["x"] * size
+            assert copied == 0
 
 
 class TestTheLexerHoldsOneToken:

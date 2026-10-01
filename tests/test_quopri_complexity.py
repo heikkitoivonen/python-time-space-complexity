@@ -8,12 +8,13 @@ file object that shows how the input is read and the output written.
 
 Measurement scope:
 
-* `encodestring()` is timed on 10,000, 100,000 and 1,000,000 input bytes of
+* `encodestring()` is timed on 100,000, 1,000,000 and 10,000,000 input bytes of
   plain text, of bytes that all need escaping, and of seeded random bytes, and
   `decodestring()` on the encodings of those inputs, which are longer by a
   factor that depends on the shape but is about the same at every size. Linear
   predicts 10x per step and quadratic 100x; each step is asserted between 3x
-  and 30x.
+  and 30x. The smallest random input is 100 KB; shorter repeated inputs can
+  have substantially different per-byte costs from longer inputs.
 * The traced peak of `encodestring()` on 1,000,000 bytes that all need
   escaping is asserted over 3x and under 7x the input (about 6.2x on 3.14: a
   working buffer the size of the output, then the returned bytes), and ten
@@ -75,7 +76,7 @@ import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "quopri.md"
 EXPECTED_BLOCKS = 5
-SIZES = (10_000, 100_000, 1_000_000)
+SIZES = (100_000, 1_000_000, 10_000_000)
 
 
 def best_ns(func: Callable[[], Any], repeats: int = 7) -> float:
