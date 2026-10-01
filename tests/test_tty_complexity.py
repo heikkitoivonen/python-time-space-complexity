@@ -14,17 +14,35 @@ Measurement scope:
   module's own `tcgetattr` and `tcsetattr` names: exactly one of each per call.
   The mode each leaves is read back from the terminal: raw clears `ECHO`,
   `ICANON`, `ISIG` and `OPOST`; cbreak clears `ECHO` and `ICANON` and keeps
-  `ISIG` and `OPOST`. From 3.12 each returns a list equal to what
+  `ISIG` and `OPOST`. From 3.12.1 each returns a list equal to what
   `tcgetattr()` read before the call, and restoring that list with
   `tcsetattr()` gives back the original attributes, apart from `PENDIN`,
   which the macOS terminal driver sets when `ICANON` comes back on; that
-  bit is masked before comparing, here and in the page's first block.
+  bit is masked before comparing, here and in the page's first block. The
+  terminal's `VMIN` and `VTIME` are first set to 5 and 2, away from the 1 and
+  0 both modes write. On 3.12.0 the returned list carries 1 and 0; 3.12.1 and
+  3.12.2 return 5 and 2 (each observed on that release).
+* With echo off and a line written to the controller, `setraw()` with the
+  default `when` or `TCSAFLUSH` leaves nothing to read on the terminal
+  (`select()` with a 0.2 s timeout), and with `TCSADRAIN` or `TCSANOW` the
+  whole line is still there to read; observed on Linux on 3.10 to 3.14, and run by the macOS
+  CI job.
+* A child process that calls `setraw()` on an inherited terminal descriptor
+  and exits leaves the terminal in raw mode for the parent to read back.
+* `setcbreak()` leaves `ICRNL` as it was, set or clear, on every version
+  except 3.12.0 and 3.12.1, which clear it (observed on 3.10, 3.11,
+  3.12.0-3.12.2, 3.13 and 3.14).
+* With echo on and canonical mode, one byte written to the controller without
+  a line end is not readable on the terminal within 0.2 s; after `setraw()` or
+  `setcbreak()` with `TCSANOW` it is, and reads back as that one byte.
 * `cfmakeraw()` and `cfmakecbreak()` (3.12+) are asserted to return `None`,
-  to leave the list they were given as the same object, and to make no
+  to change the flag words of the list they were given, and to make no
   `tcgetattr()` or `tcsetattr()` call: both names are replaced, in `tty` and in
   `termios`, by functions that raise. The list each produces carries the same
   four flag words that `setraw()` or `setcbreak()` leaves on the terminal.
-  From 3.12.2 both cbreak functions are asserted to leave `ICRNL` set.
+  From 3.12.2 `cfmakecbreak()` is asserted to leave `ICRNL` as it was.
+* `IFLAG` to `CC` are asserted to be 0 to 6, and `mode[tty.CC]` to be the
+  `NCCS`-entry control-character list.
 * Both fenced blocks run in their own subprocess on a fresh pseudo-terminal,
   and a mutated assertion is asserted to make its block fail. The second block
   calls `cfmakeraw()`, so on 3.10 and 3.11 it is skipped by name.
@@ -48,6 +66,7 @@ from __future__ import annotations
 import os
 import pathlib
 import re
+import select
 import subprocess
 import sys
 import textwrap
@@ -64,21 +83,28 @@ import tty  # noqa: E402  (after the platform guard)
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "tty.md"
 EXPECTED_BLOCKS = 2
 HAS_CFMAKE = sys.version_info >= (3, 12)
+CBREAK_CLEARS_ICRNL = (3, 12, 0) <= sys.version_info < (3, 12, 2)
 CFMAKE_ONLY = pytest.mark.skipif(not HAS_CFMAKE, reason="cfmakeraw/cfmakecbreak are 3.12+")
 
 
 @pytest.fixture
-def terminal() -> Iterator[int]:
-    """The terminal end of a fresh pseudo-terminal pair."""
+def pair() -> Iterator[tuple[int, int]]:
+    """Both ends of a fresh pseudo-terminal pair, controller first."""
     try:
         controller, slave = os.openpty()
     except OSError:  # pragma: no cover - only on a build without ptys
         pytest.skip("missing pty: needs a working pseudo-terminal")
     try:
-        yield slave
+        yield controller, slave
     finally:
         os.close(slave)
         os.close(controller)
+
+
+@pytest.fixture
+def terminal(pair: tuple[int, int]) -> int:
+    """The terminal end of a fresh pseudo-terminal pair."""
+    return pair[1]
 
 
 class CallCounter:
@@ -149,11 +175,17 @@ class TestModeChangesAreOneReadAndOneWrite:
         assert mode[tty.LFLAG] & termios.ISIG
         assert mode[tty.OFLAG] & termios.OPOST
 
-    @CFMAKE_ONLY
+    @pytest.mark.skipif(
+        sys.version_info < (3, 12, 1), reason="the original attributes are returned from 3.12.1"
+    )
     @pytest.mark.parametrize("change", [tty.setraw, tty.setcbreak])
     def test_the_replaced_attributes_are_returned_and_restore_the_terminal(
         self, terminal: int, change: Callable[[int], Any]
     ) -> None:
+        mode = termios.tcgetattr(terminal)
+        mode[tty.CC][termios.VMIN] = b"\x05"
+        mode[tty.CC][termios.VTIME] = b"\x02"
+        termios.tcsetattr(terminal, termios.TCSANOW, mode)
         before = termios.tcgetattr(terminal)
 
         saved = change(terminal)
@@ -162,6 +194,84 @@ class TestModeChangesAreOneReadAndOneWrite:
 
         assert saved == before
         assert without_pendin(termios.tcgetattr(terminal)) == before
+
+    @pytest.mark.skipif(CBREAK_CLEARS_ICRNL, reason="3.12.0 and 3.12.1 clear ICRNL")
+    @pytest.mark.parametrize("icrnl", [True, False])
+    def test_cbreak_leaves_carriage_return_translation_as_it_was(
+        self, terminal: int, icrnl: bool
+    ) -> None:
+        mode = termios.tcgetattr(terminal)
+        mode[tty.IFLAG] = (
+            mode[tty.IFLAG] | termios.ICRNL if icrnl else mode[tty.IFLAG] & ~termios.ICRNL
+        )
+        termios.tcsetattr(terminal, termios.TCSANOW, mode)
+
+        tty.setcbreak(terminal)
+
+        assert bool(termios.tcgetattr(terminal)[tty.IFLAG] & termios.ICRNL) is icrnl
+
+    @pytest.mark.parametrize("change", [tty.setraw, tty.setcbreak])
+    def test_one_byte_is_readable_without_a_line_end(
+        self, pair: tuple[int, int], change: Callable[[int, int], Any]
+    ) -> None:
+        controller, terminal = pair
+        os.write(controller, b"a")
+        assert not select.select([terminal], [], [], 0.2)[0], "canonical mode waits for a line"
+
+        change(terminal, termios.TCSANOW)
+
+        assert select.select([terminal], [], [], 5)[0]
+        assert os.read(terminal, 10) == b"a"
+
+    def test_a_mode_change_outlives_the_process_that_made_it(self, terminal: int) -> None:
+        child = "import sys, tty; tty.setraw(int(sys.argv[1]))"
+        subprocess.run(
+            [sys.executable, "-c", child, str(terminal)],
+            pass_fds=[terminal],
+            check=True,
+            timeout=60,
+        )
+
+        mode = termios.tcgetattr(terminal)
+        assert not mode[tty.LFLAG] & (termios.ECHO | termios.ICANON | termios.ISIG)
+
+
+class TestTheDefaultWhenDiscardsTypedAheadInput:
+    """Best practices: the default `TCSAFLUSH` discards unread input, and
+    `TCSADRAIN` or `TCSANOW` keeps it. Echo is turned off first, so no echoed
+    output is queued for a drain to wait on."""
+
+    @staticmethod
+    def type_ahead(controller: int, terminal: int) -> None:
+        mode = termios.tcgetattr(terminal)
+        mode[tty.LFLAG] &= ~termios.ECHO
+        termios.tcsetattr(terminal, termios.TCSANOW, mode)
+        os.write(controller, b"typed ahead\n")
+        assert select.select([terminal], [], [], 5)[0], "the line never arrived"
+
+    @pytest.mark.parametrize(
+        ("when", "kept"),
+        [
+            (None, False),
+            (termios.TCSAFLUSH, False),
+            (termios.TCSADRAIN, True),
+            (termios.TCSANOW, True),
+        ],
+    )
+    def test_unread_input_survives_only_without_a_flush(
+        self, pair: tuple[int, int], when: int | None, kept: bool
+    ) -> None:
+        controller, terminal = pair
+        self.type_ahead(controller, terminal)
+
+        if when is None:
+            tty.setraw(terminal)
+        else:
+            tty.setraw(terminal, when)
+
+        assert bool(select.select([terminal], [], [], 0.2)[0]) is kept
+        if kept:
+            assert os.read(terminal, 100) == b"typed ahead\n"
 
 
 @CFMAKE_ONLY
@@ -206,15 +316,29 @@ class TestCfmakeEditsTheListOnly:
         assert flag_words(mode) == flag_words(termios.tcgetattr(terminal))
 
     @pytest.mark.skipif(sys.version_info < (3, 12, 2), reason="ICRNL is kept from 3.12.2")
-    def test_cbreak_leaves_carriage_return_translation_on(self, terminal: int) -> None:
+    @pytest.mark.parametrize("icrnl", [True, False])
+    def test_cbreak_leaves_carriage_return_translation_as_it_was(
+        self, terminal: int, icrnl: bool
+    ) -> None:
         mode = termios.tcgetattr(terminal)
-        assert mode[tty.IFLAG] & termios.ICRNL
+        mode[tty.IFLAG] = (
+            mode[tty.IFLAG] | termios.ICRNL if icrnl else mode[tty.IFLAG] & ~termios.ICRNL
+        )
+
         getattr(tty, "cfmakecbreak")(mode)  # noqa: B009 - typeshed 3.12+
 
-        tty.setcbreak(terminal)
+        assert bool(mode[tty.IFLAG] & termios.ICRNL) is icrnl
 
-        assert mode[tty.IFLAG] & termios.ICRNL
-        assert termios.tcgetattr(terminal)[tty.IFLAG] & termios.ICRNL
+
+class TestConstantsIndexTheAttributeList:
+    """`tty.IFLAG` to `tty.CC`: O(1) indices 0 to 6 into the attribute list."""
+
+    def test_the_indices_follow_the_list_layout(self, terminal: int) -> None:
+        names = ["IFLAG", "OFLAG", "CFLAG", "LFLAG", "ISPEED", "OSPEED", "CC"]
+        mode = termios.tcgetattr(terminal)
+
+        assert [getattr(tty, name) for name in names] == list(range(7)) == list(range(len(mode)))
+        assert len(mode[tty.CC]) == termios.NCCS
 
 
 def _blocks() -> list[tuple[int, str]]:

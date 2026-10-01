@@ -7,7 +7,8 @@ seven-item attribute list that `termios.tcgetattr()` returns.
 Every operation here is O(1). The attribute list has a fixed length, and its control-character
 list holds `termios.NCCS` entries, a constant of the platform, so nothing on this page grows
 with an input. The one wait is outside that bound: with `TCSADRAIN` or the default `TCSAFLUSH`,
-`tcsetattr()` does not return until output already queued for the terminal has been sent.
+`tcsetattr()` does not return until output already queued for the terminal has been sent, and
+`TCSAFLUSH` also discards input that has arrived but not been read.
 
 ## Complexity Reference
 
@@ -17,7 +18,7 @@ with an input. The one wait is outside that bound: with `TCSADRAIN` or the defau
 |-----------|------|-------|-------|
 | `tty.setraw(fd, when=termios.TCSAFLUSH)` | O(1) | O(1) | One `tcgetattr()` and one `tcsetattr()`; also turns off signal keys and output processing |
 | `tty.setcbreak(fd, when=termios.TCSAFLUSH)` | O(1) | O(1) | One `tcgetattr()` and one `tcsetattr()`; turns off echo and line buffering, keeps signal keys and output processing |
-| Restoring with `termios.tcsetattr(fd, when, saved)` | O(1) | O(1) | `saved` from `termios.tcgetattr()`, or from the return value of `setraw()`/`setcbreak()` on 3.12+ |
+| Restoring with `termios.tcsetattr(fd, when, saved)` | O(1) | O(1) | `saved` from `termios.tcgetattr()`, or from the return value of `setraw()`/`setcbreak()` on 3.12.1+ |
 
 ### Editing an attribute list
 
@@ -26,12 +27,18 @@ with an input. The one wait is outside that bound: with `TCSADRAIN` or the defau
 | `tty.cfmakeraw(mode)` | O(1) | O(1) | Edits `mode` in place and makes no system call; 3.12+ |
 | `tty.cfmakecbreak(mode)` | O(1) | O(1) | Edits `mode` in place and makes no system call; 3.12+ |
 
+### Constants
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `tty.IFLAG`, `tty.OFLAG`, `tty.CFLAG`, `tty.LFLAG`, `tty.ISPEED`, `tty.OSPEED`, `tty.CC` | O(1) | O(1) | Indices 0 to 6 into the attribute list |
+
 ## Raw and Cbreak Mode
 
-Both modes deliver input a byte at a time without echoing it. Raw mode also turns off the
-keys that raise signals and the terminal's output processing, so Ctrl-C arrives as a byte
-rather than as `KeyboardInterrupt`. Save the attributes first and restore them in a
-`finally` block; the saved list is all that restoring needs.
+Both modes make input readable as each byte arrives, without waiting for a whole line, and
+without echoing it. Raw mode also turns off the keys that raise signals and the terminal's output
+processing, so Ctrl-C arrives as a byte rather than as `KeyboardInterrupt`. Save the attributes
+first and restore them in a `finally` block; the saved list is all that restoring needs.
 
 ```python
 import os
@@ -45,7 +52,7 @@ try:
         tty.setcbreak(terminal)               # O(1)
         mode = termios.tcgetattr(terminal)
         assert not mode[tty.LFLAG] & (termios.ECHO | termios.ICANON)
-        assert mode[tty.LFLAG] & termios.ISIG # Ctrl-C still interrupts
+        assert mode[tty.LFLAG] & termios.ISIG # signal keys stay on
 
         tty.setraw(terminal)                  # O(1)
         mode = termios.tcgetattr(terminal)
@@ -87,12 +94,30 @@ finally:
     os.close(controller)
 ```
 
+## Performance Best Practices
+
+✅ **Do**:
+
+- Save the attributes once and restore them in `finally`: both are O(1), and a terminal left in
+  raw mode outlives the program
+- Switch back and forth with lists prepared once by `cfmakeraw()` or `cfmakecbreak()` (3.12+): each
+  switch is then one `tcsetattr()`, where `setraw()` and `setcbreak()` also read the attributes first
+
+❌ **Avoid**:
+
+- The default `TCSAFLUSH` when input typed ahead matters - it is discarded; pass `TCSADRAIN` or
+  `TCSANOW` as `when`
+- Restoring from the value `setraw()` or `setcbreak()` returns in code that also runs before
+  3.12.1 - call `termios.tcgetattr()` first instead
+
 ## Version Notes
 
 - **Python 3.12+**: Added `cfmakeraw()` and `cfmakecbreak()`; `setraw()` and `setcbreak()` return
-  the attributes they replaced
+  a list instead of `None`
+- **Python 3.12.1+**: That list is the attributes the call replaced, and restores the terminal; on
+  3.12.0 its `VMIN` and `VTIME` entries already hold the new mode's values
 - **Python 3.12.2+**: `setcbreak()` and `cfmakecbreak()` leave carriage-return translation
-  (`ICRNL`) on
+  (`ICRNL`) as it was, which `setcbreak()` also does on 3.10 and 3.11; 3.12.0 and 3.12.1 clear it
 
 ## Related Modules
 
