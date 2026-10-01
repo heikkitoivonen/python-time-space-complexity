@@ -17,13 +17,12 @@ Measurement scope:
   256x; 78x to 136x was measured on 3.10 to 3.14. The control is 1,250
   against 20,000 lines of `x = x + 1`, with no targets, which must grow less
   than 40x and measured 16x to 17x on 3.14.
-* The per-instruction target lookup: 3,000 branches followed by 12,000
-  straight lines, against 13,000 straight lines, through
-  `list(get_instructions())`, each divided by the instructions it yields. The
-  whole pass is timed, branches included. On 3.10 the branchy function must
-  cost more than 2.5x per instruction (x16 measured); on 3.11+ less than
-  2.5x (x1.08 to x1.19). x86_64 CI weighs the scan less: 1,000 branches cost
-  x2.65 there on 3.10 as a whole-run ratio, against x6.6 on aarch64.
+* The per-instruction target lookup: 10, 100 and 1,000 branches followed by
+  100 straight lines. `findlabels()` returns the real targets as int
+  subclasses with counting equality and unchanged hashes. Every instruction
+  beyond the last target compares against every target on 3.10, and against
+  none on 3.11+, where their hashes differ. The jump-target flags must match
+  an uninstrumented pass. Target collection and formatting are not timed.
 * Laziness: draining `get_instructions()` over a one-line function of about
   40,000 code units without keeping the instructions peaks under 50 KB, and
   `list()` of it over 5 MB. That input has one line and no targets, so it
@@ -247,24 +246,48 @@ class TestJumpTargetsAreQuadratic:
 
 
 class TestTargetLookupPerInstruction:
-    """Version Notes: from 3.11 each instruction's offset is looked up in a set
-    of targets; on 3.10 it scans the list, O(n·t). Three thousand targets ahead
-    of a long straight tail separate the two."""
+    """Version Notes: from 3.11 each instruction's offset is looked up in a hash table
+    of targets; on 3.10 it scans the list, O(n·t). Counting comparisons for
+    offsets beyond every target separates the two without a stopwatch."""
 
-    @staticmethod
-    def per_instruction_ns(code: types.CodeType) -> float:
-        count = len(list(dis.get_instructions(code)))
-        return best_ns(lambda: list(dis.get_instructions(code)), repeats=3) / count
+    @pytest.mark.parametrize("count", [10, 100, 1000])
+    def test_only_3_10_compares_tail_offsets_against_every_target(
+        self, monkeypatch: pytest.MonkeyPatch, count: int
+    ) -> None:
+        code = branches(count, tail=100)
+        labels = targets(code)
+        assert len(labels) == count
+        last_target = max(labels)
+        expected = list(dis.get_instructions(code))
+        tail_count = sum(instruction.offset > last_target for instruction in expected)
+        assert tail_count >= 100
+        comparisons = 0
 
-    @pytest.mark.timing
-    def test_three_thousand_targets_only_cost_the_tail_on_3_10(self) -> None:
-        branchy, plain = branches(3000, tail=12000), straight(13000)
+        class Target(int):
+            __hash__ = int.__hash__
 
-        ratio = self.per_instruction_ns(branchy) / self.per_instruction_ns(plain)
+            def __eq__(self, other: object) -> bool:
+                nonlocal comparisons
+                if isinstance(other, int) and other > last_target:
+                    comparisons += 1
+                return super().__eq__(other)
+
+        calls: list[bytes] = []
+
+        def counted_labels(raw: bytes) -> list[int]:
+            calls.append(raw)
+            return [Target(label) for label in labels]
+
+        monkeypatch.setattr(dis, "findlabels", counted_labels)
+        actual = list(dis.get_instructions(code))
+        assert calls == [code.co_code]
+        assert [instruction.is_jump_target for instruction in actual] == [
+            instruction.is_jump_target for instruction in expected
+        ]
         if sys.version_info < (3, 11):
-            assert ratio > 2.5, f"3,000 targets cost x{ratio:.2f} per instruction on 3.10"
+            assert comparisons == tail_count * count
         else:
-            assert ratio < 2.5, f"3,000 targets cost x{ratio:.2f} per instruction"
+            assert comparisons == 0
 
 
 class TestIterationIsLazy:

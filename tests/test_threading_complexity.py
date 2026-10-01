@@ -39,13 +39,14 @@ Observation settles every row that has something to observe:
   and a Thread without a target runs nothing; ``join()`` on a finished
   thread returns in under 2.5 seconds with a five-second timeout, and on a
   blocked one returns after its 50 ms timeout with the thread still alive;
+  timeout measurements allow 5 ms of native-clock rounding;
 * each of the eight deprecated aliases emits exactly one DeprecationWarning
   per call, and on 3.14 so does an argument to ``RLock()``;
 * a cancelled 10-second Timer is joined within two seconds and never calls
-  its function; a 50 ms one calls it once, after at least 50 ms; a cancel
+  its function; a 50 ms one calls it once, after at least 45 ms; a cancel
   that arrives while the function is running does not stop it;
 * a free Lock is taken by a non-blocking acquire, a held one refuses it and
-  gives up a 50 ms timed acquire after at least 50 ms; a free lock accepts
+  gives up a 50 ms timed acquire after at least 45 ms; a free lock accepts
   TIMEOUT_MAX as a timeout, and TIMEOUT_MAX + 1 raises OverflowError from
   Lock, RLock, Event, Semaphore, Barrier and a ``join()`` on a live thread
   alike; releasing an unheld lock raises RuntimeError; an RLock held three
@@ -133,6 +134,9 @@ PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "threading.md"
 EXPECTED_BLOCKS = 5
 WAIT = 5.0
 SHORT = 0.05
+# Native waits (notably Windows' millisecond waits) and perf_counter use
+# different clock resolutions. A 5 ms allowance still excludes immediate return.
+SHORT_MIN = SHORT * 0.9
 
 CLASSES: dict[str, type] = {
     "Thread": threading.Thread,
@@ -412,7 +416,7 @@ class TestThreadRows:
             start = time.perf_counter()
             blocked.join(SHORT)
             elapsed = time.perf_counter() - start
-            assert elapsed >= SHORT, elapsed
+            assert elapsed >= SHORT_MIN, elapsed
             assert blocked.is_alive()
         finally:
             gate.set()
@@ -486,7 +490,7 @@ class TestThreadRows:
         join_all([timer])
 
         assert len(calls) == 1
-        assert calls[0] - start >= SHORT
+        assert calls[0] - start >= SHORT_MIN
 
     def test_timer_cancel_does_not_stop_a_function_already_running(
         self, gate: threading.Event
@@ -529,7 +533,8 @@ class TestLockRows:
         assert lock.acquire(blocking=False) is False
         start = time.perf_counter()
         assert lock.acquire(timeout=SHORT) is False
-        assert time.perf_counter() - start >= SHORT
+        elapsed = time.perf_counter() - start
+        assert elapsed >= SHORT_MIN, elapsed
 
         lock.release()
         assert not lock.locked()
@@ -862,9 +867,8 @@ class TestEventRows:
         assert not event.is_set()
         start = time.perf_counter()
         assert event.wait(SHORT) is False
-        # Windows times the wait in whole milliseconds on a coarser clock than
-        # perf_counter(), and it measured 49.4 ms for 50 ms on a CI runner.
-        assert time.perf_counter() - start >= SHORT * 0.9
+        elapsed = time.perf_counter() - start
+        assert elapsed >= SHORT_MIN, elapsed
 
     def test_set_wakes_every_waiter(self) -> None:
         event = threading.Event()

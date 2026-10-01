@@ -2,19 +2,21 @@
 
 The page prices every call in the module at O(1) except one: on Linux,
 `getrusage(RUSAGE_SELF)` sums the counters of every thread in the process, so
-it is O(t) in threads. That row is settled by timing the call against a
-growing number of idle threads, with the thread-only and children-only calls
-as controls that must stay flat. Everything else - what a snapshot holds, the
-units of `ru_maxrss`, when children are counted, how soft and hard limits
+it is O(t) in threads. Timing the call against a growing number of idle
+threads establishes its dependence on t, with the thread-only and
+children-only calls as controls that must stay flat. The linear upper bound
+comes from the kernel's thread walks. Everything else - what a snapshot holds,
+the units of `ru_maxrss`, when children are counted, how soft and hard limits
 behave - is settled by observation, with no tolerance.
 
 Measurement scope:
 
 * The fastest of seven batches of `getrusage(RUSAGE_SELF)` is measured with
-  0, 49 and 499 extra idle threads. Subtracting the zero-thread baseline
-  separates the thread walk from fixed syscall and Python result-building
-  costs. The added cost must grow between 3x and 30x from 49 to 499 threads:
-  linear predicts about 10x, quadratic about 100x. `RUSAGE_THREAD`,
+  0, 49 and 499 extra idle threads. The 49-thread cost must exceed the
+  baseline, and the 499-thread cost must exceed the 49-thread cost by 3x.
+  This distinguishes thread-dependent work from a constant-time snapshot;
+  it does not distinguish linear from quadratic growth. Raw costs include
+  the fixed syscall and Python result-building costs. `RUSAGE_THREAD`,
   `RUSAGE_CHILDREN` and `getrlimit()` each stay under 3x their baseline at
   both thread counts. Linux only, where getrusage walks the thread group.
 * `getrusage()` returns a new `struct_rusage` on every call, 16 items long,
@@ -49,6 +51,13 @@ Measurement scope:
 
 Not settled here:
 
+* The O(t) upper bound is sourced from Linux v6.12 kernel/sys.c's
+  `getrusage()` / `accumulate_thread_rusage()` and kernel/sched/cputime.c's
+  `thread_group_cputime()`: each walk adds a fixed set of counters per
+  thread. https://github.com/torvalds/linux/blob/v6.12/kernel/sys.c and
+  https://github.com/torvalds/linux/blob/v6.12/kernel/sched/cputime.c.
+  Wall-clock ratios do not count kernel operations: cache locality and
+  memory placement are uncontrolled, so no upper timing ratio is asserted.
 * macOS is not timed: whether its `RUSAGE_SELF` grows with threads is not
   measured, so the page states the thread walk for Linux only. O(t) is an
   upper bound wherever the call is in fact O(1).
@@ -157,8 +166,9 @@ class TestRusageSelfWalksEveryThread:
     """`getrusage(RUSAGE_SELF)` | O(t); `RUSAGE_THREAD`, `RUSAGE_CHILDREN` | O(1).
 
     The same process is timed with 0, 49 and 499 extra idle threads.
-    Baseline subtraction isolates the growing thread walk; the controls
-    read one thread or one running total and stay flat.
+    Growing cost distinguishes the thread walk from constant work; the
+    controls read one thread or one running total and stay flat. The linear
+    upper bound follows from kernel source, not a wall-clock growth ceiling.
     """
 
     THREADS = (49, 499)
@@ -190,10 +200,11 @@ class TestRusageSelfWalksEveryThread:
     def test_rusage_self_grows_with_threads(self, costs: list[dict[str, float]]) -> None:
         alone, medium, crowded = (measurement["self"] for measurement in costs)
         assert medium > alone, f"49 extra threads must add work: {costs}"
-        ratio = (crowded - alone) / (medium - alone)
-        assert 3 < ratio < 30, (
+        ratio = crowded / medium
+        assert ratio > 3, (
             f"RUSAGE_SELF cost {alone:.0f}, {medium:.0f}, {crowded:.0f}ns with "
-            f"0, 49, 499 extra threads; baseline-subtracted growth x{ratio:.1f}"
+            f"0, 49, 499 extra threads; 49-to-499 growth x{ratio:.1f}; "
+            "constant-time work would stay near x1"
         )
 
     @pytest.mark.parametrize("name", ["thread", "children", "getrlimit"])
