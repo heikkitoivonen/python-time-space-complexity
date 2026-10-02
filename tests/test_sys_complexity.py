@@ -49,8 +49,8 @@ Measurement scope:
   four orders of magnitude apart, asserting the larger costs less than twice
   the smaller.
 * `sys.intern` retention: 500 strings of 20,000 characters interned and
-  dropped retains 10.0 MB on 3.12.5 and 3.12.6 and 0.0 MB on 3.10, 3.11,
-  3.12.7, 3.12.14, 3.13 and 3.14. The immortal window is a patch range, not a
+  dropped in a fresh interpreter retains 10.0 MB on 3.12.5 and 3.12.6 and
+  0.0 MB on 3.10, 3.11, 3.12.7, 3.12.14, 3.13 and 3.14. The immortal window is a patch range, not a
   minor release: gh-113993 landed in 3.12.7.
 * The rest is counted rather than timed: hooks fired, `find_spec` calls,
   `__sizeof__` calls, traceback frames printed, `firstiter` calls, entries in
@@ -138,7 +138,6 @@ import textwrap
 import threading
 import time
 import timeit
-import tracemalloc
 from collections.abc import AsyncIterator, Callable, Iterator
 from types import FrameType
 from typing import Any
@@ -175,7 +174,9 @@ def run_isolated(
     executing, so the tests for those run out of process rather than leaving
     the suite in a changed state. So does the intern timing test: on 3.12.0 to
     3.12.6 an interned string is immortal, and it interns some 200 MB of them
-    that would otherwise stay resident for the rest of the run.
+    that would otherwise stay resident for the rest of the run. The intern
+    retention test runs out of process for a different reason: what earlier
+    tests interned sets the size of the table it would resize.
     """
     return subprocess.run(
         [sys.executable, "-c", textwrap.dedent(source)],
@@ -879,24 +880,36 @@ class TestIntern:
         `getunicodeinternedsize()` arrived in 3.12, so the count test above
         cannot see 3.10 or 3.11. Traced allocation can: intern a payload,
         drop every reference to it, and see whether the memory comes back.
+        It runs in a fresh interpreter because the 500 insertions can resize
+        the process-wide intern table, and that table's size depends on how
+        many strings the tests before it interned. In-process, after the rest
+        of the serial suite, one such resize traces 14.7 MiB at the intern
+        call, more than the payload itself.
         """
         payload = 500 * 20_000  # bytes of ASCII, if every string is kept
 
-        def intern_and_discard() -> None:
-            """Nothing outlives this call, so its locals cannot hold them."""
-            for index in range(500):
-                sys.intern(str(index).rjust(20_000, "q"))
+        result = run_isolated(
+            """
+            import gc
+            import sys
+            import tracemalloc
 
-        tracemalloc.start()
-        try:
+            def intern_and_discard():
+                # Nothing outlives this call, so its locals cannot hold them.
+                for index in range(500):
+                    sys.intern(str(index).rjust(20_000, "q"))
+
+            tracemalloc.start()
             base, _ = tracemalloc.get_traced_memory()
             intern_and_discard()
             gc.collect()
             current, _ = tracemalloc.get_traced_memory()
-        finally:
-            tracemalloc.stop()
+            print(current - base)
+            """
+        )
 
-        retained = current - base
+        assert result.returncode == 0, result.stderr
+        retained = int(result.stdout)
         if IMMORTAL_INTERNING:
             assert retained > payload * 0.5, (
                 f"interning is immortal here, so the payload should still be held: "
