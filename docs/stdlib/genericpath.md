@@ -1,357 +1,216 @@
-# Genericpath Module Complexity
+# genericpath Module Complexity
 
-The `genericpath` module provides generic pathname utilities shared by `posixpath` and `ntpath`. It's part of the internal implementation but can be imported directly.
+The `genericpath` module holds the path functions that `posixpath` and `ntpath` share; import
+them from `os.path`. On POSIX `os.path` re-exports every one of them, and on Windows it replaces
+several of the type checks with its own, priced on the [ntpath](ntpath.md) page. Apart from
+`commonprefix()`, every function here is at most two calls to the stat family and holds nothing
+between calls.
 
-## Common Operations
+A syscall counts as O(1), as it does on the [os](os.md) page: the kernel still resolves the path
+component by component, but that is not what a caller chooses between. For `commonprefix()`, `n`
+is the items in the list, `B` their total length, and `p` the length of the prefix returned.
+
+## Complexity Reference
+
+### Path comparison
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `commonprefix(list)` | O(n*m) | O(n) | Find common string prefix |
-| `exists(path)` | O(1) | O(1) | Check if path exists |
-| `lexists(path)` | O(1) | O(1) | Check if path exists (even if broken symlink) |
-| `isfile(path)` | O(1) | O(1) | Check if file |
-| `isdir(path)` | O(1) | O(1) | Check if directory |
-| `islink(path)` | O(1) | O(1) | Check if symlink |
-| `isjunction(path)` | O(1) | O(1) | Check Windows junction |
-| `isdevdrive(path)` | O(1) | O(1) | Check Windows Dev Drive |
-| `getsize(path)` | O(1) | O(1) | Get file size |
-| `getmtime(path)` | O(1) | O(1) | Get modification time |
-| `getatime(path)` | O(1) | O(1) | Get access time |
-| `getctime(path)` | O(1) | O(1) | Get creation time |
-| `samefile(a, b)` | O(1) | O(1) | Compare underlying file identity |
-| `samestat(stat1, stat2)` | O(1) | O(1) | Compare stat results |
-| `sameopenfile(fd1, fd2)` | O(1) | O(1) | Compare open file descriptors |
+| `genericpath.commonprefix(m)` | O(n + B) | O(n + p) | Character by character, so it can end mid-component; a list of component lists compares whole components |
 
-## Path Comparison
+### File type checks
 
-### commonprefix()
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `genericpath.exists(path)` | O(1) | O(1) | One stat; `False` for a missing, unreachable or invalid path rather than an error |
+| `genericpath.lexists(path)` | O(1) | O(1) | One lstat; `True` for a broken symlink. Python 3.13+ |
+| `genericpath.isfile(path)` | O(1) | O(1) | One stat, following symlinks |
+| `genericpath.isdir(path)` | O(1) | O(1) | One stat, following symlinks |
+| `genericpath.islink(path)` | O(1) | O(1) | One lstat. Python 3.12+ |
+| `genericpath.isjunction(path)` | O(1) | O(1) | Always `False` without touching the disk; Windows's `os.path` replaces it. Python 3.13+ |
+| `genericpath.isdevdrive(path)` | O(1) | O(1) | Always `False` without touching the disk; Windows's `os.path` replaces it. Python 3.13+ |
 
-#### Time Complexity: O(n*m)
+### File statistics
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `genericpath.getsize(filename)` | O(1) | O(1) | One stat; raises rather than returning `False` |
+| `genericpath.getmtime(filename)` | O(1) | O(1) | One stat |
+| `genericpath.getatime(filename)` | O(1) | O(1) | One stat |
+| `genericpath.getctime(filename)` | O(1) | O(1) | One stat; metadata change time on POSIX, creation time on Windows |
+
+### File identity
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `genericpath.samefile(f1, f2)` | O(1) | O(1) | Two stats; raises if either fails |
+| `genericpath.sameopenfile(fp1, fp2)` | O(1) | O(1) | Two fstats; takes file descriptors, not file objects |
+| `genericpath.samestat(s1, s2)` | O(1) | O(1) | No syscall: compares the device and inode numbers of two results already fetched |
+
+### Constants
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `genericpath.ALLOW_MISSING` | O(1) | O(1) | The `strict=` value for `os.path.realpath()` that tolerates a missing tail |
+
+## Comparing Paths
+
+### Characters vs Components
+
+`commonprefix()` finds the smallest and largest item and walks them together. That is linear in
+the item count and their total length, and it keeps only the item references and the answer. It compares characters, not
+path components: pass lists of components when the result must be a directory.
 
 ```python
 import genericpath
 
-# Find common prefix: O(n*m) character comparison
-paths = ['prefix/path1', 'prefix/path2', 'prefix/other']
-prefix = genericpath.commonprefix(paths)  # O(n*m)
-# Result: 'prefix/'
+paths = ['/srv/app1/log', '/srv/app2/log']
+assert genericpath.commonprefix(paths) == '/srv/app'  # O(n + B) - ends mid-component
 
-# All same
-prefix = genericpath.commonprefix(['abc', 'abc', 'abc'])  # O(n*m)
-# Result: 'abc'
+parts = [path.split('/') for path in paths]
+assert genericpath.commonprefix(parts) == ['', 'srv']  # O(n + B) - whole components
 
-# No common prefix
-prefix = genericpath.commonprefix(['xyz', 'abc'])  # O(n*m)
-# Result: ''
+assert genericpath.commonprefix([]) == ''
+assert genericpath.commonprefix(['abc', 'abd', 'xyz']) == ''
 ```
 
-#### Space Complexity: O(m)
+## Checking Files
 
-```python
-import genericpath
+### One Stat per Call
 
-paths = ['a' * 1000, 'a' * 1000, 'b' * 1000]
-prefix = genericpath.commonprefix(paths)  # O(m) space for result
-```
-
-File identity helpers can compare paths or stat results:
+`exists()`, `lexists()`, `isfile()`, `isdir()`, `islink()` and each `get*()` function make their
+own stat call. The checks return `False` for a path that is missing, unreachable or contains a NUL;
+the `get*()` functions and `samefile()` raise instead.
 
 ```python
 import genericpath
 import os
+import tempfile
 
-same = genericpath.samefile("a.txt", "b.txt")  # O(1)
-same = genericpath.sameopenfile(os.open("a.txt", os.O_RDONLY),
-                                os.open("a.txt", os.O_RDONLY))  # O(1)
-stat1 = os.stat("a.txt")
-stat2 = os.stat("b.txt")
-same = genericpath.samestat(stat1, stat2)  # O(1)
+with tempfile.TemporaryDirectory() as directory:
+    path = os.path.join(directory, 'data.txt')
+    with open(path, 'w') as file:
+        file.write('hello')
+
+    assert genericpath.exists(path)       # O(1) - one stat
+    assert genericpath.isfile(path)       # O(1) - one stat
+    assert genericpath.isdir(directory)   # O(1) - one stat
+    assert genericpath.getsize(path) == 5  # O(1) - one stat
+
+    missing = os.path.join(directory, 'missing.txt')
+    assert not genericpath.exists(missing)
+    assert not genericpath.isfile('bad\0name')  # invalid paths are False too
+    try:
+        genericpath.getsize(missing)
+    except FileNotFoundError:
+        pass
+    else:
+        raise AssertionError('getsize() of a missing file returned')
 ```
 
-## Path Existence and Type Checks
+### Junctions and Dev Drives
 
-### exists(), lexists(), isfile(), isdir()
-
-#### Time Complexity: O(1)
+`isjunction()` and `isdevdrive()` here are the answer for platforms that have neither. They check
+that the argument is a path and return `False` without a syscall; on Windows, `os.path` supplies
+versions that ask the filesystem.
 
 ```python
 import genericpath
 
-# Single stat call: O(1)
-if genericpath.exists('/path/to/file'):  # O(1) stat
-    print('exists')
+assert genericpath.isjunction('/no/such/path') is False  # O(1) - no syscall
+assert genericpath.isdevdrive('/no/such/path') is False  # O(1) - no syscall
 
-if genericpath.lexists('/path/to/maybe-link'):  # O(1) lstat
-    print('exists (even if broken symlink)')
-
-if genericpath.isfile('/path/to/file'):  # O(1) stat
-    print('is file')
-
-if genericpath.isdir('/path/to/dir'):  # O(1) stat
-    print('is directory')
-
-# Multiple checks: O(k) where k = checks
-for path in paths:  # k paths
-    if genericpath.exists(path):  # O(1) per check
-        process(path)
+try:
+    genericpath.isjunction(42)
+except TypeError:
+    pass
+else:
+    raise AssertionError('a non-path was accepted')
 ```
 
-#### Space Complexity: O(1)
+## File Identity
+
+Two names, or two descriptors, are the same file when their device and inode numbers match.
+`samefile()` and `sameopenfile()` fetch both stat results each time; `samestat()` compares results
+you already hold.
 
 ```python
 import genericpath
+import os
+import tempfile
 
-# No additional storage
-result = genericpath.exists('/path')  # O(1) space
-```
+with tempfile.TemporaryDirectory() as directory:
+    original = os.path.join(directory, 'a.txt')
+    alias = os.path.join(directory, 'b.txt')
+    other = os.path.join(directory, 'c.txt')
+    for name in (original, other):
+        with open(name, 'w') as file:
+            file.write('x')
+    os.link(original, alias)
 
-### islink()
+    assert genericpath.samefile(original, alias)       # O(1) - two stats
+    assert not genericpath.samefile(original, other)
 
-#### Time Complexity: O(1)
+    with open(original) as first, open(alias) as second:
+        assert genericpath.sameopenfile(first.fileno(), second.fileno())  # O(1) - two fstats
 
-```python
-import genericpath
-
-# Check if symlink: O(1) lstat
-if genericpath.islink('/path/to/link'):  # O(1)
-    print('is symlink')
-```
-
-#### Space Complexity: O(1)
-
-```python
-import genericpath
-
-is_link = genericpath.islink('/path')  # O(1) space
-```
-
-Windows-only checks also include junctions and Dev Drives:
-
-```python
-import genericpath
-
-if genericpath.isjunction('C:\\\\path\\\\to\\\\junction'):  # O(1)
-    print('is junction')
-
-if genericpath.isdevdrive('C:\\\\path'):  # O(1)
-    print('is dev drive')
-```
-
-## File Statistics
-
-### getsize(), getmtime(), getatime(), getctime()
-
-#### Time Complexity: O(1)
-
-```python
-import genericpath
-
-# Get file size: O(1) stat call
-size = genericpath.getsize('/path/file.txt')  # O(1)
-
-# Get modification time: O(1)
-mtime = genericpath.getmtime('/path/file.txt')  # O(1)
-
-# Get access time: O(1)
-atime = genericpath.getatime('/path/file.txt')  # O(1)
-
-# Get creation time: O(1)
-ctime = genericpath.getctime('/path/file.txt')  # O(1)
-
-# Multiple stats: O(k) where k = files
-for file in files:  # k files
-    size = genericpath.getsize(file)  # O(1) per file
-```
-
-#### Space Complexity: O(1)
-
-```python
-import genericpath
-
-# Single numeric value returned
-size = genericpath.getsize('/path')  # O(1) space
+    stats = [os.stat(name) for name in (original, alias, other)]
+    assert genericpath.samestat(stats[0], stats[1])     # O(1) - no syscall
+    assert not genericpath.samestat(stats[0], stats[2])
 ```
 
 ## Common Patterns
 
-### Find Common Path Base
+### Reading Several Fields at Once
 
-```python
-import genericpath
-
-# Compare file paths: O(n*m)
-paths = [
-    '/home/user/docs/file1.txt',
-    '/home/user/docs/file2.txt',
-    '/home/user/downloads/file3.txt',
-]
-
-common = genericpath.commonpath(paths)  # O(n*m)
-# Result: '/home/user'
-
-# Use for batch operations on directory
-print(f'All files under: {common}')
-```
-
-### Verify Files Before Processing
-
-```python
-import genericpath
-
-def process_files_safely(file_list):
-    # Check all exist: O(n)
-    for file in file_list:
-        if not genericpath.exists(file):  # O(1) each
-            raise FileNotFoundError(file)
-    
-    # Process files
-    for file in file_list:
-        if genericpath.isfile(file):  # O(1)
-            process(file)
-```
-
-### Check File Sizes
-
-```python
-import genericpath
-
-def get_total_size(file_list):
-    """Get total size of files: O(n)"""
-    total = 0
-    for file in file_list:
-        if genericpath.isfile(file):  # O(1)
-            total += genericpath.getsize(file)  # O(1)
-    return total
-
-size = get_total_size(files)  # O(n) where n = files
-```
-
-### Find Recently Modified Files
-
-```python
-import genericpath
-import time
-
-def find_recent_files(file_list, hours=24):
-    """Find recently modified files: O(n)"""
-    cutoff = time.time() - (hours * 3600)
-    recent = []
-    
-    for file in file_list:
-        if not genericpath.isfile(file):  # O(1)
-            continue
-        
-        mtime = genericpath.getmtime(file)  # O(1)
-        if mtime > cutoff:
-            recent.append(file)
-    
-    return recent  # O(n) total
-```
-
-## Performance Characteristics
-
-### Best Practices
-
-```python
-import genericpath
-
-# Good: Cache results
-exists = genericpath.exists(path)  # O(1)
-if exists:
-    size = genericpath.getsize(path)  # O(1)
-    # Use cached knowledge
-
-# Avoid: Repeated checks
-if genericpath.exists(path):  # O(1)
-    if genericpath.isfile(path):  # O(1) - second stat!
-        process(path)
-
-# Better: Use isfile() only (does stat once)
-if genericpath.isfile(path):  # O(1)
-    process(path)
-```
-
-### Batch Operations
-
-```python
-import genericpath
-
-# Good: Single pass for multiple checks
-for file in files:  # O(n) total
-    if genericpath.exists(file):  # O(1) each
-        size = genericpath.getsize(file)  # O(1) each
-        # Total: O(n)
-
-# Avoid: Multiple iterations
-for file in files:
-    if genericpath.exists(file):  # O(n) - first pass
-        pass
-
-for file in files:
-    size = genericpath.getsize(file)  # O(n) - second pass
-```
-
-## Comparison with pathlib
-
-```python
-import genericpath
-from pathlib import Path
-
-# genericpath (functional)
-exists = genericpath.exists(path)  # O(1)
-size = genericpath.getsize(path)   # O(1)
-mtime = genericpath.getmtime(path) # O(1)
-
-# pathlib (object-oriented)
-path_obj = Path(path)
-exists = path_obj.exists()          # O(1)
-size = path_obj.stat().st_size      # O(1)
-mtime = path_obj.stat().st_mtime    # O(1)
-
-# Similar complexity, pathlib caches stat()
-```
-
-## Comparison with os module
+Each `get*()` call is a stat of its own. When you need more than one field, one `os.stat()` returns
+them all.
 
 ```python
 import genericpath
 import os
+import tempfile
 
-# genericpath
-exists = genericpath.exists(path)  # O(1)
-size = genericpath.getsize(path)   # O(1)
+with tempfile.TemporaryDirectory() as directory:
+    path = os.path.join(directory, 'data.txt')
+    with open(path, 'w') as file:
+        file.write('hello')
 
-# os module (similar but os.stat is more direct)
-stat_info = os.stat(path)  # O(1)
-exists = stat_info is not None
-size = stat_info.st_size
+    size = genericpath.getsize(path)    # O(1) - one stat
+    mtime = genericpath.getmtime(path)  # O(1) - a second stat
 
-# Both O(1), os.stat more flexible
+    info = os.stat(path)  # O(1) - one stat for every field
+    assert (info.st_size, info.st_mtime) == (size, mtime)
 ```
 
-`ALLOW_MISSING` is a public sentinel used by `os.path.realpath()` to allow missing path components.
+## Performance Best Practices
 
-## Platform Independence
+✅ **Do**:
 
-```python
-import genericpath
+- Call `isfile()` or `isdir()` directly; they already return `False` for a missing path, so an
+  `exists()` before them is a second stat
+- Call `os.stat()` once when you need several fields, instead of one `get*()` call per field
+- Keep stat results you will compare again and use `samestat()`, which makes no syscall
+- Pass component lists to `commonprefix()`, or use `os.path.commonpath()`, when the result must be
+  a directory
 
-# Works cross-platform (uses stat underneath)
-path = '/home/user/file.txt'  # or 'C:\\Users\\user\\file.txt'
+❌ **Avoid**:
 
-exists = genericpath.exists(path)  # O(1) on any platform
-size = genericpath.getsize(path)   # O(1) on any platform
-```
-
+- `exists()` followed by `getsize()` - two stats, and the file can disappear in between
+- Using `commonprefix()` on plain strings as a directory: it can stop mid-name
 
 ## Version Notes
 
-- **Python 3.x**: Full Unicode support
-- **All versions**: Low-level interface to os.stat()
+- **Python 3.12+**: `genericpath.islink()`
+- **Python 3.13+**: `genericpath.lexists()`, `isjunction()` and `isdevdrive()`
+- **Python 3.13.4+**, also 3.10.18, 3.11.13 and 3.12.11: `ALLOW_MISSING`
+- **All Python 3**: `genericpath` is an implementation module; `os.path` is the public name, and on
+  Windows it replaces several of the type checks with its own
 
-## Related Documentation
+## Related Modules
 
-- [Pathlib Module](pathlib.md) - Object-oriented paths
-- [Posixpath Module](posixpath.md) - Unix-specific paths
-- [Ntpath Module](ntpath.md) - Windows-specific paths
-- [OS Module](os.md) - Operating system interface
+- **[os](os.md)** - `os.stat()` and the `os.path` functions built on these
+- **[posixpath](posixpath.md)** - `os.path` on POSIX, including `commonpath()`
+- **[ntpath](ntpath.md)** - `os.path` on Windows, with its own type checks
+- **[stat](stat.md)** - the mode tests behind `isfile()`, `isdir()` and `islink()`
+- **[pathlib](pathlib.md)** - the same checks as methods on path objects
