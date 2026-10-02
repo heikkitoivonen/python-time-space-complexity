@@ -1,239 +1,179 @@
-# Getpass Module
+# getpass Module Complexity
 
-The `getpass` module provides utilities for prompting the user for passwords without echoing the input to the screen.
+The `getpass` module reads a password from the terminal with echo turned off, and looks up the
+current user's login name. A prompt reads one line: the module holds that line and nothing else,
+and it restores the terminal settings before it returns.
+
+`n` is the characters typed and `p` is the characters in the prompt. Every bound leaves out the
+time spent waiting for the user. `getuser()` reads at most four environment variables before it
+falls back to one lookup in the user database, whose cost the system's backend decides; a user
+name and an environment variable are priced at O(1).
 
 ## Complexity Reference
 
+### Reading a password
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `getpass()` | O(n) | O(n) | n = password length |
-| `getuser()` | O(1) | O(1) | Get current user |
-| `fallback_getpass()` | O(n) | O(n) | Fallback prompt (echoed) |
-| `unix_getpass()` | O(n) | O(n) | Unix-specific prompt |
-| `win_getpass()` | O(n) | O(n) | Windows-specific prompt |
+| `getpass.getpass(prompt='Password: ', stream=None, *, echo_char=None)` | O(p + n) | O(n) | Echo is off while the line is read, and the terminal settings are restored even when reading raises; `EOFError` on end of input |
+| `getpass.getpass(..., echo_char='*')` | O(p + n) | O(n) | Python 3.14+: `echo_char` is written for each character typed, and the module rather than the terminal handles backspace; ignored when `getpass()` falls back |
+| `getpass.unix_getpass(prompt='Password: ', stream=None)` | O(p + n) | O(n) | What `getpass()` is on Unix: tries `/dev/tty` first, then standard input, and writes the prompt to the terminal or `sys.stderr` unless `stream` is given |
+| `getpass.win_getpass(prompt='Password: ', stream=None)` | O(p + n) | O(n) | What `getpass()` is on Windows: reads console keys with `msvcrt.getwch()`, and falls back when `sys.stdin` has been replaced |
+| `getpass.fallback_getpass(prompt='Password: ', stream=None)` | O(p + n) | O(n) | Used when echo cannot be turned off: issues `GetPassWarning` and reads one line from `sys.stdin` with echo left as it is |
 
-## Common Operations
+### Current user
 
-### Getting Password Input
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `getpass.getuser()` | O(1) | O(1) | The first non-empty of `LOGNAME`, `USER`, `LNAME` and `USERNAME`; otherwise one user-database lookup by uid on Unix. Nothing is cached |
+| `getpass.GetPassWarning` | O(1) | O(1) | A `UserWarning` subclass, issued when input may be echoed |
+
+## Reading a Password
+
+### Echo Is Off While Reading
+
+`getpass()` turns echo off, reads one line, and puts the terminal back as it found it. The
+example drives it on a pseudo-terminal in a child process, so it runs without anyone typing.
 
 ```python
-import getpass
+import os
+import subprocess
+import sys
+import termios
 
-# O(n) where n = password length
-password = getpass.getpass()
-# Prompts: "Password: " (input hidden)
+controller, terminal = os.openpty()
+child = subprocess.Popen(
+    [sys.executable, '-c', 'import getpass; print(getpass.getpass())'],
+    stdin=terminal, stderr=terminal, stdout=subprocess.PIPE,
+    start_new_session=True, text=True,  # no controlling terminal: getpass uses stdin
+)
 
-# Custom prompt - O(n)
-password = getpass.getpass(prompt="Enter secret: ")
+shown = b''
+while b'Password: ' not in shown:
+    shown += os.read(controller, 1024)  # the prompt appears once echo is off
+os.write(controller, b's3cret\n')       # O(n) - one line
 
-# Returns: user-entered password as string
-# Input is not echoed to screen
+assert child.stdout.read() == 's3cret\n'
+assert child.wait() == 0
+assert b's3cret' not in os.read(controller, 1024)  # the keys were not echoed
+assert termios.tcgetattr(terminal)[3] & termios.ECHO  # and echo is back on
+os.close(terminal)
+os.close(controller)
 ```
 
-If terminal control isn't available, `getpass()` may fall back to `fallback_getpass()` and raise
-`GetPassWarning`. Platform-specific helpers `unix_getpass()` and `win_getpass()` are also exposed.
+### Masking Characters
 
-### Getting Current User
-
-```python
-import getpass
-
-# O(1) - get current user from environment
-username = getpass.getuser()
-# Returns: string like 'john', 'alice', etc.
-
-# Works across platforms
-import platform
-print(f"User {username} on {platform.system()}")
-```
-
-## Common Use Cases
-
-### Secure Login Prompt
+From Python 3.14, `echo_char` is written for each character typed, so the user can see their
+typing. It must be a single printable ASCII character.
 
 ```python
 import getpass
+import sys
 
-def login():
-    """Prompt for credentials - O(n+m)"""
-    # O(1) - auto-fill username
-    username = getpass.getuser()
-    
-    # O(n) where n = password length
-    password = getpass.getpass(f"Password for {username}: ")
-    
-    if password == "correct_password":
-        print("Login successful")
-        return True
+if sys.version_info >= (3, 14):
+    try:
+        getpass.getpass(echo_char='**')  # O(1) - validated before the terminal is opened
+    except ValueError as error:
+        assert 'single printable ASCII character' in str(error)
     else:
-        print("Login failed")
-        return False
+        raise AssertionError('a two-character echo_char was accepted')
 ```
 
-### Authenticate User
+### Without a Terminal
+
+On Unix, `getpass()` reads from the controlling terminal whenever there is one, even if standard
+input is redirected. Only when neither `/dev/tty` nor standard input is a terminal does it give up
+on turning echo off: it issues `GetPassWarning`, writes a warning line, and reads the password from
+standard input as `input()` would.
 
 ```python
-import getpass
-import hashlib
+import subprocess
+import sys
 
-def authenticate(stored_hash):
-    """Authenticate against stored password hash - O(n)"""
-    # O(n) to get password
-    password = getpass.getpass("Enter password: ")
-    
-    # O(n) to hash (depends on hash algorithm)
-    entered_hash = hashlib.pbkdf2_hmac(
-        'sha256',
-        password.encode(),
-        b'salt',
-        iterations=100000
-    )
-    
-    # O(n) to compare
-    return entered_hash == stored_hash
+result = subprocess.run(
+    [sys.executable, '-c', 'import getpass; print(getpass.getpass())'],
+    input='s3cret\n', capture_output=True, text=True,
+    start_new_session=True,  # no controlling terminal, and stdin is a pipe
+)
+
+assert result.stdout == 's3cret\n'
+assert 'GetPassWarning' in result.stderr
+assert 'Password input may be echoed' in result.stderr
 ```
 
-### Multi-step Authentication
+## Finding the Current User
 
-```python
-import getpass
-
-def multi_factor_auth(max_attempts=3):
-    """Multi-step authentication - O(n)"""
-    attempts = 0
-    
-    while attempts < max_attempts:
-        # O(1) - get username
-        username = getpass.getuser()
-        
-        # O(n) - get password where n = length
-        password = getpass.getpass("Password: ")
-        
-        # O(n) - get 2FA code
-        code = getpass.getpass("2FA Code: ")
-        
-        # Verify credentials (simplified)
-        if verify_credentials(username, password, code):
-            return True
-        
-        attempts += 1
-        if attempts < max_attempts:
-            print(f"Invalid. {max_attempts - attempts} attempts left.")
-    
-    return False
-
-def verify_credentials(user, pwd, code):
-    # Placeholder
-    return len(pwd) > 0 and len(code) == 6
-```
-
-### Secure Config Input
-
-```python
-import getpass
-import json
-
-def setup_database_config():
-    """Get database credentials securely - O(n)"""
-    config = {
-        'host': input("Database host: "),  # O(n)
-        'port': int(input("Port [5432]: ") or 5432),  # O(n)
-        'database': input("Database name: "),  # O(n)
-        'username': input("Username: "),  # O(n)
-        # O(n) - password hidden
-        'password': getpass.getpass("Password: "),
-    }
-    
-    return config
-
-# Usage - O(n) for user interaction
-config = setup_database_config()
-
-# Don't print password!
-print(f"Connecting to {config['host']}:{config['port']}/{config['database']}")
-```
-
-## Performance Tips
-
-### Cache Username
-
-```python
-import getpass
-
-# Bad: Call getuser() multiple times
-def get_user_from_env():
-    user = getpass.getuser()  # O(1) but repeated
-    return user
-
-# Good: Call once and cache
-_cached_user = None
-
-def get_current_user():
-    global _cached_user
-    if _cached_user is None:
-        _cached_user = getpass.getuser()  # O(1) first call
-    return _cached_user
-```
-
-### Validate During Input
-
-```python
-import getpass
-
-def get_password_with_validation(min_length=8):
-    """Get password with validation - O(n*m)"""
-    while True:
-        # O(n) where n = password length
-        password = getpass.getpass("Password (min 8 chars): ")
-        
-        # O(n) to validate length
-        if len(password) >= min_length:
-            return password
-        
-        # Validation failed, try again
-        print("Password too short. Try again.")
-
-# Usage - O(n*m) where m = attempts
-password = get_password_with_validation()
-```
-
-### Securely Handle Sensitive Data
+`getuser()` reads the environment first, so it returns whatever `LOGNAME` (or the next variable
+set) says, not necessarily who owns the process. Only when all four are unset or empty does it
+consult the user database. It reads them again on every call.
 
 ```python
 import getpass
 import os
 
-def secure_password_entry():
-    """Get and clear password securely - O(n)"""
-    import sys
-    
-    # O(n) to get password
-    password = getpass.getpass()
-    
-    try:
-        # Use password
-        authenticate(password)
-    finally:
-        # O(n) to clear from memory (best effort)
-        # Python doesn't guarantee memory clearing, but this helps
-        password = '0' * len(password)
-        password = None
-        
-        # Force garbage collection in sensitive cases
-        import gc
-        gc.collect()
+saved = {name: os.environ.pop(name, None) for name in ('LOGNAME', 'USER', 'LNAME', 'USERNAME')}
+try:
+    os.environ['USER'] = 'alice'
+    assert getpass.getuser() == 'alice'  # O(1)
+
+    os.environ['LOGNAME'] = 'bob'
+    assert getpass.getuser() == 'bob'  # LOGNAME is read first, and nothing was cached
+finally:
+    for name, value in saved.items():
+        os.environ.pop(name, None)
+        if value is not None:
+            os.environ[name] = value
+
+assert issubclass(getpass.GetPassWarning, UserWarning)
 ```
+
+## Common Patterns
+
+### Login Prompt
+
+```python
+import getpass
+import hashlib
+import hmac
+
+def check(password, salt, expected):
+    derived = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 100_000)
+    return hmac.compare_digest(derived, expected)  # constant-time comparison
+
+def login(salt, expected):
+    user = getpass.getuser()  # O(1)
+    password = getpass.getpass(f'Password for {user}: ')  # O(p + n)
+    return check(password, salt, expected)
+
+salt = b'per-user salt'
+expected = hashlib.pbkdf2_hmac('sha256', b's3cret', salt, 100_000)
+assert check('s3cret', salt, expected)
+assert not check('guess', salt, expected)
+```
+
+## Performance Best Practices
+
+✅ **Do**:
+
+- Expect `getpass()` on Unix to read from the controlling terminal even when standard input is a
+  pipe; piped input reaches it only where there is no terminal
+- Treat `GetPassWarning` as a sign the password may have been echoed, and catch `EOFError` for
+  closed input
+
+❌ **Avoid**:
+
+- Reading a password with `input()` - the same O(n) line, but echoed to the screen
+- Relying on `getuser()` to identify the process owner - it trusts the environment first
 
 ## Version Notes
 
-- **Python 2.6+**: getpass() and getuser()
-- **Python 3.x**: Full support on all platforms
-- **Unix/Linux**: Disables terminal echo with termios
-- **Windows**: Uses Windows API for hiding input
-- **macOS**: Uses termios (Unix-based)
+- **Python 3.14+**: Added the `echo_char` keyword argument
+- **Python 3.13+**: `getuser()` raises `OSError` when no name is found; before, the
+  `KeyError` or `ImportError` from the user database propagated
 
-## Related Documentation
+## Related Modules
 
-- [Input/Output](../builtins/input.md) - Regular input()
-- [Sys Module](sys.md) - System interactions
-- [Os Module](os.md) - Environment variables
+- **[termios](termios.md)** - the terminal attributes `getpass()` switches off and restores
+- **[pwd](pwd.md)** - the user database `getuser()` falls back to
+- **[msvcrt](msvcrt.md)** - the console calls `getpass()` uses on Windows
+- **[os](os.md)** - `os.environ`, which `getuser()` reads first
