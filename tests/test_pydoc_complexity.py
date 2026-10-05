@@ -1329,18 +1329,22 @@ class TestTheServer:
         assert "<title>Pydoc: module served</title>" in second
         assert runs(log) == 2
 
-    def test_the_server_is_single_threaded_and_serves_pages(self) -> None:
+    def test_the_server_is_single_threaded_and_serves_pages(self, source_dir: pathlib.Path) -> None:
+        # A module page re-imports its module in this process, so serve a
+        # throwaway module rather than one other tests hold references into.
+        logging_module(source_dir, "servedbythread")
         start = pydoc._start_server  # type: ignore[attr-defined]
         thread = start(pydoc._url_handler, "localhost", 0)  # type: ignore[attr-defined]
         try:
             assert thread.error is None
             assert not isinstance(thread.docserver, socketserver.ThreadingMixIn)
-            with urllib.request.urlopen(thread.url + "json.html", timeout=30) as response:
+            url = thread.url + "servedbythread.html"
+            with urllib.request.urlopen(url, timeout=30) as response:
                 page = response.read().decode("utf-8")
         finally:
             thread.stop()
 
-        assert "<title>Pydoc: package json</title>" in page
+        assert "<title>Pydoc: module servedbythread</title>" in page
 
     def test_the_command_line_server_stops_at_q(self, tmp_path: pathlib.Path) -> None:
         result = subprocess.run(
