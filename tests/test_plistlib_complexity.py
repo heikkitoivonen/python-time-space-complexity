@@ -41,8 +41,11 @@ Measurement scope:
   float seconds from 2001, so distant dates lose precision; not varied), a
   non-`str` key and a `set`
   raise `TypeError`, 2**64 raises `OverflowError`. `skipkeys=True` skips a
-  non-`str` key with `sort_keys=False` and raises `TypeError` in the sort with
-  `sort_keys=True` when it is mixed with `str` keys.
+  non-`str` key with `sort_keys=False`. With `sort_keys=True`, mixed keys
+  raise `TypeError` before 3.13.16 on the 3.13 line and before 3.14.8 on the
+  3.14 line (also on 3.10-3.12); from those patches, non-string keys are
+  skipped and the remaining keys are sorted. Both values and key order are
+  checked in each successful case.
 * `UID` accepts 0 and 2**64 - 1, rejects -1 and 2**64 with `ValueError` and
   a `str` with `TypeError`,
   round-trips through the binary format, exposes `.data`, and makes the XML
@@ -374,12 +377,17 @@ class TestSortKeys:
 
     @pytest.mark.parametrize("fmt", FORMATS, ids=lambda f: f.name)
     def test_skipkeys(self, fmt: plistlib.PlistFormat) -> None:
-        mixed: dict[Any, Any] = {"a": 1, 2: "b"}
+        mixed: dict[Any, Any] = {"z": 3, 2: "b", "a": 1}
 
         written = plistlib.dumps(mixed, fmt=fmt, skipkeys=True, sort_keys=False)
-        assert plistlib.loads(written) == {"a": 1}
-        with pytest.raises(TypeError, match="not supported between"):
-            plistlib.dumps(mixed, fmt=fmt, skipkeys=True)
+        assert list(plistlib.loads(written).items()) == [("z", 3), ("a", 1)]
+        # gh-145856: filter non-string keys before sorting.
+        if sys.version_info >= (3, 14, 8) or (3, 13, 16) <= sys.version_info < (3, 14):
+            written = plistlib.dumps(mixed, fmt=fmt, skipkeys=True)
+            assert list(plistlib.loads(written).items()) == [("a", 1), ("z", 3)]
+        else:
+            with pytest.raises(TypeError, match="not supported between"):
+                plistlib.dumps(mixed, fmt=fmt, skipkeys=True)
         with pytest.raises(TypeError, match="keys must be strings"):
             plistlib.dumps(mixed, fmt=fmt, sort_keys=False)
 

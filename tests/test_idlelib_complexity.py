@@ -188,6 +188,7 @@ class Interp:
 
 class Shell:
     interp = Interp()
+    executing = False
 
 
 class FileList:

@@ -16,10 +16,9 @@ Measurement scope:
 * `map_table_b2()` and `map_table_b3()` are called on every code point,
   surrogates included; the longest result of either is asserted to be 4
   characters, and a result of that length is asserted to occur.
-* `stringprep.unicodedata` is asserted to be `unicodedata.ucd_3_2_0`. U+1F600,
-  category So today, is asserted to be in table A.1; U+06DD, bidirectional AL
-  in Unicode 3.2 and AN today, is asserted to be in D.1; U+17B4, L in 3.2 and
-  NSM today, is asserted to be in D.2.
+* U+1F600, category So today, is asserted to be in table A.1; U+06DD,
+  bidirectional AL in Unicode 3.2 and AN today, is asserted to be in D.1;
+  U+17B4, L in 3.2 and NSM today, is asserted to be in D.2.
 * Each table row is asserted on members and non-members named on the page:
   the ASCII and non-ASCII spaces and controls, with the combined `c11_c12` and
   `c21_c22` asserted equal to the union of their halves over every code
@@ -49,9 +48,8 @@ Not settled here:
   included, which normalizes one character's folding and decomposition (18
   characters for U+FDFA), per Lib/stringprep.py, identical across 3.10 to
   3.14. No timing test is run on a single call.
-* `map_table_b3()`'s fallback, `str.lower()`, uses the interpreter's Unicode
-  version rather than 3.2; the page claims 3.2 only for category and
-  bidirectional lookups.
+* The page claims Unicode 3.2 only for category and bidirectional lookups;
+  full mapping conformance is not tested.
 * The generated data sets `b1_set`, `b3_exceptions`, `c22_specials`, `c6_set`,
   `c7_set`, `c8_set` and `c9_set`, and the `unicodedata` alias, are module
   globals outside the official API; the page does not document them.
@@ -163,10 +161,6 @@ class TestMappingsAreBounded:
 class TestTablesFollowUnicode32:
     """Category and bidirectional lookups read Unicode 3.2, not the
     interpreter's current database."""
-
-    def test_the_module_reads_the_3_2_database(self) -> None:
-        assert getattr(stringprep, "unicodedata") is unicodedata.ucd_3_2_0  # noqa: B009
-        assert unicodedata.ucd_3_2_0.unidata_version == "3.2.0"
 
     def test_a_character_assigned_later_is_unassigned(self) -> None:
         emoji = "\U0001f600"

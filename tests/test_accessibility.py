@@ -366,7 +366,10 @@ def test_dialogs_have_an_accessible_name(template):
 
 @pytest.mark.parametrize(
     "name,template",
-    [("main.html", MAIN_HTML), ("copyright.html", COPYRIGHT_HTML)],
+    [
+        pytest.param("main.html", MAIN_HTML, id="main.html"),
+        pytest.param("copyright.html", COPYRIGHT_HTML, id="copyright.html"),
+    ],
 )
 def test_new_tab_links_carry_an_accessible_label(name, template):
     """target=_blank with no indication: the tab arrives unannounced.

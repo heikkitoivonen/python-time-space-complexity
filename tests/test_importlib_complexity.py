@@ -443,6 +443,7 @@ class TestImportModuleIsACacheLookup:
         write_module(tmp_path / "fpkg", "__init__", "")
         write_module(tmp_path / "fpkg", "leaf", "VALUE = 1\n")
         write_module(tmp_path / "fpkg", "other", "VALUE = 2\n")
+        write_module(tmp_path / "fpkg", "starred", "VALUE = 3\n")
         sys.path.insert(0, str(tmp_path))
 
         top = importlib.__import__("fpkg.leaf")
@@ -453,7 +454,6 @@ class TestImportModuleIsACacheLookup:
         assert package is top and package.other.VALUE == 2
         assert "fpkg.other" in sys.modules
 
-        write_module(tmp_path / "fpkg", "starred", "VALUE = 3\n")
         namespace: Any = top
         namespace.__all__ = ["starred"]
         namespace.PRESENT = object()

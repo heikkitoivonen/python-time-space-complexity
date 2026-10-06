@@ -29,9 +29,11 @@ Measurement scope:
 * History files: `read_history_file()` appends to the history already held
   and raises `FileNotFoundError` for a missing file. `set_history_length(3)`
   leaves six in-memory entries alone and leaves three in the file after either
-  writer; under libedit the truncated file has lost its header line and
-  `read_history_file()` raises `OSError` on it, while removing the oldest
-  entries before writing keeps it readable. `append_history_file(1)` writes
+  writer. Before 3.14.8, the libedit bundled with the Linux interpreters drops
+  the header and `read_history_file()` raises `OSError`; from 3.14.8, CPython
+  preserves the header and the retained entries read back. GNU readline and
+  macOS's libedit keep the file readable on both versions. Removing the oldest
+  entries before writing also keeps it readable. `append_history_file(1)` writes
   the newest entry. Timed: `append_history_file(1)` costs less than 3x as much
   with 100,000 entries held as with 100, and appending 100,000 of them more
   than 20x as much as appending 1,000. For files of 10,000, 100,000 and
@@ -424,11 +426,11 @@ def assert_truncated_to(path: str, expected: list[str]) -> None:
     """Read back a file the length limit truncated.
 
     GNU readline, and the older libedit macOS ships, keep it readable. The
-    libedit the Linux interpreters bundle drops the header line when it
-    truncates, and the file no longer reads.
+    libedit the Linux interpreters bundle drops the header when it truncates;
+    CPython 3.14.8+ preserves it with its own truncator (gh-123018).
     """
     empty_history()
-    if LIBEDIT and sys.platform != "darwin":
+    if LIBEDIT and sys.platform != "darwin" and sys.version_info < (3, 14, 8):
         with pytest.raises(OSError):
             readline.read_history_file(path)
         lines = pathlib.Path(path).read_text().splitlines()
