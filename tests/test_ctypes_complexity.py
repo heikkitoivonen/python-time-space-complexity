@@ -38,14 +38,17 @@ Measurement scope:
 * `memmove()` and `memset()` over 10,000,000 bytes peak under 20 KB.
 * `resize()` grows `sizeof()` and preserves the old bytes, leaves `len()`
   alone, and raises `ValueError` below the type's size.
-* Definition time, with the collector paused, at 500 and 32,000 `c_int`
-  fields, a 64x step where linear predicts x64 and quadratic x4096. A
-  `Structure` is asserted over x300 before 3.14 and under x300 from 3.14; a
-  `Union` under x512 on every version. Locally (aarch64) a `Structure` grows
-  x1200 to x1700 on 3.10 to 3.13 and x67 to x72 on 3.14, and a `Union` x68
-  to x128 everywhere. The pre-3.14 cost is each field re-copying the growing
-  buffer-format string (Modules/_ctypes/stgdict.c). The definition's space is
-  its f `CField` descriptors, one per field, asserted by count.
+* Definition time, with the collector paused, at 100, 1,000 and 10,000
+  `c_int` fields: each 10x step predicts x10 if linear and x100 if quadratic.
+  Names have a fixed width of 256 ASCII characters, prepared outside the timer,
+  to make format copying dominate per-field setup before 3.14. Each step for
+  `Structure` is asserted over x30 before 3.14 and under x30 from 3.14;
+  `Union` stays under x30 on every version. Locally (aarch64), the steps are
+  x83 and x119 for `Structure` on 3.11.16, x12 and x9 on 3.14.7, and x7 to
+  x11 for `Union` on those versions. The pre-3.14 cost is each field re-copying
+  the growing buffer-format string (CPython 3.11 Modules/_ctypes/stgdict.c).
+  Name width is held fixed, not measured as an independent dimension. The
+  definition's space is its f `CField` descriptors, one per field, asserted by count.
 * An anonymous member of 100 fields is asserted to give the outer structure
   a descriptor for each of them.
 * `SetPointerType()` completes an incomplete pointer to a self-referencing
@@ -110,6 +113,7 @@ import textwrap
 import time
 import tracemalloc
 from collections.abc import Callable
+from itertools import pairwise
 from typing import Any
 
 import pytest
@@ -539,8 +543,8 @@ class Point(ctypes.Structure):
 
 
 class TestStructures:
-    """Definition is O(f); an instance is O(n); a field is O(1) and an
-    aggregate field is a view."""
+    """Definition is O(f²) before 3.14 and O(f) from 3.14; an instance is
+    O(n); a field is O(1) and an aggregate field is a view."""
 
     @staticmethod
     def define(fields: list[tuple[str, Any]]) -> type:
@@ -556,29 +560,36 @@ class TestStructures:
 
     @staticmethod
     def definition_ns(base: type, fields: int) -> float:
-        names = [(f"f{index}", ctypes.c_int) for index in range(fields)]
+        names = [(f"f{index:0255d}", ctypes.c_int) for index in range(fields)]
         return best_ns(lambda: type("S", (base,), {"_fields_": names}), repeats=3)
 
     @classmethod
-    def growth(cls, base: type) -> tuple[float, list[float]]:
-        """Definition time at 32,000 fields over 500: x64 if linear, x4096 if quadratic."""
-        durations = [cls.definition_ns(base, fields) for fields in (500, 32_000)]
-        return durations[1] / durations[0], durations
+    def growth(cls, base: type) -> tuple[list[float], list[float]]:
+        """Two 10x field-count steps: x10 each if linear, x100 if quadratic."""
+        durations = [cls.definition_ns(base, fields) for fields in (100, 1_000, 10_000)]
+        ratios = [later / earlier for earlier, later in pairwise(durations)]
+        return ratios, durations
 
     @pytest.mark.timing
     def test_structure_definition_is_quadratic_before_314_and_linear_after(self) -> None:
-        ratio, durations = self.growth(ctypes.Structure)
+        ratios, durations = self.growth(ctypes.Structure)
 
         if sys.version_info >= (3, 14):
-            assert ratio < 300, f"64x the fields: {durations} ns, x{ratio:.0f}"
+            assert all(ratio < 30 for ratio in ratios), (
+                f"100/1,000/10,000 fields: {durations} ns, step ratios {ratios}"
+            )
         else:
-            assert ratio > 300, f"64x the fields: {durations} ns, only x{ratio:.0f}"
+            assert all(ratio > 30 for ratio in ratios), (
+                f"100/1,000/10,000 fields: {durations} ns, step ratios {ratios}"
+            )
 
     @pytest.mark.timing
     def test_union_definition_is_linear_in_fields(self) -> None:
-        ratio, durations = self.growth(ctypes.Union)
+        ratios, durations = self.growth(ctypes.Union)
 
-        assert ratio < 512, f"64x the fields: {durations} ns, x{ratio:.0f}"
+        assert all(ratio < 30 for ratio in ratios), (
+            f"100/1,000/10,000 fields: {durations} ns, step ratios {ratios}"
+        )
 
     def test_an_instance_is_zero_filled_and_costs_its_bytes(self) -> None:
         big = self.define([("data", ctypes.c_char * 10_000_000)])
