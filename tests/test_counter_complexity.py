@@ -9,6 +9,9 @@ Measurement scope:
   same CPython counting helper and produce the same counts as a Python loop.
   Per-key increments do not call that helper.
 * Timing tests vary input size with fixed-cost keys and counts.
+* Addition visits each operand's items once, with one lookup per left key and
+  one membership probe per right key, at 10 and 1,000 keys in each operand.
+  Overlapping and disjoint inputs both produce the expected counts.
 
 Not settled here: relative speed of bulk counting and Python counting loops
 across workloads and interpreters; neither method has a universal speed ranking.
@@ -311,16 +314,46 @@ class TestCounterOperations:
         with pytest.raises(NotImplementedError):
             Counter.fromkeys(["a", "b"])
 
-    @pytest.mark.timing
-    def test_addition_is_linear_in_the_keys(self) -> None:
-        small, large = self._counter(1_000), self._counter(100_000)
+    @pytest.mark.parametrize("left_size", [10, 1_000])
+    @pytest.mark.parametrize("right_size", [10, 1_000])
+    @pytest.mark.parametrize("overlap", [False, True])
+    def test_addition_is_linear_in_the_keys(
+        self, left_size: int, right_size: int, overlap: bool
+    ) -> None:
+        visits = lookups = probes = 0
 
-        small_time = measure_time(lambda: small + small, iterations=5)
-        large_time = measure_time(lambda: large + large, iterations=5)
+        class ObservedCounter(Counter):
+            # A generator observes consumption instead of returning a dict view.
+            def items(self):  # pyright: ignore[reportIncompatibleMethodOverride]
+                nonlocal visits
+                for key, value in super().items():
+                    visits += 1
+                    yield key, value
 
-        assert is_linear_time(small_time, large_time, 100), (
-            f"Counter addition doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
-        )
+            def __getitem__(self, key: Any) -> int:
+                nonlocal lookups
+                lookups += 1
+                return super().__getitem__(key)
+
+            def __contains__(self, key: Any) -> bool:
+                nonlocal probes
+                probes += 1
+                return super().__contains__(key)
+
+        offset = 0 if overlap else left_size
+        left = ObservedCounter(dict.fromkeys(range(left_size), 2))
+        right = ObservedCounter(dict.fromkeys(range(offset, offset + right_size), 3))
+        expected = dict.fromkeys(range(left_size), 2)
+        for key in range(offset, offset + right_size):
+            expected[key] = expected.get(key, 0) + 3
+        visits = lookups = probes = 0
+
+        result = left + right
+
+        assert visits == left_size + right_size
+        assert lookups == left_size
+        assert probes == right_size
+        assert result == expected
 
     def test_addition_drops_non_positive_counts(self) -> None:
         assert Counter(a=1) + Counter(a=-1) == Counter()

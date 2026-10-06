@@ -38,14 +38,16 @@ Measurement scope:
 * `memmove()` and `memset()` over 10,000,000 bytes peak under 20 KB.
 * `resize()` grows `sizeof()` and preserves the old bytes, leaves `len()`
   alone, and raises `ValueError` below the type's size.
-* Definition time, with the collector paused, at 100, 1,000 and 10,000
-  `c_int` fields: each 10x step predicts x10 if linear and x100 if quadratic.
-  Names have a fixed width of 256 ASCII characters, prepared outside the timer,
-  to make format copying dominate per-field setup before 3.14. Each step for
-  `Structure` is asserted over x30 before 3.14 and under x30 from 3.14;
-  `Union` stays under x30 on every version. Locally (aarch64), the steps are
-  x83 and x119 for `Structure` on 3.11.16, x12 and x9 on 3.14.7, and x7 to
-  x11 for `Union` on those versions. The pre-3.14 cost is each field re-copying
+* Definition time, with the collector paused, at 64 and 4,096 `c_int`
+  fields: the 64x step predicts x64 if linear and x4,096 if quadratic.
+  Names have a fixed width of 4,096 ASCII characters, prepared outside the
+  timer, to make format copying dominate per-field setup before 3.14.
+  `Structure` is asserted over x512 before 3.14 and under x512 from 3.14;
+  `Union` stays under x512 on every version. The threshold is eight times
+  the linear prediction and one eighth of the quadratic prediction.
+  On aarch64, `Structure` gives x4,724 on 3.11.17 and x117 on 3.14.7;
+  `Union` gives x17 and x39 on those versions.
+  The pre-3.14 cost is each field re-copying
   the growing buffer-format string (CPython 3.11 Modules/_ctypes/stgdict.c).
   Name width is held fixed, not measured as an independent dimension. The
   definition's space is its f `CField` descriptors, one per field, asserted by count.
@@ -113,7 +115,6 @@ import textwrap
 import time
 import tracemalloc
 from collections.abc import Callable
-from itertools import pairwise
 from typing import Any
 
 import pytest
@@ -560,36 +561,29 @@ class TestStructures:
 
     @staticmethod
     def definition_ns(base: type, fields: int) -> float:
-        names = [(f"f{index:0255d}", ctypes.c_int) for index in range(fields)]
+        names = [(f"f{index:04095d}", ctypes.c_int) for index in range(fields)]
         return best_ns(lambda: type("S", (base,), {"_fields_": names}), repeats=3)
 
     @classmethod
-    def growth(cls, base: type) -> tuple[list[float], list[float]]:
-        """Two 10x field-count steps: x10 each if linear, x100 if quadratic."""
-        durations = [cls.definition_ns(base, fields) for fields in (100, 1_000, 10_000)]
-        ratios = [later / earlier for earlier, later in pairwise(durations)]
-        return ratios, durations
+    def growth(cls, base: type) -> tuple[float, list[float]]:
+        """64x the fields: x64 if linear, x4,096 if quadratic."""
+        durations = [cls.definition_ns(base, fields) for fields in (64, 4_096)]
+        return durations[1] / durations[0], durations
 
     @pytest.mark.timing
     def test_structure_definition_is_quadratic_before_314_and_linear_after(self) -> None:
-        ratios, durations = self.growth(ctypes.Structure)
+        ratio, durations = self.growth(ctypes.Structure)
 
         if sys.version_info >= (3, 14):
-            assert all(ratio < 30 for ratio in ratios), (
-                f"100/1,000/10,000 fields: {durations} ns, step ratios {ratios}"
-            )
+            assert ratio < 512, f"64/4,096 fields: {durations} ns, ratio {ratio}"
         else:
-            assert all(ratio > 30 for ratio in ratios), (
-                f"100/1,000/10,000 fields: {durations} ns, step ratios {ratios}"
-            )
+            assert ratio > 512, f"64/4,096 fields: {durations} ns, ratio {ratio}"
 
     @pytest.mark.timing
     def test_union_definition_is_linear_in_fields(self) -> None:
-        ratios, durations = self.growth(ctypes.Union)
+        ratio, durations = self.growth(ctypes.Union)
 
-        assert all(ratio < 30 for ratio in ratios), (
-            f"100/1,000/10,000 fields: {durations} ns, step ratios {ratios}"
-        )
+        assert ratio < 512, f"64/4,096 fields: {durations} ns, ratio {ratio}"
 
     def test_an_instance_is_zero_filled_and_costs_its_bytes(self) -> None:
         big = self.define([("data", ctypes.c_char * 10_000_000)])

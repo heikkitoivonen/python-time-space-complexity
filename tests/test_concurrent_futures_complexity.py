@@ -6,8 +6,8 @@ submits its whole input up front, a `Future` hands back the stored object, and
 `wait()` and `as_completed()` sort their futures once. Worker starts are
 settled by counting threads, child processes and interpreters; laziness by a
 generator that records what it has handed out; the sort by a counting
-`sorted` injected into the module's globals; identity rows by `is`. Two
-timing tests bound growth where no counter reaches.
+`sorted` injected into the module's globals; identity rows by `is`. Future
+access counts bound wait bookkeeping; a timing test covers submission cost.
 
 Measurement scope:
 
@@ -46,9 +46,10 @@ Measurement scope:
   calling thread; `set_result()` runs each of 50 callbacks once.
 * `wait()` and `as_completed()` each call `sorted` once, over the n distinct
   futures, for n = 50; duplicates are yielded once and already-finished
-  futures come before one finished later. A timing test over 300, 3,000
-  and 30,000 finished futures bounds each 10x step of `wait()` under 40x,
-  where a quadratic would give 100x and n log n about 12x.
+  futures come before one finished later. Over 10, 100 and 1,000 finished
+  futures, `wait()` reads each state once and each condition twice, and
+  hashes futures at most six times per input. The original condition locks
+  and identity hashes are retained; the sort is observed once at each size.
 * `concurrent.futures.TimeoutError` is the builtin from 3.11 and a distinct
   class before; the `Broken*` classes subclass `BrokenExecutor`; the
   `return_when` constants are their own names as strings.
@@ -459,15 +460,37 @@ class TestWaitingSortsOnce:
         result = futures.wait([done_ok, failed, pending], return_when=futures.FIRST_EXCEPTION)
         assert failed in result.done and pending in result.not_done
 
-    @pytest.mark.timing
-    def test_wait_grows_well_below_quadratic(self) -> None:
-        costs = {
-            n: best_ns(lambda made=self.finished(n): futures.wait(made), repeats=5)
-            for n in (300, 3_000, 30_000)
-        }
-        for small, large in ((300, 3_000), (3_000, 30_000)):
-            ratio = costs[large] / costs[small]
-            assert ratio < 40, f"wait() on {small} -> {large} futures cost x{ratio:.1f}"
+    @pytest.mark.parametrize("count", [10, 100, 1_000])
+    def test_wait_does_linear_bookkeeping_around_the_sort(
+        self, count: int, sort_sizes: list[int]
+    ) -> None:
+        reads = {"_state": 0, "_condition": 0}
+        hashes = 0
+
+        class ObservedFuture(futures.Future[int]):
+            def __getattribute__(self, name: str) -> Any:
+                if name in reads:
+                    reads[name] += 1
+                return super().__getattribute__(name)
+
+            def __hash__(self) -> int:
+                nonlocal hashes
+                hashes += 1
+                return super().__hash__()
+
+        made = [ObservedFuture() for _ in range(count)]
+        for future in made:
+            future.set_result(0)
+        reads = dict.fromkeys(reads, 0)
+        hashes = 0
+
+        done, not_done = futures.wait(made)
+
+        assert sort_sizes == [count]
+        assert reads == {"_state": count, "_condition": 2 * count}
+        assert count <= hashes <= 6 * count
+        assert done == set(made)
+        assert not not_done
 
 
 class TestConstantsAndExceptions:

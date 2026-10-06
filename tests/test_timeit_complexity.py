@@ -4,8 +4,8 @@ The page prices the module's own work around the caller's statement: a
 compile when a `Timer` is built, then per run one setup and `number`
 executions between two clock reads. Execution counts are settled by counting
 callables and by a fake clock, which need no tolerance; the compile and the
-space rows by counting `compile` calls and by traced allocation; one timing
-test settles the cost of a callable statement.
+space rows by counting `compile` calls and by traced allocation. Profiling
+counts the extra Python calls made by a callable statement.
 
 Measurement scope:
 
@@ -34,8 +34,9 @@ Measurement scope:
   the first whose time reaches 0.2, the one before it stays under 0.2, the
   executions total fewer than twice the returned count, and the setup runs
   once per trial.
-* A callable statement that does nothing takes more than twice as long per
-  loop as the string `pass`, at 100,000 loops, fastest of five.
+* Profiling a no-op callable and the string `pass` at 0, 1 and 1,000 loops
+  observes exactly one extra Python call per loop for the callable. No
+  wall-clock speed ratio is asserted.
 * `print_exc()` writes the statement's source line with the traceback, to
   `file` or by default to stderr. `default_timer` is `time.perf_counter`.
 * `python -m timeit -n 1000 -r 3` prints the best of three at 1,000 loops;
@@ -82,18 +83,6 @@ import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "timeit.md"
 EXPECTED_BLOCKS = 7
-
-
-def best_ns(func: Callable[[], Any], repeats: int = 5) -> float:
-    """Fastest of `repeats` runs, in nanoseconds."""
-    best: float | None = None
-    for _ in range(repeats):
-        start = time.perf_counter_ns()
-        func()
-        elapsed = time.perf_counter_ns() - start
-        best = elapsed if best is None else min(best, elapsed)
-    assert best is not None
-    return best
 
 
 def peak_bytes(func: Callable[[], Any]) -> int:
@@ -359,15 +348,33 @@ class TestAutorangeDoublesUntilPointTwoSeconds:
 class TestCallableStatementsAddACall:
     """A callable `stmt` is called once per loop; a string runs inline."""
 
-    @pytest.mark.timing
-    def test_a_callable_costs_more_than_inline_pass(self) -> None:
-        inline = timeit.Timer("pass")
-        called = timeit.Timer(lambda: None)
+    @pytest.mark.parametrize("number", [0, 1, 1_000])
+    def test_a_callable_adds_one_python_call_per_loop(self, number: int) -> None:
+        def noop() -> None:
+            pass
 
-        durations = [best_ns(lambda t=t: t.timeit(number=100_000)) for t in (inline, called)]
-        ratio = durations[1] / durations[0]
+        calls: list[Any] = []
 
-        assert ratio > 2, f"a no-op call per loop against pass: {durations} ns, x{ratio:.2f}"
+        def profile(frame: Any, event: str, arg: Any) -> None:
+            if event == "call":
+                calls.append(frame.f_code)
+
+        observed = []
+        for statement in ("pass", noop):
+            timer = timeit.Timer(statement)
+            calls.clear()
+            previous = sys.getprofile()
+            try:
+                sys.setprofile(profile)
+                timer.timeit(number=number)
+            finally:
+                sys.setprofile(previous)
+            observed.append(calls.copy())
+
+        inline, called = observed
+        assert inline.count(noop.__code__) == 0
+        assert called.count(noop.__code__) == number
+        assert len(called) == len(inline) + number
 
 
 class TestPrintExcAndDefaultTimer:

@@ -18,7 +18,7 @@ the compiler, linker and archiver and counts their runs, a wrapped
 `os.path.exists`, `os.path.isfile` or `os.mkdir` counts filesystem calls, a
 `str` subclass counts the comparisons made against it, and identity checks
 settle which objects are shared. Four bounds that are quadratic in a word,
-line or argument count are timed.
+line or argument count are covered by copied-character counts and three timings.
 
 Measurement scope:
 
@@ -83,8 +83,11 @@ Measurement scope:
   sets `PLAT` once per process; `subst_vars()` raises `ValueError` for an
   unknown name; `byte_compile()` compiles each stale file once, nothing when
   up to date, everything with `force`, and spawns an interpreter when
-  `optimize` is set unless `direct=1`. `split_quoted()` over 4,000 and 40,000 one-letter
-  words, `wrap_text()` over 1,000 and 10,000 words at width 10,
+  `optimize` is set unless `direct=1`. A `str` subclass preserves instrumentation
+  across slices and whitespace stripping: `split_quoted()` slices a total of
+  w² characters for w = 10, 100 and 1,000 one-letter words separated by spaces.
+  Word width, quotes and escapes are not varied in that count.
+  `wrap_text()` over 1,000 and 10,000 words at width 10,
   `TextFile.readline()` joining 1,000 and 10,000 continuation lines of 40
   characters, and `FancyGetopt.getopt()` over 1,000 and 10,000 copies of one
   long option take more than 25x the time for 10x the input: about 100x is
@@ -1369,8 +1372,9 @@ def ratio(func: Callable[[int], Callable[[], Any]], small: int, large: int) -> f
 class TestQuadraticInWords:
     """`split_quoted()` | O(L·w), `wrap_text()` | O(L + w²),
     `TextFile.readline()` joining p lines | O(L·p) and `FancyGetopt.getopt()`
-    | O(o + a·o + a²): ten times the words, lines or arguments costs about a
-    hundred times the time, where a linear bound predicts ten."""
+    | O(o + a·o + a²). Slice lengths settle `split_quoted()`; the other
+    tests require over 25x the time for 10x the words, lines or arguments,
+    where a quadratic predicts 100x and a linear bound predicts 10x."""
 
     @pytest.mark.timing
     def test_getopt_in_the_argument_count(self, du: Any) -> None:
@@ -1381,10 +1385,30 @@ class TestQuadraticInWords:
         r = ratio(parse, 1_000, 10_000)
         assert r > 25, r
 
-    @pytest.mark.timing
-    def test_split_quoted(self, du: Any) -> None:
-        r = ratio(lambda w: lambda: du.util.split_quoted("a " * w), 4_000, 40_000)
-        assert r > 25, r
+    @pytest.mark.parametrize("words", [10, 100, 1_000])
+    def test_split_quoted(self, du: Any, words: int) -> None:
+        """Repeated suffix slices copy w² characters for fixed-width words."""
+        copied = 0
+
+        class ObservedString(str):
+            def __getitem__(self, key: Any) -> str:
+                nonlocal copied
+                result = super().__getitem__(key)
+                if isinstance(key, slice):
+                    copied += len(result)
+                    return ObservedString(result)
+                return result
+
+            def strip(self, chars: str | None = None) -> ObservedString:
+                return ObservedString(super().strip(chars))
+
+            def lstrip(self, chars: str | None = None) -> ObservedString:
+                return ObservedString(super().lstrip(chars))
+
+        result = du.util.split_quoted(ObservedString("a " * words))
+
+        assert result == ["a"] * words
+        assert copied == words**2
 
     @pytest.mark.timing
     def test_wrap_text(self, du: Any) -> None:
