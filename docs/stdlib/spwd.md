@@ -1,96 +1,104 @@
-# spwd Module
+# spwd Module Complexity
 
-⚠️ **REMOVED IN PYTHON 3.13**: The `spwd` module was deprecated in Python 3.11 and removed in Python 3.13.
+The `spwd` module reads the Unix shadow password database, which holds each account's password
+hash and password-ageing fields. Both functions go through the C library, so the host's
+name-service configuration, such as `/etc/nsswitch.conf`, decides where the entries come from;
+with the usual `files` backend that is `/etc/shadow`, which normally only root can read.
 
-The `spwd` module provides access to the Unix shadow password database
-(`/etc/shadow`), where hashed passwords and account-ageing fields are stored.
-Reading it normally requires root privileges.
+!!! warning "Removed in Python 3.13"
+    Deprecated in Python 3.11 and removed in Python 3.13 by PEP 594. The page covers the module
+    as it is on Python 3.10 to 3.12 on Unix; the examples also need privileges to read the
+    database and an entry for `root` in it.
 
-Throughout, `n` is the number of entries in the database.
+`n` is the entries in the database. The bounds are those of the `files` backend, and treat one
+entry as short - a line of `/etc/shadow` - so reading or decoding it is O(1). Another backend sets
+its own lookup cost.
 
 ## Complexity Reference
 
+### Functions
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `getspnam(name)` | O(n) | O(1) | Linear scan of the database for one user |
-| `getspall()` | O(n) | O(n) | Returns every entry as a list |
+| `spwd.getspnam(name)` | O(n) | O(1) | Reads the database in order until the name matches. Raises `KeyError` when no entry matches, or an `OSError` such as `PermissionError` when a backend reports a failure; which one an unprivileged process gets depends on the backend |
+| `spwd.getspall()` | O(n) | O(n) | A list of the entries the backends enumerate. Without privileges that may be fewer than `getspnam()` finds, or none, rather than an error |
 
-The underlying C library walks the file sequentially, so there is no index to
-exploit. Both functions are linear.
+### struct_spwd
 
-### Entry Fields
-
-Each record is a tuple-like object with attribute access, all O(1):
-
-| Attribute | Meaning |
-|-----------|---------|
-| `sp_namp` | Login name |
-| `sp_pwdp` | Hashed password |
-| `sp_lstchg` | Date of last change (days since epoch) |
-| `sp_min` | Minimum days between changes |
-| `sp_max` | Maximum days the password is valid |
-| `sp_warn` | Days before expiry to warn |
-| `sp_inact` | Days after expiry until the account is disabled |
-| `sp_expire` | Account expiry date |
-| `sp_flag` | Reserved |
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `spwd.struct_spwd` | O(1) | O(1) | The entry type: a 9-item tuple whose items are also attributes |
+| `struct_spwd.sp_namp` | O(1) | O(1) | Index 0: login name |
+| `struct_spwd.sp_pwdp` | O(1) | O(1) | Index 1: password hash |
+| `struct_spwd.sp_lstchg` | O(1) | O(1) | Index 2: date of the last password change, in days since 1970-01-01 |
+| `struct_spwd.sp_min` | O(1) | O(1) | Index 3: minimum days between changes |
+| `struct_spwd.sp_max` | O(1) | O(1) | Index 4: maximum days between changes |
+| `struct_spwd.sp_warn` | O(1) | O(1) | Index 5: days before the password expires to warn the user |
+| `struct_spwd.sp_inact` | O(1) | O(1) | Index 6: days after the password expires until the account is disabled |
+| `struct_spwd.sp_expire` | O(1) | O(1) | Index 7: date the account expires, in days since 1970-01-01 |
+| `struct_spwd.sp_flag` | O(1) | O(1) | Index 8: reserved |
 
 ## Looking Up One Account
 
-```python
-import spwd
-
-# O(n) - scans until the name matches
-entry = spwd.getspnam("alice")
-print(entry.sp_namp, entry.sp_max)   # O(1) attribute access
-```
-
-`getspnam()` raises `KeyError` if the user does not exist, and
-`PermissionError` if the process cannot read the shadow file.
-
-## Scanning Every Account
+`getspnam()` reads the database until it finds the name, so one lookup costs up to the whole
+database. The entry it returns is a tuple, read by index or by attribute name.
 
 ```python
 import spwd
 
-# O(n) time and O(n) space - the whole database is materialized
-expiring = [
-    e.sp_namp
-    for e in spwd.getspall()
-    if e.sp_max != -1
-]
+entry = spwd.getspnam('root')  # O(n)
+assert entry.sp_namp == 'root'  # O(1)
+assert entry[0] == entry.sp_namp  # O(1) - index 0 is the login name
+assert len(entry) == 9
+
+try:
+    spwd.getspnam('no such user')
+except KeyError:
+    pass
+else:
+    raise AssertionError('a missing name returned an entry')
 ```
 
-Calling `getspnam()` inside a loop over many users is O(n*m); read the database
-once with `getspall()` and build a dict instead:
+## Reading Every Account
+
+`getspall()` reads the database once and keeps every entry. For more than a few names, that and a
+`dict` beat a `getspnam()` call per name, each of which reads the database again.
 
 ```python
 import spwd
 
-# One O(n) pass, then O(1) lookups
-by_name = {e.sp_namp: e for e in spwd.getspall()}
-for name in names_to_check:
-    entry = by_name.get(name)     # O(1)
+entries = spwd.getspall()  # O(n) time and space
+by_name = {entry.sp_namp: entry for entry in entries}  # O(n)
+
+wanted = ['root', 'no such user']
+found = {name: by_name[name] for name in wanted if name in by_name}  # O(1) per name
+assert found['root'] == spwd.getspnam('root')
+assert 'no such user' not in found
 ```
 
-!!! warning "Removed in Python 3.13"
-    There is no standard-library replacement. Use a third-party library such as
-    `python-pam` for authentication, or read the database through the
-    platform's own tooling.
+## Performance Best Practices
 
-!!! warning "Requires privileges"
-    The shadow database is readable only by root on most systems. Design around
-    delegating authentication rather than reading hashes directly.
+✅ **Do**:
+
+- Call `getspnam()` for one or a few names
+- Read the database once with `getspall()` and look names up in a `dict` when you need many
+- Use `pwd` for names, user IDs and home directories; it needs no privileges and outlives this
+  module
+
+❌ **Avoid**:
+
+- Calling `getspnam()` in a loop over many names - each call reads the database again
+- Reading an empty `getspall()` as an empty database - without privileges it may return nothing
+  rather than raise
 
 ## Version Notes
 
-- **Python 3.11**: deprecated (PEP 594)
-- **Python 3.13**: removed
-- **Before 3.13**: Unix-only; not available on Windows
-- **All versions**: both lookups are linear scans
+- **Python 3.11+**: `import spwd` emits a `DeprecationWarning`
+- **Python 3.13+**: The module is removed; `import spwd` raises `ModuleNotFoundError`
 
-## Related Documentation
+## Related Modules
 
-- [Pwd Module](pwd.md)
-- [Grp Module](grp.md)
-- [Crypt Module](crypt.md)
-- [OS Module](os.md)
+- **[pwd](pwd.md)** - the password database without the hashes, readable without privileges
+- **[grp](grp.md)** - the group database
+- **[crypt](crypt.md)** - hashing a password to compare with `sp_pwdp`, removed in Python 3.13 as
+  well
