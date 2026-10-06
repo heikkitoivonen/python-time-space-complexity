@@ -30,8 +30,8 @@ Measurement scope:
   mode sets `LC_CTYPE` and restores it, except on Windows, where it makes no
   call either. `getencoding()` makes no call
   (3.11+). `getdefaultlocale()` leaves every category unchanged; it warns
-  `DeprecationWarning` on 3.11 through 3.14.6 and not on 3.10 or 3.14.7
-  (checked on 3.10.21, 3.11.16, 3.12, 3.13.14, 3.14.2, and 3.14.4 to 3.14.7).
+  `DeprecationWarning` on 3.11, 3.12, 3.13.0-3.13.14 and 3.14.0-3.14.6,
+  but not on 3.10, 3.13.15+ or 3.14.7+.
 * On Windows, setting `'POSIX'` raises `locale.Error` and leaves the category
   as it was, and `locale` has no `LC_MESSAGES`.
 * `localeconv()` returns a new dictionary on each call, with the same keys in
@@ -454,7 +454,9 @@ class TestEncodingQueries:
         assert len(result) == 2
         assert locale.setlocale(locale.LC_ALL) == before
         deprecated = [w for w in caught if issubclass(w.category, DeprecationWarning)]
-        assert bool(deprecated) == ((3, 11) <= sys.version_info < (3, 14, 7))
+        version = sys.version_info
+        warns = (3, 11) <= version < (3, 13, 15) or (3, 14) <= version < (3, 14, 7)
+        assert bool(deprecated) == warns
 
 
 class TestLocaleconv:

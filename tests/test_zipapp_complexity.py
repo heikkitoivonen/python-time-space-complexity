@@ -14,7 +14,7 @@ Measurement scope:
   recorded list is the whole tree, directories included, and it still holds a
   rejected directory's children; the archive built from it holds the file that
   was accepted under the rejected directory. The order the paths arrive in is
-  asserted sorted on 3.14 only, which is the version that sorts the listing.
+  asserted sorted from 3.13, which is the version that sorts the listing.
 * Space for a directory build, stored and deflated, and for a copy is a
   `tracemalloc` peak over an eight-megabyte input, asserted at under half of
   it. That the remaining space is the member list, O(f), is read from
@@ -37,10 +37,12 @@ Measurement scope:
   guarded on `sys.platform`.
 * Whether a refused build opens the target is settled by the target's absence
   afterwards, for each of the four `ZipAppError` paths that exist on every
-  version and the fifth that 3.14 adds.
-* The self-inclusion boundary is asserted on both sides of it. Up to 3.13 a
+  version and the fifth that 3.13.3 adds.
+* The self-inclusion boundary is asserted on both sides of it. Before 3.13.3 a
   target created inside the source directory appears in its own member list;
-  on 3.14 it does not, and an existing target inside the source raises.
+  from 3.13.3 it does not, and an existing target inside the source raises.
+  CPython 3.13.0-3.13.2 Lib/zipapp.py sorts after opening the target;
+  3.13.3 sorts before opening it and checks for an existing target.
 * The compile at every start is a subprocess per archive that replaces
   `builtins.compile` before importing the package. Each `.py` member imported
   compiles twice, on every supported version: `zipimporter.get_filename()`
@@ -62,8 +64,8 @@ Measurement scope:
 
 Not settled here:
 
-* The O(f log f) that 3.14's sort adds is not separated from the O(b + f)
-  around it by timing. The sorted member order on 3.14 is what is asserted.
+* The O(f log f) that 3.13's sort adds is not separated from the O(b + f)
+  around it by timing. The sorted member order from 3.13 is what is asserted.
 * The shebang encoding differs by platform - UTF-8 on Windows, the filesystem
   encoding elsewhere - and the page makes no claim about it.
 * The running-archive row's O(m) for reading the central directory is
@@ -95,7 +97,8 @@ import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "zipapp.md"
 EXPECTED_BLOCKS = 3
-LISTS_BEFORE_WRITING = sys.version_info >= (3, 14)
+SORTS_LISTING = sys.version_info >= (3, 13)
+LISTS_BEFORE_WRITING = sys.version_info >= (3, 13, 3)
 INTERPRETER = "/usr/bin/env python3"
 NEEDS_EXEC_BIT = pytest.mark.skipif(sys.platform == "win32", reason="no executable bit")
 
@@ -193,7 +196,7 @@ class TestBuildingFromADirectory:
             "pkg/helper.py",
         ]
 
-    @pytest.mark.skipif(not LISTS_BEFORE_WRITING, reason="the listing is sorted from 3.14")
+    @pytest.mark.skipif(not SORTS_LISTING, reason="the listing is sorted from 3.13")
     def test_the_listing_is_sorted(self, tmp_path: pathlib.Path) -> None:
         source = tmp_path / "app"
         source.mkdir()
@@ -209,7 +212,7 @@ class TestBuildingFromADirectory:
     def test_a_stored_archive_is_the_bytes_plus_a_bounded_header_per_member(
         self, tmp_path: pathlib.Path
     ) -> None:
-        """O(b + f) read off the file written: b bytes of contents, and under 200 per entry."""
+        """Output size is O(b + f): b bytes of contents, and under 200 per entry."""
         source = tmp_path / "app"
         source.mkdir()
         (source / "__main__.py").write_text("", encoding="utf-8")
@@ -338,7 +341,7 @@ class TestZipAppErrorLeavesNoFile:
         assert issubclass(zipapp.ZipAppError, ValueError)
 
     def test_a_target_inside_the_source(self, tmp_path: pathlib.Path) -> None:
-        """Up to 3.13 the fresh target is walked into itself; 3.14 lists first."""
+        """From 3.13.3 the listing precedes target creation, excluding the fresh target."""
         source = app_tree(tmp_path)
         target = source / "app.pyz"
 
@@ -349,7 +352,7 @@ class TestZipAppErrorLeavesNoFile:
         else:
             assert "app.pyz" in names_in(target)
 
-    @pytest.mark.skipif(not LISTS_BEFORE_WRITING, reason="the guard exists from 3.14")
+    @pytest.mark.skipif(not LISTS_BEFORE_WRITING, reason="the guard exists from 3.13.3")
     def test_an_existing_target_inside_the_source_is_refused(self, tmp_path: pathlib.Path) -> None:
         source = app_tree(tmp_path)
         target = source / "app.pyz"

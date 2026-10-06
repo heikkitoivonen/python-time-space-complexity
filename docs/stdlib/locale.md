@@ -22,7 +22,7 @@ selects it is the C library's work and is not priced here.
 | `locale.setlocale(category)` | O(1) | O(1) | Query only: returns the category's current name and changes nothing |
 | `locale.setlocale(category, locale)` | Varies | Varies | The C library selects the locale; raises `locale.Error` if it is not installed. A `(language, encoding)` tuple goes through `normalize()` first |
 | `locale.getlocale(category=LC_CTYPE)` | O(1) | O(1) | One `setlocale()` query, parsed through the alias table; `(None, None)` for the C locale. `LC_ALL` raises `TypeError` when the categories differ |
-| `locale.getdefaultlocale(envvars=('LC_ALL', 'LC_CTYPE', 'LANG', 'LANGUAGE'))` | O(1) | O(1) | Works out the default locale without changing the current one; warns `DeprecationWarning` on Python 3.11 to 3.14.6 |
+| `locale.getdefaultlocale(envvars=('LC_ALL', 'LC_CTYPE', 'LANG', 'LANGUAGE'))` | O(1) | O(1) | Works out the default locale without changing the current one; warns `DeprecationWarning` on Python 3.11, 3.12, 3.13.0-3.13.14 and 3.14.0-3.14.6 |
 | `locale.getencoding()` | O(1) | O(1) | The current locale encoding, ignoring UTF-8 mode; Python 3.11+ |
 | `locale.getpreferredencoding(do_setlocale=True)` | Varies | Varies | Answers UTF-8 at once in UTF-8 mode; otherwise, with `do_setlocale=True`, sets `LC_CTYPE` from the environment and back, which is not thread-safe; Windows never sets it. `do_setlocale=False` is O(1) |
 | `locale.normalize(localename)` | O(1) | O(1) | At most four lookups in `locale_alias`; a name it does not know is returned unchanged |
@@ -243,7 +243,7 @@ assert locale.setlocale(locale.LC_NUMERIC) == before
   `DeprecationWarning`
 - **Python 3.12+**: `locale.format()` is removed; use `format_string()`
 - **Python 3.13+**: `resetlocale()` is removed; use `setlocale(locale.LC_ALL, '')`
-- **Python 3.14.7+**: `getdefaultlocale()` no longer warns
+- **Python 3.13.15+ and 3.14.7+**: `getdefaultlocale()` no longer warns
 - **All Python 3**: Which locales exist depends on what is installed; only `'C'` and, off
   Windows, `'POSIX'` are guaranteed
 

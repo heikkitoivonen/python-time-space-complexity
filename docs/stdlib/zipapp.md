@@ -28,15 +28,15 @@ replaced; c = the cost of one `filter` call.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `create_archive(directory, target=None, ...)` | O(b + f) | O(f) | Walks every entry under the directory and writes each one as a member, directories included. Contents stream through a fixed buffer; the O(f) is the member list held for the central directory. 3.14 sorts the listing before writing, an extra O(f log f) |
+| `create_archive(directory, target=None, ...)` | O(b + f) before 3.13; O(b + f log f) from 3.13 | O(f) | Walks every entry under the directory and writes each one as a member, directories included. Contents stream through a fixed buffer; the O(f) is the member list held for the central directory and, from 3.13, the sorted source listing |
 | `filter=func` | O(f·c) | O(1) | Called once per entry with its path relative to the source. A rejected directory is not pruned: its contents are still walked and still offered |
 | `compressed=True` | O(b) | O(1) | Deflates each member instead of storing it. The loader inflates a member each time it reads it |
 | `main='mod:fn'` | O(1) | O(1) | Writes a three-line `__main__.py`. Refused when the directory already has one, and required when it does not |
 | `interpreter=path` | O(s) | O(s) | Writes the shebang ahead of the archive and sets the executable bit on a path target |
 | `ZipAppError` | — | — | A `ValueError`, raised before the target is opened, so a refused build writes nothing |
 
-Up to 3.13 the directory is walked while the target is being written, so a
-target inside the source directory becomes a member of itself. 3.14 lists the
+Before 3.13.3 the directory is walked after the target is opened, so a
+target inside the source directory becomes a member of itself. From 3.13.3, it lists the
 entries before opening the target, and raises `ZipAppError` when a target that
 already exists is among them.
 
@@ -78,7 +78,7 @@ with tempfile.TemporaryDirectory() as tmp:
         seen.append(path.as_posix())  # called once per entry - O(f) calls
         return "__pycache__" not in path.parts  # reject the whole subtree
 
-    # Build - O(b + f)
+    # Build - O(b + f log f) from 3.13; O(b + f) before 3.13
     zipapp.create_archive(source, Path(tmp) / "app.pyz", main="pkg:main", filter=keep)
 
     # The directory was rejected, and its contents were still offered
@@ -147,7 +147,7 @@ with tempfile.TemporaryDirectory() as tmp:
     # Compile once, at build time - O(source length)
     compileall.compile_dir(source, legacy=True, quiet=1)
 
-    # Pack sources and bytecode together - O(b + f)
+    # Pack sources and bytecode - O(b + f log f) from 3.13; O(b + f) before 3.13
     zipapp.create_archive(source, Path(tmp) / "app.pyz", main="pkg:main")
 
     names = zipfile.ZipFile(Path(tmp) / "app.pyz").namelist()
@@ -159,7 +159,7 @@ with tempfile.TemporaryDirectory() as tmp:
 The command line does the same work as `create_archive()`:
 
 ```bash
-# Build from a directory - O(b + f)
+# Build from a directory - O(b + f log f) from 3.13; O(b + f) before 3.13
 python -m zipapp app -m pkg:main -o app.pyz
 
 # Copy with a shebang - O(a); the copy is made executable
