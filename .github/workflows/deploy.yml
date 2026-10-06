@@ -64,8 +64,56 @@ jobs:
           path: 'site'
           include-hidden-files: true
 
-  # The suite on each operating system. A test with no platform guard must
-  # pass on all three, so a failure on any one of them fails the run.
+  # Everything except the stopwatch tests, on Linux, on every supported line.
+  # Those are correct but not reliable on a shared runner, and a mis-timed
+  # measurement is not a reason to stop publishing documentation -- three
+  # deploys were lost that way. They run in the `timing` job below, which does
+  # not gate the deploy. `make check` still runs the whole suite before a commit.
+  test-linux:
+    needs: checks
+    # A hang otherwise holds the runner for GitHub's six-hour default.
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every supported line, at or above its CVE-2026-3276 fix release,
+        # so the timing job's normalization assertion runs on each version.
+        python: &supported-pythons ["3.10.22", "3.11.17", "3.12.15", "3.13.16", "3.14.8"]
+    env:
+      UV_PYTHON: ${{ matrix.python }}
+      # The runner lacks nothing the suite needs; see tests/conftest.py.
+      COMPLEXITY_MISSING_CAPABILITIES: ""
+      # The curses tests need a terminfo entry, and a job has no TERM.
+      TERM: xterm-256color
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.1.0
+        with:
+          # An older pinned uv resolves against a build index predating the
+          # fix releases and cannot fetch the matrix entries.
+          version: "latest"
+          enable-cache: false
+
+      - name: Install Python ${{ matrix.python }}
+        run: uv python install ${{ matrix.python }}
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run tests
+        run: uv run pytest -m "not timing and not serial" -n auto --dist=loadfile
+
+      # Runs even when the parallel step fails, so every line reports both.
+      - name: Run serial tests
+        if: ${{ !cancelled() }}
+        run: uv run pytest -m "serial and not timing" -n 0
+
+  # The same tests on the other operating systems, on the newest supported
+  # line. A test with no platform guard must pass on Linux, macOS and Windows,
+  # so a failure on any one of them fails the run.
   test:
     needs: checks
     # A hang otherwise holds the runner for GitHub's six-hour default.
@@ -74,8 +122,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            missing: ""
           # Its interpreter has no C-library gettext, and links the system
           # libedit, which lacks append_history.
           - os: macos-latest
@@ -107,21 +153,16 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      # Everything except the stopwatch tests. Those are correct but not
-      # reliable on a shared runner, and a mis-timed measurement is not a
-      # reason to stop publishing documentation -- three deploys were lost
-      # that way. They run in the `timing` job below, which does not gate
-      # the deploy. `make check` still runs the whole suite before a commit.
+      # Everything except the stopwatch tests; see `test-linux`.
       - name: Run tests
         run: |
           uv run pytest -m "not timing and not serial" -n auto --dist=loadfile
           uv run pytest -m "serial and not timing" -n 0
 
-  # The whole suite on every supported line: the `test` job's steps, then the
-  # stopwatch tests. Reports, but deliberately does not gate: `deploy` does
-  # not need it. A red timing step means a complexity claim needs looking at
-  # -- check whether the measurement missed by a hair (noise) or by a wide
-  # margin (the claim).
+  # The stopwatch tests on every supported line. Reports, but deliberately
+  # does not gate: `deploy` does not need it. A red timing step means a
+  # complexity claim needs looking at -- check whether the measurement missed
+  # by a hair (noise) or by a wide margin (the claim).
   timing:
     # A hang otherwise holds the runner for GitHub's six-hour default.
     timeout-minutes: 60
@@ -129,12 +170,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Every supported line, at or above its CVE-2026-3276 fix release,
-        # so the normalization assertion runs on each version.
-        python: ["3.10.22", "3.11.17", "3.12.15", "3.13.16", "3.14.8"]
+        python: *supported-pythons
     env:
       UV_PYTHON: ${{ matrix.python }}
-      # Makes that skip a failure here, so a pin that drifts below a fix
+      # Makes the unpatched-interpreter skip a failure here, so a pin that drifts below a fix
       # release cannot quietly put this job back to verifying nothing.
       # Local runs still skip, and `make check` stays green off a patch.
       COMPLEXITY_REQUIRE_PATCHED_PYTHON: "1"
@@ -159,17 +198,7 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      # Each test step runs even when an earlier one fails, so every line reports
-      # all three groups.
-      - name: Run tests
-        run: uv run pytest -m "not timing and not serial" -n auto --dist=loadfile
-
-      - name: Run serial tests
-        if: ${{ !cancelled() }}
-        run: uv run pytest -m "serial and not timing" -n 0
-
       - name: Run timing tests
-        if: ${{ !cancelled() }}
         run: uv run pytest -m timing -n 0
 
   deploy:
@@ -182,7 +211,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-    needs: [checks, test]
+    needs: [checks, test-linux, test]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - name: Deploy to GitHub Pages

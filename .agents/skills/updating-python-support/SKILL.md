@@ -62,7 +62,8 @@ when their version's audit manifest is removed.
 
 ## Update CI Boundary Versions
 
-In `.github/workflows/deploy.yml`, keep the timing matrix on exactly the oldest
+In `.github/workflows/deploy.yml`, the `test-linux` and `timing` jobs share one
+Python list (the `supported-pythons` YAML anchor). Keep it on exactly the oldest
 and newest supported minor lines, each pinned to its latest patch release.
 
 - Replace the old lower boundary when support is dropped.
