@@ -17,8 +17,10 @@ The integer rows:
   8,192 bits sharing a gcd of 1 bit, the result is exactly 16,384 bits.
 * `math.factorial(n)`, `math.comb(n, k)` and `math.perm(n, k)` are O(d²) in the
   digits of the result. d is the size variable that moves: factorial's result
-  grows x10.8 for 8x n (Theta(n log n) bits) and the time follows at x3.2 to
-  x3.8 per doubling.
+  grows x10.8 for 8x n (Theta(n log n) bits). Factorial timings at n = 2,000,
+  20,000 and 200,000 exceed x20 at both 10x steps, excluding linear growth
+  without asserting a particular exponent. On aarch64 Python 3.12.15 the
+  step ratios are x83 and x53.
 * n is barely a variable for comb. `comb(n, 50)`'s result gains a flat 50 bits
   per doubling of n - 334, 384, 434 and 484 bits at n = 2,000 through 16,000 -
   and the time is flat with it, x1.06 to x1.46 for 8x n where a linear term
@@ -658,10 +660,14 @@ class TestFactorialGrowsWithItsResult:
 
     @pytest.mark.timing
     def test_time_grows_faster_than_n(self) -> None:
-        timings = [best_ns(lambda n=n: math.factorial(n), repeats=3) for n in (4000, 8000, 16000)]
+        sizes = (2_000, 20_000, 200_000)
+        timings = [best_ns(lambda n=n: math.factorial(n), repeats=5) for n in sizes]
 
         for before, after in zip(timings, timings[1:], strict=False):
-            assert after > 2.5 * before, f"doubling n should cost more than x2: {timings}"
+            ratio = after / before
+            assert ratio > 20, (
+                f"factorial() at n = {sizes}: {timings} ns, 10x step ratio {ratio:.1f}"
+            )
 
 
 class TestCombAndPermAreDrivenByK:

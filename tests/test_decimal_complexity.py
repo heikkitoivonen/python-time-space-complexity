@@ -6,9 +6,8 @@ keeps, and the constructor is the one operation that does not round. Identity,
 digit counts and signal flags settle most of it without a stopwatch. Growth
 classes that only a stopwatch can separate - linear parsing against quadratic
 base conversion, quadratic multiplication against a linear operand, a
-quadratic `sqrt()` against a superquadratic `exp()` - are measured at two
-sizes with the threshold placed between the claimed shape and the excluded
-one.
+quadratic `sqrt()` against a superquadratic `exp()` - are measured across
+input sizes with thresholds between the claimed shape and the excluded one.
 
 Measurement scope:
 
@@ -74,9 +73,12 @@ Measurement scope:
   to the same exponent signals, and `round(d)` with no second argument to
   return an `int` rounded to even under a `ROUND_UP` context.
 * Digit manipulation. `normalize()`, `shift()`, `rotate()`, `logical_and()`,
-  `logical_invert()` and `next_plus()` each grow more than 4x from 2,000 to
-  20,000 digits at a precision that matches - n and p move together there,
-  and neither is separated from the other. `logical_and()` against a
+  `logical_invert()` and `next_plus()` grow between 3x and 30x per 10x step
+  at 10,000, 100,000 and 1,000,000 digits, with matching precision. Both
+  intervals separate linear growth from constant and quadratic growth;
+  n and p move together, and neither is separated from the other. On
+  aarch64 Python 3.12.15 the step ratios range from x8.6 to x11.1.
+  `logical_and()` against a
   200,000-digit second operand costs more than 4x what it costs against a
   2,000-digit one at a fixed first operand, which is the m term, and a digit
   outside the retained width is asserted to still signal.
@@ -1072,8 +1074,13 @@ class TestDigitManipulation:
                 call(value)
                 return best_ns(lambda: call(value), inner=20)
 
-        ratio = at(20_000) / at(2_000)
-        assert ratio > 4.0, f"{name}() grew only {ratio:.1f}x over 10x the digits"
+        sizes = (10_000, 100_000, 1_000_000)
+        timings = [at(count) for count in sizes]
+        for before, after in zip(timings, timings[1:], strict=False):
+            ratio = after / before
+            assert 3 < ratio < 30, (
+                f"{name}() at {sizes} digits: {timings} ns, 10x step ratio {ratio:.1f}"
+            )
 
     @pytest.mark.timing
     def test_the_logical_family_reads_its_second_operand_too(self) -> None:
