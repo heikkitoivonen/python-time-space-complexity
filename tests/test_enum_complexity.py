@@ -589,6 +589,13 @@ class TestDocumentedExamples:
 
 
 class TestUnhashableLookup:
+    """List/dict lookup scans 10 or 100 constant-size values.
+
+    Released CPython 3.12.0–3.12.9 Lib/enum.py hashes raw containment
+    candidates directly; 3.12.10 delegates to value lookup and accepts
+    unhashable candidates. Earlier minor versions reject raw values.
+    """
+
     @pytest.mark.parametrize("kind", [list, dict])
     @pytest.mark.parametrize("count", [10, 100])
     def test_lookup_scans_values(self, kind: type, count: int) -> None:
@@ -613,13 +620,14 @@ class TestUnhashableLookup:
         with pytest.raises(ValueError):
             cls(value(-1))
         assert count <= comparisons <= 2 * count
-        if sys.version_info >= (3, 13):
+        if sys.version_info >= (3, 12, 10):
             comparisons = 0
             assert value(count - 1) in cls
             assert count <= comparisons <= 2 * count
+            comparisons = 0
+            assert value(-1) not in cls
+            assert count <= comparisons <= 2 * count
         else:
-            # 3.10 and 3.11 refuse any raw value; 3.12 hashes before comparing,
-            # so an unhashable one raises there too. 3.13 is the first to scan.
             with pytest.raises(TypeError):
                 assert value(count - 1) in cls
 

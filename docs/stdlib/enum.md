@@ -39,7 +39,7 @@ Construction bounds below cover ordinary hashable values.
 | `len(C)` | O(1) | O(1) | The canonical member list's length |
 | `iter(C)` | O(n) | O(1) | Canonical members only — aliases are skipped |
 | `C.__members__` | O(1) | O(1) auxiliary | Read-only proxy over the existing dictionary, including aliases; copying it to a dict or list costs O(n) time and space |
-| `x in C` | O(1) for a member; up to O(n) comparisons for raw values from 3.13 | O(1) auxiliary, excluding hooks | A raw value raises `TypeError` before 3.12; from 3.12 a hashable one answers `True`/`False`, while an unhashable one still raises until 3.13 compares it |
+| `x in C` | O(1) for a member; up to O(n) comparisons for raw values from 3.12 | O(1) auxiliary, excluding hooks | A raw value raises `TypeError` before 3.12; hashable values are accepted from 3.12, unhashable values from 3.12.10 |
 
 ### Variants
 
@@ -165,10 +165,10 @@ if sys.version_info >= (3, 12):
 
 !!! warning "`value in EnumClass` was not always a question you could ask"
     On 3.10 and 3.11 testing a non-member raises `TypeError` (with a `DeprecationWarning` saying
-    the behaviour will change). Python 3.12 answers for a hashable value but still raises
-    `TypeError: unhashable type` for a list- or dict-valued member; 3.13 is the first release that
-    compares one. For hashable values, use `value in EnumClass._value2member_map_` to support the
-    older versions, or catch the `TypeError`.
+    the behaviour will change). Python 3.12.0–3.12.9 answers for a hashable value but still raises
+    `TypeError: unhashable type` for a list- or dict-valued member; Python 3.12.10 and later
+    compare unhashable values too. For hashable values, use `value in EnumClass._value2member_map_`
+    to support the older versions, or catch the `TypeError`.
 
 ## Integer and String Enums
 
@@ -295,7 +295,8 @@ assert round(Planet.EARTH.surface_gravity, 2) == 9.80
 - **Python 3.11+**: `StrEnum`, `ReprEnum`, `EnumType`, `verify` with `EnumCheck`, `FlagBoundary`,
   `member`/`nonmember`, `enum.property`, `show_flag_values`, `enum.bin`, the `global_*` and
   `pickle_by_*` helpers; a combined `Flag` became sized and iterable
-- **Python 3.12+**: `value in EnumClass` answers `True`/`False` instead of raising `TypeError`
+- **Python 3.12+**: `value in EnumClass` answers `True`/`False` for hashable values;
+  unhashable values are supported from 3.12.10
 - **Python 3.13+**: `EnumDict`, the class-body mapping, became public
 
 ## Related Documentation
