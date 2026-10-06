@@ -56,9 +56,11 @@ Observation settles every row that has something to observe:
   six waiters wakes the two that arrived first and leaves four queued; a
   wait that times out behind 20 waiters is removed from index 20 of the
   deque, through ``Condition.wait``, ``Event.wait`` and
-  ``Semaphore.acquire`` alike, where each ``notify_all`` removal is from
-  index 0; ``wait_for`` calls its predicate once when it is already true
-  and once more per wakeup;
+  ``Semaphore.acquire`` alike. A semaphore may repeat its condition wait
+  before its deadline clock expires; a controlled clock forces two waits,
+  both removed at index 20, leaving the original 20 waiters queued.
+  Each ``notify_all`` removal is from index 0; ``wait_for`` calls its
+  predicate once when it is already true and once more per wakeup;
 * Semaphore(2) grants two non-blocking acquires and refuses the third;
   ``release(2)`` on six waiters wakes exactly two; BoundedSemaphore raises
   ValueError on the release that would exceed its initial value;
@@ -732,22 +734,31 @@ class TestConditionRows:
         assert queue.removed_at == [20] + [0] * 20
 
     @pytest.mark.parametrize(
-        ("build", "block", "timed", "release"),
+        ("build", "block", "timed", "release", "clock_ticks"),
         [
             (
                 threading.Event,
                 lambda event: event.wait(),
                 lambda event: event.wait(SHORT),
                 lambda event: event.set(),
+                None,
             ),
             (
                 lambda: threading.Semaphore(0),
                 lambda semaphore: semaphore.acquire(),
                 lambda semaphore: semaphore.acquire(timeout=SHORT),
                 lambda semaphore: semaphore.release(20),
+                None,
+            ),
+            (
+                lambda: threading.Semaphore(0),
+                lambda semaphore: semaphore.acquire(),
+                lambda semaphore: semaphore.acquire(timeout=SHORT),
+                lambda semaphore: semaphore.release(20),
+                (0.0, SHORT / 2, SHORT),
             ),
         ],
-        ids=["Event.wait", "Semaphore.acquire"],
+        ids=["Event.wait", "Semaphore.acquire", "Semaphore.acquire-retry"],
     )
     def test_the_wrappers_timed_waits_pay_the_same_removal(
         self,
@@ -755,18 +766,33 @@ class TestConditionRows:
         block: Callable[[Any], object],
         timed: Callable[[Any], bool],
         release: Callable[[Any], object],
+        clock_ticks: tuple[float, ...] | None,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        """Each timeout scans past the earlier waiters, including on a retry.
+
+        Native lock waits and the deadline clock can have different resolutions.
+        The controlled clock keeps half the timeout after the first wait and
+        expires after the second, exercising that path on every platform.
+        """
         primitive = build()
         queue = RecordingDeque()
         cast("Any", condition_of(primitive))._waiters = queue
         threads = [spawn(block, primitive) for _ in range(20)]
         try:
             assert wait_until(lambda: len(queue) == 20)
-            assert timed(primitive) is False
-            assert queue.removed_at == [20]
+            with monkeypatch.context() as patch:
+                if clock_ticks is not None:
+                    ticks = iter(clock_ticks)
+                    patch.setattr(threading, "_time", lambda: next(ticks))
+                assert timed(primitive) is False
+            assert set(queue.removed_at) == {20}
+            assert len(queue) == 20
+            if clock_ticks is not None:
+                assert queue.removed_at == [20, 20]
         finally:
             release(primitive)
-        join_all(threads)
+            join_all(threads)
 
     def test_wait_for_calls_the_predicate_once_per_wakeup(self) -> None:
         condition = threading.Condition()
