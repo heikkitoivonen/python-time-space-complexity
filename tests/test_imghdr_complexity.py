@@ -206,7 +206,9 @@ class TestWhatReadsOneHeader:
         assert f._f.tell() == start
 
     @pytest.mark.parametrize(
-        ("data", "expected"), [(PNG + bytes(1_000_000), "png"), (bytes(1_000_000), None)]
+        ("data", "expected"),
+        [(PNG + bytes(1_000_000), "png"), (bytes(1_000_000), None)],
+        ids=["png", "unrecognised"],
     )
     def test_a_path_is_opened_read_once_and_closed(
         self, imghdr: Any, monkeypatch: pytest.MonkeyPatch, data: bytes, expected: str | None
