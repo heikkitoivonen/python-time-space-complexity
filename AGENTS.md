@@ -198,7 +198,7 @@ Run another interpreter only for the tests whose claim is about that version -
 a version-gated skip, a bound that moves at a release, an API added or removed:
 
 ```bash
-UV_PROJECT_ENVIRONMENT=/tmp/py312 uv run --python 3.12.14 --frozen \
+UV_PROJECT_ENVIRONMENT=/tmp/py312 uv run --python 3.12.15 --frozen \
   pytest tests/test_enum_complexity.py -k unhashable
 ```
 

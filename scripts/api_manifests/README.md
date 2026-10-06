@@ -44,7 +44,7 @@ release shown on the official site, download its inventory, then run:
 curl --fail --location https://docs.python.org/3.14/objects.inv --output /tmp/python-3.14-objects.inv
 uv run python scripts/build_api_manifest.py \
   --inventory /tmp/python-3.14-objects.inv \
-  --documentation-version 3.14.7 \
+  --documentation-version 3.14.8 \
   --source-url https://docs.python.org/3.14/objects.inv \
   --output scripts/api_manifests/python-3.14.json
 ```

@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "python_version": "3.14",
-  "documentation_version": "3.14.7",
+  "documentation_version": "3.14.8",
   "source_url": "https://docs.python.org/3.14/objects.inv",
-  "inventory_sha256": "15fb790183470bbcd4484deec71a3d13c2a018be0b707173966e3adbf57d1532",
+  "inventory_sha256": "49b99d2c8ad6242ab2463722f1d800c8427f6a0ef5ffb67a61935a65638a267a",
   "apis": {
     "__future__._Feature": {
       "kind": "class",
@@ -35528,6 +35528,10 @@
     "turtle.Turtle": {
       "kind": "class",
       "source": "https://docs.python.org/3.14/library/turtle.html#turtle.Turtle"
+    },
+    "turtle.TurtleGraphicsError": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.14/library/turtle.html#turtle.TurtleGraphicsError"
     },
     "turtle.TurtleScreen": {
       "kind": "class",

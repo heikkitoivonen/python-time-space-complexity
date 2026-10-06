@@ -153,9 +153,9 @@ CLASSES: dict[str, type] = {
 # Classes whose __init__ installs public methods on the instance, and how to
 # build one so those names count as members too.
 INSTANCES: dict[str, Callable[[], object]] = {"Condition": threading.Condition}
-# Module attributes that are imports rather than API: ``warnings`` leaks on
-# 3.13 and WeakSet on every supported version.
-LEAKED_IMPORTS = {"WeakSet", "warnings"}
+# Module attributes that are imports rather than API: ``functools`` leaks on
+# 3.10 to 3.12, ``warnings`` on 3.13 and WeakSet on every supported version.
+LEAKED_IMPORTS = {"WeakSet", "functools", "warnings"}
 # C-level spellings of the lock methods that the Python documentation omits.
 UNDOCUMENTED_LOCK_ALIASES = {"acquire_lock", "release_lock", "locked_lock"}
 VERSION_GATED_NAMES = {

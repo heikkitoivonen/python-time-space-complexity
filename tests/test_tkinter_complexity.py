@@ -785,7 +785,8 @@ class TestSmallRows:
         values = {"a": root.tk.call("list", 1, 2), "b": "text", "c": ()}
         converted = ttk.tclobjs_to_py(values)
         assert converted is values
-        assert converted == {"a": [1, 2], "b": "text", "c": ""}
+        empty = "" if sys.version_info >= (3, 14) else ()
+        assert converted == {"a": [1, 2], "b": "text", "c": empty}
 
 
 @pytest.mark.timing

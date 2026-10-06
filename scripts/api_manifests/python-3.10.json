@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "python_version": "3.10",
-  "documentation_version": "3.10.21",
+  "documentation_version": "3.10.22",
   "source_url": "https://docs.python.org/3.10/objects.inv",
-  "inventory_sha256": "253c33f16d7da2451fb3695fd9cc9ca259a4b55fe378ad2224ab5e8c3943258f",
+  "inventory_sha256": "ece6952e136303d797672231d6564692b7fbc266dc71dabb74c2c3eed77de193",
   "apis": {
     "_thread": {
       "kind": "module",

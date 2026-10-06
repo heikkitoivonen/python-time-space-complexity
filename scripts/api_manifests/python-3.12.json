@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "python_version": "3.12",
-  "documentation_version": "3.12.14",
+  "documentation_version": "3.12.15",
   "source_url": "https://docs.python.org/3.12/objects.inv",
   "inventory_sha256": "8745104c851435ca3dbb6fd47e11f5dfb6361d74500b32c04f3f6b23bc0e4673",
   "apis": {

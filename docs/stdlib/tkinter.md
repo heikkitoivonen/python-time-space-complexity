@@ -259,7 +259,7 @@ Widget options reach Tk through one routine that rebuilds the argument tuple onc
 |-----------|------|-------|-------|
 | `ttk.Widget(master, widgetname, **k)` / `ttk.Frame()` / `ttk.Label()` / `ttk.Labelframe()` / `ttk.LabelFrame()` / `ttk.Menubutton()` / `ttk.Button()` / `ttk.Checkbutton()` / `ttk.Radiobutton()` / `ttk.Entry()` / `ttk.Combobox()` / `ttk.Spinbox()` / `ttk.Scale()` / `ttk.Scrollbar()` / `ttk.Separator()` / `ttk.Sizegrip()` / `ttk.Progressbar()` / `ttk.Notebook()` / `ttk.Panedwindow()` / `ttk.PanedWindow()` / `ttk.Treeview()` | O(k² + t·f) | O(k) | The classic widget constructor and its option marshalling; only the style and item methods below format options linearly |
 | `ttk.setup_master(master)` | O(1) | O(1) | The master given, or the default root |
-| `ttk.tclobjs_to_py(adict)` | O(m) | O(m) | Converts the dict's values in place, a list per tuple value, m elements in all, and returns the same dict |
+| `ttk.tclobjs_to_py(adict)` | O(m) | O(m) | Converts the dict's values in place, a list per non-empty tuple value, m elements in all, and returns the same dict; an empty tuple becomes `''` from 3.14 and stays `()` before |
 | `ttk.Widget.state(statespec)` / `ttk.Widget.instate(statespec, callback)` / `ttk.Widget.identify(x, y)` | O(m + f) | O(m) | m state flags; `instate` runs the callback only when they all hold |
 | `ttk.Button.invoke()` / `ttk.Checkbutton.invoke()` / `ttk.Radiobutton.invoke()` | O(f + t·f) | O(1) | The two with a variable write it first, firing its traces |
 | `ttk.Entry.bbox(index)` / `ttk.Entry.identify(x, y)` / `ttk.Scale.get(x, y)` | O(1) | O(1) | |
