@@ -22,7 +22,7 @@ Measurement scope:
   After a real `openlog(ident='myapp', facility=LOG_LOCAL0)` and
   `closelog()`, the next `syslog()` raises `syslog.openlog` again with the
   default ident, logoption and facility.
-* `setlogmask(0)` returns `LOG_UPTO(LOG_DEBUG)` in a fresh process, and
+* After explicitly setting `LOG_UPTO(LOG_DEBUG)`, `setlogmask(0)`
   returns the same value twice, so 0 does not change the mask;
   `setlogmask(m)` returns the mask it replaced, and `setlogmask(0)` then
   returns `m`.
@@ -366,14 +366,14 @@ class TestSyslogOpensTheLog:
 @UNIX
 class TestSetlogmask:
     """`setlogmask()` row: returns the previous mask, and 0 leaves the mask
-    unchanged, so `setlogmask(0)` reads it. By default every priority
-    passes."""
+    unchanged, so `setlogmask(0)` reads it."""
 
     def test_zero_reads_the_mask_and_a_mask_returns_the_old_one(self) -> None:
         _check(
             """
             import syslog
             everything = syslog.LOG_UPTO(syslog.LOG_DEBUG)
+            initial = syslog.setlogmask(everything)
             assert syslog.setlogmask(0) == everything
             assert syslog.setlogmask(0) == everything
 
@@ -382,6 +382,7 @@ class TestSetlogmask:
             assert syslog.setlogmask(0) == warnings_up
             assert syslog.setlogmask(0) == warnings_up
             assert syslog.setlogmask(everything) == warnings_up
+            assert syslog.setlogmask(initial) == everything
             """
         )
 

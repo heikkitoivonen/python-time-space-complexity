@@ -67,8 +67,7 @@ whole process. `syslog()` still converts a filtered message before the C library
 ```python
 import syslog
 
-everything = syslog.setlogmask(syslog.LOG_UPTO(syslog.LOG_WARNING))  # O(1) - returns the old mask
-assert everything == syslog.LOG_UPTO(syslog.LOG_DEBUG)  # by default every priority passes
+previous = syslog.setlogmask(syslog.LOG_UPTO(syslog.LOG_WARNING))  # O(1) - returns the old mask
 
 mask = syslog.setlogmask(0)  # O(1) - 0 reads the mask without changing it
 assert mask & syslog.LOG_MASK(syslog.LOG_ERR)
@@ -77,7 +76,7 @@ assert not mask & syslog.LOG_MASK(syslog.LOG_INFO)
 syslog.syslog(syslog.LOG_INFO, 'Filtered')  # still O(n)
 syslog.syslog(syslog.LOG_ERR, 'Sent')  # O(n)
 
-syslog.setlogmask(everything)  # O(1) - restore
+syslog.setlogmask(previous)  # O(1) - restore
 ```
 
 ## Common Patterns
@@ -104,9 +103,10 @@ previous = syslog.setlogmask(syslog.LOG_UPTO(syslog.LOG_INFO))
 log_debug(describe_state)
 assert built == []  # filtered before it was built
 
-syslog.setlogmask(previous)
+syslog.setlogmask(syslog.LOG_UPTO(syslog.LOG_DEBUG))
 log_debug(describe_state)
 assert built == [True]
+syslog.setlogmask(previous)  # restore the process's original mask
 ```
 
 ## Performance Best Practices

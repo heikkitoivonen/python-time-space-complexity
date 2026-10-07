@@ -20,6 +20,10 @@ Measurement scope:
   With the pseudo-terminal made the child's controlling terminal and
   standard input and error as pipes, the prompt appears on the terminal and
   nothing reaches `sys.stderr`, so `/dev/tty` is tried first.
+  A controlling-terminal child also writes 100,000 bytes before exit; all
+  arrive at the master while the parent drains it before waiting. Terminal
+  attributes are checked after exit only without a controlling terminal:
+  macOS revokes that terminal when its session leader exits.
 * `fallback_getpass()` issues `GetPassWarning`, writes the warning line and
   the prompt to `stream`, and returns the line without its newline, leaving
   the next line unread; an empty `sys.stdin` raises `EOFError`. With the
@@ -166,7 +170,7 @@ class Session:
     stderr: bytes
     screen: bytes
     before: list[Any]
-    after: list[Any]
+    after: list[Any] | None
 
 
 def _drain(fd: int, until: bytes | None = None, timeout: float = 10.0) -> bytes:
@@ -224,19 +228,37 @@ def on_terminal(code: str, keys: bytes, *, controlling: bool = False) -> Session
         prompt_fd = controller if controlling else child.stderr.fileno()
         shown = _drain(prompt_fd, until=b"Password: ")
         os.write(controller, keys)
+        # A controlling-terminal child can wait for its output to drain on
+        # exit on macOS. Read the master while it is alive, before waiting.
+        screen = b""
+        deadline = time.monotonic() + 30
+        while child.poll() is None:
+            if time.monotonic() >= deadline:
+                raise subprocess.TimeoutExpired(child.args, 30)
+            screen += _drain(controller, timeout=0.5)
         stdout, stderr = child.communicate(timeout=30)
-        screen = _drain(controller)
+        screen += _drain(controller)
         if controlling:
             screen = shown + screen
         else:
             stderr = shown + stderr
-        return Session(stdout, stderr, screen, before, termios.tcgetattr(terminal))
+        # macOS revokes a controlling terminal when its session leader exits.
+        after = None if controlling else termios.tcgetattr(terminal)
+        return Session(stdout, stderr, screen, before, after)
     finally:
         if child is not None and child.poll() is None:
             child.kill()
-            child.wait()
-        os.close(terminal)
+        # Closing the master releases terminal drain waits even after SIGKILL.
         os.close(controller)
+        os.close(terminal)
+        if child is not None:
+            try:
+                child.wait(timeout=30)
+            finally:
+                if child.stdout is not None:
+                    child.stdout.close()
+                if child.stderr is not None:
+                    child.stderr.close()
 
 
 @POSIX_ONLY
@@ -300,6 +322,13 @@ class TestEchoIsOffWhileReading:
         assert b"Password: " in session.screen
         assert session.stderr == b"", session.stderr
         assert b"s3cret" not in session.screen
+
+    def test_terminal_output_is_drained_while_the_child_exits(self) -> None:
+        code = self.READ + "\nwith open('/dev/tty', 'w') as tty: tty.write('done' * 25_000)"
+        session = on_terminal(code, b"s3cret\n", controlling=True)
+
+        assert session.stdout.decode().strip() == "'s3cret'"
+        assert session.screen.endswith(b"done" * 25_000)
 
 
 class TestFallbackReadsOneEchoedLine:

@@ -71,12 +71,13 @@ Measurement scope:
 * `ba[:]` of 10,000,000 traces a peak of at least 10,000,000 and
   `memoryview(ba)` under 1,000. Under a live view `append()`, `del`,
   `clear()` and `+=` raise `BufferError` while an item assignment succeeds.
-* `clear()` on 100,000,000 bytes costs far more than on 1,000,000 and leaves
-  an allocation of at most one byte. `reverse()` traces no allocation and
+* `clear()` on 100,000, 1,000,000 and 10,000,000 bytes leaves an allocation
+  of at most one byte, with and without a deleted prefix. `reverse()` traces no allocation and
   scales; `copy()` traces a full-size peak. `resize()` (3.14+) costs the same
   at both sizes when shrinking by one byte and growing back, and scales when
-  halving and regrowing; shrinking 100,000,000 bytes to one costs far more
-  than shrinking 1,000,000 to one, which is its n term.
+  halving and regrowing. Shrinking each of those three buffer sizes to one
+  preserves the first byte and leaves at most two bytes allocated, with
+  and without a deleted prefix.
 * Searching: `find()`, `rfind()` and `in` for an absent byte, `count()` for a
   present one and `in` with a `bytes` pattern all scale with the buffer.
   `startswith()` costs the same on both buffer sizes and scales with the
@@ -141,14 +142,15 @@ Measurement scope:
 
 Not settled here:
 
-* `clear()`, and `resize()` shrinking, are O(n) because the allocator
-  returns the pages; a small buffer shrinks in place at O(1), so both
-  measurements span 1,000,000 to 100,000,000 bytes, where glibc unmaps, and
-  carry no upper bound. They still depend on allocator state: a long-lived
-  process can hold a free heap region big enough to take and give back the
-  large buffer without unmapping it. In the serial timing run 50,000,000
-  bytes did that (x1.0 and x2.0) and 100,000,000 did not, so these two
-  tests exceed 64 MB of resident memory.
+* Time spent releasing a buffer in `clear()` or a major `resize()` shrink
+  depends on the allocator and operating system, including whether pages
+  are returned or retained for reuse. The page includes this in its
+  worst-case bounds; it does not require every release to scale with n.
+  Objects/bytearrayobject.c (v3.10.19 through v3.14.2) implements `clear()`
+  by resizing to zero: one reallocation, or an allocation and free when the
+  start offset has moved, with no bytes copied. A resize to one byte copies
+  at most one byte in that path. Portable timing cannot establish the
+  allocator's release cost; buffer release is observed through `__alloc__()`.
 * The O(n + m) bound on `find()`, `count()` and `in` follows from the two-way
   algorithm in Objects/stringlib/fastsearch.h, present since 3.10; only the n
   term is timed. The reverse search's worst case is measured at one buffer
@@ -834,11 +836,18 @@ class TestFrontDeletionAdvancesTheStart:
 
 
 class TestClearReverseCopyAndResize:
-    """`clear()` | O(n) frees the buffer; `reverse()` | O(n) | O(1) in place;
-    `copy()` | O(n) | O(n); `resize(size)` | O(n + size) | O(size), 3.14+."""
+    """`clear()` releases the buffer; `reverse()` | O(n) | O(1) in place;
+    `copy()` | O(n) | O(n); `resize(size)` | O(n + size) worst case | O(size), 3.14+.
 
-    def test_clear_releases_the_buffer(self) -> None:
-        data = bytearray(LARGE)
+    Release time is allocator-dependent; observe the allocation, rather than
+    requiring a linear timing ratio on each platform.
+    """
+
+    @pytest.mark.parametrize("size", [100_000, 1_000_000, 10_000_000])
+    @pytest.mark.parametrize("offset", [0, 1])
+    def test_clear_releases_the_buffer(self, size: int, offset: int) -> None:
+        data = bytearray(size + offset)
+        del data[:offset]
 
         data.clear()
 
@@ -878,25 +887,6 @@ class TestClearReverseCopyAndResize:
         assert not hasattr(bytearray, "resize")
 
     @pytest.mark.timing
-    def test_clear_costs_the_buffer_it_frees(self) -> None:
-        def clear_cost(size: int) -> float:
-            best: float | None = None
-            for _ in range(5):
-                data = bytearray(size)
-                start = time.perf_counter_ns()
-                data.clear()
-                elapsed = time.perf_counter_ns() - start
-                best = elapsed if best is None else min(best, elapsed)
-            assert best is not None
-            return best
-
-        ratio = clear_cost(100_000_000) / clear_cost(1_000_000)
-
-        # No upper bound: the ratio reflects the allocator returning pages
-        # rather than a growth class.
-        assert ratio > LINEAR, f"clear() of 100x the bytes cost x{ratio:.1f}"
-
-    @pytest.mark.timing
     def test_reverse_scales_with_the_buffer(self) -> None:
         small, large = letters(SMALL), letters(LARGE)
 
@@ -905,24 +895,17 @@ class TestClearReverseCopyAndResize:
         assert_linear("reverse()", ratio)
 
     @pytest.mark.skipif(sys.version_info < (3, 14), reason="resize() was added in 3.14")
-    @pytest.mark.timing
-    def test_shrinking_costs_the_buffer_it_gives_back(self) -> None:
-        """The n term: the same release `clear()` pays for, so no upper bound."""
+    @pytest.mark.parametrize("size", [100_000, 1_000_000, 10_000_000])
+    @pytest.mark.parametrize("offset", [0, 1])
+    def test_shrinking_releases_the_unused_buffer(self, size: int, offset: int) -> None:
+        data = bytearray(size + offset)
+        del data[:offset]
+        data[0] = 97
 
-        def shrink_cost(size: int) -> float:
-            best: float | None = None
-            for _ in range(5):
-                data = bytearray(size)
-                start = time.perf_counter_ns()
-                data.resize(1)  # type: ignore[attr-defined]
-                elapsed = time.perf_counter_ns() - start
-                best = elapsed if best is None else min(best, elapsed)
-            assert best is not None
-            return best
+        data.resize(1)  # type: ignore[attr-defined]
 
-        ratio = shrink_cost(100_000_000) / shrink_cost(1_000_000)
-
-        assert ratio > LINEAR, f"resizing 100x the buffer down to one byte cost x{ratio:.1f}"
+        assert data == b"a"
+        assert data.__alloc__() <= 2, f"resize(1) kept {data.__alloc__()} bytes allocated"
 
     @pytest.mark.skipif(sys.version_info < (3, 14), reason="resize() was added in 3.14")
     @pytest.mark.timing

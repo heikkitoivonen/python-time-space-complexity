@@ -62,10 +62,10 @@ their input, as the byte-oriented codecs are. A structured codec can cost more.
 | `pop()`, `pop(-1)` | O(1) amortized | O(1), O(n) on compaction | The buffer is compacted once the contents fall below half of it, which copies the remainder |
 | `pop(i)` | O(n) | O(1), O(n) on compaction | Shifts the tail, including for i = 0; `del ba[0]` does not |
 | `remove(x)` | O(n) | O(1), O(n) on compaction | Finds the first occurrence and shifts the tail; `ValueError` when absent |
-| `clear()` | O(n) | O(1) | Frees the buffer |
+| `clear()` | O(n) worst case | O(1) | Releases the buffer; time depends on the allocator, rather than a scan of the bytes |
 | `copy()` | O(n) | O(n) | |
 | `reverse()` | O(n) | O(1) | In place |
-| `resize(size)` | O(n + size) | O(size) | Python 3.14+. Added bytes are zeros, and dropped ones are released, so shrinking costs the buffer it gives back; a negative size raises `ValueError` |
+| `resize(size)` | O(n + size) worst case | O(size) | Python 3.14+. Added bytes are zeros; shrinking can be O(1), depending on reallocation and allocator costs. A negative size raises `ValueError` |
 
 ### Searching
 
