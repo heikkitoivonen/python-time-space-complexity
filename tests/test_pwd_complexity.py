@@ -9,10 +9,11 @@ entry per entry the C library enumerates.
 
 Measurement scope:
 
-* `getpwuid(0)` and `getpwnam()` of its name return equal `struct_passwd`
-  entries that are not the same object, and two `getpwuid(0)` calls and two
-  `getpwnam()` calls do the same. Two `getpwall()` calls return distinct
-  lists sharing no entry object, with equal contents in any order. That
+* `getpwuid(0)` and `getpwnam()` of its name return `struct_passwd` entries
+  with the same uid and name. Two `getpwuid(0)` calls and two `getpwnam()`
+  calls return four distinct entry objects. Other fields, such as the login
+  shell, can differ between backend queries. Two `getpwall()` calls return
+  distinct lists sharing no entry object. That
   nothing is cached in Python is read from Modules/pwdmodule.c, which keeps
   no state but the `struct_passwd` type: a cache could also hand back copies.
 * `getpwall()` returns exactly as many entries as a `setpwent()` /
@@ -104,7 +105,7 @@ def _enumerated_by_libc() -> int:
 @UNIX
 class TestLookupsReturnFreshEntries:
     """`getpwuid()` and `getpwnam()` are O(1): one query, one seven-field
-    entry built. Equal results that are not the same object show each call
+    entry built. Distinct object identities show each call
     returns a fresh entry; that nothing is cached is read from the source."""
 
     def test_by_uid_and_by_name_agree(self) -> None:
@@ -112,8 +113,10 @@ class TestLookupsReturnFreshEntries:
         by_name = pwd.getpwnam(by_uid.pw_name)
 
         assert isinstance(by_uid, pwd.struct_passwd)
+        assert isinstance(by_name, pwd.struct_passwd)
         assert by_uid.pw_uid == 0
-        assert by_name == by_uid
+        assert by_name.pw_uid == by_uid.pw_uid
+        assert by_name.pw_name == by_uid.pw_name
 
     def test_every_call_builds_a_new_entry(self) -> None:
         first = pwd.getpwuid(0)
@@ -121,9 +124,10 @@ class TestLookupsReturnFreshEntries:
         by_name = pwd.getpwnam(first.pw_name)
         again_by_name = pwd.getpwnam(first.pw_name)
 
-        assert first == second == by_name == again_by_name
-        assert first is not second and first is not by_name
-        assert by_name is not again_by_name
+        entries = [first, second, by_name, again_by_name]
+        assert all(isinstance(entry, pwd.struct_passwd) for entry in entries)
+        assert all(entry.pw_uid == 0 and entry.pw_name == first.pw_name for entry in entries)
+        assert len({id(entry) for entry in entries}) == len(entries)
 
     def test_a_missing_uid_raises_key_error(self) -> None:
         uid = _unlisted_uid()
@@ -171,7 +175,8 @@ class TestGetpwallEnumeratesTheDatabase:
 
         assert first is not second
         assert {id(entry) for entry in first}.isdisjoint(id(entry) for entry in second)
-        assert sorted(map(repr, first)) == sorted(map(repr, second))
+        assert first and second
+        assert all(isinstance(entry, pwd.struct_passwd) for entry in first + second)
 
 
 @UNIX

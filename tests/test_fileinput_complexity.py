@@ -17,9 +17,10 @@ Measurement scope:
   instance's methods return, and to raise `RuntimeError` before `input()` and
   after `close()`; `nextfile()` does too, and `close()` without an instance
   does nothing.
-* One line held: iterating a 400,000-line file (4.4 MB) peaks under 1 MB of
-  traced allocation, and so does an in-place edit of the same file, while
-  `list()` of it peaks over 10 MB.
+* One line held: iterating a 400,000-line file (11 characters per decoded
+  line, with native line endings on disk) peaks under 1 MB of traced
+  allocation, and so does an in-place edit of the same file, while `list()`
+  of it peaks over 10 MB. The edit preserves the file's original byte size.
 * `nextfile()` on the first line of a 10,000-line file makes the counting
   file object serve one `readline()` call, and `lineno()` does not count the
   skipped lines. What a buffered file reads ahead is outside that count.
@@ -259,6 +260,7 @@ class TestIterationHoldsOneLine:
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         path = self._big(tmp_path)
+        original_size = path.stat().st_size  # includes the native line endings
         monkeypatch.setattr(sys, "stdout", sys.stdout)  # restored even if the loop fails
 
         def edit() -> None:
@@ -268,7 +270,7 @@ class TestIterationHoldsOneLine:
 
         streamed = peak_bytes(edit)
         assert streamed < 1_000_000, f"the in-place edit peaked at {streamed} bytes"
-        assert path.stat().st_size == 11 * self.LINES
+        assert path.stat().st_size == original_size
 
     def test_readline_returns_an_empty_string_at_the_end(self, tmp_path: pathlib.Path) -> None:
         lines = fileinput.FileInput(_write(tmp_path / "a.txt", "1\n"), encoding="utf-8")

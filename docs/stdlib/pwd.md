@@ -45,7 +45,8 @@ assert root.pw_uid == 0
 assert root[0] == root.pw_name and root[5] == root.pw_dir
 
 same = pwd.getpwnam(root.pw_name)  # O(1) - another query
-assert same == root and same is not root  # a fresh entry, not a cached one
+assert same.pw_uid == root.pw_uid and same.pw_name == root.pw_name
+assert same is not root  # a fresh entry, not a cached one
 
 try:
     pwd.getpwuid(2**32)  # beyond a 32-bit uid_t, so no entry can have it
