@@ -1,255 +1,228 @@
 ---
-source_sha: b04962478eecb0ad13d0ce4d85f4eb6e7d0434e3799c89a2b10b66a31b8766c6
+source_sha: a94d3e8a9450b59cb245eb0f1ed57d4adf9f9336e3b33dadbbff5a31abbd09b2
 translated: machine
 ---
 
-# Bisect-moduulin vaativuus
+# bisect-moduulin vaativuus
 
-Moduuli `bisect` tarjoaa binäärihakuoperaatioita järjestetyille listoille.
+Moduuli `bisect` etsii sijainteja jonosta, jonka kutsuja pitää järjestyksessä. Se ei koskaan
+järjestä eikä koskaan tarkista järjestystä: jokainen haku puolittaa sille annetun välin ja lukee
+yhden alkion kierrosta kohden vakiomääräisellä lisämuistilla. Lisäysfunktiot yhdistävät tämän haun
+jonon omaan `insert()`-metodiin, ja listalla kustannus syntyy lisäyksestä, ei hausta.
 
-## Operaatiot
+`n` on jonon pituus. Hakujen vaativuus lasketaan koetuksina: kukin on yksi alkion luku, yksi `key`-kutsu,
+kun avainfunktio on annettu, ja yksi `<`-vertailu, ja jokainen hinnoitellaan O(1):ksi. Avainfunktio
+tai vertailu, joka tekee enemmän työtä, kertoo haun kustannuksellaan. Indeksointi on O(1), kuten
+listalla. Kaksi alkiota ovat tässä yhtä suuret, kun kumpikaan ei ole `<` toista; kun `key` on
+annettu, verrataan avaimia.
+
+## Vaativuusviite
+
+### Haku
 
 | Operaatio | Aika | Tila | Huomiot |
 |-----------|------|-------|-------|
-| `bisect_left(a, x)` | O(log n) | O(1) | Etsii vasemmanpuoleisimman sijainnin |
-| `bisect_right(a, x)` | O(log n) | O(1) | Etsii oikeanpuoleisimman sijainnin |
-| `bisect(a, x)` | O(log n) | O(1) | Vaihtoehtoinen nimi funktiolle bisect_right |
-| `insort_left(a, x)` | O(n) | O(1) | O(log n) haku + O(n) lisäys (siirtää alkioita paikallaan) |
-| `insort_right(a, x)` | O(n) | O(1) | O(log n) haku + O(n) lisäys (siirtää alkioita paikallaan) |
-| `insort(a, x)` | O(n) | O(1) | Vaihtoehtoinen nimi funktiolle insort_right |
+| `bisect.bisect_left(a, x, lo=0, hi=len(a), *, key=None)` | O(log n) | O(1) | Sijainti ennen `x`:n kanssa yhtä suurten alkioiden jaksoa; `key` sovelletaan jokaiseen koetettuun alkioon, ei koskaan `x`:ään |
+| `bisect.bisect_right(a, x, lo=0, hi=len(a), *, key=None)` | O(log n) | O(1) | Sijainti `x`:n kanssa yhtä suurten alkioiden jakson jälkeen |
+| `bisect.bisect(a, x, lo=0, hi=len(a), *, key=None)` | O(log n) | O(1) | Sama funktio kuin `bisect_right` |
 
-## Tilavaativuus
+### Lisäys
 
-- Binäärihakuoperaatiot: O(1) lisätilaa
-- Lisäysoperaatiot: O(1) lisätilaa (siirtää alkioita olemassa olevan listan sisällä)
+| Operaatio | Aika | Tila | Huomiot |
+|-----------|------|-------|-------|
+| `bisect.insort_left(a, x, lo=0, hi=len(a), *, key=None)` | O(n) | O(1) | O(log n) haku, sitten `a.insert()`, joka listalla siirtää loppuosaa; `key` sovelletaan `x`:ään kerran |
+| `bisect.insort_right(a, x, lo=0, hi=len(a), *, key=None)` | O(n) | O(1) | Lisää `x`:n kanssa yhtä suurten alkioiden jakson jälkeen |
+| `bisect.insort(a, x, lo=0, hi=len(a), *, key=None)` | O(n) | O(1) | Sama funktio kuin `insort_right` |
 
-## Toteutuksen yksityiskohdat
+## Haku järjestetystä listasta
 
-### Binäärihaun takuu
+### Vasen ja oikea
+
+Haut eroavat vain siinä, mihin ne osuvat yhtä suurten alkioiden jaksossa: `bisect_left` ennen sitä,
+`bisect_right` sen jälkeen. Kumpikin puolittaa silti välin, joten toistuvien arvojen jakson haku on
+O(log n) kuten mikä tahansa muu haku, ja yhdessä ne rajaavat jakson, oli se kuinka pitkä tahansa.
 
 ```python
 import bisect
 
-# Must be sorted!
-sorted_list = [1, 3, 3, 3, 5, 7, 9]
+values = [1, 3, 3, 3, 5, 7, 9]
 
-# bisect_left: leftmost insertion point
-pos = bisect.bisect_left(sorted_list, 3)  # O(log n), pos = 1
-# Insert here to keep list sorted (before all 3's)
+left = bisect.bisect_left(values, 3)    # O(log n)
+right = bisect.bisect_right(values, 3)  # O(log n)
+assert (left, right) == (1, 4)
+assert values[left:right] == [3, 3, 3]
+assert right - left == 3                # occurrences counted without a scan
 
-# bisect_right: rightmost insertion point
-pos = bisect.bisect_right(sorted_list, 3)  # O(log n), pos = 4
-# Insert here to keep list sorted (after all 3's)
-# Both halve the search range each step, so a run of equal values costs no
-# more than a unique one
+def contains(sorted_list, x):
+    i = bisect.bisect_left(sorted_list, x)  # O(log n), against O(n) for `x in sorted_list`
+    return i < len(sorted_list) and sorted_list[i] == x
+
+assert contains(values, 5)
+assert not contains(values, 4)
 ```
 
-### Alkioiden etsiminen
+### Rajaus parametreilla lo ja hi
+
+`lo` ja `hi` rajaavat haettavan viipaleen, ja haku maksaa O(log(hi - lo)) jonon pituudesta
+riippumatta. Lisäys `insort`-funktiolla maksaa silti koko listan lisäyksen. Negatiivinen `lo`
+nostaa `ValueError`-poikkeuksen.
 
 ```python
 import bisect
 
-sorted_list = [1, 3, 5, 7, 9]
+values = list(range(0, 1_000, 2))
 
-# Check if element exists
-def exists(sorted_list, x):
-    pos = bisect.bisect_left(sorted_list, x)
-    return pos < len(sorted_list) and sorted_list[pos] == x
+assert bisect.bisect_left(values, 100, lo=40, hi=60) == 50  # O(log 20)
 
-exists(sorted_list, 5)  # True - O(log n)
-exists(sorted_list, 4)  # False - O(log n)
+try:
+    bisect.bisect_left(values, 100, lo=-1)
+except ValueError as error:
+    assert 'lo must be non-negative' in str(error)
+else:
+    raise AssertionError('a negative lo was accepted')
 ```
 
-## Yleiset käyttötapaukset
+### Haku avaimella
 
-### Lisäys järjestystä säilyttäen
+`key` kutsutaan kerran koetusta kohden koetetulle alkiolle, joten avaimella tehty haku tekee
+O(log n) avainkutsua eikä tarvitse rinnakkaista listaa. Sitä ei kutsuta `x`:lle: haut ottavat `x`:n
+valmiiksi avainarvona. `insort` on poikkeus - se lisää itse tietueen, joten se kutsuu `key(x)`
+kerran löytääkseen paikan.
 
 ```python
 import bisect
 
-sorted_list = [1, 3, 5, 7]
+records = [('a', 1), ('b', 3), ('c', 5)]
+by_count = lambda record: record[1]
 
-# Insert while maintaining order - O(n) overall
-# (O(log n) search + O(n) shift)
-bisect.insort(sorted_list, 4)  # [1, 3, 4, 5, 7]
+pos = bisect.bisect_right(records, 4, key=by_count)  # O(log n) key calls; x is the key value
+assert pos == 2
 
-# Better for many insertions: use list, then sort
-# Multiple inserts: O(n log n) with sort
-# vs O(n²) with repeated insort
+bisect.insort(records, ('d', 4), key=by_count)  # O(n); key(x) is called here
+assert records == [('a', 1), ('b', 3), ('d', 4), ('c', 5)]
 ```
 
-### Välien etsiminen
+Rinnakkainen avainlista on vaihtoehto, kun monta hakua jakaa saman listan: sen rakentaminen maksaa
+O(n), ja se on pidettävä ajan tasalla jokaisen lisäyksen yhteydessä, mutta silloin yksikään haku ei
+tee avainkutsuja.
 
 ```python
 import bisect
 
-# Find all equal elements
-sorted_list = [1, 3, 3, 3, 5, 7, 9]
-target = 3
+records = [('a', 1), ('b', 3), ('c', 5)]
+keys = [record[1] for record in records]  # O(n) once
 
-left = bisect.bisect_left(sorted_list, target)
-right = bisect.bisect_right(sorted_list, target)
-
-equals = sorted_list[left:right]  # All 3's - O(log n) search
+pos = bisect.bisect_right(keys, 4)  # O(log n), no key calls
+records.insert(pos, ('d', 4))       # O(n)
+keys.insert(pos, 4)                 # O(n) - keys must follow every insert
+assert keys == [record[1] for record in records] == [1, 3, 4, 5]
 ```
 
-### Välin lisäyskohdan etsiminen
+### Järjestämätön syöte
+
+Mikään ei tarkista, että viipale on järjestyksessä. Järjestämättömällä syötteellä haku palauttaa
+silti sijainnin nostamatta poikkeusta, mutta mikään ei takaa sen olevan oikea: siihen lisääminen voi
+jättää listan epäjärjestykseen.
 
 ```python
 import bisect
 
-# Find where range [a, b] fits in sorted list
-sorted_list = [1, 5, 10, 15, 20]
-target_range = (7, 12)
+unsorted = [3, 1, 4, 1, 5]
 
-# Position to insert start of range
-start_pos = bisect.bisect_right(sorted_list, target_range[0])  # O(log n)
-
-# Position to insert end of range
-end_pos = bisect.bisect_left(sorted_list, target_range[1])  # O(log n)
-# Two independent searches: O(log n) total, not O(n)
-
-print(f"Insert range {target_range} at positions {start_pos}-{end_pos}")
+pos = bisect.bisect(unsorted, 2)  # O(log n), no error
+result = unsorted[:pos] + [2] + unsorted[pos:]
+assert result != sorted(result)
 ```
 
-## Suorituskyvyn vertailu
+## Listan pitäminen järjestyksessä
 
-### Haku järjestetystä datasta
+### Yksi lisäys vai erä
+
+Jokainen `insort` listaan on O(n), joten k lisäystä n alkion listaan maksaa O(k·(n + k)).
+Kun lisäykset tulevat yhdessä eikä niiden välissä ole hakuja, niiden lisääminen loppuun ja yksi
+järjestäminen maksaa sen sijaan O((n + k) log(n + k)). `insort` on oikea työkalu, kun haut ja
+lisäykset vuorottelevat.
 
 ```python
 import bisect
 
-data = sorted(range(1000000))
+values = [1, 3, 5, 7]
+bisect.insort(values, 4)  # O(n) - the tail shifts
+assert values == [1, 3, 4, 5, 7]
 
-# Bad: Linear search - O(n)
-found = 500000 in data  # Scans linearly
+# Many inserts at once: O(k·(n + k)) one at a time
+one_at_a_time = [1, 3, 5, 7, 9]
+for item in [8, 2, 6, 4]:
+    bisect.insort(one_at_a_time, item)  # O(n) each
 
-# Good: Binary search - O(log n)
-pos = bisect.bisect_left(data, 500000)  # Much faster!
-found = pos < len(data) and data[pos] == 500000
+# ... or O((n + k) log(n + k)) as one sort
+batch = [1, 3, 5, 7, 9]
+batch.extend([8, 2, 6, 4])
+batch.sort()
+assert batch == one_at_a_time
 ```
 
-### Järjestettyjen listojen ylläpito
+## Yleisiä malleja
+
+### Pistemäärän kuvaaminen arvosanaväliin
 
 ```python
 import bisect
 
-# Many insertions scenario
-sorted_list = [1, 3, 5, 7, 9]
+breakpoints = [60, 70, 80, 90]
+grades = 'FDCBA'
 
-# Bad: Multiple insort - O(n²)
-for item in [2, 4, 6, 8]:
-    bisect.insort(sorted_list, item)  # O(n) each
+def grade(score):
+    return grades[bisect.bisect(breakpoints, score)]  # O(log b), b = breakpoints
 
-# Better: Collect, sort once - O(n log n)
-sorted_list.extend([2, 4, 6, 8])
-sorted_list.sort()  # Single O(n log n) operation
+assert [grade(score) for score in (33, 60, 77, 89, 90, 100)] == list('FDCBAA')
 ```
 
-## Yksityiskohtaiset esimerkit
-
-### Arvosanavälit
+### Aikaikkunan tapahtumat
 
 ```python
 import bisect
+from datetime import datetime
 
-# Map scores to grades
-grade_breaks = [60, 70, 80, 90]
-grades = ['F', 'D', 'C', 'B', 'A']
-
-def get_grade(score):
-    i = bisect.bisect(grade_breaks, score)
-    return grades[i]
-
-print(get_grade(85))  # 'B' - O(log n)
-print(get_grade(95))  # 'A' - O(log n)
-```
-
-### Aikaleimahaku
-
-```python
-import bisect
-from datetime import datetime, timedelta
-
-# Find events in a time range
 events = [
     (datetime(2024, 1, 1, 10), 'event1'),
     (datetime(2024, 1, 1, 12), 'event2'),
     (datetime(2024, 1, 1, 15), 'event3'),
     (datetime(2024, 1, 1, 18), 'event4'),
 ]
+when = lambda event: event[0]
 
-timestamps = [e[0] for e in events]
-
-# Find events after specific time
-target = datetime(2024, 1, 1, 14)
-idx = bisect.bisect_right(timestamps, target)
-later_events = events[idx:]  # O(log n) search
-
-print(later_events)  # Events at 3pm and 6pm
+start = bisect.bisect_left(events, datetime(2024, 1, 1, 11), key=when)  # O(log n)
+end = bisect.bisect_right(events, datetime(2024, 1, 1, 15), key=when)   # O(log n)
+assert [name for _, name in events[start:end]] == ['event2', 'event3']  # O(m), m = matches
 ```
 
-## Edistynyt: omat avainfunktiot
+## Suorituskyvyn parhaat käytännöt
 
-```python
-import bisect
-from bisect import bisect_right
+✅ **Tee näin**:
 
-# Custom objects - compare by second element
-data = [('a', 1), ('b', 3), ('c', 5)]
-keys = [x[1] for x in data]  # O(n) - building the key list dominates
+- Käytä jäsenyyden tarkistamiseen järjestetystä listasta `bisect_left`-funktiota ja yhtä vertailua
+  O(n) `in`-operaation sijaan
+- Käytä erotusta `bisect_right - bisect_left` yhtä suurten alkioiden jakson pituuden laskemiseen ajassa
+  O(log n)
+- Anna `lo` ja `hi`, kun vastauksen tiedetään olevan listan tietyssä osassa
+- Käytä `key`-parametria satunnaiseen hakuun tietueista; pidä rinnakkaista avainlistaa, kun monta
+  hakua jakaa sen
 
-# Find position for ('d', 4)
-pos = bisect_right(keys, 4)  # O(log n)
-data.insert(pos, ('d', 4))  # O(n) - shifts the tail
-# Rebuilding keys per search makes the whole thing O(n); keep it alongside
-# data instead
-```
+❌ **Vältä**:
 
-Python 3.10 alkaen jokainen moduulin funktio ottaa `key`-argumentin, joka
-poistaa rinnakkaisen listan tarpeen:
+- Avainlistan rakentamista yhtä hakua varten - se on O(n) O(log n) -vastauksen takia
+- Toistuvaa `insort`-kutsua erän lataamiseen listaan - lisää loppuun ja järjestä kerran
+- Hakua listasta, jota et ole pitänyt järjestyksessä - vastaus on epäluotettava, eikä mikään nosta
+  poikkeusta
 
-```python
-import bisect
+## Versiohuomautukset
 
-data = [('a', 1), ('b', 3), ('c', 5)]
+- **Python 3.10+**: Kaikkiin kuuteen funktioon lisättiin `key`-parametri
 
-# key runs once per probe, so no parallel list is needed
-pos = bisect.bisect_right(data, 4, key=lambda item: item[1])  # O(log n) key calls
-data.insert(pos, ('d', 4))  # O(n) - shifts the tail
-```
+## Liittyvät moduulit
 
-Valinta riippuu siitä, kuinka moni haku jakaa samat avaimet: rinnakkainen lista
-maksaa O(n) kerran eikä yhtään kutsua hakua kohti, kun taas `key` ei maksa
-mitään etukäteen ja yhden kutsun jokaista koetinta kohti.
-
-## Tärkeitä huomioita
-
-!!! warning "Vaatimus järjestetystä datasta"
-    Syötelistan TÄYTYY olla järjestetty, jotta binäärihaku toimii oikein.
-    
-    ```python
-    import bisect
-
-    # Wrong: Data not sorted
-    unsorted = [3, 1, 4, 1, 5]
-    pos = bisect.bisect(unsorted, 2)  # Incorrect result!
-    ```
-
-!!! tip "Tasoitettu tehokkuus"
-    Kun lisäyksiä on paljon:
-
-    - Useita `insort()`-kutsuja: yhteensä O(n²)
-    - Kerää ensin ja kutsu `sort()` kerran: yhteensä O(n log n)
-    
-    Valitse käyttötapasi mukaan.
-
-## Versiohuomiot
-
-- **Python 3.10+**: `key`-parametri lisättiin jokaiseen moduulin funktioon
-
-## Liittyvä dokumentaatio
-
-- [Heapq-moduuli](heapq.md)
-- [Collections-moduuli](collections.md)
-- [Listan metodit](../builtins/list.md)
+- **[heapq](heapq.md)** - O(log n) lisäys ja poisto, kun tarvitaan vain pienin alkio eikä
+  järjestettyä listaa
+- **[list](../builtins/list.md)** - `insert()` ja `sort()`, kustannukset, joihin `insort` ja
+  erän järjestäminen perustuvat

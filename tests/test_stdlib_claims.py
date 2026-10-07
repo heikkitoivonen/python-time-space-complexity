@@ -227,14 +227,16 @@ class TestSqliteCommitBatching:
 
 
 class TestBisectKeyListDominates:
-    """docs/stdlib/bisect.md's key-list warning, checked against sorting.
+    """docs/stdlib/bisect.md: building a key list for a single search is O(n)
+    for an O(log n) answer.
 
     Kept here rather than in test_bisect_complexity.py because it is a claim
-    about the surrounding code, not about bisect.
+    about the surrounding code, not about bisect. At 50,000 items the list
+    comprehension is asserted over 100x the search it precedes.
     """
 
     @pytest.mark.timing
-    def test_sorting_once_beats_rebuilding_keys_per_search(self) -> None:
+    def test_building_the_keys_dwarfs_the_search(self) -> None:
         size = 50_000
         data = [(str(i), i) for i in range(size)]
         keys = [item[1] for item in data]

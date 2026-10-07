@@ -1,250 +1,218 @@
-# Bisect Module Complexity
+# bisect Module Complexity
 
-The `bisect` module provides binary search operations for sorted lists.
+The `bisect` module finds positions in a sequence the caller keeps sorted. It never sorts and
+never checks the order: each search halves the range it was given, reading one element per step,
+in constant extra memory. The insert functions pair that search with the sequence's own
+`insert()`, and for a list the insert, not the search, is what costs.
 
-## Operations
+`n` is the length of the sequence. The search bounds count probes: one element read, one `key`
+call when a key is given, and one `<` comparison each, all priced O(1). A key or a comparison that
+does more work multiplies the search by its cost. Indexing is O(1), as it is for a list. Two items
+are equal here when neither is `<` the other, comparing keys when a `key` is given.
+
+## Complexity Reference
+
+### Searching
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `bisect_left(a, x)` | O(log n) | O(1) | Find leftmost position |
-| `bisect_right(a, x)` | O(log n) | O(1) | Find rightmost position |
-| `bisect(a, x)` | O(log n) | O(1) | Alias for bisect_right |
-| `insort_left(a, x)` | O(n) | O(1) | O(log n) search + O(n) insert (shifts elements in place) |
-| `insort_right(a, x)` | O(n) | O(1) | O(log n) search + O(n) insert (shifts elements in place) |
-| `insort(a, x)` | O(n) | O(1) | Alias for insort_right |
+| `bisect.bisect_left(a, x, lo=0, hi=len(a), *, key=None)` | O(log n) | O(1) | Position before any run of items equal to `x`; `key` is applied to each probed item, never to `x` |
+| `bisect.bisect_right(a, x, lo=0, hi=len(a), *, key=None)` | O(log n) | O(1) | Position after any run of items equal to `x` |
+| `bisect.bisect(a, x, lo=0, hi=len(a), *, key=None)` | O(log n) | O(1) | The same function as `bisect_right` |
 
-## Space Complexity
+### Inserting
 
-- Binary search operations: O(1) additional space
-- Insert operations: O(1) additional space (shifts elements within the existing list)
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `bisect.insort_left(a, x, lo=0, hi=len(a), *, key=None)` | O(n) | O(1) | O(log n) search, then `a.insert()`, which for a list shifts the tail; `key` is applied to `x` once |
+| `bisect.insort_right(a, x, lo=0, hi=len(a), *, key=None)` | O(n) | O(1) | Inserts after any run of items equal to `x` |
+| `bisect.insort(a, x, lo=0, hi=len(a), *, key=None)` | O(n) | O(1) | The same function as `insort_right` |
 
-## Implementation Details
+## Searching a Sorted List
 
-### Binary Search Guarantee
+### Left and Right
+
+The two searches differ only in where they land on a run of equal items: `bisect_left` before
+it, `bisect_right` after it. Each still halves the range, so searching a run of duplicates is
+O(log n) like any other search, and the pair of them brackets the run however long it is.
 
 ```python
 import bisect
 
-# Must be sorted!
-sorted_list = [1, 3, 3, 3, 5, 7, 9]
+values = [1, 3, 3, 3, 5, 7, 9]
 
-# bisect_left: leftmost insertion point
-pos = bisect.bisect_left(sorted_list, 3)  # O(log n), pos = 1
-# Insert here to keep list sorted (before all 3's)
+left = bisect.bisect_left(values, 3)    # O(log n)
+right = bisect.bisect_right(values, 3)  # O(log n)
+assert (left, right) == (1, 4)
+assert values[left:right] == [3, 3, 3]
+assert right - left == 3                # occurrences counted without a scan
 
-# bisect_right: rightmost insertion point
-pos = bisect.bisect_right(sorted_list, 3)  # O(log n), pos = 4
-# Insert here to keep list sorted (after all 3's)
-# Both halve the search range each step, so a run of equal values costs no
-# more than a unique one
+def contains(sorted_list, x):
+    i = bisect.bisect_left(sorted_list, x)  # O(log n), against O(n) for `x in sorted_list`
+    return i < len(sorted_list) and sorted_list[i] == x
+
+assert contains(values, 5)
+assert not contains(values, 4)
 ```
 
-### Finding Elements
+### Narrowing With lo and hi
+
+`lo` and `hi` bound the slice that is searched, and a search costs O(log(hi - lo)), whatever the
+length of the sequence. An insort still pays for the whole list's insert. A negative `lo` raises
+`ValueError`.
 
 ```python
 import bisect
 
-sorted_list = [1, 3, 5, 7, 9]
+values = list(range(0, 1_000, 2))
 
-# Check if element exists
-def exists(sorted_list, x):
-    pos = bisect.bisect_left(sorted_list, x)
-    return pos < len(sorted_list) and sorted_list[pos] == x
+assert bisect.bisect_left(values, 100, lo=40, hi=60) == 50  # O(log 20)
 
-exists(sorted_list, 5)  # True - O(log n)
-exists(sorted_list, 4)  # False - O(log n)
+try:
+    bisect.bisect_left(values, 100, lo=-1)
+except ValueError as error:
+    assert 'lo must be non-negative' in str(error)
+else:
+    raise AssertionError('a negative lo was accepted')
 ```
 
-## Common Use Cases
+### Searching by Key
 
-### Sorted Insert
+`key` is called once per probe, on the item probed, so a keyed search makes O(log n) key calls
+and needs no parallel list. It is not called on `x`: the searches take `x` as a key value
+already. `insort` is the exception - it inserts the record itself, so it calls `key(x)` once to
+find where.
 
 ```python
 import bisect
 
-sorted_list = [1, 3, 5, 7]
+records = [('a', 1), ('b', 3), ('c', 5)]
+by_count = lambda record: record[1]
 
-# Insert while maintaining order - O(n) overall
-# (O(log n) search + O(n) shift)
-bisect.insort(sorted_list, 4)  # [1, 3, 4, 5, 7]
+pos = bisect.bisect_right(records, 4, key=by_count)  # O(log n) key calls; x is the key value
+assert pos == 2
 
-# Better for many insertions: use list, then sort
-# Multiple inserts: O(n log n) with sort
-# vs O(n²) with repeated insort
+bisect.insort(records, ('d', 4), key=by_count)  # O(n); key(x) is called here
+assert records == [('a', 1), ('b', 3), ('d', 4), ('c', 5)]
 ```
 
-### Finding Ranges
+A parallel list of keys is the alternative when many searches share one list: it costs O(n) to
+build and must be kept in step with every insert, but each search then makes no key calls.
 
 ```python
 import bisect
 
-# Find all equal elements
-sorted_list = [1, 3, 3, 3, 5, 7, 9]
-target = 3
+records = [('a', 1), ('b', 3), ('c', 5)]
+keys = [record[1] for record in records]  # O(n) once
 
-left = bisect.bisect_left(sorted_list, target)
-right = bisect.bisect_right(sorted_list, target)
-
-equals = sorted_list[left:right]  # All 3's - O(log n) search
+pos = bisect.bisect_right(keys, 4)  # O(log n), no key calls
+records.insert(pos, ('d', 4))       # O(n)
+keys.insert(pos, 4)                 # O(n) - keys must follow every insert
+assert keys == [record[1] for record in records] == [1, 3, 4, 5]
 ```
 
-### Finding Insertion Point for Range
+### Unsorted Input
+
+Nothing checks that the slice is sorted. On unsorted input the search still returns a position
+without raising, but nothing guarantees it is the right one: inserting there can leave the list out
+of order.
 
 ```python
 import bisect
 
-# Find where range [a, b] fits in sorted list
-sorted_list = [1, 5, 10, 15, 20]
-target_range = (7, 12)
+unsorted = [3, 1, 4, 1, 5]
 
-# Position to insert start of range
-start_pos = bisect.bisect_right(sorted_list, target_range[0])  # O(log n)
-
-# Position to insert end of range
-end_pos = bisect.bisect_left(sorted_list, target_range[1])  # O(log n)
-# Two independent searches: O(log n) total, not O(n)
-
-print(f"Insert range {target_range} at positions {start_pos}-{end_pos}")
+pos = bisect.bisect(unsorted, 2)  # O(log n), no error
+result = unsorted[:pos] + [2] + unsorted[pos:]
+assert result != sorted(result)
 ```
 
-## Performance Comparison
+## Keeping a List Sorted
 
-### Searching in Sorted Data
+### One Insert or a Batch
+
+Each `insort` on a list is O(n), so k inserts into a list of n items cost O(k·(n + k)).
+When the inserts arrive together with no searches between them, appending them and sorting once
+costs O((n + k) log(n + k)) instead. `insort` is the right tool when searches and inserts
+interleave.
 
 ```python
 import bisect
 
-data = sorted(range(1000000))
+values = [1, 3, 5, 7]
+bisect.insort(values, 4)  # O(n) - the tail shifts
+assert values == [1, 3, 4, 5, 7]
 
-# Bad: Linear search - O(n)
-found = 500000 in data  # Scans linearly
+# Many inserts at once: O(k·(n + k)) one at a time
+one_at_a_time = [1, 3, 5, 7, 9]
+for item in [8, 2, 6, 4]:
+    bisect.insort(one_at_a_time, item)  # O(n) each
 
-# Good: Binary search - O(log n)
-pos = bisect.bisect_left(data, 500000)  # Much faster!
-found = pos < len(data) and data[pos] == 500000
+# ... or O((n + k) log(n + k)) as one sort
+batch = [1, 3, 5, 7, 9]
+batch.extend([8, 2, 6, 4])
+batch.sort()
+assert batch == one_at_a_time
 ```
 
-### Maintaining Sorted Lists
+## Common Patterns
+
+### Mapping a Score to a Band
 
 ```python
 import bisect
 
-# Many insertions scenario
-sorted_list = [1, 3, 5, 7, 9]
+breakpoints = [60, 70, 80, 90]
+grades = 'FDCBA'
 
-# Bad: Multiple insort - O(n²)
-for item in [2, 4, 6, 8]:
-    bisect.insort(sorted_list, item)  # O(n) each
+def grade(score):
+    return grades[bisect.bisect(breakpoints, score)]  # O(log b), b = breakpoints
 
-# Better: Collect, sort once - O(n log n)
-sorted_list.extend([2, 4, 6, 8])
-sorted_list.sort()  # Single O(n log n) operation
+assert [grade(score) for score in (33, 60, 77, 89, 90, 100)] == list('FDCBAA')
 ```
 
-## Detailed Examples
-
-### Grade Ranges
+### Events in a Time Window
 
 ```python
 import bisect
+from datetime import datetime
 
-# Map scores to grades
-grade_breaks = [60, 70, 80, 90]
-grades = ['F', 'D', 'C', 'B', 'A']
-
-def get_grade(score):
-    i = bisect.bisect(grade_breaks, score)
-    return grades[i]
-
-print(get_grade(85))  # 'B' - O(log n)
-print(get_grade(95))  # 'A' - O(log n)
-```
-
-### Timestamp Lookup
-
-```python
-import bisect
-from datetime import datetime, timedelta
-
-# Find events in a time range
 events = [
     (datetime(2024, 1, 1, 10), 'event1'),
     (datetime(2024, 1, 1, 12), 'event2'),
     (datetime(2024, 1, 1, 15), 'event3'),
     (datetime(2024, 1, 1, 18), 'event4'),
 ]
+when = lambda event: event[0]
 
-timestamps = [e[0] for e in events]
-
-# Find events after specific time
-target = datetime(2024, 1, 1, 14)
-idx = bisect.bisect_right(timestamps, target)
-later_events = events[idx:]  # O(log n) search
-
-print(later_events)  # Events at 3pm and 6pm
+start = bisect.bisect_left(events, datetime(2024, 1, 1, 11), key=when)  # O(log n)
+end = bisect.bisect_right(events, datetime(2024, 1, 1, 15), key=when)   # O(log n)
+assert [name for _, name in events[start:end]] == ['event2', 'event3']  # O(m), m = matches
 ```
 
-## Advanced: Custom Key Functions
+## Performance Best Practices
 
-```python
-import bisect
-from bisect import bisect_right
+✅ **Do**:
 
-# Custom objects - compare by second element
-data = [('a', 1), ('b', 3), ('c', 5)]
-keys = [x[1] for x in data]  # O(n) - building the key list dominates
+- Use `bisect_left` plus one comparison for membership in a sorted list, instead of an O(n) `in`
+- Use `bisect_right - bisect_left` to count a run of equal items in O(log n)
+- Pass `lo` and `hi` when the answer is known to lie in part of the list
+- Use `key` for an occasional search over records; keep a parallel key list when many searches
+  share it
 
-# Find position for ('d', 4)
-pos = bisect_right(keys, 4)  # O(log n)
-data.insert(pos, ('d', 4))  # O(n) - shifts the tail
-# Rebuilding keys per search makes the whole thing O(n); keep it alongside
-# data instead
-```
+❌ **Avoid**:
 
-Since Python 3.10 every function in the module takes a `key` argument, which
-removes the parallel list:
-
-```python
-import bisect
-
-data = [('a', 1), ('b', 3), ('c', 5)]
-
-# key runs once per probe, so no parallel list is needed
-pos = bisect.bisect_right(data, 4, key=lambda item: item[1])  # O(log n) key calls
-data.insert(pos, ('d', 4))  # O(n) - shifts the tail
-```
-
-Which to prefer depends on how many searches share the keys: a parallel list
-costs O(n) once and no calls per search, while `key` costs nothing up front and
-one call per probe.
-
-## Important Notes
-
-!!! warning "Sorted Data Requirement"
-    The input list MUST be sorted for binary search to work correctly.
-    
-    ```python
-    import bisect
-
-    # Wrong: Data not sorted
-    unsorted = [3, 1, 4, 1, 5]
-    pos = bisect.bisect(unsorted, 2)  # Incorrect result!
-    ```
-
-!!! tip "Amortized Efficiency"
-    For many insertions:
-
-    - Multiple `insort()` calls: O(n²) overall
-    - Collect then single `sort()`: O(n log n) overall
-    
-    Choose based on your access patterns.
+- Building a key list for a single search - that is O(n) for an O(log n) answer
+- Repeated `insort` to load a batch into a list - extend and sort once
+- Searching a list you have not kept sorted - the answer is unreliable, and nothing raises
 
 ## Version Notes
 
-- **Python 3.10+**: `key` parameter added to every function in the module
+- **Python 3.10+**: Added the `key` argument to all six functions
 
-## Related Documentation
+## Related Modules
 
-- [Heapq Module](heapq.md)
-- [Collections Module](collections.md)
-- [List Methods](../builtins/list.md)
+- **[heapq](heapq.md)** - O(log n) push and pop when only the smallest item is needed, not a
+  sorted list
+- **[list](../builtins/list.md)** - `insert()` and `sort()`, the costs `insort` and a batch sort
+  rest on

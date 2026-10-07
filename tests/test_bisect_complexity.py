@@ -1,378 +1,433 @@
-"""Tests to verify documented behaviour of the bisect module.
+"""Tests for docs/stdlib/bisect.md.
 
-The page's framing is that the search is cheap and everything around it is
-not - `keys = [x[1] for x in data]` before a search, or the insert after one -
-so the contrast between the two is what these tests pin.
+The page prices every search by its probes - one element read, one `key`
+call and one `<` comparison each - and every insort by the list insert that
+follows the search. Probes are counted on a virtual sequence whose
+`__getitem__` records each read, so the logarithmic bound is settled by
+observation at sizes no real list could reach, with no tolerance. Only the
+insert's O(n) needs a stopwatch, and there the gap between a front insert
+and an end insert is orders of magnitude.
 
-Two things the review found, both now covered here:
+Measurement scope:
 
-* The Sorted Data Requirement snippet had no `import bisect`, so it raised
-  NameError when run on its own. Nothing executed the page's code before.
-* The page never mentioned the `key` argument, added in 3.10, while its
-  Advanced section built a parallel list instead. Measured, key runs exactly
-  once per probe - 10, 16 and 20 calls at n = 1,024, 65,536 and 1,048,576 -
-  and insort adds one more for the item being inserted.
+* Probes: on virtual sequences (indexable, not lists) of 2**10, 2**20 and
+  2**40 items, the most
+  reads any of five targets (before the start, at it, inside, at the last
+  item, past the end) costs `bisect_left` and `bisect_right` is exactly
+  floor(log2 n) + 1: 11, 21 and 41. An all-equal sequence searched for the
+  equal value stays within the same bound for both functions. `lo` and `hi`
+  bounding 16 items of a 2**40-item sequence cost at most 5 reads. Each
+  read is compared exactly once, at 4,096 items for three targets.
+* `key`: called once per read, on the very object read (by identity), at
+  1,024 and 65,536 items;
+  never called on `x` by the searches, which compare `x` as given, so a
+  record passed as `x` beside an integer key raises `TypeError`. `insort_left`
+  and `insort_right` call it on `x` once, then once per read.
+* Space: a search over 10,000- and 1,000,000-item lists traces a peak under
+  1 KB at both sizes (the returned index is an int object, so the peak is
+  small, not zero), and an insort into a 1,000,000-item list with a free
+  slot does too.
+* Insert: the fastest of seven runs of 100 front insorts grows more than
+  20x from 10,000 to 1,000,000 items, where the 100x size step predicts
+  100x for O(n) and about 1.5x for O(log n); end inserts on the same lists
+  grow under 5x. Each run times 100 inserts into a fresh
+  list built outside the timer with room for all of them already allocated,
+  so neither a removal nor a storage resize is measured. `insort_left`
+  and `insort_right` on a non-list sequence call its `insert()` once, with
+  the searched position.
+* Batch: inserting k items in descending order one `insort` at a time grows
+  more than 80x from k = 2,000 to 32,000, where O(k²) predicts 256x and
+  O(k log k) about 22x. The list starts empty, so the n in O(k·(n + k)) is
+  not varied; it is the per-insert O(n) measured above.
+* `bisect` and `insort` are the same objects as `bisect_right` and
+  `insort_right`; the left and right variants are asserted by position on
+  an equal run and by where an equal-keyed record lands.
+* Unsorted input returns a position without raising; on [3, 1, 4, 1, 5]
+  inserting 2 there leaves the list unsorted.
+* Every fenced Python block runs in its own subprocess, and a mutated
+  assertion in one of them is asserted to fail.
 
-On "a run of equal values costs no more than a unique one": counted rather
-than timed below. An all-equal list costs one probe more than the distinct
-list this file compares it against (11 against 10 at n=1,024), but that is
-where the answer lands, not the duplicates - position 0 needs the extra
-halving. Both are log2(n) probes, which is the claim. The point the test has
-to exclude is a scan of the run, and 17 probes at n=65,536 excludes it by
-three orders of magnitude.
+Not settled here:
 
-Not settled by execution:
-
-* "O(1) additional space" for the searches. No allocation is observable per
-  probe, asserted below via tracemalloc, but the C implementation's stack
-  use is not something this suite can weigh.
+* Treating one comparison and one key call as O(1) is a cost-model
+  assumption; a costlier `__lt__` or key multiplies the probe count, which
+  is what is measured.
+* The O((n + k) log(n + k)) batch sort is `list.sort()`'s bound, priced on
+  docs/builtins/list.md and not re-measured here.
+* An insort into a full list grows the list's storage, as any
+  `list.insert()` does; that is the list's cost, priced on
+  docs/builtins/list.md, and the space test uses a list with a free slot.
+* Element types and key costs are not varied for the insert timing, and the
+  timing uses lists only.
 """
+
+from __future__ import annotations
 
 import bisect
 import math
 import pathlib
+import random
 import re
 import subprocess
 import sys
 import textwrap
 import time
+import tracemalloc
 from collections.abc import Callable
+from functools import partial
 from typing import Any
 
 import pytest
 
+PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "bisect.md"
+EXPECTED_BLOCKS = 8
 
-def trimmed_mean(samples: list[float], trim_fraction: float = 0.1) -> float:
-    """Return the trimmed mean to reduce outlier impact."""
-    if not samples:
-        return 0.0
-    if trim_fraction <= 0:
-        return sum(samples) / len(samples)
-    k = int(len(samples) * trim_fraction)
-    if len(samples) - 2 * k <= 0:
-        return sum(samples) / len(samples)
-    samples = sorted(samples)
-    core = samples[k : len(samples) - k]
-    return sum(core) / len(core)
+SEARCHES = (bisect.bisect_left, bisect.bisect_right)
 
 
-def measure_time(func: Callable[[], Any], iterations: int = 100) -> float:
-    """Measure trimmed mean time for a function over multiple iterations."""
-    times: list[float] = []
-    for _ in range(iterations):
-        start = time.perf_counter()
+def best_ns(func: Callable[[], Any], repeats: int = 7) -> float:
+    """Fastest of `repeats` runs, in nanoseconds."""
+    best: float | None = None
+    for _ in range(repeats):
+        start = time.perf_counter_ns()
         func()
-        times.append(time.perf_counter() - start)
-    return trimmed_mean(times)
+        elapsed = time.perf_counter_ns() - start
+        best = elapsed if best is None else min(best, elapsed)
+    assert best is not None
+    return best
 
 
-def is_constant_time(small_time: float, large_time: float, tolerance: float = 3.0) -> bool:
-    """Check if two times are within tolerance (suggesting O(1))."""
-    if small_time == 0:
-        return large_time < 1e-6
-    return large_time / small_time < tolerance
-
-
-def is_logarithmic_time(
-    small_time: float,
-    large_time: float,
-    small_size: int,
-    large_size: int,
-    tolerance: float = 3.0,
-) -> bool:
-    """Check if time scales logarithmically with size."""
-    if small_time == 0:
-        return True
-    expected = math.log2(large_size) / math.log2(small_size)
-    return large_time / small_time < expected * tolerance
+def peak_bytes(func: Callable[[], Any]) -> int:
+    """Peak traced allocation while func runs."""
+    tracemalloc.start()
+    try:
+        func()
+        return tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
 
 
 class CountingInt(int):
-    """A list element that counts the probes a binary search makes."""
+    """An int that counts every `<` it takes part in, from either side."""
 
     comparisons = 0
 
-    def __lt__(self, other: int) -> bool:
+    def __lt__(self, other: object) -> bool:
         CountingInt.comparisons += 1
-        return int.__lt__(self, other)
+        return int.__lt__(self, other)  # type: ignore[arg-type]
 
-    def __gt__(self, other: int) -> bool:
+    def __gt__(self, other: object) -> bool:
         CountingInt.comparisons += 1
-        return int.__gt__(self, other)
+        return int.__gt__(self, other)  # type: ignore[arg-type]
 
 
-class TestBisectComplexity:
-    """Test bisect operation complexities as documented in docs/stdlib/bisect.md."""
+class VirtualSequence:
+    """A sorted sequence of `size` items that records every item read.
 
-    SMALL_SIZE = 1_000
-    LARGE_SIZE = 1_000_000
-
-    @pytest.mark.timing
-    def test_bisect_left_is_ologn(self) -> None:
-        """bisect_left() should be O(log n)."""
-        small = list(range(self.SMALL_SIZE))
-        large = list(range(self.LARGE_SIZE))
-
-        small_time = measure_time(lambda: bisect.bisect_left(small, self.SMALL_SIZE // 2))
-        large_time = measure_time(lambda: bisect.bisect_left(large, self.LARGE_SIZE // 2))
-
-        assert is_logarithmic_time(small_time, large_time, self.SMALL_SIZE, self.LARGE_SIZE), (
-            f"bisect_left() doesn't appear O(log n): {small_time:.2e}s vs {large_time:.2e}s"
-        )
-
-    @pytest.mark.timing
-    def test_bisect_right_is_ologn(self) -> None:
-        """bisect_right() should be O(log n)."""
-        small = list(range(self.SMALL_SIZE))
-        large = list(range(self.LARGE_SIZE))
-
-        small_time = measure_time(lambda: bisect.bisect_right(small, self.SMALL_SIZE // 2))
-        large_time = measure_time(lambda: bisect.bisect_right(large, self.LARGE_SIZE // 2))
-
-        assert is_logarithmic_time(small_time, large_time, self.SMALL_SIZE, self.LARGE_SIZE), (
-            f"bisect_right() doesn't appear O(log n): {small_time:.2e}s vs {large_time:.2e}s"
-        )
-
-    def test_a_run_of_equal_values_costs_no_more(self) -> None:
-        """The page claims equal values do not degrade the search.
-
-        Counted, not timed: halving the range does not care whether the values
-        it skips are distinct, so an all-equal list of 65,536 items takes 17
-        probes where a scan of the run would take 65,536.
-        """
-        for size in (1_024, 65_536):
-            distinct = [CountingInt(value) for value in range(size)]
-            identical = [CountingInt(5) for _ in range(size)]
-
-            CountingInt.comparisons = 0
-            bisect.bisect_left(distinct, size // 2)
-            distinct_probes = CountingInt.comparisons
-
-            CountingInt.comparisons = 0
-            bisect.bisect_left(identical, 5)
-            identical_probes = CountingInt.comparisons
-
-            assert identical_probes <= distinct_probes + 1, (
-                f"an all-equal list should not cost more than a distinct one at "
-                f"n={size}: {identical_probes} against {distinct_probes} probes"
-            )
-            assert identical_probes < math.log2(size) + 2, (
-                f"the search should stay logarithmic on a run of duplicates at "
-                f"n={size}: {identical_probes} probes"
-            )
-
-    def test_left_and_right_bracket_a_run_of_duplicates(self) -> None:
-        """bisect_left and bisect_right give the ends of an equal run."""
-        values = [1, 3, 3, 3, 5, 7, 9]
-        assert bisect.bisect_left(values, 3) == 1
-        assert bisect.bisect_right(values, 3) == 4
-        assert values[1:4] == [3, 3, 3]
-
-    def test_bisect_is_an_alias_for_bisect_right(self) -> None:
-        values = [1, 3, 3, 5]
-        assert bisect.bisect(values, 3) == bisect.bisect_right(values, 3)
-
-    @pytest.mark.timing
-    def test_two_searches_cost_two_logs_not_a_scan(self) -> None:
-        """The range example does two searches; that is still logarithmic."""
-        large = list(range(self.LARGE_SIZE))
-
-        one = measure_time(lambda: bisect.bisect_right(large, 10))
-        two = measure_time(lambda: (bisect.bisect_right(large, 10), bisect.bisect_left(large, 20)))
-
-        assert two < one * 4, (
-            f"two searches should cost about two searches, not a scan: "
-            f"one={one:.2e}s two={two:.2e}s"
-        )
-
-
-class TestInsortCostIsTheInsertNotTheSearch:
-    """insort is O(n) because a list insert shifts the tail.
-
-    docs/stdlib/bisect.md prices insort at "O(log n) search + O(n) insert",
-    which is the page's own explanation for why maintaining a sorted list
-    this way does not scale.
+    It is not a list: item i is a fresh `CountingInt(i)`, or
+    `CountingInt(constant)` for every index when one is given, and `insert()`
+    only records its arguments.
     """
 
-    SMALL_SIZE = 10_000
-    LARGE_SIZE = 200_000
+    def __init__(self, size: int, constant: int | None = None) -> None:
+        self.size = size
+        self.constant = constant
+        self.read: list[CountingInt] = []
+        self.inserts: list[tuple[int, object]] = []
 
-    @pytest.mark.timing
-    def test_insort_scales_with_the_list(self) -> None:
-        def insert_into(size: int) -> float:
+    @property
+    def reads(self) -> int:
+        return len(self.read)
+
+    def __len__(self) -> int:
+        return self.size
+
+    def __getitem__(self, index: int) -> CountingInt:
+        item = CountingInt(index if self.constant is None else self.constant)
+        self.read.append(item)
+        return item
+
+    def insert(self, index: int, item: object) -> None:
+        self.inserts.append((index, item))
+
+
+def most_reads(search: Callable[..., int], size: int) -> int:
+    """The most reads `search` makes over five targets spanning the sequence."""
+    worst = 0
+    for target in (-1, 0, size // 3, size - 1, size):
+        sequence = VirtualSequence(size)
+        search(sequence, target)
+        worst = max(worst, sequence.reads)
+    return worst
+
+
+class TestSearchesAreLogarithmic:
+    """`bisect_left`, `bisect_right` | O(log n) | O(1).
+
+    Counted reads and comparisons, not time: a halving search reads
+    floor(log2 n) + 1 items at most and compares each once, and a scan would
+    read n.
+    """
+
+    @pytest.mark.parametrize("search", SEARCHES, ids=lambda f: f.__name__)
+    def test_reads_are_one_per_halving(self, search: Callable[..., int]) -> None:
+        for exponent in (10, 20, 40):
+            size = 2**exponent
+
+            reads = most_reads(search, size)
+
+            assert reads == exponent + 1, f"{search.__name__} read {reads} items of 2**{exponent}"
+
+    @pytest.mark.parametrize("search", SEARCHES, ids=lambda f: f.__name__)
+    def test_one_comparison_per_read(self, search: Callable[..., int]) -> None:
+        for target in (0, 1_000, 4_095):
+            sequence = VirtualSequence(4_096)
+            CountingInt.comparisons = 0
+
+            search(sequence, target)
+
+            assert CountingInt.comparisons == sequence.reads, (
+                f"{search.__name__} made {CountingInt.comparisons} comparisons "
+                f"over {sequence.reads} reads"
+            )
+
+    @pytest.mark.parametrize("search", SEARCHES, ids=lambda f: f.__name__)
+    def test_a_run_of_duplicates_is_searched_the_same_way(self, search: Callable[..., int]) -> None:
+        for exponent in (10, 20):
+            sequence = VirtualSequence(2**exponent, constant=5)
+
+            search(sequence, 5)
+
+            assert sequence.reads <= exponent + 1, (
+                f"{search.__name__} read {sequence.reads} items of an equal run of 2**{exponent}"
+            )
+
+    def test_extra_memory_does_not_grow_with_the_list(self) -> None:
+        for size in (10_000, 1_000_000):
             values = list(range(size))
+            bisect.bisect_left(values, 5)
 
-            def run() -> None:
-                bisect.insort(values, 0)  # front: the whole tail shifts
-                values.pop(0)
+            for search in SEARCHES:
+                peak = peak_bytes(partial(search, values, size // 3))
+                assert peak < 1_000, f"{search.__name__} traced {peak} bytes at n={size}"
 
-            return measure_time(run, iterations=50)
 
-        small_time = insert_into(self.SMALL_SIZE)
-        large_time = insert_into(self.LARGE_SIZE)
+class TestLeftAndRight:
+    """The two variants differ only at a run of equal items."""
 
-        assert large_time > small_time * 2, (
-            f"insort should scale with the list, unlike the search inside it: "
-            f"{small_time:.2e}s vs {large_time:.2e}s"
-        )
+    def test_left_lands_before_the_run_and_right_after(self) -> None:
+        values = [1, 3, 3, 3, 5, 7, 9]
+
+        assert bisect.bisect_left(values, 3) == 1
+        assert bisect.bisect_right(values, 3) == 4
+        assert bisect.bisect_left(values, 4) == bisect.bisect_right(values, 4) == 4
+
+    def test_with_a_key_the_run_is_of_equal_keys(self) -> None:
+        records = [("a", 1), ("b", 2), ("c", 2), ("d", 3)]
+
+        def count(record: tuple[str, int]) -> int:
+            return record[1]
+
+        assert bisect.bisect_left(records, 2, key=count) == 1
+        assert bisect.bisect_right(records, 2, key=count) == 3
+
+    def test_insort_left_and_right_place_an_equal_record_either_side(self) -> None:
+        marker = ("new", 2)
+        left = [("a", 1), ("old", 2), ("c", 3)]
+        right = list(left)
+
+        bisect.insort_left(left, marker, key=lambda record: record[1])
+        bisect.insort_right(right, marker, key=lambda record: record[1])
+
+        assert left.index(marker) == 1
+        assert right.index(marker) == 2
+
+    def test_the_short_names_are_the_right_variants(self) -> None:
+        assert bisect.bisect is bisect.bisect_right
+        assert bisect.insort is bisect.insort_right
+
+
+class TestLoAndHi:
+    """`lo` and `hi` bound the slice searched, and the cost follows it."""
+
+    @pytest.mark.parametrize(
+        ("search", "expected"),
+        ((bisect.bisect_left, 2**30 + 7), (bisect.bisect_right, 2**30 + 8)),
+        ids=("bisect_left", "bisect_right"),
+    )
+    def test_the_cost_follows_the_slice_not_the_sequence(
+        self, search: Callable[..., int], expected: int
+    ) -> None:
+        sequence = VirtualSequence(2**40)
+
+        position = search(sequence, 2**30 + 7, lo=2**30, hi=2**30 + 16)
+
+        assert position == expected
+        assert sequence.reads <= 5, f"{search.__name__} read {sequence.reads} items"
+
+    def test_the_answer_is_clamped_to_the_slice(self) -> None:
+        values = list(range(100))
+
+        assert bisect.bisect_left(values, 90, lo=10, hi=20) == 20
+        assert bisect.bisect_right(values, 5, lo=10, hi=20) == 10
+
+    def test_a_negative_lo_raises(self) -> None:
+        for function in (*SEARCHES, bisect.insort_left, bisect.insort_right):
+            with pytest.raises(ValueError, match="lo must be non-negative"):
+                function([1, 2], 1, lo=-1)
+
+
+INSORTS = (bisect.insort_left, bisect.insort_right)
+
+
+class TestKeyIsCalledPerProbe:
+    """`key` is applied to each item read, never to `x` by a search, and to
+    `x` once by an insort."""
+
+    @pytest.mark.parametrize("search", SEARCHES, ids=lambda f: f.__name__)
+    def test_one_key_call_per_read_on_the_item_read(self, search: Callable[..., int]) -> None:
+        for size in (1_024, 65_536):
+            sequence = VirtualSequence(size)
+            seen: list[object] = []
+
+            def key(item: int, seen: list[object] = seen) -> int:
+                seen.append(item)
+                return item
+
+            search(sequence, size // 3, key=key)
+
+            assert len(seen) == sequence.reads <= math.log2(size) + 1
+            assert all(a is b for a, b in zip(seen, sequence.read, strict=True))
+
+    def test_a_search_does_not_call_key_on_x(self) -> None:
+        records = [("a", 1), ("b", 3), ("c", 5)]
+        arguments: list[tuple[str, int]] = []
+
+        def key(record: tuple[str, int]) -> int:
+            arguments.append(record)
+            return record[1]
+
+        assert bisect.bisect_right(records, 4, key=key) == 2
+        assert all(argument in records for argument in arguments)
+
+        with pytest.raises(TypeError):
+            bisect.bisect_right(records, ("d", 4), key=key)
+
+    @pytest.mark.parametrize("insort", INSORTS, ids=lambda f: f.__name__)
+    def test_insort_calls_key_on_x_once_then_once_per_read(
+        self, insort: Callable[..., None]
+    ) -> None:
+        sequence = VirtualSequence(1_024)
+        item = CountingInt(300)
+        arguments: list[object] = []
+
+        def key(value: int) -> int:
+            arguments.append(value)
+            return value
+
+        insort(sequence, item, key=key)
+
+        assert arguments[0] is item
+        assert all(a is b for a, b in zip(arguments[1:], sequence.read, strict=True))
+        assert len(arguments) == sequence.reads + 1
+
+
+class TestInsortCostIsTheInsert:
+    """`insort_left`, `insort_right` | O(n) | O(1): an O(log n) search, then
+    `a.insert()`, which shifts a list's tail."""
 
     @pytest.mark.timing
-    def test_the_search_inside_insort_does_not(self) -> None:
-        """Contrast: the bisect_left that insort performs is flat."""
-        small = list(range(self.SMALL_SIZE))
-        large = list(range(self.LARGE_SIZE))
+    def test_a_front_insert_grows_with_the_list(self) -> None:
+        def cost(size: int, at_front: bool) -> float:
+            item = -1 if at_front else size + 1
+            best: float | None = None
+            for _ in range(7):
+                values = list(range(size + 100))
+                del values[size:]  # keeps the capacity for the 100 inserts
+                start = time.perf_counter_ns()
+                for _ in range(100):
+                    bisect.insort(values, item)
+                elapsed = time.perf_counter_ns() - start
+                best = elapsed if best is None else min(best, elapsed)
+            assert best is not None
+            return best
 
-        small_time = measure_time(lambda: bisect.bisect_left(small, 0))
-        large_time = measure_time(lambda: bisect.bisect_left(large, 0))
+        front = cost(1_000_000, True) / cost(10_000, True)
+        end = cost(1_000_000, False) / cost(10_000, False)
 
-        assert is_constant_time(small_time, large_time), (
-            f"the search is logarithmic, so it should look flat next to the "
-            f"insert: {small_time:.2e}s vs {large_time:.2e}s"
-        )
+        assert front > 20, f"a front insort grew only {front:.1f}x over a 100x size step"
+        assert end < 5, f"an end insort grew {end:.1f}x over a 100x size step"
+
+    @pytest.mark.parametrize(
+        ("insort", "expected"),
+        ((bisect.insort_left, 0), (bisect.insort_right, 4)),
+        ids=("left", "right"),
+    )
+    def test_a_non_list_gets_one_insert_at_the_searched_position(
+        self, insort: Callable[..., None], expected: int
+    ) -> None:
+        sequence = VirtualSequence(4, constant=3)
+
+        insort(sequence, 3)
+
+        assert sequence.inserts == [(expected, 3)]
 
     def test_insort_keeps_the_list_sorted(self) -> None:
-        import random
-
-        values: list[int] = []
         source = list(range(500))
         random.Random(7).shuffle(source)
+        values: list[int] = []
+
         for item in source:
             bisect.insort(values, item)
 
         assert values == sorted(source)
 
+    def test_an_insert_into_a_free_slot_allocates_little(self) -> None:
+        values = list(range(1_000_000))
+        values.pop(0)
 
-class TestKeyFunctionCosts:
-    """The page warns that building a key list dominates the search.
+        peak = peak_bytes(lambda: bisect.insort(values, -1))
 
-    Python 3.10+ has a `key` parameter, which the page's "Advanced" example
-    predates - it builds a parallel list instead. Either way the O(n) work is
-    the keys, not the O(log n) that follows.
-    """
+        assert peak < 1_000, f"insort traced {peak} bytes"
+        assert values[0] == -1
 
-    SIZE = 200_000
+
+class TestBatchInsertion:
+    """k inserts one at a time cost O(k·(n + k)); extending and sorting once
+    gives the same list."""
 
     @pytest.mark.timing
-    def test_building_the_key_list_dominates_the_search(self) -> None:
-        data = [(str(i), i) for i in range(self.SIZE)]
+    def test_k_inserts_grow_quadratically(self) -> None:
+        def cost(k: int) -> float:
+            items = list(range(k, 0, -1))
 
-        build_time = measure_time(lambda: [x[1] for x in data], iterations=5)
-        keys = [x[1] for x in data]
-        search_time = measure_time(lambda: bisect.bisect_right(keys, self.SIZE // 2))
+            def run() -> None:
+                values: list[int] = []
+                for item in items:
+                    bisect.insort(values, item)
 
-        assert build_time > search_time * 100, (
-            f"the O(n) key list should dwarf the O(log n) search: "
-            f"build={build_time:.2e}s search={search_time:.2e}s"
-        )
+            return best_ns(run, repeats=3)
 
-    def test_key_parameter_calls_the_key_once_per_probe(self) -> None:
-        """With key=, the callable runs per probe - about log2(n) times."""
-        calls = {"n": 0}
+        growth = cost(32_000) / cost(2_000)
 
-        def key(item: tuple[str, int]) -> int:
-            calls["n"] += 1
-            return item[1]
+        assert growth > 80, f"16x the inserts cost only {growth:.1f}x"
 
-        data = [(str(i), i) for i in range(1024)]
-        bisect.bisect_left(data, 500, key=key)
+    def test_extend_and_sort_gives_the_same_list(self) -> None:
+        start = [1, 3, 5, 7, 9]
+        items = [8, 2, 6, 4]
+        one_at_a_time = list(start)
+        for item in items:
+            bisect.insort(one_at_a_time, item)
 
-        # Exactly log2(1024) probes, one key call each; a scan would be 1024.
-        assert calls["n"] == 10, f"expected log2(n) == 10 key calls, got {calls['n']}"
+        batch = [*start, *items]
+        batch.sort()
 
-
-class TestInsortLeftAndRightDiffer:
-    """Two table rows that only the aliases were covering."""
-
-    def test_left_inserts_before_an_equal_run_and_right_after(self) -> None:
-        left_target = [1, 3, 3, 3, 5]
-        right_target = [1, 3, 3, 3, 5]
-
-        bisect.insort_left(left_target, 3)
-        bisect.insort_right(right_target, 3)
-
-        assert left_target == right_target == [1, 3, 3, 3, 3, 5]
-        assert bisect.bisect_left(left_target, 3) == 1
-        assert bisect.bisect_right(right_target, 3) == 5
-
-    def test_left_and_right_place_a_new_object_differently(self) -> None:
-        """With equal keys the two differ in where the item lands."""
-        marker = ("b", 2)
-        left_data = [("a", 1), ("x", 2), ("c", 3)]
-        right_data = [("a", 1), ("x", 2), ("c", 3)]
-
-        bisect.insort_left(left_data, marker, key=lambda item: item[1])
-        bisect.insort_right(right_data, marker, key=lambda item: item[1])
-
-        assert left_data.index(marker) == 1, "insort_left goes before the equal item"
-        assert right_data.index(marker) == 2, "insort_right goes after it"
-
-    def test_insort_is_an_alias_for_insort_right(self) -> None:
-        alias = [1, 3, 3, 5]
-        explicit = [1, 3, 3, 5]
-
-        bisect.insort(alias, 3)
-        bisect.insort_right(explicit, 3)
-
-        assert alias == explicit
+        assert batch == one_at_a_time
 
 
-class TestKeyParameterCosts:
-    """The `key` argument the page gained in this review.
-
-    Counted rather than timed: key runs once per probe, so the call count is
-    exactly the number of halvings.
-    """
-
-    def test_key_runs_once_per_probe_at_every_size(self) -> None:
-        for size in (1_024, 65_536):
-            calls = {"n": 0}
-
-            def key(item: tuple[str, int], calls: dict[str, int] = calls) -> int:
-                calls["n"] += 1
-                return item[1]
-
-            data = [(str(value), value) for value in range(size)]
-            bisect.bisect_left(data, size // 2, key=key)
-
-            assert calls["n"] == math.log2(size), (
-                f"expected log2({size}) key calls, got {calls['n']}"
-            )
-
-    def test_insort_calls_key_once_more_for_the_inserted_item(self) -> None:
-        size = 1_024
-        calls = {"n": 0}
-
-        def key(item: tuple[str, int]) -> int:
-            calls["n"] += 1
-            return item[1]
-
-        data = [(str(value), value) for value in range(size)]
-        bisect.insort_left(data, ("new", size // 2), key=key)
-
-        assert calls["n"] == math.log2(size) + 1, (
-            f"expected log2(n) probes plus the item itself, got {calls['n']}"
-        )
-
-    def test_key_avoids_building_a_parallel_list(self) -> None:
-        """The trade the page now states: no O(n) build, log n calls instead."""
-        size = 10_000
-        data = [(str(value), value) for value in range(size)]
-        calls = {"n": 0}
-
-        def key(item: tuple[str, int]) -> int:
-            calls["n"] += 1
-            return item[1]
-
-        position = bisect.bisect_right(data, 5_000, key=key)
-
-        assert position == 5_001
-        assert calls["n"] < size / 100, (
-            f"key should be called per probe, not per element: {calls['n']} for n={size}"
-        )
-
-
-class TestSortedDataRequirement:
-    """The warning admonition: unsorted input gives a wrong answer."""
+class TestUnsortedInput:
+    """Nothing checks the order: unsorted input gives a wrong answer, not an
+    error."""
 
     def test_an_unsorted_list_yields_a_position_that_does_not_sort(self) -> None:
         unsorted = [3, 1, 4, 1, 5]
@@ -380,14 +435,7 @@ class TestSortedDataRequirement:
         position = bisect.bisect(unsorted, 2)
         result = unsorted[:position] + [2] + unsorted[position:]
 
-        assert result != sorted(result), (
-            f"the page calls this an incorrect result; inserting at {position} gave {result}"
-        )
-
-
-PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "bisect.md"
-
-EXPECTED_BLOCKS = 12
+        assert result != sorted(result)
 
 
 def _blocks() -> list[tuple[int, str]]:
@@ -407,7 +455,7 @@ def _blocks() -> list[tuple[int, str]]:
     return found
 
 
-def _run(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
+def _run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
     script = cwd / "_block.py"
     script.write_text(source, encoding="utf-8")
     return subprocess.run(
@@ -422,87 +470,28 @@ def _run(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
 
 
 class TestDocumentedExamples:
-    """Every block runs, including the one indented inside an admonition."""
+    """Each block runs in its own subprocess and asserts its own result."""
 
     def test_the_page_has_the_expected_blocks(self) -> None:
-        blocks = _blocks()
-
-        assert len(blocks) == EXPECTED_BLOCKS, (
-            f"expected {EXPECTED_BLOCKS} python blocks, found {len(blocks)}"
-        )
+        assert len(_blocks()) == EXPECTED_BLOCKS
 
     def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
-
+        ran = 0
         for line, source in _blocks():
-            result = _run(source, tmp_path)
+            ran += 1
+            workdir = tmp_path / f"block{line}"
+            workdir.mkdir()
+            result = _run_block(source, workdir)
             if result.returncode != 0:
-                failures.append(f"{PAGE.name}:{line} raised: {result.stderr.strip()}")
+                failures.append(f"{PAGE.name}:{line}\n{result.stderr.strip()}")
 
-        assert not failures, "\n".join(failures)
+        assert ran == EXPECTED_BLOCKS
+        assert not failures, "\n\n".join(failures)
 
-    def test_the_runner_catches_a_broken_block(self, tmp_path: pathlib.Path) -> None:
-        """A runner that cannot fail proves nothing about the blocks it ran."""
-        original = _blocks()[0][1]
-        broken = original.replace("import bisect\n", "", 1)
-        assert broken != original, "the mutation did not remove the import"
+    def test_the_runner_notices_a_broken_assertion(self, tmp_path: pathlib.Path) -> None:
+        line, source = next((n, s) for n, s in _blocks() if "(left, right) == (1, 4)" in s)
+        mutated = source.replace("(left, right) == (1, 4)", "(left, right) == (1, 3)", 1)
 
-        result = _run(broken, tmp_path)
-
-        assert result.returncode != 0
-        assert "NameError" in result.stderr
-
-
-class TestDocumentedOutputs:
-    """Every value the page prints or states in a comment."""
-
-    def test_binary_search_guarantee_positions(self) -> None:
-        values = [1, 3, 3, 3, 5, 7, 9]
-
-        assert bisect.bisect_left(values, 3) == 1
-        assert bisect.bisect_right(values, 3) == 4
-
-    def test_sorted_insert_result(self) -> None:
-        values = [1, 3, 5, 7]
-
-        bisect.insort(values, 4)
-
-        assert values == [1, 3, 4, 5, 7]
-
-    def test_range_positions(self) -> None:
-        values = [1, 5, 10, 15, 20]
-
-        assert bisect.bisect_right(values, 7) == 2
-        assert bisect.bisect_left(values, 12) == 3
-
-    def test_grade_ranges(self) -> None:
-        breaks = [60, 70, 80, 90]
-        grades = ["F", "D", "C", "B", "A"]
-
-        assert grades[bisect.bisect(breaks, 85)] == "B"
-        assert grades[bisect.bisect(breaks, 95)] == "A"
-
-    def test_timestamp_lookup_returns_the_later_events(self) -> None:
-        from datetime import datetime
-
-        events = [
-            (datetime(2024, 1, 1, 10), "event1"),
-            (datetime(2024, 1, 1, 12), "event2"),
-            (datetime(2024, 1, 1, 15), "event3"),
-            (datetime(2024, 1, 1, 18), "event4"),
-        ]
-        timestamps = [event[0] for event in events]
-
-        index = bisect.bisect_right(timestamps, datetime(2024, 1, 1, 14))
-
-        assert [name for _, name in events[index:]] == ["event3", "event4"]
-
-    def test_exists_helper_from_the_page(self) -> None:
-        values = [1, 3, 5, 7, 9]
-
-        def exists(sorted_list: list[int], x: int) -> bool:
-            position = bisect.bisect_left(sorted_list, x)
-            return position < len(sorted_list) and sorted_list[position] == x
-
-        assert exists(values, 5) is True
-        assert exists(values, 4) is False
+        assert mutated != source, f"the mutation matched nothing in {PAGE.name}:{line}"
+        assert _run_block(mutated, tmp_path).returncode != 0

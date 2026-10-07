@@ -1,255 +1,222 @@
 ---
-source_sha: b04962478eecb0ad13d0ce4d85f4eb6e7d0434e3799c89a2b10b66a31b8766c6
+source_sha: a94d3e8a9450b59cb245eb0f1ed57d4adf9f9336e3b33dadbbff5a31abbd09b2
 translated: machine
 ---
 
 # bisect モジュールの計算量
 
-`bisect` モジュールは、整列済みリストに対する二分探索の操作を提供します。
+`bisect` モジュールは、呼び出し側がソート済みに保っているシーケンスの中で位置を求めます。ソートも
+順序の検査も一切行いません。各探索は与えられた範囲を半分にしながら、1 ステップごとに要素を 1 つ
+読み、追加のメモリは定数です。挿入関数はこの探索とシーケンス自身の `insert()` を組み合わせたもので、
+リストではコストがかかるのは探索ではなく挿入のほうです。
 
-## 操作
+`n` はシーケンスの長さです。探索の上界はプローブ数で数えます。1 回のプローブは要素の読み取り 1 回、
+キー関数が指定されていれば `key` の呼び出し 1 回、そして `<` の比較 1 回からなり、いずれも O(1)
+とみなします。より重い処理を行うキー関数や比較は、そのコストの分だけ探索を重くします。添字アクセスは
+リストと同じく O(1) です。ここで 2 つの要素が等しいとは、どちらも他方に対して `<` でないことを
+指し、`key` が指定されていればキー同士を比較します。
+
+## 計算量リファレンス
+
+### 探索
 
 | 操作 | 時間 | 空間 | 備考 |
 |-----------|------|-------|-------|
-| `bisect_left(a, x)` | O(log n) | O(1) | もっとも左の位置を求める |
-| `bisect_right(a, x)` | O(log n) | O(1) | もっとも右の位置を求める |
-| `bisect(a, x)` | O(log n) | O(1) | bisect_right の別名 |
-| `insort_left(a, x)` | O(n) | O(1) | O(log n) の探索と O(n) の挿入（その場で要素をずらす） |
-| `insort_right(a, x)` | O(n) | O(1) | O(log n) の探索と O(n) の挿入（その場で要素をずらす） |
-| `insort(a, x)` | O(n) | O(1) | insort_right の別名 |
+| `bisect.bisect_left(a, x, lo=0, hi=len(a), *, key=None)` | O(log n) | O(1) | `x` と等しい要素の並びの手前の位置。`key` はプローブした各要素に適用され、`x` には適用されません |
+| `bisect.bisect_right(a, x, lo=0, hi=len(a), *, key=None)` | O(log n) | O(1) | `x` と等しい要素の並びの直後の位置 |
+| `bisect.bisect(a, x, lo=0, hi=len(a), *, key=None)` | O(log n) | O(1) | `bisect_right` と同じ関数 |
 
-## 空間計算量
+### 挿入
 
-- 二分探索の操作: 追加の空間は O(1)
-- 挿入の操作: 追加の空間は O(1)（既存のリストの中で要素をずらす）
+| 操作 | 時間 | 空間 | 備考 |
+|-----------|------|-------|-------|
+| `bisect.insort_left(a, x, lo=0, hi=len(a), *, key=None)` | O(n) | O(1) | O(log n) の探索のあと `a.insert()` を呼び、リストでは後続の要素がずれます。`key` は `x` に 1 回適用されます |
+| `bisect.insort_right(a, x, lo=0, hi=len(a), *, key=None)` | O(n) | O(1) | `x` と等しい要素の並びの直後に挿入します |
+| `bisect.insort(a, x, lo=0, hi=len(a), *, key=None)` | O(n) | O(1) | `insort_right` と同じ関数 |
 
-## 実装の詳細
+## ソート済みリストの探索
 
-### 二分探索の前提
+### 左と右
+
+2 つの探索の違いは、等しい要素の並びに対してどこに着地するかだけです。`bisect_left` は並びの手前、
+`bisect_right` は並びの直後です。どちらも範囲を半分にしていくので、重複の並びの探索もほかの探索と
+同じく O(log n) で、2 つを組み合わせれば並びの長さにかかわらずその両端を求められます。
 
 ```python
 import bisect
 
-# Must be sorted!
-sorted_list = [1, 3, 3, 3, 5, 7, 9]
+values = [1, 3, 3, 3, 5, 7, 9]
 
-# bisect_left: leftmost insertion point
-pos = bisect.bisect_left(sorted_list, 3)  # O(log n), pos = 1
-# Insert here to keep list sorted (before all 3's)
+left = bisect.bisect_left(values, 3)    # O(log n)
+right = bisect.bisect_right(values, 3)  # O(log n)
+assert (left, right) == (1, 4)
+assert values[left:right] == [3, 3, 3]
+assert right - left == 3                # occurrences counted without a scan
 
-# bisect_right: rightmost insertion point
-pos = bisect.bisect_right(sorted_list, 3)  # O(log n), pos = 4
-# Insert here to keep list sorted (after all 3's)
-# Both halve the search range each step, so a run of equal values costs no
-# more than a unique one
+def contains(sorted_list, x):
+    i = bisect.bisect_left(sorted_list, x)  # O(log n), against O(n) for `x in sorted_list`
+    return i < len(sorted_list) and sorted_list[i] == x
+
+assert contains(values, 5)
+assert not contains(values, 4)
 ```
 
-### 要素を見つける
+### lo と hi による絞り込み
+
+`lo` と `hi` は探索するスライスを区切り、探索のコストはシーケンスの長さにかかわらず
+O(log(hi - lo)) です。ただし `insort` はリスト全体に対する挿入のコストを払います。負の `lo` は
+`ValueError` を送出します。
 
 ```python
 import bisect
 
-sorted_list = [1, 3, 5, 7, 9]
+values = list(range(0, 1_000, 2))
 
-# Check if element exists
-def exists(sorted_list, x):
-    pos = bisect.bisect_left(sorted_list, x)
-    return pos < len(sorted_list) and sorted_list[pos] == x
+assert bisect.bisect_left(values, 100, lo=40, hi=60) == 50  # O(log 20)
 
-exists(sorted_list, 5)  # True - O(log n)
-exists(sorted_list, 4)  # False - O(log n)
+try:
+    bisect.bisect_left(values, 100, lo=-1)
+except ValueError as error:
+    assert 'lo must be non-negative' in str(error)
+else:
+    raise AssertionError('a negative lo was accepted')
 ```
 
-## よくある使い方
+### キーによる探索
 
-### 整列を保った挿入
+`key` はプローブごとに 1 回、プローブした要素に対して呼ばれるので、キー付きの探索は O(log n) 回の
+キー呼び出しで済み、並行するリストは不要です。`x` に対しては呼ばれません。探索関数は `x` をすでに
+キーの値として受け取ります。例外は `insort` で、レコードそのものを挿入するため、位置を求めるのに
+`key(x)` を 1 回呼びます。
 
 ```python
 import bisect
 
-sorted_list = [1, 3, 5, 7]
+records = [('a', 1), ('b', 3), ('c', 5)]
+by_count = lambda record: record[1]
 
-# Insert while maintaining order - O(n) overall
-# (O(log n) search + O(n) shift)
-bisect.insort(sorted_list, 4)  # [1, 3, 4, 5, 7]
+pos = bisect.bisect_right(records, 4, key=by_count)  # O(log n) key calls; x is the key value
+assert pos == 2
 
-# Better for many insertions: use list, then sort
-# Multiple inserts: O(n log n) with sort
-# vs O(n²) with repeated insort
+bisect.insort(records, ('d', 4), key=by_count)  # O(n); key(x) is called here
+assert records == [('a', 1), ('b', 3), ('d', 4), ('c', 5)]
 ```
 
-### 範囲を求める
+多くの探索が 1 つのリストを共有する場合は、キーの並行リストという選択肢もあります。構築に O(n)
+かかり、挿入のたびに同期させる必要がありますが、その後の探索ではキー呼び出しが発生しません。
 
 ```python
 import bisect
 
-# Find all equal elements
-sorted_list = [1, 3, 3, 3, 5, 7, 9]
-target = 3
+records = [('a', 1), ('b', 3), ('c', 5)]
+keys = [record[1] for record in records]  # O(n) once
 
-left = bisect.bisect_left(sorted_list, target)
-right = bisect.bisect_right(sorted_list, target)
-
-equals = sorted_list[left:right]  # All 3's - O(log n) search
+pos = bisect.bisect_right(keys, 4)  # O(log n), no key calls
+records.insert(pos, ('d', 4))       # O(n)
+keys.insert(pos, 4)                 # O(n) - keys must follow every insert
+assert keys == [record[1] for record in records] == [1, 3, 4, 5]
 ```
 
-### 範囲の挿入位置を求める
+### ソートされていない入力
+
+スライスがソート済みかどうかは何も検査されません。ソートされていない入力でも探索は例外を送出せずに
+位置を返しますが、それが正しい位置である保証はなく、そこに挿入した後もリストがソートされていない
+ことがあります。
 
 ```python
 import bisect
 
-# Find where range [a, b] fits in sorted list
-sorted_list = [1, 5, 10, 15, 20]
-target_range = (7, 12)
+unsorted = [3, 1, 4, 1, 5]
 
-# Position to insert start of range
-start_pos = bisect.bisect_right(sorted_list, target_range[0])  # O(log n)
-
-# Position to insert end of range
-end_pos = bisect.bisect_left(sorted_list, target_range[1])  # O(log n)
-# Two independent searches: O(log n) total, not O(n)
-
-print(f"Insert range {target_range} at positions {start_pos}-{end_pos}")
+pos = bisect.bisect(unsorted, 2)  # O(log n), no error
+result = unsorted[:pos] + [2] + unsorted[pos:]
+assert result != sorted(result)
 ```
 
-## 性能の比較
+## リストをソート済みに保つ
 
-### 整列済みデータの探索
+### 1 件ずつの挿入とまとめての挿入
+
+リストへの `insort` は 1 回ごとに O(n) なので、n 要素のリストへの k 回の挿入は O(k·(n + k))
+かかります。挿入がまとめて届き、その間に探索がない場合は、末尾に追加して 1 回ソートすれば
+O((n + k) log(n + k)) で済みます。探索と挿入が交互に起こる場合は `insort` が適しています。
 
 ```python
 import bisect
 
-data = sorted(range(1000000))
+values = [1, 3, 5, 7]
+bisect.insort(values, 4)  # O(n) - the tail shifts
+assert values == [1, 3, 4, 5, 7]
 
-# Bad: Linear search - O(n)
-found = 500000 in data  # Scans linearly
+# Many inserts at once: O(k·(n + k)) one at a time
+one_at_a_time = [1, 3, 5, 7, 9]
+for item in [8, 2, 6, 4]:
+    bisect.insort(one_at_a_time, item)  # O(n) each
 
-# Good: Binary search - O(log n)
-pos = bisect.bisect_left(data, 500000)  # Much faster!
-found = pos < len(data) and data[pos] == 500000
+# ... or O((n + k) log(n + k)) as one sort
+batch = [1, 3, 5, 7, 9]
+batch.extend([8, 2, 6, 4])
+batch.sort()
+assert batch == one_at_a_time
 ```
 
-### 整列済みリストの維持
+## よくあるパターン
+
+### 点数を区分に対応づける
 
 ```python
 import bisect
 
-# Many insertions scenario
-sorted_list = [1, 3, 5, 7, 9]
+breakpoints = [60, 70, 80, 90]
+grades = 'FDCBA'
 
-# Bad: Multiple insort - O(n²)
-for item in [2, 4, 6, 8]:
-    bisect.insort(sorted_list, item)  # O(n) each
+def grade(score):
+    return grades[bisect.bisect(breakpoints, score)]  # O(log b), b = breakpoints
 
-# Better: Collect, sort once - O(n log n)
-sorted_list.extend([2, 4, 6, 8])
-sorted_list.sort()  # Single O(n log n) operation
+assert [grade(score) for score in (33, 60, 77, 89, 90, 100)] == list('FDCBAA')
 ```
 
-## 詳しい例
-
-### 成績の範囲
+### 時間範囲内のイベント
 
 ```python
 import bisect
+from datetime import datetime
 
-# Map scores to grades
-grade_breaks = [60, 70, 80, 90]
-grades = ['F', 'D', 'C', 'B', 'A']
-
-def get_grade(score):
-    i = bisect.bisect(grade_breaks, score)
-    return grades[i]
-
-print(get_grade(85))  # 'B' - O(log n)
-print(get_grade(95))  # 'A' - O(log n)
-```
-
-### タイムスタンプの検索
-
-```python
-import bisect
-from datetime import datetime, timedelta
-
-# Find events in a time range
 events = [
     (datetime(2024, 1, 1, 10), 'event1'),
     (datetime(2024, 1, 1, 12), 'event2'),
     (datetime(2024, 1, 1, 15), 'event3'),
     (datetime(2024, 1, 1, 18), 'event4'),
 ]
+when = lambda event: event[0]
 
-timestamps = [e[0] for e in events]
-
-# Find events after specific time
-target = datetime(2024, 1, 1, 14)
-idx = bisect.bisect_right(timestamps, target)
-later_events = events[idx:]  # O(log n) search
-
-print(later_events)  # Events at 3pm and 6pm
+start = bisect.bisect_left(events, datetime(2024, 1, 1, 11), key=when)  # O(log n)
+end = bisect.bisect_right(events, datetime(2024, 1, 1, 15), key=when)   # O(log n)
+assert [name for _, name in events[start:end]] == ['event2', 'event3']  # O(m), m = matches
 ```
 
-## 応用: 独自のキー関数
+## 性能のベストプラクティス
 
-```python
-import bisect
-from bisect import bisect_right
+✅ **推奨**:
 
-# Custom objects - compare by second element
-data = [('a', 1), ('b', 3), ('c', 5)]
-keys = [x[1] for x in data]  # O(n) - building the key list dominates
+- ソート済みリストの所属判定には、O(n) の `in` ではなく `bisect_left` と比較 1 回を使う
+- 等しい要素の並びを数えるには `bisect_right - bisect_left` を使い、O(log n) で求める
+- 答えがリストの一部にあるとわかっているときは `lo` と `hi` を渡す
+- レコードをたまに探索するなら `key` を使い、多くの探索で共有するならキーの並行リストを保持する
 
-# Find position for ('d', 4)
-pos = bisect_right(keys, 4)  # O(log n)
-data.insert(pos, ('d', 4))  # O(n) - shifts the tail
-# Rebuilding keys per search makes the whole thing O(n); keep it alongside
-# data instead
-```
+❌ **避ける**:
 
-Python 3.10 以降、モジュールのすべての関数が `key` 引数を取り、並行リストが
-不要になる:
+- 1 回の探索のためにキーのリストを作る - O(log n) の答えのために O(n) を払うことになる
+- まとまったデータを `insort` の繰り返しでリストに入れる - 末尾に追加して 1 回ソートする
+- ソート済みに保っていないリストを探索する - 答えは信頼できず、例外も送出されない
 
-```python
-import bisect
+## バージョン別の注記
 
-data = [('a', 1), ('b', 3), ('c', 5)]
+- **Python 3.10+**: 6 つの関数すべてに `key` 引数が追加されました
 
-# key runs once per probe, so no parallel list is needed
-pos = bisect.bisect_right(data, 4, key=lambda item: item[1])  # O(log n) key calls
-data.insert(pos, ('d', 4))  # O(n) - shifts the tail
-```
+## 関連モジュール
 
-どちらを選ぶかは、同じキーを共有する検索の数による。並行リストは一度 O(n)
-かかるが検索ごとの呼び出しはゼロで、`key` は事前コストがない代わりに探索
-1 回につき 1 回呼ばれる。
-
-## 重要な注意
-
-!!! warning "データが整列済みであること"
-    二分探索が正しく動くには、入力のリストが必ず整列済みでなければなりません。
-    
-    ```python
-    import bisect
-
-    # Wrong: Data not sorted
-    unsorted = [3, 1, 4, 1, 5]
-    pos = bisect.bisect(unsorted, 2)  # Incorrect result!
-    ```
-
-!!! tip "ならしたときの効率"
-    挿入を何度も行う場合は次のようになります。
-
-    - `insort()` を複数回呼ぶ: 全体で O(n²)
-    - まとめてから `sort()` を一度呼ぶ: 全体で O(n log n)
-    
-    アクセスの仕方に応じて選んでください。
-
-## バージョン情報
-
-- **Python 3.10+**: モジュールのすべての関数に `key` パラメータが追加
-
-## 関連するドキュメント
-
-- [heapq モジュール](heapq.md)
-- [collections モジュール](collections.md)
-- [リストのメソッド](../builtins/list.md)
+- **[heapq](heapq.md)** - ソート済みリストではなく最小の要素だけが必要なときの O(log n) の
+  push と pop
+- **[list](../builtins/list.md)** - `insort` とまとめてのソートが依拠する `insert()` と
+  `sort()` のコスト
