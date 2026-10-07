@@ -19,8 +19,11 @@ Measurement scope:
   the input expands more than 500x and the traced peak exceeds the output. In a
   timing test, 16x the output (2,000,000 to 32,000,000 zero bytes) costs
   between 4x and 64x.
-* `compressobj()` peaks under 1,000,000 traced bytes at the defaults, and
-  `wbits=9, memLevel=1` under a quarter of that. Streaming 200 chunks of
+* `compressobj()` peaks under 1,000,000 traced bytes at the defaults.
+  Lowering `wbits` from 15 to 9 or `memLevel` from 8 to 1 independently
+  reduces allocation by more than 32 KiB; lowering both saves another
+  32 KiB against either alone. The margin excludes Python call overhead
+  while allowing backend-specific fixed state. Streaming 200 chunks of
   65,536 random bytes, each sliced afresh from the source, through one
   object and discarding the output, peaks under 2,000,000 bytes against
   13,107,200 compressed. `Compress.copy()`, and
@@ -77,9 +80,12 @@ Not settled here:
 
 * `ZLIBNG_VERSION` exists only on a 3.14+ build linked against zlib-ng; the
   local build links zlib, so its presence is not observed.
-* The state's size is read from zlib's documented memory formula and observed
-  only at two parameter settings; other `wbits`/`memLevel` pairs are not
-  varied. The raw-stream `decompressobj(wbits=-15, zdict=...)` is observed
+* State allocation depends on the linked backend: zlib's documented memory
+  formula and zlib-ng 2.2.4's `alloc_deflate()` in deflate.c both have buffers
+  sized by `wbits` and `memLevel`, but zlib-ng also has a fixed-size hash
+  table. Allocation is observed only at the four combinations of `wbits`
+  9/15 and `memLevel` 1/8; other pairs are not varied.
+  The raw-stream `decompressobj(wbits=-15, zdict=...)` is observed
   not to copy the dictionary; its time is not measured.
 * `Compress.flush()` is bounded by the size of what it returns; its time is
   not measured.
@@ -245,10 +251,20 @@ class TestObjectsHoldAFixedState:
     @pytest.mark.serial
     def test_compressobj_allocates_a_fixed_state_set_by_its_parameters(self) -> None:
         default = peak_bytes(zlib.compressobj)
+        small_window = peak_bytes(lambda: zlib.compressobj(wbits=9))
+        small_tables = peak_bytes(lambda: zlib.compressobj(memLevel=1))
         small = peak_bytes(lambda: zlib.compressobj(wbits=9, memLevel=1))
 
         assert default < 1_000_000, f"compressobj() peaked at {default} B"
-        assert small < default / 4, f"wbits=9, memLevel=1 peaked at {small} B of {default} B"
+        margin = 32 * 1024
+        assert default - small_window > margin, f"wbits=9 peaked at {small_window} B of {default} B"
+        assert default - small_tables > margin, (
+            f"memLevel=1 peaked at {small_tables} B of {default} B"
+        )
+        assert min(small_window, small_tables) - small > margin, (
+            f"wbits=9, memLevel=1 peaked at {small} B; "
+            f"wbits=9 alone at {small_window} B, memLevel=1 alone at {small_tables} B"
+        )
 
     @pytest.mark.serial
     def test_streaming_compression_does_not_hold_the_stream(self) -> None:
