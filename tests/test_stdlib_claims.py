@@ -11,6 +11,7 @@ proves it reads nothing at construction, and no tolerance is involved.
 
 docs/stdlib/array.md's claims live in tests/test_array_complexity.py,
 docs/stdlib/decimal.md's in tests/test_decimal_complexity.py,
+docs/stdlib/fnmatch.md's in tests/test_fnmatch_complexity.py,
 docs/stdlib/multiprocessing.md's in tests/test_multiprocessing_complexity.py,
 docs/stdlib/numbers.md's in tests/test_numbers_complexity.py,
 docs/stdlib/secrets.md's in tests/test_secrets_complexity.py,
@@ -31,14 +32,13 @@ Deliberately not covered, because a unit test cannot settle them:
 import bisect
 import contextlib
 import filecmp
-import fnmatch
 import pprint
 import queue
 import sqlite3
 import threading
 import time
 from collections import defaultdict, deque
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from functools import cmp_to_key
 from pathlib import Path
 from typing import Any
@@ -99,59 +99,6 @@ class TestFilecmpIsLazy:
         (left / "same.txt").write_text("x", encoding="utf-8")
         (right / "same.txt").write_text("x", encoding="utf-8")
         assert filecmp.dircmp(str(left), str(right)).same_files == ["same.txt"]
-
-
-class TestFnmatchPatternCost:
-    """docs/stdlib/fnmatch.md: patterns are compiled and cached, so the
-    wildcard used does not change the cost; filter() is O(k*n)."""
-
-    @pytest.mark.timing
-    def test_wildcard_choice_does_not_change_the_cost(self) -> None:
-        name = "some_moderately_long_filename.txt"
-        star = best_time(lambda: [fnmatch.fnmatch(name, "*.txt") for _ in range(20_000)])
-        classes = best_time(lambda: [fnmatch.fnmatch(name, "[a-z]*.txt") for _ in range(20_000)])
-
-        ratio = max(star, classes) / min(star, classes)
-        assert ratio < 4.0, (
-            f"both compile to a cached regex: star={star:.2e}s classes={classes:.2e}s"
-        )
-
-    @pytest.mark.timing
-    def test_filter_scales_with_the_number_of_names(self) -> None:
-        few = [f"file{i}.txt" for i in range(100)]
-        many = [f"file{i}.txt" for i in range(10_000)]
-
-        few_time = best_time(lambda: fnmatch.filter(few, "*.txt"))
-        many_time = best_time(lambda: fnmatch.filter(many, "*.txt"))
-
-        assert many_time > few_time * 10, (
-            f"filter() is O(k) in names: {few_time:.2e}s vs {many_time:.2e}s"
-        )
-
-    def test_two_patterns_means_two_passes(self) -> None:
-        """Each filter consumes every name, even when its pattern matches none.
-
-        Count yielded names with real pattern matching; elapsed time also
-        depends on matching and output construction, not just pass count.
-        """
-        visits: list[str] = []
-
-        class RecordingNames(list[str]):
-            def __iter__(self) -> Iterator[str]:
-                for name in super().__iter__():
-                    visits.append(name)
-                    yield name
-
-        expected = [f"file{i}.py" for i in range(100)]
-        names = RecordingNames(expected)
-
-        matched = fnmatch.filter(names, "*.py")
-        assert matched == expected
-        assert visits == expected
-
-        unmatched = fnmatch.filter(names, "*.js")
-        assert unmatched == []
-        assert visits == expected + expected
 
 
 class TestCmpToKeyCallsPerComparison:
