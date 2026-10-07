@@ -14,6 +14,7 @@ docs/stdlib/decimal.md's in tests/test_decimal_complexity.py,
 docs/stdlib/fnmatch.md's in tests/test_fnmatch_complexity.py,
 docs/stdlib/multiprocessing.md's in tests/test_multiprocessing_complexity.py,
 docs/stdlib/numbers.md's in tests/test_numbers_complexity.py,
+docs/stdlib/pwd.md's in tests/test_pwd_complexity.py,
 docs/stdlib/secrets.md's in tests/test_secrets_complexity.py,
 docs/stdlib/tempfile.md's in tests/test_tempfile_complexity.py,
 docs/stdlib/smtplib.md's in tests/test_smtplib_complexity.py,
@@ -23,8 +24,6 @@ those modules' tables as well.
 
 Deliberately not covered, because a unit test cannot settle them:
 
-* docs/stdlib/pwd.md - lookup cost is decided by the NSS backend, which may
-  be a local file or a network directory
 * docs/stdlib/cgi.md, docs/stdlib/cgitb.md - removed in Python 3.13, so a
   test would have to be skipped on any current interpreter
 """
