@@ -1,282 +1,301 @@
-# Heapq Module Complexity
+# heapq Module Complexity
 
-The `heapq` module provides heap implementations for priority queue operations.
+The `heapq` module keeps a binary heap inside an ordinary `list`: there is no heap type, only
+functions that move items around a list you own so that `heap[0]` is always the smallest. Every
+operation is in place, and only `nlargest`, `nsmallest` and `merge` keep anything of their own.
 
-## Min-Heap Operations
+`n` is the items in the heap, `m` is the items taken from the input iterables, `k` is the items
+`nlargest` or `nsmallest` is asked for, and `r` is the iterables passed to `merge`. Every bound
+counts comparisons between items and treats one comparison, and one call of a `key` function,
+as O(1).
 
-| Operation | Time | Space | Notes |
-|-----------|------|-------|-------|
-| `heapify(x)` | O(n) | O(1) | In-place transformation |
-| `heappush(heap, item)` | O(log n) | O(1) | Add item to heap |
-| `heappop(heap)` | O(log n) | O(1) | Remove and return min item |
-| `heappushpop(heap, item)` | O(log n) | O(1) | Push then pop (more efficient than separate calls) |
-| `heapreplace(heap, item)` | O(log n) | O(1) | Pop then push (more efficient than separate calls) |
-| `nlargest(k, iterable)` | O(N log k) | O(k) | N = iterable length; maintains heap of k items; O(N log N) if k ≥ N |
-| `nsmallest(k, iterable)` | O(N log k) | O(k) | N = iterable length; maintains heap of k items; O(N log N) if k ≥ N |
-| `merge(*iterables)` | O(n log k) | O(k) | n = total items, k = count of iterables |
+## Complexity Reference
 
-## Max-Heap Operations (Python 3.14+)
+### Min-heap functions
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `heapify_max(x)` | O(n) | O(1) | In-place max-heap transformation |
-| `heappush_max(heap, item)` | O(log n) | O(1) | Add item to max-heap |
-| `heappop_max(heap)` | O(log n) | O(1) | Remove and return max item |
-| `heappushpop_max(heap, item)` | O(log n) | O(1) | Push then pop max |
-| `heapreplace_max(heap, item)` | O(log n) | O(1) | Pop max then push |
+| `heapq.heapify(x)` | O(n) | O(1) | In place |
+| `heapq.heappush(heap, item)` | O(log n) amortized | O(1) amortized | The list grows the way `append` does |
+| `heapq.heappop(heap)` | O(log n) amortized | O(1) | The list shrinks the way `pop` does; raises `IndexError` on an empty heap |
+| `heapq.heappushpop(heap, item)` | O(log n) | O(1) | O(1), heap untouched, when the heap is empty or `item` is not larger than `heap[0]` |
+| `heapq.heapreplace(heap, item)` | O(log n) | O(1) | Pops before it pushes, so it can return an item larger than `item`; raises `IndexError` on an empty heap |
+| Reading `heap[0]` | O(1) | O(1) | The smallest item, without removing it |
 
-## Space Complexity Notes
+### Max-heap functions
 
-- `heapify()`: O(1) in-place transformation
-- `heappush()`: O(1) - modifies existing list
-- `heappop()`: O(1) - modifies existing list
-- `nlargest(k, ...)`: O(k) for result list of k items
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `heapq.heapify_max(x)` | O(n) | O(1) | Python 3.14+; `heap[0]` is then the largest item |
+| `heapq.heappush_max(heap, item)` | O(log n) amortized | O(1) amortized | Python 3.14+ |
+| `heapq.heappop_max(heap)` | O(log n) amortized | O(1) | Python 3.14+; raises `IndexError` on an empty heap |
+| `heapq.heappushpop_max(heap, item)` | O(log n) | O(1) | Python 3.14+; O(1), heap untouched, when the heap is empty or `item` is not smaller than `heap[0]` |
+| `heapq.heapreplace_max(heap, item)` | O(log n) | O(1) | Python 3.14+; raises `IndexError` on an empty heap |
 
-## Implementation Details
+### Selecting and merging
 
-### Min-Heap Property
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `heapq.nlargest(k, iterable, key=None)` | O(m log k) | O(k) | One comparison for an item that cannot enter the result, so random input with a small k costs close to O(m); ascending input makes every item enter. k = 1 is a `max()` pass, O(m). `key` is called once per item |
+| `heapq.nsmallest(k, iterable, key=None)` | O(m log k) | O(k) | The mirror image: descending input is the worst case, and k = 1 is a `min()` pass |
+| `heapq.merge(*iterables, key=None, reverse=False)` | O(r + m log r) | O(r) | Lazy: holds one item per input. Each input must already be sorted in the output's direction; this is not checked. `key` is called at most once per item |
+
+## Heap Layout
+
+A heap is a list in which the item at `i` is no larger than the two at `2*i + 1` and `2*i + 2`.
+`heapify` establishes only that, in O(n): the list is not sorted, and only `heap[0]` is known to
+be the smallest.
 
 ```python
 import heapq
 
-# Min-heap: parent <= children
-heap = [1, 3, 5, 7, 9, 11]
-#        0  1  2  3  4   5
-# Parent at i: children at 2*i+1, 2*i+2
+data = [5, 3, 7, 1, 9, 4]
+heapq.heapify(data)  # O(n), in place
+
+assert data[0] == 1          # O(1) - the root is the smallest
+assert data != sorted(data)  # a heap, not a sorted list
+for parent in range(len(data)):
+    for child in (2 * parent + 1, 2 * parent + 2):
+        if child < len(data):
+            assert data[parent] <= data[child]
 ```
 
-### Heapify Transform
+## Pushing and Popping
+
+A push or a pop walks one path between the root and a leaf, so it costs the heap's height,
+O(log n). Draining a whole heap is therefore O(n log n).
 
 ```python
 import heapq
 
-# Transform list into heap - O(n)
-data = [5, 3, 7, 1, 9]
-heapq.heapify(data)  # In-place, O(n)
-# data is now [1, 3, 7, 5, 9] (heap property satisfied)
-```
-
-### Iterative Operations
-
-```python
-import heapq
-
-heap = [5, 3, 7]
-heapq.heapify(heap)  # [3, 5, 7]
-
-# Add items
-heapq.heappush(heap, 1)  # O(log n), now [1, 3, 7, 5]
-heapq.heappush(heap, 6)  # O(log n)
-
-# Remove min
-min_val = heapq.heappop(heap)  # O(log n), returns 1
-
-# Peek at min without removing
-print(heap[0])  # O(1) - minimum is always at root
-```
-
-## Common Use Cases
-
-### Priority Queue
-
-```python
-import heapq
-
-# Simple priority queue
-tasks = [(3, 'low'), (1, 'high'), (2, 'medium')]
-heapq.heapify(tasks)  # O(n)
-
-while tasks:
-    priority, task = heapq.heappop(tasks)  # O(log n) each, O(n log n) to drain
-    print(f"Execute {task}")  # Executes high, medium, low
-
-# Output:
-# Execute high
-# Execute medium
-# Execute low
-```
-
-### Top-K Elements
-
-```python
-import heapq
-
-# Find k largest elements - O(n log k)
-data = [3, 1, 4, 1, 5, 9, 2, 6]
-top_3 = heapq.nlargest(3, data)  # [9, 6, 5]
-bottom_3 = heapq.nsmallest(3, data)  # [1, 1, 2]
-```
-
-### Merge Sorted Sequences
-
-```python
-import heapq
-
-# Merge multiple sorted iterables efficiently
-seq1 = [1, 3, 5]
-seq2 = [2, 4, 6]
-seq3 = [1.5, 2.5, 3.5]
-
-merged = heapq.merge(seq1, seq2, seq3)
-# merged is iterator that yields in order
-list(merged)  # [1, 1.5, 2, 2.5, 3, 3.5, 4, 5, 6]
-```
-
-## Advanced: Custom Priority
-
-### Using Tuples
-
-```python
-import heapq
-
-# Priority queue with custom objects
 heap = []
-heapq.heappush(heap, (3, 'low-priority-task'))    # O(log n)
-heapq.heappush(heap, (1, 'high-priority-task'))   # O(log n)
-heapq.heappush(heap, (2, 'medium-priority-task'))  # O(log n)
+for priority in [5, 1, 4, 2, 3]:
+    heapq.heappush(heap, priority)  # O(log n) amortized
 
-# Tasks ordered by priority (first element of tuple)
-# Tuples compare element by element: equal priorities fall through to the
-# next field, so a tie costs more to order than a plain int key would
-while heap:
-    priority, task = heapq.heappop(heap)  # O(log n)
-    print(task)
+assert heap[0] == 1  # O(1) peek
+drained = [heapq.heappop(heap) for _ in range(len(heap))]  # O(n log n) in total
+assert drained == [1, 2, 3, 4, 5]
+
+try:
+    heapq.heappop(heap)
+except IndexError as error:
+    assert 'index out of range' in str(error)
+else:
+    raise AssertionError('popped from an empty heap')
 ```
 
-### Using Dataclass with functools
+### Ties and Uncomparable Payloads
+
+Tuples compare field by field, so two entries with equal priorities go on to compare the next
+field. Put a unique counter there and the payload is never compared: equal priorities then come
+out in insertion order, and a payload that does not support `<` is never asked to.
 
 ```python
 import heapq
-from dataclasses import dataclass
-from functools import total_ordering
+import itertools
 
-@total_ordering
-@dataclass
-class Task:
-    priority: int
-    name: str
-    
-    def __lt__(self, other):
-        return self.priority < other.priority
+class Job:
+    def __init__(self, name):
+        self.name = name
 
-heap = [
-    Task(3, 'low'),
-    Task(1, 'high'),
-    Task(2, 'medium')
-]
-heapq.heapify(heap)  # O(n), but each comparison is a Python __lt__ call
+heap = []
+try:
+    heapq.heappush(heap, (1, Job('a')))
+    heapq.heappush(heap, (1, Job('b')))  # equal priority reaches Job < Job
+except TypeError as error:
+    assert "'<' not supported" in str(error)
+else:
+    raise AssertionError('two Jobs were compared')
 
-while heap:
-    task = heapq.heappop(heap)  # O(log n)
-    print(f"{task.priority}: {task.name}")
+counter = itertools.count()
+heap = []
+for name in ['a', 'b', 'c']:
+    heapq.heappush(heap, (1, next(counter), Job(name)))  # O(log n)
+
+assert [heapq.heappop(heap)[2].name for _ in range(3)] == ['a', 'b', 'c']
 ```
 
-## Performance Comparison
+## Combined Push and Pop
 
-### Top-K Problem
-
-```python
-import heapq
-
-data = list(range(1000000))
-
-# Bad: Full sort - O(n log n)
-top_10 = sorted(data, reverse=True)[:10]  # Sorts all!
-
-# Good: Heap nlargest - O(n log k), k=10
-top_10 = heapq.nlargest(10, data)  # Only sorts top 10
-
-# For small k, nlargest much faster than sort
-```
-
-### Priority Queue Simulation
-
-```python
-import heapq
-from collections import deque
-
-# Simulated queue with priorities
-heap_queue = []  # heapq-based
-fifo_queue = deque()  # Simple FIFO
-
-# Add task
-priority, task = 1, 'render'
-heapq.heappush(heap_queue, (priority, task))  # O(log n)
-fifo_queue.append(task)  # O(1)
-
-# Get task with priority (smallest priority value first)
-task = heapq.heappop(heap_queue)  # O(log n)
-task = fifo_queue.popleft()  # O(1), gets oldest
-```
-
-## Implementation Notes
-
-### CPython
-Uses array-based binary heap, highly optimized.
-
-### PyPy
-JIT compilation provides additional optimization for repeated operations.
-
-## Max-Heap Usage (Python 3.14+)
+`heappushpop` and `heapreplace` do a push and a pop in one call that leaves the heap the same
+size. They differ in order: `heappushpop` pushes first, so an item no larger than the root comes
+straight back after one comparison; `heapreplace` pops first, so it always returns the old root,
+even when that is larger than the new item.
 
 ```python
 import heapq
 
-# Create a max-heap
+heap = [2, 4, 6]
+heapq.heapify(heap)
+
+assert heapq.heappushpop(heap, 1) == 1  # O(1) here - 1 never enters the heap
+assert heap == [2, 4, 6]
+
+assert heapq.heapreplace(heap, 1) == 2  # O(log n) - pops 2, then pushes 1
+assert sorted(heap) == [1, 4, 6]
+
+assert heapq.heappushpop([], 7) == 7  # an empty heap returns the item
+```
+
+## Selecting the Top k
+
+For k above 1, `nlargest` keeps the k best items seen so far in a heap and compares each new
+item with the weakest of them. An item that cannot get in costs that one comparison, so on random
+input with a small k the heap is rarely touched; an item that does get in costs O(log k). Input
+already in ascending order is the worst case for `nlargest`, since every item beats everything
+before it, and descending input is the worst case for `nsmallest`. Either way it is one pass
+holding k items, against `sorted()`, which holds all m.
+
+```python
+import heapq
+
+scores = [31, 7, 88, 54, 12, 99, 63, 5]
+
+assert heapq.nlargest(3, scores) == [99, 88, 63]  # O(m log k), O(k) memory
+assert heapq.nsmallest(2, scores) == [5, 7]       # O(m log k)
+assert heapq.nlargest(3, scores) == sorted(scores, reverse=True)[:3]  # same answer, O(m log m)
+
+# key is called once per item, and the items themselves are returned
+words = ['pear', 'fig', 'banana', 'kiwi']
+assert heapq.nlargest(2, words, key=len) == ['banana', 'pear']
+
+# The input can be any iterable, consumed in one pass
+assert heapq.nsmallest(2, (x * x for x in range(-3, 4))) == [0, 1]
+```
+
+## Merging Sorted Inputs
+
+`merge` is a generator. The first `next()` takes one item from each input and heapifies them,
+O(r); after that each item it yields costs at most one O(log r) sift to bring in that input's next
+item. Nothing beyond one item per input is read ahead, so it can merge inputs too large for memory,
+but it trusts the order it is given: an unsorted input produces unsorted output without an error.
+
+```python
+import heapq
+
+merged = heapq.merge([1, 4, 7], [2, 5, 8], [3, 6, 9])  # O(1) - nothing is read yet
+assert next(merged) == 1                               # O(r) - one item from each input
+assert list(merged) == [2, 3, 4, 5, 6, 7, 8, 9]        # O(log r) per item
+
+# key and reverse: each input must already be sorted that way
+by_length = heapq.merge(['fig', 'pear'], ['kiwi', 'banana'], key=len)
+assert list(by_length) == ['fig', 'pear', 'kiwi', 'banana']
+descending = heapq.merge([9, 5, 1], [8, 2], reverse=True)
+assert list(descending) == [9, 8, 5, 2, 1]
+
+# Unsorted input is not detected
+assert list(heapq.merge([3, 1], [2])) == [2, 3, 1]
+```
+
+## Max-Heaps
+
+### The Max-Heap Functions
+
+Python 3.14 adds a `_max` twin of each of the five heap functions. They have the same costs as
+the min-heap functions, with `heap[0]` the largest item instead of the smallest.
+
+```python
+import heapq
+
 data = [3, 1, 4, 1, 5, 9, 2, 6]
 heapq.heapify_max(data)  # O(n)
+assert data[0] == 9      # O(1) - the root is the largest
 
-# Peek at max
-print(data[0])  # 9 - maximum is always at root
+heapq.heappush_max(data, 10)          # O(log n) amortized
+assert heapq.heappop_max(data) == 10  # O(log n) amortized
 
-# Add and remove from max-heap
-heapq.heappush_max(data, 10)      # O(log n)
-max_val = heapq.heappop_max(data)  # O(log n), returns 10
-
-# Efficient combined operations
-heapq.heapreplace_max(data, 7)    # O(log n) - pop max, push 7
-heapq.heappushpop_max(data, 8)    # O(log n) - push 8, pop max
+assert heapq.heapreplace_max(data, 7) == 9   # O(log n) - pops 9, then pushes 7
+assert heapq.heappushpop_max(data, 8) == 8   # O(1) here - 8 is not smaller than the root
+assert data[0] == 7
 ```
 
-### Max-Heap Priority Queue
+### Before Python 3.14
+
+Negating numeric priorities turns the min-heap functions into a max-heap at the same cost.
 
 ```python
 import heapq
 
-# Priority queue returning highest priority first
-tasks = [(1, "low"), (5, "urgent"), (3, "medium")]
-heapq.heapify_max(tasks)  # O(n)
-
-while tasks:
-    priority, task = heapq.heappop_max(tasks)  # O(log n) each, O(n log n) to drain
-    print(f"{priority}: {task}")
-# Output: 5: urgent, 3: medium, 1: low
-```
-
-### Pre-3.14 Max-Heap Workaround
-
-```python
-import heapq
-
-# Before 3.14: Negate values for max-heap behavior
 data = [3, 1, 4, 1, 5]
 max_heap = [-x for x in data]  # O(n)
 heapq.heapify(max_heap)        # O(n)
 
-# Get max
-max_val = -heapq.heappop(max_heap)  # Negate back
-
-# Python 3.14+: Use native max-heap functions instead
+assert -max_heap[0] == 5               # O(1) peek
+assert -heapq.heappop(max_heap) == 5   # O(log n)
+heapq.heappush(max_heap, -9)           # O(log n)
+assert -max_heap[0] == 9
 ```
+
+## Common Patterns
+
+### A Bounded Top-k Over a Stream
+
+When items arrive one at a time and only the k largest matter, a min-heap of k items keeps them:
+the root is the weakest survivor, and `heappushpop` replaces it only when a new item beats it.
+
+```python
+import heapq
+
+k = 3
+best = []
+for reading in [12, 40, 7, 33, 51, 8, 29, 60]:
+    if len(best) < k:
+        heapq.heappush(best, reading)      # O(log k)
+    else:
+        heapq.heappushpop(best, reading)   # O(log k), O(1) if it cannot get in
+
+assert sorted(best, reverse=True) == [60, 51, 40]  # O(k) memory throughout
+```
+
+### A Priority Queue of Tasks
+
+```python
+import heapq
+import itertools
+
+counter = itertools.count()
+queue = []
+
+def submit(priority, task):
+    heapq.heappush(queue, (priority, next(counter), task))  # O(log n)
+
+def take():
+    priority, _, task = heapq.heappop(queue)  # O(log n)
+    return task
+
+submit(2, 'write report')
+submit(1, 'fix outage')
+submit(2, 'answer email')
+
+assert [take() for _ in range(3)] == ['fix outage', 'write report', 'answer email']
+```
+
+## Performance Best Practices
+
+✅ **Do**:
+
+- Read `heap[0]` to peek; it is O(1) and needs no pop and push
+- Use `heappushpop` or `heapreplace` for a push and a pop together: one call, no resize, and
+  `heappushpop` returns an item that cannot enter after one comparison
+- Use `nlargest` or `nsmallest` for a few items from a large or streaming input; memory follows k
+- Put a counter between the priority and the payload, so ties never compare payloads
+- Use `merge` on inputs that are already sorted: it is lazy and holds one item per input
+
+❌ **Avoid**:
+
+- Sorting a whole list to take a few items from it - O(m log m) time and O(m) memory
+- Draining a heap to find one item; a heap orders only the root
+- Calling `heapify` after every push - O(n) each time against O(log n)
+- Passing unsorted inputs to `merge`; the output will not be sorted and nothing says so
 
 ## Version Notes
 
-- **Python 3.14+**: Native max-heap functions added
-- **All versions**: Min-heap functions available
+- **Python 3.14+**: Added `heapify_max`, `heappush_max`, `heappop_max`, `heappushpop_max` and
+  `heapreplace_max`
 
-## Related Documentation
+## Related Modules
 
-- [Collections Module](collections.md)
-- [Bisect Module](bisect.md)
-- [Python 3.14](../versions/py314.md)
-- [sorted() Function](../builtins/sorted.md)
+- **[queue](queue.md)** - `PriorityQueue` is a locked `heapq` heap, for producer and consumer threads
+- **[sched](sched.md)** - an event scheduler built on a heap of timed events
+- **[bisect](bisect.md)** - keeps a list fully sorted instead, with O(n) insertion
+- **[sorted()](../builtins/sorted.md)** - O(m log m) when every item, not just the top k, is needed

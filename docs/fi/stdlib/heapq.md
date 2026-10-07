@@ -1,287 +1,316 @@
 ---
-source_sha: c1b5f1ee5978dde99e9799f5f90d36c53c47949cd101d739d756649cb9c23ab7
+source_sha: bc027a0b06cdd8740a2521704ec5280e0839aa5d5e037704f37c0fb6913b975e
 translated: machine
 ---
 
-# Heapq-moduulin vaativuus
+# heapq-moduulin vaativuus
 
-Moduuli `heapq` tarjoaa kekototeutuksia prioriteettijono-operaatioita varten.
+Moduuli `heapq` pitää binäärikekoa tavallisen `list`-olion sisällä: kekotyyppiä ei ole, vain
+funktioita, jotka siirtelevät alkioita omistamassasi listassa niin, että `heap[0]` on aina
+pienin. Jokainen operaatio tehdään paikallaan, ja vain `nlargest`, `nsmallest` ja `merge`
+pitävät mitään omanaan.
 
-## Minimikeko-operaatiot
+`n` on keon alkiot, `m` on syötteenä annetuista iteroitavista otetut alkiot, `k` on alkiot,
+joita `nlargest` tai `nsmallest` pyydetään palauttamaan, ja `r` on `merge`-funktiolle annetut
+iteroitavat. Jokainen raja laskee alkioiden välisiä vertailuja ja käsittelee yhtä vertailua ja
+yhtä `key`-funktion kutsua O(1)-operaationa.
 
-| Operaatio | Aika | Tila | Huomiot |
-|-----------|------|-------|-------|
-| `heapify(x)` | O(n) | O(1) | Muunnos paikallaan |
-| `heappush(heap, item)` | O(log n) | O(1) | Lisää alkion kekoon |
-| `heappop(heap)` | O(log n) | O(1) | Poistaa ja palauttaa pienimmän alkion |
-| `heappushpop(heap, item)` | O(log n) | O(1) | Lisäys ja sitten poisto (tehokkaampi kuin erilliset kutsut) |
-| `heapreplace(heap, item)` | O(log n) | O(1) | Poisto ja sitten lisäys (tehokkaampi kuin erilliset kutsut) |
-| `nlargest(k, iterable)` | O(N log k) | O(k) | N = iteroituvan pituus; ylläpitää k alkion kekoa; O(N log N) jos k ≥ N |
-| `nsmallest(k, iterable)` | O(N log k) | O(k) | N = iteroituvan pituus; ylläpitää k alkion kekoa; O(N log N) jos k ≥ N |
-| `merge(*iterables)` | O(n log k) | O(k) | n = alkioiden kokonaismäärä, k = iteroituvien lukumäärä |
+## Vaativuustaulukko
 
-## Maksimikeko-operaatiot (Python 3.14+)
+### Minimikeon funktiot
 
 | Operaatio | Aika | Tila | Huomiot |
-|-----------|------|-------|-------|
-| `heapify_max(x)` | O(n) | O(1) | Maksimikekomuunnos paikallaan |
-| `heappush_max(heap, item)` | O(log n) | O(1) | Lisää alkion maksimikekoon |
-| `heappop_max(heap)` | O(log n) | O(1) | Poistaa ja palauttaa suurimman alkion |
-| `heappushpop_max(heap, item)` | O(log n) | O(1) | Lisäys ja sitten suurimman poisto |
-| `heapreplace_max(heap, item)` | O(log n) | O(1) | Suurimman poisto ja sitten lisäys |
+|-----------|------|------|---------|
+| `heapq.heapify(x)` | O(n) | O(1) | Paikallaan |
+| `heapq.heappush(heap, item)` | O(log n) tasoitettu | O(1) tasoitettu | Lista kasvaa samoin kuin `append`-kutsussa |
+| `heapq.heappop(heap)` | O(log n) tasoitettu | O(1) | Lista kutistuu samoin kuin `pop`-kutsussa; tyhjälle keolle nostaa `IndexError`-poikkeuksen |
+| `heapq.heappushpop(heap, item)` | O(log n) | O(1) | O(1), kekoon koskematta, kun keko on tyhjä tai `item` ei ole suurempi kuin `heap[0]` |
+| `heapq.heapreplace(heap, item)` | O(log n) | O(1) | Poistaa ennen lisäämistä, joten se voi palauttaa alkion, joka on suurempi kuin `item`; tyhjälle keolle nostaa `IndexError`-poikkeuksen |
+| `heap[0]`:n lukeminen | O(1) | O(1) | Pienin alkio poistamatta sitä |
 
-## Tilavaativuuden huomioita
+### Maksimikeon funktiot
 
-- `heapify()`: O(1) muunnos paikallaan
-- `heappush()`: O(1) - muokkaa olemassa olevaa listaa
-- `heappop()`: O(1) - muokkaa olemassa olevaa listaa
-- `nlargest(k, ...)`: O(k) k alkion tuloslistalle
+| Operaatio | Aika | Tila | Huomiot |
+|-----------|------|------|---------|
+| `heapq.heapify_max(x)` | O(n) | O(1) | Python 3.14+; `heap[0]` on sen jälkeen suurin alkio |
+| `heapq.heappush_max(heap, item)` | O(log n) tasoitettu | O(1) tasoitettu | Python 3.14+ |
+| `heapq.heappop_max(heap)` | O(log n) tasoitettu | O(1) | Python 3.14+; tyhjälle keolle nostaa `IndexError`-poikkeuksen |
+| `heapq.heappushpop_max(heap, item)` | O(log n) | O(1) | Python 3.14+; O(1), kekoon koskematta, kun keko on tyhjä tai `item` ei ole pienempi kuin `heap[0]` |
+| `heapq.heapreplace_max(heap, item)` | O(log n) | O(1) | Python 3.14+; tyhjälle keolle nostaa `IndexError`-poikkeuksen |
 
-## Toteutuksen yksityiskohdat
+### Valinta ja yhdistäminen
 
-### Minimikeon ominaisuus
+| Operaatio | Aika | Tila | Huomiot |
+|-----------|------|------|---------|
+| `heapq.nlargest(k, iterable, key=None)` | O(m log k) | O(k) | Yksi vertailu alkiolle, joka ei pääse tulokseen, joten satunnainen syöte pienellä k:lla maksaa lähes O(m); nouseva syöte päästää jokaisen alkion sisään. k = 1 on yksi `max()`-läpikäynti, O(m). `key` kutsutaan kerran alkiota kohden |
+| `heapq.nsmallest(k, iterable, key=None)` | O(m log k) | O(k) | Peilikuva: laskeva syöte on pahin tapaus, ja k = 1 on yksi `min()`-läpikäynti |
+| `heapq.merge(*iterables, key=None, reverse=False)` | O(r + m log r) | O(r) | Laiska: pitää yhden alkion syötettä kohden. Jokaisen syötteen on oltava valmiiksi järjestetty tulosteen suuntaan; tätä ei tarkisteta. `key` kutsutaan enintään kerran alkiota kohden |
+
+## Keon rakenne
+
+Keko on lista, jossa indeksin `i` alkio ei ole suurempi kuin kumpikaan indekseissä `2*i + 1` ja
+`2*i + 2` olevista. `heapify` saa aikaan vain tämän, ajassa O(n): lista ei ole järjestetty, ja
+vain `heap[0]`:n tiedetään olevan pienin.
 
 ```python
 import heapq
 
-# Min-heap: parent <= children
-heap = [1, 3, 5, 7, 9, 11]
-#        0  1  2  3  4   5
-# Parent at i: children at 2*i+1, 2*i+2
+data = [5, 3, 7, 1, 9, 4]
+heapq.heapify(data)  # O(n), in place
+
+assert data[0] == 1          # O(1) - the root is the smallest
+assert data != sorted(data)  # a heap, not a sorted list
+for parent in range(len(data)):
+    for child in (2 * parent + 1, 2 * parent + 2):
+        if child < len(data):
+            assert data[parent] <= data[child]
 ```
 
-### Heapify-muunnos
+## Lisääminen ja poistaminen
+
+Lisäys tai poisto kulkee yhden polun juuren ja lehden välillä, joten se maksaa keon korkeuden,
+O(log n). Koko keon tyhjentäminen on siksi O(n log n).
 
 ```python
 import heapq
 
-# Transform list into heap - O(n)
-data = [5, 3, 7, 1, 9]
-heapq.heapify(data)  # In-place, O(n)
-# data is now [1, 3, 7, 5, 9] (heap property satisfied)
-```
-
-### Iteratiiviset operaatiot
-
-```python
-import heapq
-
-heap = [5, 3, 7]
-heapq.heapify(heap)  # [3, 5, 7]
-
-# Add items
-heapq.heappush(heap, 1)  # O(log n), now [1, 3, 7, 5]
-heapq.heappush(heap, 6)  # O(log n)
-
-# Remove min
-min_val = heapq.heappop(heap)  # O(log n), returns 1
-
-# Peek at min without removing
-print(heap[0])  # O(1) - minimum is always at root
-```
-
-## Yleiset käyttötapaukset
-
-### Prioriteettijono
-
-```python
-import heapq
-
-# Simple priority queue
-tasks = [(3, 'low'), (1, 'high'), (2, 'medium')]
-heapq.heapify(tasks)  # O(n)
-
-while tasks:
-    priority, task = heapq.heappop(tasks)  # O(log n) each, O(n log n) to drain
-    print(f"Execute {task}")  # Executes high, medium, low
-
-# Output:
-# Execute high
-# Execute medium
-# Execute low
-```
-
-### K suurinta alkiota
-
-```python
-import heapq
-
-# Find k largest elements - O(n log k)
-data = [3, 1, 4, 1, 5, 9, 2, 6]
-top_3 = heapq.nlargest(3, data)  # [9, 6, 5]
-bottom_3 = heapq.nsmallest(3, data)  # [1, 1, 2]
-```
-
-### Järjestettyjen jonojen yhdistäminen
-
-```python
-import heapq
-
-# Merge multiple sorted iterables efficiently
-seq1 = [1, 3, 5]
-seq2 = [2, 4, 6]
-seq3 = [1.5, 2.5, 3.5]
-
-merged = heapq.merge(seq1, seq2, seq3)
-# merged is iterator that yields in order
-list(merged)  # [1, 1.5, 2, 2.5, 3, 3.5, 4, 5, 6]
-```
-
-## Edistynyt: oma prioriteetti
-
-### Monikoiden käyttö
-
-```python
-import heapq
-
-# Priority queue with custom objects
 heap = []
-heapq.heappush(heap, (3, 'low-priority-task'))    # O(log n)
-heapq.heappush(heap, (1, 'high-priority-task'))   # O(log n)
-heapq.heappush(heap, (2, 'medium-priority-task'))  # O(log n)
+for priority in [5, 1, 4, 2, 3]:
+    heapq.heappush(heap, priority)  # O(log n) amortized
 
-# Tasks ordered by priority (first element of tuple)
-# Tuples compare element by element: equal priorities fall through to the
-# next field, so a tie costs more to order than a plain int key would
-while heap:
-    priority, task = heapq.heappop(heap)  # O(log n)
-    print(task)
+assert heap[0] == 1  # O(1) peek
+drained = [heapq.heappop(heap) for _ in range(len(heap))]  # O(n log n) in total
+assert drained == [1, 2, 3, 4, 5]
+
+try:
+    heapq.heappop(heap)
+except IndexError as error:
+    assert 'index out of range' in str(error)
+else:
+    raise AssertionError('popped from an empty heap')
 ```
 
-### Dataluokan käyttö functoolsin kanssa
+### Tasapelit ja vertailukelvottomat hyötykuormat
+
+Monikot vertaillaan kenttä kerrallaan, joten kaksi alkiota, joilla on sama prioriteetti,
+siirtyvät vertailemaan seuraavaa kenttää. Laita siihen yksilöllinen laskuri, niin hyötykuormaa ei
+koskaan vertailla: samat prioriteetit tulevat silloin ulos lisäysjärjestyksessä, eikä
+hyötykuormalta, joka ei tue `<`-vertailua, koskaan pyydetä sitä.
 
 ```python
 import heapq
-from dataclasses import dataclass
-from functools import total_ordering
+import itertools
 
-@total_ordering
-@dataclass
-class Task:
-    priority: int
-    name: str
-    
-    def __lt__(self, other):
-        return self.priority < other.priority
+class Job:
+    def __init__(self, name):
+        self.name = name
 
-heap = [
-    Task(3, 'low'),
-    Task(1, 'high'),
-    Task(2, 'medium')
-]
-heapq.heapify(heap)  # O(n), but each comparison is a Python __lt__ call
+heap = []
+try:
+    heapq.heappush(heap, (1, Job('a')))
+    heapq.heappush(heap, (1, Job('b')))  # equal priority reaches Job < Job
+except TypeError as error:
+    assert "'<' not supported" in str(error)
+else:
+    raise AssertionError('two Jobs were compared')
 
-while heap:
-    task = heapq.heappop(heap)  # O(log n)
-    print(f"{task.priority}: {task.name}")
+counter = itertools.count()
+heap = []
+for name in ['a', 'b', 'c']:
+    heapq.heappush(heap, (1, next(counter), Job(name)))  # O(log n)
+
+assert [heapq.heappop(heap)[2].name for _ in range(3)] == ['a', 'b', 'c']
 ```
 
-## Suorituskyvyn vertailu
+## Yhdistetty lisäys ja poisto
 
-### Top-K-ongelma
-
-```python
-import heapq
-
-data = list(range(1000000))
-
-# Bad: Full sort - O(n log n)
-top_10 = sorted(data, reverse=True)[:10]  # Sorts all!
-
-# Good: Heap nlargest - O(n log k), k=10
-top_10 = heapq.nlargest(10, data)  # Only sorts top 10
-
-# For small k, nlargest much faster than sort
-```
-
-### Prioriteettijono Simulation
-
-```python
-import heapq
-from collections import deque
-
-# Simulated queue with priorities
-heap_queue = []  # heapq-based
-fifo_queue = deque()  # Simple FIFO
-
-# Add task
-priority, task = 1, 'render'
-heapq.heappush(heap_queue, (priority, task))  # O(log n)
-fifo_queue.append(task)  # O(1)
-
-# Get task with priority (smallest priority value first)
-task = heapq.heappop(heap_queue)  # O(log n)
-task = fifo_queue.popleft()  # O(1), gets oldest
-```
-
-## Toteutushuomioita
-
-### CPython
-Käyttää taulukkopohjaista binäärikekoa, erittäin optimoitu.
-
-### PyPy
-JIT-käännös tuo lisäoptimointia toistuviin operaatioihin.
-
-## Maksimikeon käyttö (Python 3.14+)
+`heappushpop` ja `heapreplace` tekevät lisäyksen ja poiston yhdellä kutsulla, joka jättää keon
+koon ennalleen. Ne eroavat järjestyksessä: `heappushpop` lisää ensin, joten alkio, joka ei ole
+juurta suurempi, palaa suoraan takaisin yhden vertailun jälkeen; `heapreplace` poistaa ensin,
+joten se palauttaa aina vanhan juuren, silloinkin kun se on uutta alkiota suurempi.
 
 ```python
 import heapq
 
-# Create a max-heap
+heap = [2, 4, 6]
+heapq.heapify(heap)
+
+assert heapq.heappushpop(heap, 1) == 1  # O(1) here - 1 never enters the heap
+assert heap == [2, 4, 6]
+
+assert heapq.heapreplace(heap, 1) == 2  # O(log n) - pops 2, then pushes 1
+assert sorted(heap) == [1, 4, 6]
+
+assert heapq.heappushpop([], 7) == 7  # an empty heap returns the item
+```
+
+## k suurimman valitseminen
+
+Kun k on suurempi kuin 1, `nlargest` pitää keossa k parasta tähän mennessä nähtyä alkiota ja
+vertaa jokaista uutta alkiota niistä heikoimpaan. Alkio, joka ei pääse joukkoon, maksaa tuon
+yhden vertailun, joten satunnaisella syötteellä ja pienellä k:lla kekoon kosketaan harvoin;
+joukkoon pääsevä alkio maksaa O(log k). Valmiiksi nousevassa järjestyksessä oleva syöte on
+`nlargest`-funktion pahin tapaus, koska jokainen alkio voittaa kaikki aiemmat, ja laskeva syöte
+on `nsmallest`-funktion pahin tapaus. Kummassakin tapauksessa kyse on yhdestä läpikäynnistä,
+joka pitää k alkiota, kun taas `sorted()` pitää kaikki m alkiota.
+
+```python
+import heapq
+
+scores = [31, 7, 88, 54, 12, 99, 63, 5]
+
+assert heapq.nlargest(3, scores) == [99, 88, 63]  # O(m log k), O(k) memory
+assert heapq.nsmallest(2, scores) == [5, 7]       # O(m log k)
+assert heapq.nlargest(3, scores) == sorted(scores, reverse=True)[:3]  # same answer, O(m log m)
+
+# key is called once per item, and the items themselves are returned
+words = ['pear', 'fig', 'banana', 'kiwi']
+assert heapq.nlargest(2, words, key=len) == ['banana', 'pear']
+
+# The input can be any iterable, consumed in one pass
+assert heapq.nsmallest(2, (x * x for x in range(-3, 4))) == [0, 1]
+```
+
+## Järjestettyjen syötteiden yhdistäminen
+
+`merge` on generaattori. Ensimmäinen `next()` ottaa yhden alkion jokaisesta syötteestä ja tekee
+niistä keon, O(r); sen jälkeen jokainen tuotettu alkio maksaa enintään yhden O(log r) -seulonnan,
+jolla saman syötteen seuraava alkio tuodaan mukaan. Yhtä alkiota syötettä kohden pidemmälle ei
+lueta etukäteen, joten se voi yhdistää muistiin mahtumattomia syötteitä, mutta se luottaa
+saamaansa järjestykseen: järjestämätön syöte tuottaa järjestämättömän tulosteen ilman virhettä.
+
+```python
+import heapq
+
+merged = heapq.merge([1, 4, 7], [2, 5, 8], [3, 6, 9])  # O(1) - nothing is read yet
+assert next(merged) == 1                               # O(r) - one item from each input
+assert list(merged) == [2, 3, 4, 5, 6, 7, 8, 9]        # O(log r) per item
+
+# key and reverse: each input must already be sorted that way
+by_length = heapq.merge(['fig', 'pear'], ['kiwi', 'banana'], key=len)
+assert list(by_length) == ['fig', 'pear', 'kiwi', 'banana']
+descending = heapq.merge([9, 5, 1], [8, 2], reverse=True)
+assert list(descending) == [9, 8, 5, 2, 1]
+
+# Unsorted input is not detected
+assert list(heapq.merge([3, 1], [2])) == [2, 3, 1]
+```
+
+## Maksimikeot
+
+### Maksimikeon funktiot
+
+Python 3.14 lisää `_max`-parin kullekin viidestä kekofunktiosta. Niillä on samat kustannukset
+kuin minimikeon funktioilla, mutta `heap[0]` on suurin alkio pienimmän sijaan.
+
+```python
+import heapq
+
 data = [3, 1, 4, 1, 5, 9, 2, 6]
 heapq.heapify_max(data)  # O(n)
+assert data[0] == 9      # O(1) - the root is the largest
 
-# Peek at max
-print(data[0])  # 9 - maximum is always at root
+heapq.heappush_max(data, 10)          # O(log n) amortized
+assert heapq.heappop_max(data) == 10  # O(log n) amortized
 
-# Add and remove from max-heap
-heapq.heappush_max(data, 10)      # O(log n)
-max_val = heapq.heappop_max(data)  # O(log n), returns 10
-
-# Efficient combined operations
-heapq.heapreplace_max(data, 7)    # O(log n) - pop max, push 7
-heapq.heappushpop_max(data, 8)    # O(log n) - push 8, pop max
+assert heapq.heapreplace_max(data, 7) == 9   # O(log n) - pops 9, then pushes 7
+assert heapq.heappushpop_max(data, 8) == 8   # O(1) here - 8 is not smaller than the root
+assert data[0] == 7
 ```
 
-### Maksimikekoon perustuva prioriteettijono
+### Ennen Python 3.14:ää
+
+Numeeristen prioriteettien vastaluvuiksi muuttaminen tekee minimikeon funktioista maksimikeon
+samalla kustannuksella.
 
 ```python
 import heapq
 
-# Priority queue returning highest priority first
-tasks = [(1, "low"), (5, "urgent"), (3, "medium")]
-heapq.heapify_max(tasks)  # O(n)
-
-while tasks:
-    priority, task = heapq.heappop_max(tasks)  # O(log n) each, O(n log n) to drain
-    print(f"{priority}: {task}")
-# Output: 5: urgent, 3: medium, 1: low
-```
-
-### Maksimikeon kiertotie ennen 3.14:ää
-
-```python
-import heapq
-
-# Before 3.14: Negate values for max-heap behavior
 data = [3, 1, 4, 1, 5]
 max_heap = [-x for x in data]  # O(n)
 heapq.heapify(max_heap)        # O(n)
 
-# Get max
-max_val = -heapq.heappop(max_heap)  # Negate back
-
-# Python 3.14+: Use native max-heap functions instead
+assert -max_heap[0] == 5               # O(1) peek
+assert -heapq.heappop(max_heap) == 5   # O(log n)
+heapq.heappush(max_heap, -9)           # O(log n)
+assert -max_heap[0] == 9
 ```
+
+## Yleisiä ratkaisumalleja
+
+### Rajattu k suurimman joukko virrasta
+
+Kun alkioita saapuu yksi kerrallaan ja vain k suurinta merkitsee, k alkion minimikeko pitää ne:
+juuri on heikoin jäljellä oleva, ja `heappushpop` korvaa sen vain, kun uusi alkio voittaa sen.
+
+```python
+import heapq
+
+k = 3
+best = []
+for reading in [12, 40, 7, 33, 51, 8, 29, 60]:
+    if len(best) < k:
+        heapq.heappush(best, reading)      # O(log k)
+    else:
+        heapq.heappushpop(best, reading)   # O(log k), O(1) if it cannot get in
+
+assert sorted(best, reverse=True) == [60, 51, 40]  # O(k) memory throughout
+```
+
+### Tehtävien prioriteettijono
+
+```python
+import heapq
+import itertools
+
+counter = itertools.count()
+queue = []
+
+def submit(priority, task):
+    heapq.heappush(queue, (priority, next(counter), task))  # O(log n)
+
+def take():
+    priority, _, task = heapq.heappop(queue)  # O(log n)
+    return task
+
+submit(2, 'write report')
+submit(1, 'fix outage')
+submit(2, 'answer email')
+
+assert [take() for _ in range(3)] == ['fix outage', 'write report', 'answer email']
+```
+
+## Parhaat käytännöt
+
+✅ **Tee näin**:
+
+- Lue `heap[0]` kurkistaaksesi; se on O(1) eikä vaadi poistoa ja lisäystä
+- Käytä `heappushpop`- tai `heapreplace`-funktiota, kun lisäät ja poistat yhdessä: yksi kutsu,
+  ei koon muuttamista, ja `heappushpop` palauttaa alkion, joka ei pääse sisään, yhden vertailun
+  jälkeen
+- Käytä `nlargest`- tai `nsmallest`-funktiota muutaman alkion poimimiseen suuresta tai
+  virtaavasta syötteestä; muistinkäyttö seuraa k:ta
+- Laita laskuri prioriteetin ja hyötykuorman väliin, jotta tasapelit eivät koskaan vertaile
+  hyötykuormia
+- Käytä `merge`-funktiota valmiiksi järjestettyihin syötteisiin: se on laiska ja pitää yhden
+  alkion syötettä kohden
+
+❌ **Vältä**:
+
+- Koko listan järjestämistä vain muutaman alkion ottamiseksi - O(m log m) aikaa ja O(m) muistia
+- Keon tyhjentämistä yhden alkion löytämiseksi; keko järjestää vain juuren
+- `heapify`-kutsua jokaisen lisäyksen jälkeen - joka kerta O(n), kun lisäys olisi O(log n)
+- Järjestämättömien syötteiden antamista `merge`-funktiolle; tuloste ei ole järjestetty, eikä
+  mikään kerro siitä
 
 ## Versiohuomiot
 
-- **Python 3.14+**: Natiivit maksimikekofunktiot lisätty
-- **Kaikki versiot**: Minimikekofunktiot saatavilla
+- **Python 3.14+**: Lisätty `heapify_max`, `heappush_max`, `heappop_max`, `heappushpop_max` ja
+  `heapreplace_max`
 
-## Liittyvä dokumentaatio
+## Liittyvät moduulit
 
-- [Collections-moduuli](collections.md)
-- [Bisect-moduuli](bisect.md)
-- [Python 3.14](../versions/py314.md)
-- [sorted()-funktio](../builtins/sorted.md)
+- **[queue](queue.md)** - `PriorityQueue` on lukittu `heapq`-keko tuottaja- ja kuluttajasäikeille
+- **[sched](sched.md)** - tapahtuma-ajastin, joka on rakennettu ajastettujen tapahtumien keon päälle
+- **[bisect](bisect.md)** - pitää listan sen sijaan täysin järjestettynä, O(n)-lisäyksin
+- **[sorted()](../builtins/sorted.md)** - O(m log m), kun tarvitaan jokainen alkio eikä vain k suurinta
