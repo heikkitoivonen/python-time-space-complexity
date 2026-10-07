@@ -7,7 +7,8 @@ threads establishes its dependence on t, with the thread-only and
 children-only calls as controls that must stay flat. The linear upper bound
 comes from the kernel's thread walks. Everything else - what a snapshot holds,
 the units of `ru_maxrss`, when children are counted, how soft and hard limits
-behave - is settled by observation, with no tolerance.
+behave - is settled by observation. The Linux unit check allows for variation
+between separately sampled memory counters.
 
 Measurement scope:
 
@@ -22,9 +23,11 @@ Measurement scope:
 * `getrusage()` returns a new `struct_rusage` on every call, 16 items long,
   each attribute equal to the item at its documented index; the two times are
   floats and the other fourteen ints.
-* `ru_maxrss` is read beside `/proc/self/status`'s VmHWM on Linux and is at
-  least VmHWM and under 32x it, which kilobytes satisfy and bytes (1,024x)
-  cannot. On macOS it is over 4,000,000 in a test process, which bytes
+* `ru_maxrss` is read beside `/proc/self/status`'s VmHWM on Linux and is within
+  a factor of two in either direction, which kilobytes satisfy and bytes
+  (1,024x) cannot. These are separate snapshots, not an ordering guarantee;
+  Linux v6.12 fs/proc/task_mmu.c's `task_mem()` explicitly allows inconsistent
+  snapshots. On macOS it is over 4,000,000 in a test process, which bytes
   satisfy and kilobytes would need a 4 GB process for. It does not fall after
   a touched 64 MB buffer is freed. On Linux `ru_ixrss`, `ru_idrss`,
   `ru_isrss`, `ru_nswap`, `ru_msgsnd`, `ru_msgrcv` and `ru_nsignals` are 0.
@@ -279,7 +282,7 @@ class TestMaxrss:
         peak_kb = _vmhwm_kb()
         maxrss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 
-        assert peak_kb <= maxrss < peak_kb * 32, (
+        assert peak_kb / 2 < maxrss < peak_kb * 2, (
             f"ru_maxrss {maxrss} against VmHWM {peak_kb} kB; bytes would be 1,024x VmHWM"
         )
 

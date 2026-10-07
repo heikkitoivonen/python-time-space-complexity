@@ -14,8 +14,11 @@ Measurement scope:
   time, where linear predicts 10x and quadratic 100x. The same statements at
   3,000 pairs inside one function are asserted more than 5x dearer than at
   module level; that is the b·f term, measured at 32x to 36x on 3.10 and 3.14. The traced peak
-  grows between 5x and 30x from 1,000 to 10,000 pairs (9.5x on 3.14), where
-  linear predicts 10x and quadratic 100x.
+  grows between 5x and 30x from 1,000 to 10,000 pairs (9.6x on 3.10.22), where
+  linear predicts 10x and quadratic 100x. A table built from the larger input
+  is held outside tracing to keep its names interned: the measurement covers
+  fresh parsing and analysis, excluding growth of the process-wide intern
+  dictionary, whose size depends on earlier work in the process.
 * `symtable()` is observed to raise `SyntaxError` for a fault on the last of
   1,000 lines, and to register one wrapper for its filename in the factory's
   memo, rising to 1 + t only once `get_children()` is called and held.
@@ -184,8 +187,11 @@ class TestBuildingAnalysesTheWholeSource:
 
     def test_the_peak_follows_the_source(self) -> None:
         small, large = at_module(1_000), at_module(10_000)
+        # Keep the names alive so neither build resizes the global intern dictionary.
+        warm = build(large)
 
         peaks = [peak_bytes(lambda: build(small)), peak_bytes(lambda: build(large))]
+        del warm
 
         assert peaks[0] * 5 < peaks[1] < peaks[0] * 30, f"10x the source peaked at {peaks}"
 
