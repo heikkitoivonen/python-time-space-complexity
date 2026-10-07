@@ -34,8 +34,8 @@ Measurement scope:
 * `clone()` gets the debug flag, and a step added to either template after
   the clone changes only that template's command line.
 * Building the command line: with `os.system()` recording, `copy()` over
-  1,000, 4,000 and 16,000 steps of a 60-character command costs more than 8x
-  per 4x step, where linear gives 4x and quadratic 16x; at 2,000 and 32,000
+  100, 1,000 and 10,000 steps of a 256-character command costs more than 30x
+  per 10x step, where linear gives 10x and quadratic 100x; at 2,000 and 32,000
   steps of a 3-character command the traced peak rises between 8x and 40x,
   where linear gives 16x. `open()` passes `os.popen()` the same command line
   that `copy()` passes `os.system()`, so the two share the bound. With
@@ -374,18 +374,21 @@ class TestBuildingTheCommandLine:
     before the shell starts, and that is quadratic in the steps."""
 
     @pytest.mark.timing
-    def test_four_times_the_steps_costs_far_more_than_four_times(
+    def test_ten_times_the_steps_costs_far_more_than_ten_times(
         self, pipes: Any, recorder: Recorder
     ) -> None:
         durations = []
-        for steps in (1_000, 4_000, 16_000):
-            t = template(pipes, steps, cmd="c" * 60)
+        for steps in (100, 1_000, 10_000):
+            t = template(pipes, steps, cmd="c" * 256)
+            t.copy("a", "b")  # warm before measuring
+            recorder.commands.clear()
             durations.append(best_ns(lambda t=t: t.copy("a", "b")))
+            recorder.commands.clear()
 
         ratios = [later / earlier for earlier, later in zip(durations, durations[1:], strict=False)]
-        assert all(ratio > 8 for ratio in ratios), (
-            f"4x steps cost {[f'x{r:.1f}' for r in ratios]} ({durations} ns); "
-            "linear gives x4, quadratic x16"
+        assert all(ratio > 30 for ratio in ratios), (
+            f"10x steps cost {[f'x{r:.1f}' for r in ratios]} ({durations} ns); "
+            "linear gives x10, quadratic x100"
         )
 
     def test_the_peak_grows_linearly_with_the_steps(self, pipes: Any, recorder: Recorder) -> None:

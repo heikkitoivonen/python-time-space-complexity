@@ -62,10 +62,10 @@ Measurement scope:
   `strict=ALLOW_MISSING` returns a path with a missing tail and raises
   `NotADirectoryError` for a component below a regular file.
 * `realpath()` string work: with `os.lstat` replaced by a stub reporting a
-  directory, 4x the components (2,000, 8,000 and 32,000 four-character
-  ones) costs over 8x on the second step and over 48x across both, where
-  linear predicts 4x and 16x (x6.1 then x10.5 on 3.10, x8.8 then x21 on
-  3.14).
+  directory, 10x the components (100, 1,000 and 10,000 of 256 characters
+  each) costs over 30x per step, where linear predicts 10x and quadratic
+  100x. Component width is held fixed; symlinks and filesystem costs are
+  excluded from this measurement.
 * `realpath()` space: a chain of 160 symlinks in a directory four
   150-character names below the temporary directory (under macOS's
   1,024-byte PATH_MAX) peaks at over 2.5x the traced allocation of a chain
@@ -566,18 +566,22 @@ class TestRealpathStringWork:
     path of very many components is quadratic in its string work."""
 
     @pytest.mark.timing
-    def test_four_times_the_components_costs_sixteen_times(
+    def test_ten_times_the_components_costs_far_more_than_ten_times(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         directory = os.stat_result((stat.S_IFDIR | 0o755,) + (0,) * 9)
         monkeypatch.setattr(os, "lstat", lambda path: directory)
-        ratios = steps(
-            lambda k: functools.partial(posixpath.realpath, "/" + "/".join(["abcd"] * k)),
-            (2_000, 8_000, 32_000),
-        )
+        durations = []
+        for components in (100, 1_000, 10_000):
+            path = "/" + "/".join(["x" * 256] * components)
+            assert posixpath.realpath(path) == path  # warm before measuring
+            durations.append(best_ns(lambda path=path: posixpath.realpath(path)))
 
-        assert ratios[1] > 8, f"x{ratios}"
-        assert ratios[0] * ratios[1] > 48, f"x{ratios}"
+        ratios = [later / earlier for earlier, later in zip(durations, durations[1:], strict=False)]
+        assert all(ratio > 30 for ratio in ratios), (
+            f"10x components cost {[f'x{r:.1f}' for r in ratios]} ({durations} ns); "
+            "linear gives x10, quadratic x100"
+        )
 
 
 @POSIX

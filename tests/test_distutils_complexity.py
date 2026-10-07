@@ -18,7 +18,7 @@ the compiler, linker and archiver and counts their runs, a wrapped
 `os.path.exists`, `os.path.isfile` or `os.mkdir` counts filesystem calls, a
 `str` subclass counts the comparisons made against it, and identity checks
 settle which objects are shared. Four bounds that are quadratic in a word,
-line or argument count are covered by copied-character counts and three timings.
+line or argument count are covered by copied-character/reference counts and two timings.
 
 Measurement scope:
 
@@ -89,9 +89,11 @@ Measurement scope:
   Word width, quotes and escapes are not varied in that count.
   `wrap_text()` over 1,000 and 10,000 words at width 10,
   `TextFile.readline()` joining 1,000 and 10,000 continuation lines of 40
-  characters, and `FancyGetopt.getopt()` over 1,000 and 10,000 copies of one
-  long option take more than 25x the time for 10x the input: about 100x is
-  quadratic, 10x linear.
+  characters take more than 25x the time for 10x the input: about 100x is
+  quadratic, 10x linear. A list subclass preserves instrumentation across
+  slices: `FancyGetopt.getopt()` over a = 10, 100 and 1,000 copies of one
+  long option copies a(a-1)/2 argument references. Option count and spelling
+  are held fixed.
 * `FancyGetopt.getopt()` with 5 long arguments over 10 and 100 options calls
   `startswith` on every option once per argument; `get_option_order()` is the
   parser's own list and grows across calls; `generate_help()` calls
@@ -1372,18 +1374,36 @@ def ratio(func: Callable[[int], Callable[[], Any]], small: int, large: int) -> f
 class TestQuadraticInWords:
     """`split_quoted()` | O(L·w), `wrap_text()` | O(L + w²),
     `TextFile.readline()` joining p lines | O(L·p) and `FancyGetopt.getopt()`
-    | O(o + a·o + a²). Slice lengths settle `split_quoted()`; the other
-    tests require over 25x the time for 10x the words, lines or arguments,
+    | O(o + a·o + a²). Slice lengths settle `split_quoted()` and `getopt()`;
+    the other tests require over 25x the time for 10x the words or lines,
     where a quadratic predicts 100x and a linear bound predicts 10x."""
 
-    @pytest.mark.timing
-    def test_getopt_in_the_argument_count(self, du: Any) -> None:
-        def parse(a: int) -> Callable[[], Any]:
-            args = ["--verbose"] * a
-            return lambda: du.fancy_getopt.FancyGetopt([("verbose", "v", "")]).getopt(args)
+    @pytest.mark.parametrize("arguments", [10, 100, 1_000])
+    def test_getopt_in_the_argument_count(self, du: Any, arguments: int) -> None:
+        """Count references in the shrinking argument-list slices."""
+        copied = 0
 
-        r = ratio(parse, 1_000, 10_000)
-        assert r > 25, r
+        class ObservedArguments(list[str]):
+            def __getitem__(self, key: Any) -> Any:
+                nonlocal copied
+                result = super().__getitem__(key)
+                if isinstance(key, slice):
+                    copied += len(result)
+                    return ObservedArguments(result)
+                return result
+
+        args = ObservedArguments(["--verbose"] * arguments)
+        parser = du.fancy_getopt.FancyGetopt([("verbose", "v", "")])
+
+        remaining, options = parser.getopt(args)
+
+        assert remaining == []
+        assert options.verbose == arguments
+        assert parser.get_option_order() == [
+            ("verbose", value) for value in range(1, arguments + 1)
+        ]
+        assert args == ["--verbose"] * arguments
+        assert copied == arguments * (arguments - 1) // 2
 
     @pytest.mark.parametrize("words", [10, 100, 1_000])
     def test_split_quoted(self, du: Any, words: int) -> None:
