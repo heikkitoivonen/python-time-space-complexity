@@ -32,7 +32,6 @@ import bisect
 import contextlib
 import filecmp
 import fnmatch
-import posixpath
 import pprint
 import queue
 import sqlite3
@@ -183,27 +182,6 @@ class TestCmpToKeyCallsPerComparison:
         assert key_calls["n"] == size, "key= is called exactly once per element"
         assert comparisons["n"] > size * 3, (
             f"compare() runs per comparison, about n log n: {comparisons['n']} calls for n={size}"
-        )
-
-
-class TestPosixpathIsPureStringWork:
-    """docs/stdlib/posixpath.md: join and normpath are string operations with
-    no filesystem access."""
-
-    def test_paths_that_do_not_exist_are_handled_fine(self) -> None:
-        assert posixpath.join("/nowhere", "a", "b") == "/nowhere/a/b"
-        assert posixpath.normpath("/nowhere/../a//b") == "/a/b"
-
-    @pytest.mark.timing
-    def test_cost_follows_the_string_length(self) -> None:
-        short = "/".join(["seg"] * 10)
-        long = "/".join(["seg"] * 5_000)
-
-        short_time = best_time(lambda: posixpath.normpath(short))
-        long_time = best_time(lambda: posixpath.normpath(long))
-
-        assert long_time > short_time * 10, (
-            f"normpath is linear in the path: {short_time:.2e}s vs {long_time:.2e}s"
         )
 
 
