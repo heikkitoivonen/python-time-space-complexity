@@ -715,33 +715,27 @@ call, which releases the lock while it waits.
 
 ```python
 import asyncio
-import time
+import threading
+
+# Each call blocks until all three worker threads arrive.
+barrier = threading.Barrier(3, timeout=30)
 
 
 def blocking_call():
     """Stands in for a library that has no async form."""
-    time.sleep(0.05)
+    barrier.wait()
     return "done"
 
 
 async def main():
-    # One call, to measure what three of them would cost in sequence
-    start = time.perf_counter()
-    await asyncio.to_thread(blocking_call)
-    one = time.perf_counter() - start
-
-    # The same three waits, overlapped on the default thread pool
-    start = time.perf_counter()
+    # Overlap the blocking calls on the default thread pool.
     results = await asyncio.gather(
         asyncio.to_thread(blocking_call),
         asyncio.to_thread(blocking_call),
         asyncio.to_thread(blocking_call),
     )
-    three = time.perf_counter() - start
-
+    # The barrier can release only if all three calls overlap.
     assert results == ["done", "done", "done"]
-    # Overlapped, not summed: nothing like 3x one call
-    assert three < 2 * one
 
 
 asyncio.run(main())

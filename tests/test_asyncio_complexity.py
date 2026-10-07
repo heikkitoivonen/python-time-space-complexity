@@ -56,11 +56,11 @@ Measurement scope:
   of n children cancels all n synchronously - timed at 10, 1,000 and 10,000
   children, which is where the O(1) row would have been wrong. `shield()` is
   checked by asserting the inner task's *result*, not merely that it survived.
-* The `to_thread` overlap test compares three concurrent calls against one
-  measured call in the same process rather than against a fixed millisecond
-  budget, so a loaded machine moves both sides together. Overlap alone would
-  not show the loop staying free, so a second test counts a ticker task's
-  iterations while the thread blocks.
+* The `to_thread` overlap test makes three calls wait at a three-party
+  threading barrier. All three must arrive before any can return, which
+  establishes overlap without a timing ratio; a 30-second timeout bounds a
+  failed rendezvous. A second test counts a ticker task's iterations while
+  the thread blocks to show that the loop stays free.
 * `Semaphore.locked()` consults the waiter deque, not only the counter, and a
   test that leaves the counter at zero cannot tell the two apart. The test
   drives the counter *positive* while a woken waiter is still queued, so a
@@ -1629,35 +1629,24 @@ class TestThreadBridges:
         loop_thread, worker_thread = asyncio.run(main())
         assert loop_thread != worker_thread
 
-    @pytest.mark.timing
     def test_blocking_calls_on_threads_overlap(self) -> None:
-        """Three waits against one measured wait, so load moves both sides together."""
+        """A three-party barrier releases only when all three calls overlap."""
+        barrier = threading.Barrier(3, timeout=30)
 
         def blocking() -> str:
-            time.sleep(0.05)
+            barrier.wait()
             return "done"
 
-        async def main() -> tuple[list[str], float, float]:
-            start = time.perf_counter()
-            await asyncio.to_thread(blocking)
-            one = time.perf_counter() - start
-
-            start = time.perf_counter()
-            results = list[str](
+        async def main() -> list[str]:
+            return list[str](
                 await asyncio.gather(
                     asyncio.to_thread(blocking),
                     asyncio.to_thread(blocking),
                     asyncio.to_thread(blocking),
                 )
             )
-            return results, one, time.perf_counter() - start
 
-        results, one, three = asyncio.run(main())
-        assert results == ["done"] * 3
-        assert three < 2 * one, (
-            f"three overlapping waits took {three:.3f}s against {one:.3f}s for one; "
-            "they look serialized"
-        )
+        assert asyncio.run(main()) == ["done"] * 3
 
     def test_the_loop_keeps_running_while_a_thread_blocks(self) -> None:
         """Overlap is only half the claim; the other half is that the loop is free."""
