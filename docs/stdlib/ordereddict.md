@@ -1,288 +1,227 @@
-# OrderedDict - Insertion-Order Preserving Dictionary
+# OrderedDict Complexity
 
-The `OrderedDict` class from `collections` maintains insertion order of keys, guaranteeing that iteration order matches insertion order even in older Python versions.
+`collections.OrderedDict` is a `dict` subclass that also keeps its entries on a doubly-linked
+list. Lookups are the inherited `dict` code; the list is what makes reordering and popping from
+either end O(1), and it is also what every insertion, deletion and iteration has to maintain or
+walk.
 
-!!! note "Python 3.7+ Note"
-    Regular `dict` maintains insertion order as a language guarantee. Use `OrderedDict` for backwards compatibility with Python 3.6 and earlier, or when you need specialized methods like `move_to_end()`.
+`n` is the entries in the `OrderedDict`, and `m` is the entries supplied by the other mapping,
+iterable or keyword arguments an operation takes. Bounds treat hashing a key and comparing keys
+or values as O(1). Iterating is the one place that assumption matters more than for a `dict`: each step looks
+its key up again, so the key's `__hash__` runs on every step.
+
+!!! note "OrderedDict or dict"
+    A plain `dict` keeps insertion order too. Reach for `OrderedDict` when you need
+    `move_to_end()`, `popitem(last=False)`, or equality that compares order.
 
 ## Complexity Reference
 
+### OrderedDict
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `OrderedDict()` | O(n) | O(n) | Create from dict/iterable |
-| `__getitem__` | O(1) | O(1) | Access by key |
-| `__setitem__` | O(1) | O(1) | Set/update item |
-| `__delitem__` | O(1) | O(1) | Delete item (uses doubly-linked list) |
-| `move_to_end()` | O(1) | O(1) | Move key to end |
-| `popitem(last=True)` | O(1) | O(1) | Remove last (LIFO). `last=False` pops the first in O(1) too, which `dict.popitem()` cannot do at all |
-| Iteration | O(n) | O(1) | Iterate in insertion order |
+| `OrderedDict(iterable=(), /, **kwds)` | O(m) | O(m) | One linked node per new key |
+| `od[key]`, `od.get(key)`, `key in od`, `len(od)` | O(1) | O(1) | Inherited from `dict` unchanged |
+| `od[key] = value` | O(1) amortized | O(1) amortized | A new key is linked at the end; updating an existing key keeps its position |
+| `del od[key]` | O(1) amortized | O(1) | Unlinks the node; raises `KeyError` if the key is missing |
+| `OrderedDict.move_to_end(key, last=True)` | O(1) amortized | O(1) | `last=False` moves it to the front; raises `KeyError` if the key is missing |
+| `OrderedDict.popitem(last=True)` | O(1) amortized | O(1) | Last entry by default, first with `last=False`; raises `KeyError` when empty |
+| `OrderedDict.pop(key[, default])` | O(1) amortized | O(1) | Raises `KeyError` for a missing key without a default |
+| `OrderedDict.setdefault(key, default=None)` | O(1) amortized | O(1) amortized | Inserts at the end only if the key is missing |
+| `OrderedDict.update(other=(), /, **kwds)` | O(m) | O(m) | New keys go to the end in the order supplied |
+| `OrderedDict.fromkeys(iterable, value=None)` | O(m) | O(m) | A class method; every key shares one value object |
+| `OrderedDict.copy()` | O(n) | O(n) | Shallow copy in the same order |
+| `OrderedDict.clear()` | O(n) | O(1) | Frees every node |
+| `OrderedDict.keys()`, `OrderedDict.values()`, `OrderedDict.items()` | O(1) | O(1) | Live views; iterating one is O(n) and `reversed()` works on each |
+| Iterating an `OrderedDict`, `reversed(od)` | O(1) to start, O(n) to exhaust | O(1) | Walks the linked list, looking each key up again; adding, removing or moving a key meanwhile raises `RuntimeError` |
+| `od == other` | O(n) | O(1) | Order-sensitive when both sides are `OrderedDict`; against a plain `dict`, order is ignored |
+| `od \| other` | O(n + m) | O(n + m) | A new `OrderedDict`; keys new to `od` follow its own |
+| `od \|= other` | O(m) | O(m) | Same as `update(other)` |
 
-## Basic Usage
+## Reordering and Popping
+
+The linked list is what `dict` does not have. Moving a key to either end and popping from either
+end each touch one node, so an `OrderedDict` works as a deque that also supports O(1) lookup by
+key.
 
 ```python
 from collections import OrderedDict
 
-# Create empty OrderedDict - O(1)
-od = OrderedDict()
+od = OrderedDict([('a', 1), ('b', 2), ('c', 3)])  # O(m)
 
-# Create from dict - O(n)
+od.move_to_end('a')              # O(1) - to the back
+assert list(od) == ['b', 'c', 'a']
+od.move_to_end('a', last=False)  # O(1) - to the front
+assert list(od) == ['a', 'b', 'c']
+
+assert od.popitem() == ('c', 3)            # O(1) - last in, first out
+assert od.popitem(last=False) == ('a', 1)  # O(1) - first in, first out
+assert list(od) == ['b']
+
+try:
+    od.move_to_end('missing')
+except KeyError as error:
+    assert error.args == ('missing',)
+else:
+    raise AssertionError('a missing key was moved')
+```
+
+### Popping the Oldest Entry
+
+`dict.popitem()` takes no argument and always removes the newest entry. Emulating a pop from
+the front with `next(iter(d))` scans past every slot that earlier front deletions left empty, so
+draining a `dict` that way is O(n²); `popitem(last=False)` keeps it O(n).
+
+```python
+from collections import OrderedDict
+
+queue = OrderedDict.fromkeys(range(1000))  # O(m)
+while queue:
+    queue.popitem(last=False)  # O(1) each, O(n) to drain
+
+try:
+    {'a': 1}.popitem(last=False)
+except TypeError as error:
+    assert 'keyword arguments' in str(error)
+else:
+    raise AssertionError('dict.popitem() accepted last=False')
+```
+
+## Iteration
+
+Iteration walks the list in insertion order, and `reversed()` walks it backwards without building
+a copy. Each step looks the current key up in the table to find the next node, which is why an
+`OrderedDict` iterates more slowly than a `dict` and calls a key's `__hash__` on every step,
+where iterating a `dict` hashes nothing.
+Adding, removing or moving a key while iterating raises `RuntimeError`; assigning to an existing
+key does not.
+
+```python
+from collections import OrderedDict
+
 od = OrderedDict([('a', 1), ('b', 2), ('c', 3)])
-# Order: a, b, c (insertion order)
 
-# Create from kwargs - O(n)
-od = OrderedDict(a=1, b=2, c=3)
+assert list(od) == ['a', 'b', 'c']                  # O(n)
+assert list(reversed(od)) == ['c', 'b', 'a']        # O(n); reversed() copies nothing
+assert list(reversed(od.items()))[0] == ('c', 3)    # views reverse too
 
-# Access - O(1)
-print(od['a'])  # 1
+for key in od:
+    od[key] *= 10  # values may change
+assert list(od.values()) == [10, 20, 30]
 
-# Update - O(1)
-od['d'] = 4
-
-# Iterate maintains insertion order - O(n)
-for key, value in od.items():  # O(n)
-    print(key, value)
+try:
+    for key in od:
+        od.move_to_end(key)
+except RuntimeError as error:
+    assert 'mutated during iteration' in str(error)
+else:
+    raise AssertionError('reordering during iteration went unnoticed')
 ```
 
-## Move to End
+## Equality
+
+Two `OrderedDict` objects are equal only if they hold the same entries in the same order.
+Against a plain `dict` the order is ignored. Both comparisons are O(n), and together they make
+equality non-transitive.
 
 ```python
 from collections import OrderedDict
 
-# Create OrderedDict - O(n)
-od = OrderedDict([('a', 1), ('b', 2), ('c', 3)])
+first = OrderedDict([('x', 1), ('y', 2)])
+reordered = OrderedDict([('y', 2), ('x', 1)])
+plain = {'y': 2, 'x': 1}
 
-# Move to end - O(1)
-od.move_to_end('a')
-# Order: b, c, a
-
-# Move to beginning - O(1)
-od.move_to_end('b', last=False)
-# Order: b, c, a (stays at front)
+assert first != reordered  # O(n), order compared
+assert first == plain      # O(n), order ignored
+assert plain == reordered
 ```
 
-## FIFO / LIFO Access
+## Building and Copying
+
+Construction, `update()`, `fromkeys()` and `|` each insert one key at a time, linking a node per
+new key. Updating a key that is already present changes its value but not its position.
 
 ```python
 from collections import OrderedDict
 
-# Create OrderedDict - O(n)
-od = OrderedDict([('a', 1), ('b', 2), ('c', 3)])
+od = OrderedDict(a=1, b=2)       # O(m)
+od.update([('c', 3), ('a', 9)])  # O(m) - 'a' keeps its place
+assert list(od.items()) == [('a', 9), ('b', 2), ('c', 3)]
 
-# Pop last (LIFO stack) - O(1)
-last = od.popitem()  # ('c', 3)
+merged = od | {'d': 4}  # O(n + m), a new OrderedDict
+assert list(merged) == ['a', 'b', 'c', 'd'] and list(od) == ['a', 'b', 'c']
 
-# Pop first (FIFO queue) - O(1)
-first = od.popitem(last=False)  # ('a', 1)
+od |= {'e': 5}  # O(m), in place
+assert list(od) == ['a', 'b', 'c', 'e']
 
-# Remaining order: b
+copied = od.copy()  # O(n), same order
+assert copied == od and copied is not od
+
+defaults = OrderedDict.fromkeys('xyz', 0)  # O(m)
+assert list(defaults.items()) == [('x', 0), ('y', 0), ('z', 0)]
+
+assert od.setdefault('b', 7) == 2   # O(1), present: unchanged
+assert od.setdefault('f', 6) == 6   # O(1), missing: appended
+assert od.pop('a') == 9 and od.pop('a', None) is None  # O(1)
+od.clear()                          # O(n)
+assert not od
 ```
 
-## Reversing Insertion Order
+## Common Patterns
 
-```python
-from collections import OrderedDict
+### LRU Cache
 
-# Create OrderedDict - O(n)
-od = OrderedDict([('a', 1), ('b', 2), ('c', 3)])
-
-# Reverse iteration - O(n)
-for key in reversed(od):  # O(n)
-    print(key, od[key])
-# Output: c, b, a
-
-# Create reversed OrderedDict - O(n)
-reversed_od = OrderedDict(reversed(od.items()))
-# Order: c, b, a
-```
-
-## Equality Comparison
-
-```python
-from collections import OrderedDict
-
-# Create OrderedDicts with same keys but different order
-od1 = OrderedDict([('a', 1), ('b', 2), ('c', 3)])
-od2 = OrderedDict([('c', 3), ('a', 1), ('b', 2)])
-
-# Order matters for equality - O(n) comparison
-print(od1 == od2)  # False (different order)
-
-# Same order - O(n) comparison
-od3 = OrderedDict([('a', 1), ('b', 2), ('c', 3)])
-print(od1 == od3)  # True
-
-# Regular dict doesn't care about order - O(n)
-d = {'a': 1, 'b': 2, 'c': 3}
-print(od1 == d)  # True (same keys/values, order ignored)
-```
-
-## LRU Cache Pattern
+Every step of a least-recently-used cache is O(1) amortized: a hit moves its key to the back, and an
+eviction pops the front.
 
 ```python
 from collections import OrderedDict
 
 class LRUCache:
-    """Simple LRU cache using OrderedDict - O(1) operations"""
-    
     def __init__(self, capacity):
-        self.cache = OrderedDict()  # O(1)
         self.capacity = capacity
-    
+        self.entries = OrderedDict()
+
     def get(self, key):
-        """Get value and mark as recently used - O(1)"""
-        if key not in self.cache:  # O(1)
+        if key not in self.entries:  # O(1)
             return None
-        # Move to end (most recent) - O(1)
-        self.cache.move_to_end(key)
-        return self.cache[key]  # O(1)
-    
+        self.entries.move_to_end(key)  # O(1) - now the most recent
+        return self.entries[key]
+
     def put(self, key, value):
-        """Put value and evict if over capacity - O(1)"""
-        if key in self.cache:  # O(1)
-            # Update and move to end - O(1)
-            self.cache.move_to_end(key)
-        self.cache[key] = value  # O(1)
-        
-        # Evict least recently used if over capacity - O(1)
-        if len(self.cache) > self.capacity:
-            self.cache.popitem(last=False)  # O(1) - remove first
+        self.entries[key] = value  # O(1) amortized
+        self.entries.move_to_end(key)  # O(1)
+        if len(self.entries) > self.capacity:
+            self.entries.popitem(last=False)  # O(1) - evict the least recent
 
-# Usage
 cache = LRUCache(2)
-cache.put('a', 1)   # O(1)
-cache.put('b', 2)   # O(1)
-print(cache.get('a'))  # O(1), marks 'a' as recent
-cache.put('c', 3)   # O(1), evicts 'b' (least recent)
+cache.put('a', 1)
+cache.put('b', 2)
+assert cache.get('a') == 1  # 'b' is now the least recent
+cache.put('c', 3)           # evicts 'b'
+assert list(cache.entries) == ['a', 'c']
+assert cache.get('b') is None
 ```
 
-## Common Patterns
-
-### Preserving Insertion Order
-
-```python
-from collections import OrderedDict
-
-# Creating from list of tuples preserves insertion order - O(n)
-data = [('name', 'Alice'), ('age', 30), ('city', 'NYC')]
-od = OrderedDict(data)  # O(n)
-
-# Iteration order guaranteed - O(n)
-for key in od:  # O(n)
-    print(f"{key}: {od[key]}")
-# Output: name: Alice, age: 30, city: NYC
-```
-
-### Deep Copy Preserving Order
-
-```python
-from collections import OrderedDict
-import copy
-
-# Original OrderedDict - O(n)
-od1 = OrderedDict([('a', 1), ('b', 2), ('c', 3)])
-
-# Deep copy preserves order - O(n)
-od2 = copy.deepcopy(od1)
-
-# Same order guaranteed
-assert list(od1.keys()) == list(od2.keys())
-```
-
-### Comparison with Regular Dict
-
-```python
-from collections import OrderedDict
-
-# Python 3.7+ - regular dict preserves insertion order
-regular_dict = {'a': 1, 'b': 2, 'c': 3}
-
-# OrderedDict also preserves insertion order
-ordered_dict = OrderedDict([('a', 1), ('b', 2), ('c', 3)])
-
-# Both maintain insertion order - O(n)
-print(list(regular_dict.keys()))  # ['a', 'b', 'c']
-print(list(ordered_dict.keys()))  # ['a', 'b', 'c']
-
-# Key difference: OrderedDict has move_to_end() and stricter equality
-ordered_dict.move_to_end('a')  # Available in OrderedDict
-# regular_dict.move_to_end('a')  # Not available
-```
-
-## When to Use OrderedDict
-
-### Good For:
-- Backwards compatibility (Python 3.6 and earlier)
-- Using `move_to_end()` for LRU/MRU patterns
-- Explicit intent to preserve order
-- JSON serialization with guaranteed order
-- Strict equality based on insertion order
-
-### Not Good For:
-- Python 3.7+ without special ordering needs (use `dict`)
-- When order doesn't matter (use `dict`)
-- Memory-constrained environments: the linked list roughly doubles it, at
-  100,000 entries 9.1 MB against a `dict`'s 3.8 MB (64-bit CPython)
-- Iteration-heavy code, where the gap is largest
-
-### How much slower, exactly
-
-"Regular `dict` is faster" is true but uneven. Mappings of 100,000 entries,
-on 64-bit CPython 3.11 on one Linux machine - illustrative, not portable:
-
-| Measured | `dict` | `OrderedDict` | |
-|---|---|---|---|
-| 10,000 lookups of one key | 240 µs | 252 µs | 1.05x - the same code, inherited |
-| 10,000 assignments to one key | 599 µs | 722 µs | 1.21x |
-| build 1,000 entries, then delete all | 54 µs | 102 µs | 1.89x |
-| one construction from 100,000 pairs | 4970 µs | 12961 µs | 2.61x |
-| one `list()` over all 100,000 keys | 619 µs | 3522 µs | **5.69x** |
-
-Lookups cost the same, because `OrderedDict` inherits them unchanged. What
-you pay for is maintaining and walking the doubly-linked list, so the cost
-lands on construction, mutation and above all iteration.
-
-## Comparison with Alternatives
-
-```python
-from collections import OrderedDict, defaultdict
-
-# OrderedDict - for insertion-order preservation
-od = OrderedDict([('a', 1), ('b', 2)])  # O(n)
-od.move_to_end('a')  # O(1)
-
-# defaultdict - for default values
-dd = defaultdict(int)  # O(1)
-dd['count'] += 1  # O(1)
-
-# Regular dict - for simplicity in Python 3.7+
-d = {'a': 1, 'b': 2}  # O(n)
-```
-
-## Version Notes
-
-- **Python 2.7+**: OrderedDict available
-- **Python 3.7+**: Regular `dict` maintains insertion order, but OrderedDict still useful for explicit semantics
-- **All versions**: O(1) operations for access, insertion, deletion
-
-## Related Modules
-
-- **[dict](../builtins/dict.md)** - Standard dictionary
-- **[defaultdict](defaultdict.md)** - Dict with default values
-- **[Counter](counter.md)** - Dict subclass for counting
-- **[collections](collections.md)** - Container data types
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use for backwards compatibility with Python 3.6
-- Use for LRU/MRU cache patterns with `move_to_end()`
-- Use when strict insertion-order equality matters
-- Use for explicit code intent
+- Use `popitem(last=False)` for FIFO eviction: it is O(1), where emulating it on a `dict` drains in O(n²)
+- Use `reversed(od)` to walk backwards; it copies nothing
 
 ❌ **Avoid**:
 
-- Using instead of regular `dict` in Python 3.7+ without special needs
-- Assuming faster than regular `dict`
-- Using for non-ordered operations
-- Frequent copying (use references when possible)
+- `OrderedDict` where a `dict` would do: lookups cost the same, but every node costs memory and iteration is slower
+- Iterating an `OrderedDict` whose keys are expensive to hash; each step hashes its key again
+- Relying on `==` between an `OrderedDict` and a `dict` to compare order; it ignores it
+
+## Version Notes
+
+- **All Python 3**: Equality between two `OrderedDict` objects is order-sensitive; against a `dict` it is not
+
+## Related Modules
+
+- **[dict](../builtins/dict.md)** - the base type; insertion-ordered, smaller and faster to iterate
+- **[collections](collections.md)** - the module `OrderedDict` belongs to, with `deque` for a pure queue
+- **[functools](functools.md)** - `lru_cache` when the cache is around a function
