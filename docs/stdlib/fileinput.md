@@ -1,389 +1,309 @@
-# Fileinput Module Complexity
+# fileinput Module Complexity
 
-The `fileinput` module provides an iterator for processing lines from multiple input files in a uniform way.
+The `fileinput` module reads the lines of several files, or standard input, as one stream, and can
+rewrite each file in place as it goes. It opens one file at a time and reads it a line at a time:
+nothing holds a whole file, and building the iterator opens nothing.
 
-## Common Operations
+`B` is the bytes read across all files (characters in text mode, decompressed bytes through
+`hook_compressed()`), `L` is the longest line, `f` is the files in the list, and `W` is what an
+in-place edit writes back. Opening, closing and renaming a file are priced at O(1).
+
+## Complexity Reference
+
+### Module-level functions
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `input(files)` | O(B) | O(L) | B = total bytes read; L = longest line held at a time |
-| `input()` with backup | O(B) | O(L) | In-place edit with backup; same streaming bounds as above |
-| `filename()` | O(1) | O(1) | Get current file name |
-| `filelineno()` | O(1) | O(1) | Get current line in file |
-| `lineno()` | O(1) | O(1) | Get total line count |
-| `fileno()` | O(1) | O(1) | Get current file descriptor |
-| `isfirstline()` | O(1) | O(1) | Check first line of file |
-| `isstdin()` | O(1) | O(1) | Check if current file is stdin |
-| `nextfile()` | O(1) | O(1) | Skip to next file |
-| `close()` | O(1) | O(1) | Close file iterator |
-| `FileInput(...)` | O(1) | O(1) | Create iterator instance |
-| `hook_encoded()` | O(1) | O(1) | Encoding open hook factory |
-| `hook_compressed()` | O(1) | O(1) | Compressed-file open hook factory |
+| `fileinput.input(files=None, inplace=False, backup='', *, mode='r', openhook=None, encoding=None, errors=None)` | O(f) | O(f) | Builds a `FileInput` and makes it the module's global instance; opens nothing yet. Raises `RuntimeError` while the previous one still has a file open |
+| `fileinput.filename()`, `fileinput.lineno()`, `fileinput.filelineno()`, `fileinput.fileno()`, `fileinput.isfirstline()`, `fileinput.isstdin()` | O(1) | O(1) | Ask the global instance; raise `RuntimeError` when there is none |
+| `fileinput.nextfile()` | O(1) | O(1) | Closes the current file without reading further lines from it |
+| `fileinput.close()` | O(1) | O(1) | Closes the current file and drops the global instance |
 
-## Basic Line Iteration
+### FileInput
 
-### input()
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `fileinput.FileInput(files=None, inplace=False, backup='', *, mode='r', openhook=None, encoding=None, errors=None)` | O(f) | O(f) | Copies the file list; opens nothing yet. `files=None` reads the names in `sys.argv[1:]`, and `'-'` or an empty list means standard input |
+| Iterating a `FileInput`, `FileInput.readline()` | O(B + f²) total | O(L + f) | One line held at a time. Each move to the next file copies the remaining file list, which is the f² term; `readline()` returns `''`, or `b''` in binary mode, at the end instead of raising `StopIteration` |
+| `FileInput.filename()`, `FileInput.lineno()`, `FileInput.filelineno()`, `FileInput.fileno()`, `FileInput.isfirstline()`, `FileInput.isstdin()` | O(1) | O(1) | Stored counters and flags; `fileno()` is -1 when no file is open |
+| `FileInput.nextfile()` | O(1) | O(1) | No further lines are read from the current file, and the skipped ones do not count towards `lineno()` |
+| `FileInput.close()`, leaving `with FileInput(...)` | O(1) | O(1) | Closes the current file and empties the file list |
 
-#### Time Complexity: O(n)
+### In-place editing and open hooks
 
-Where n = total lines across all files.
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| Iterating with `inplace=True` | O(B + W + f²) total | O(L + f) | Each file is renamed to its backup name, read from there, and rewritten through `print()`; the backup is deleted when the file is finished unless `backup` names an extension |
+| `fileinput.hook_encoded(encoding, errors=None)` | O(1) | O(1) | Returns an opener; each file then opens with that encoding |
+| `fileinput.hook_compressed(filename, mode, *, encoding=None, errors=None)` | O(1) | O(1) | Opens `.gz` and `.bz2` files through `gzip` and `bz2`, anything else with `open()`; decompression happens as lines are read, inside the O(B) |
+
+## Reading Many Files as One Stream
+
+### Lazy Line Iteration
+
+A `FileInput` holds one line. Building it opens nothing, each step reads one line from the
+current file, and the counters it keeps are integers it updates as it goes.
 
 ```python
 import fileinput
+import pathlib
+import tempfile
 
-# Iterate lines from multiple files
-for line in fileinput.input(['file1.txt', 'file2.txt']):
-    print(line.rstrip())  # O(n) to process all lines
+with tempfile.TemporaryDirectory() as tmp:
+    first = pathlib.Path(tmp, 'first.txt')
+    second = pathlib.Path(tmp, 'second.txt')
+    first.write_text('a\nb\n', encoding='utf-8')
+    second.write_text('c\n', encoding='utf-8')
 
-# With stdin
-for line in fileinput.input():
-    print(line)  # O(n) for all input
+    seen = []
+    with fileinput.input([first, second], encoding='utf-8') as lines:  # O(f) - opens nothing yet
+        for line in lines:  # O(B) over both files, one line held at a time
+            seen.append((
+                pathlib.Path(fileinput.filename()).name,  # O(1)
+                fileinput.lineno(),       # O(1) - across all files
+                fileinput.filelineno(),   # O(1) - within this file
+                fileinput.isfirstline(),  # O(1)
+            ))
+
+    assert seen == [
+        ('first.txt', 1, 1, True),
+        ('first.txt', 2, 2, False),
+        ('second.txt', 3, 1, True),
+    ]
 ```
 
-#### Space Complexity: O(1)
+### Skipping the Rest of a File
+
+`nextfile()` closes the current file where it stands. No further lines are read from it, and the
+ones skipped do not count towards `lineno()`.
 
 ```python
 import fileinput
+import pathlib
+import tempfile
 
-# Lazy iteration - no buffering
-for line in fileinput.input(['huge_file.txt']):
-    # Process one line at a time
-    process(line)  # O(1) memory per iteration
+with tempfile.TemporaryDirectory() as tmp:
+    long = pathlib.Path(tmp, 'long.txt')
+    short = pathlib.Path(tmp, 'short.txt')
+    long.write_text('header\n' + 'body\n' * 10_000, encoding='utf-8')
+    short.write_text('header\n', encoding='utf-8')
+
+    headers = []
+    with fileinput.FileInput([long, short], encoding='utf-8') as lines:
+        for line in lines:
+            if lines.isfirstline():
+                headers.append(line)
+                lines.nextfile()  # O(1) - no further lines are read
+
+    assert headers == ['header\n', 'header\n']
+    assert lines.lineno() == 2
+```
+
+### Very Long File Lists
+
+Moving to the next file copies the list of files still to come, so a list of f files costs O(f²)
+on top of the bytes read. That is negligible for a handful of files and the dominant cost for a
+long list of small files. A generator that opens each file in turn
+does the same job in O(B + f), without the counters.
+
+```python
+import pathlib
+import tempfile
+
+def lines_of(paths, encoding='utf-8'):
+    for path in paths:  # O(B + f) - no per-file copy of the list
+        with open(path, encoding=encoding) as handle:
+            yield from handle
+
+with tempfile.TemporaryDirectory() as tmp:
+    paths = []
+    for index in range(100):
+        path = pathlib.Path(tmp, f'{index}.txt')
+        path.write_text(f'{index}\n', encoding='utf-8')
+        paths.append(path)
+
+    assert sum(1 for _ in lines_of(paths)) == 100
+```
+
+### Binary Mode
+
+`mode='rb'` yields `bytes` lines and skips decoding; nothing else about the cost changes.
+
+```python
+import fileinput
+import pathlib
+import tempfile
+
+with tempfile.TemporaryDirectory() as tmp:
+    data = pathlib.Path(tmp, 'data.bin')
+    data.write_bytes(b'\x00\x01\n\xff\n')
+
+    with fileinput.input(data, mode='rb') as lines:  # O(1) for a single name
+        assert list(lines) == [b'\x00\x01\n', b'\xff\n']  # O(B)
 ```
 
 ## In-Place Editing
 
-### Backup Creation
-
-#### Time Complexity: O(n)
+With `inplace=True`, each file is renamed to a backup, read from there, and rewritten with
+whatever the loop prints, since standard output points at the new file while it is open. Reading
+and writing are both streamed, so memory still follows the longest line. Opening hooks cannot be
+combined with `inplace=True`.
 
 ```python
 import fileinput
+import pathlib
+import tempfile
 
-# Modify files in-place with backup
-for line in fileinput.input(['file1.txt', 'file2.txt'], 
-                           backup='.bak', inplace=True):
-    # Original backed up as file1.txt.bak
-    print(line.upper().rstrip())  # Write to stdout -> redirected to file
+with tempfile.TemporaryDirectory() as tmp:
+    config = pathlib.Path(tmp, 'config.txt')
+    config.write_text('debug=0\nlevel=1\n', encoding='utf-8')
+
+    with fileinput.input(config, inplace=True, backup='.orig', encoding='utf-8') as lines:
+        for line in lines:  # O(B + W)
+            print(line.replace('debug=0', 'debug=1'), end='')  # written into config.txt
+
+    assert config.read_text(encoding='utf-8') == 'debug=1\nlevel=1\n'
+    assert pathlib.Path(tmp, 'config.txt.orig').read_text(encoding='utf-8') == 'debug=0\nlevel=1\n'
 ```
 
-#### Space Complexity: O(1)
+### Without a Backup
+
+`backup=''` still renames the file to a `.bak` name while it is being edited; it deletes that
+copy when the file is closed, including when an exception closes it. A loop that raises part way
+through therefore leaves the file holding only the lines written so far, with nothing to restore
+it from.
 
 ```python
 import fileinput
+import os
+import pathlib
+import tempfile
 
-# Streaming in-place edit
-for line in fileinput.input(inplace=True):
-    print(line.rstrip())  # O(1) memory
+with tempfile.TemporaryDirectory() as tmp:
+    data = pathlib.Path(tmp, 'data.txt')
+    data.write_text('1\n2\n3\n', encoding='utf-8')
+
+    try:
+        with fileinput.input(data, inplace=True, encoding='utf-8') as lines:
+            for line in lines:
+                if line == '2\n':
+                    raise ValueError('bad line')
+                print(line, end='')
+    except ValueError as error:
+        assert str(error) == 'bad line'
+    else:
+        raise AssertionError('the loop did not raise')
+
+    assert data.read_text(encoding='utf-8') == '1\n'  # lines 2 and 3 are gone
+    assert os.listdir(tmp) == ['data.txt']  # and so is the backup
 ```
 
-### In-Place Without Backup
+## Encodings and Compressed Input
 
-#### Time Complexity: O(n)
-
-```python
-import fileinput
-
-# Edit without backup
-for line in fileinput.input(['file.txt'], inplace=True, 
-                           backup=''):
-    print(line.rstrip())  # No backup created
-
-# Original file modified, no .bak
-```
-
-#### Space Complexity: O(1)
+`encoding=` and the two hooks decide how each file is opened. They add a per-file open, priced at
+O(1), and the decoding or decompression of the bytes read, which stays inside O(B).
 
 ```python
+import bz2
 import fileinput
+import gzip
+import pathlib
+import tempfile
 
-# Direct modification
-for line in fileinput.input(['large_file.txt'], inplace=True, 
-                           backup=''):
-    process(line)  # O(1) memory
-```
+with tempfile.TemporaryDirectory() as tmp:
+    latin = pathlib.Path(tmp, 'latin.txt')
+    latin.write_bytes('café\n'.encode('latin-1'))
+    packed = pathlib.Path(tmp, 'log.gz')
+    packed.write_bytes(gzip.compress('zipped\n'.encode('utf-8')))
+    squeezed = pathlib.Path(tmp, 'log.bz2')
+    squeezed.write_bytes(bz2.compress('squeezed\n'.encode('utf-8')))
 
-## Line Number Tracking
+    opener = fileinput.hook_encoded('latin-1')  # O(1) - builds the opener
+    with fileinput.input(latin, openhook=opener) as lines:
+        assert list(lines) == ['café\n']
 
-### linenum() and fileno()
-
-#### Time Complexity: O(1)
-
-```python
-import fileinput
-
-# Track line numbers
-for line in fileinput.input(['file1.txt', 'file2.txt']):
-    total_line_num = fileinput.lineno()      # O(1)
-    file_line_num = fileinput.filelineno()   # O(1)
-    filename = fileinput.filename()          # O(1)
-    
-    print(f'{filename}:{file_line_num}: {line.rstrip()}')
-```
-
-#### Space Complexity: O(1)
-
-```python
-import fileinput
-
-# Metadata stored during iteration
-for line in fileinput.input():
-    num = fileinput.lineno()  # O(1) space - counter
-```
-
-## Context Manager Usage
-
-### Time Complexity: O(n)
-
-```python
-import fileinput
-
-# Use as context manager (Python 3.10+)
-with fileinput.input(['file1.txt', 'file2.txt']) as f:
-    for line in f:
-        print(line.rstrip())  # O(n) for all lines
-# Auto-cleanup
-```
-
-### Space Complexity: O(1)
-
-```python
-import fileinput
-
-with fileinput.input(['file.txt']) as f:
-    for line in f:
-        process(line)  # O(1) streaming
+    with fileinput.input([packed, squeezed], openhook=fileinput.hook_compressed,
+                         encoding='utf-8') as lines:  # decompressed as read
+        assert list(lines) == ['zipped\n', 'squeezed\n']
 ```
 
 ## Common Patterns
-
-### Simple Line Processing
-
-```python
-import fileinput
-
-# Process lines from multiple files - O(B) in total bytes, O(L) space.
-# Lines are the unit you iterate, not the unit of work: every byte is still
-# scanned to find the line breaks. Files are opened one at a time and lines
-# yielded on demand, so memory holds one line - which can be arbitrarily long
-for line in fileinput.input(['input1.txt', 'input2.txt']):
-    # Line already has newline
-    if line.startswith('#'):
-        continue  # Skip comments
-    
-    print(line.rstrip())  # Remove trailing newline, print
-```
-
-### In-Place Text Replacement
-
-```python
-import fileinput
-import sys
-
-# Replace pattern in-place
-def replace_in_files(files, old, new):
-    for line in fileinput.input(files, inplace=True, backup='.bak'):
-        print(line.replace(old, new).rstrip())
-
-# Usage
-replace_in_files(['config.txt', 'data.txt'], 'old_value', 'new_value')
-# Creates .bak files as backups
-```
-
-### Count Lines in Multiple Files
-
-```python
-import fileinput
-
-# Count all lines
-count = 0
-for line in fileinput.input(['file1.txt', 'file2.txt']):
-    count += 1
-print(f'Total lines: {count}')  # O(n)
-
-# Group by file
-lines_per_file = {}
-for line in fileinput.input(['file1.txt', 'file2.txt']):
-    filename = fileinput.filename()
-    lines_per_file[filename] = fileinput.filelineno()
-```
 
 ### Filter Lines Across Files
 
 ```python
 import fileinput
+import pathlib
+import tempfile
 
-# Extract specific lines - O(B) over all bytes, O(L) for the current line
-for line in fileinput.input(['file1.txt', 'file2.txt']):
-    if 'ERROR' in line:
-        filename = fileinput.filename()  # O(1)
-        lineno = fileinput.lineno()      # O(1) - a running counter
-        print(f'{filename}:{lineno}: {line.rstrip()}')
+with tempfile.TemporaryDirectory() as tmp:
+    pathlib.Path(tmp, 'a.log').write_text('ok\nERROR disk\n', encoding='utf-8')
+    pathlib.Path(tmp, 'b.log').write_text('ERROR net\nok\n', encoding='utf-8')
+    paths = sorted(pathlib.Path(tmp).glob('*.log'))
+
+    errors = []
+    with fileinput.input(paths, encoding='utf-8') as lines:
+        for line in lines:  # O(B + f²); the iterator holds O(L + f)
+            if line.startswith('ERROR'):
+                name = pathlib.Path(lines.filename()).name  # O(1)
+                errors.append(f'{name}:{lines.filelineno()}: {line.rstrip()}')
+
+    assert errors == ['a.log:2: ERROR disk', 'b.log:1: ERROR net']
 ```
 
-### Add Line Numbers to Files
+### Count Lines per File
 
 ```python
 import fileinput
+import pathlib
+import tempfile
 
-# O(B) in total bytes; in-place editing rewrites each file once
-for line in fileinput.input(inplace=True):
-    lineno = fileinput.lineno()  # O(1)
-    print(f'{lineno:5d}: {line.rstrip()}')
+with tempfile.TemporaryDirectory() as tmp:
+    pathlib.Path(tmp, 'a.txt').write_text('1\n2\n3\n', encoding='utf-8')
+    pathlib.Path(tmp, 'b.txt').write_text('1\n', encoding='utf-8')
+    paths = sorted(pathlib.Path(tmp).glob('*.txt'))
 
-# Reads from stdin, writes to stdout with line numbers
-# Usage: python script.py < input.txt
+    per_file = {}
+    with fileinput.input(paths, encoding='utf-8') as lines:
+        for _ in lines:  # O(B + f²)
+            per_file[pathlib.Path(lines.filename()).name] = lines.filelineno()  # O(1)
+
+    assert per_file == {'a.txt': 3, 'b.txt': 1}
+    assert lines.lineno() == 4
 ```
 
-## Input Modes
+## Performance Best Practices
 
-### Text Mode (Default)
+✅ **Do**:
 
-```python
-import fileinput
+- Iterate the lines instead of collecting them, so memory follows the longest line rather than
+  the input
+- Use `nextfile()` to stop reading a file early; no further lines are read from it
+- Pass `encoding=` explicitly, or text mode decodes with the locale encoding
+- Give `inplace=True` a `backup` extension unless losing the file on an error is acceptable
+- Use one `FileInput` per stream when you need two at once; the module-level functions share a
+  single global instance
 
-# Read as text (default) - O(B) in total bytes, O(L) for the current line
-# Decoding is part of the per-line cost; it does not change the complexity
-for line in fileinput.input(['file.txt']):
-    print(type(line))  # str
-    print(line.rstrip())
-```
+❌ **Avoid**:
 
-### Binary Mode (Not Directly Supported)
-
-```python
-import fileinput
-
-# fileinput works with text by default
-# For binary, use regular file operations
-with open('file.bin', 'rb') as f:
-    for line in f:
-        process(line)
-```
-
-## Encoding Support
-
-```python
-import fileinput
-
-# Specify encoding (Python 3.10+)
-# hook_encoded() is O(1) - it builds the opener, called once per file
-for line in fileinput.input(['utf8_file.txt'], 
-                           openhook=fileinput.hook_encoded("utf-8")):
-    print(line.rstrip())  # Still O(B) in total bytes, O(L) per line
-```
-
-## Performance Characteristics
-
-### Best Practices
-
-```python
-import fileinput
-
-# Good: Stream processing
-for line in fileinput.input(['large_file.txt']):
-    process(line)  # O(1) memory per line
-
-# Good: Use context manager
-with fileinput.input(['file.txt']) as f:
-    for line in f:
-        print(line.rstrip())
-
-# Avoid: Loading all lines first
-lines = []
-for line in fileinput.input(['file.txt']):
-    lines.append(line)  # O(n) memory
-```
-
-### In-Place Editing Safety
-
-```python
-import fileinput
-
-# Good: Create backup
-for line in fileinput.input(['config.txt'], 
-                           inplace=True, backup='.bak'):
-    print(line.rstrip())
-
-# Risky: No backup
-for line in fileinput.input(['config.txt'], 
-                           inplace=True, backup=''):
-    print(line.rstrip())  # Lost on error
-```
-
-## Error Handling
-
-```python
-import fileinput
-import sys
-
-def process_files_safely(files):
-    try:
-        # O(B) in total bytes; the try/except costs nothing until it raises
-        for line in fileinput.input(files):
-            try:
-                process(line)
-            except ValueError as e:
-                filename = fileinput.filename()  # O(1)
-                lineno = fileinput.lineno()      # O(1)
-                print(f'Error {filename}:{lineno}: {e}', 
-                      file=sys.stderr)
-    finally:
-        fileinput.close()
-
-# Handle file not found
-try:
-    for line in fileinput.input(['nonexistent.txt']):
-        pass
-except FileNotFoundError as e:
-    print(f'File error: {e}')
-```
-
-## Comparison with Alternatives
-
-```python
-import fileinput
-from pathlib import Path
-
-# fileinput (good for multiple files)
-for line in fileinput.input(['file1.txt', 'file2.txt']):
-    print(line.rstrip())  # O(n), O(1) memory
-
-# pathlib (good for single operations)
-for line in Path('file.txt').read_text().splitlines():
-    print(line)  # O(n) time, O(n) memory
-
-# direct open (good for single file)
-with open('file.txt') as f:
-    for line in f:
-        print(line.rstrip())  # O(n) time, O(1) memory
-
-# All similar time complexity, fileinput best for multiple files
-```
-
-## Sys.argv Integration
-
-```python
-import fileinput
-import sys
-
-# Automatically use command-line files or stdin
-# O(B) in total bytes, O(L) per line - stdin streams the same way a file does
-for line in fileinput.input():
-    # Reads from files in sys.argv[1:] or stdin
-    print(line.rstrip())
-
-# Usage: python script.py file1.txt file2.txt
-# Or:    python script.py < input.txt
-```
+- `list(fileinput.input(...))` on large files - that is the O(B) memory this module exists to avoid
+- `fileinput` over a very long list of files - the per-file list copy makes it O(f²); open each
+  file in a generator instead
+- Calling the query functions or `nextfile()` before `input()` or after `fileinput.close()` - they
+  raise `RuntimeError`
 
 ## Version Notes
 
-- **Python 3.10+**: Context manager support (`with` statement)
-- **Python 3.10+**: `openhook` parameter for encoding
+- **Python 3.10+**: `encoding` and `errors` keyword arguments on `input()`, `FileInput()` and
+  `hook_compressed()`
+- **Python 3.11+**: `mode` accepts only `'r'` and `'rb'`; the `'U'` modes and indexing a
+  `FileInput` are removed
+- **All Python 3**: text mode without `encoding` or an `openhook` decodes with the locale encoding
 
-## Related Documentation
+## Related Modules
 
-- [Pathlib Module](pathlib.md) - Object-oriented file paths
-- [IO Module](io.md) - Core I/O classes
-- [OS Module](os.md) - Operating system interface
+- **[io](io.md)** - the file objects `fileinput` reads a line at a time
+- **[gzip](gzip.md)** and **[bz2](bz2.md)** - what `hook_compressed()` opens
+- **[itertools](itertools.md)** - `chain.from_iterable` joins already-open files without the
+  per-file list copy
+- **[glob](glob.md)** - building the file list
