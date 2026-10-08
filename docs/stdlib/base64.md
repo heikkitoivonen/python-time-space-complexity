@@ -1,156 +1,192 @@
 # base64 Module Complexity
 
-The `base64` module provides encoding and decoding for base64, base32, base16, and other alphabet-based binary encodings, used for transmitting binary data over text channels.
+The `base64` module turns binary data into ASCII text and back: Base64 (standard and URL-safe),
+Base32, Base16, Ascii85, Base85 and Z85. Every encoder and decoder is linear in its input and
+returns a new `bytes` object, so each costs its input length in time and in memory. The legacy
+`encode()` and `decode()` copy between files and hold one line.
+
+How fast that pass runs depends on the encoding. Base64, Base16 and the legacy file functions
+hand the work to `binascii`, which is C; Base32, Ascii85, Base85 and Z85 loop over each 5- or
+4-byte group in Python, so they are many times slower per byte at the same O(n).
+
+`n` is the input length: bytes for an encoder, encoded characters for a decoder. An encoder's
+output is at most a fixed multiple of its input, plus padding - 4/3 for Base64, 8/5 for Base32, 2
+for Base16 and 5/4 for the 85 family. `L` is the longest line in a file passed to `decode()`. The
+legacy functions' space is working memory; it excludes what the output file keeps.
 
 ## Complexity Reference
 
+### Base64
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `base64.b64encode(data)` | O(n) | O(n) | n = data size |
-| `base64.b64decode(data)` | O(n) | O(n) | n = encoded size |
-| `base64.standard_b64encode(data)` | O(n) | O(n) | Standard alphabet |
-| `base64.standard_b64decode(data)` | O(n) | O(n) | Standard alphabet |
-| `base64.urlsafe_b64encode(data)` | O(n) | O(n) | URL-safe alphabet |
-| `base64.urlsafe_b64decode(data)` | O(n) | O(n) | URL-safe alphabet |
-| `base64.b32encode(data)` | O(n) | O(n) | n = data size |
-| `base64.b32decode(data)` | O(n) | O(n) | n = encoded size |
-| `base64.b32hexencode(data)` | O(n) | O(n) | Base32hex alphabet |
-| `base64.b32hexdecode(data)` | O(n) | O(n) | Base32hex alphabet |
-| `base64.b16encode(data)` | O(n) | O(n) | n = data size |
-| `base64.b16decode(data)` | O(n) | O(n) | n = encoded size |
-| `base64.a85encode(data)` | O(n) | O(n) | ASCII85 encoding |
-| `base64.a85decode(data)` | O(n) | O(n) | ASCII85 decoding |
-| `base64.b85encode(data)` | O(n) | O(n) | Base85 encoding |
-| `base64.b85decode(data)` | O(n) | O(n) | Base85 decoding |
-| `base64.z85encode(data)` | O(n) | O(n) | Z85 encoding |
-| `base64.z85decode(data)` | O(n) | O(n) | Z85 decoding |
-| `base64.encode()` | O(n) | O(n) | File-like to file-like |
-| `base64.decode()` | O(n) | O(n) | File-like to file-like |
-| `base64.encodebytes()` | O(n) | O(n) | Adds newlines every 76 chars |
-| `base64.decodebytes()` | O(n) | O(n) | Accepts newlines/whitespace |
-| `base64.main()` | O(n) | O(n) | CLI encode/decode over files |
+| `base64.b64encode(s, altchars=None)` | O(n) | O(n) | `altchars` replaces `+` and `/` with one extra translation pass |
+| `base64.b64decode(s, altchars=None, validate=False)` | O(n) | O(n) | Discards characters outside the alphabet; `validate=True` raises `binascii.Error` instead |
+| `base64.standard_b64encode(s)`, `base64.standard_b64decode(s)` | O(n) | O(n) | `b64encode()` and `b64decode()` with the standard alphabet |
+| `base64.urlsafe_b64encode(s)`, `base64.urlsafe_b64decode(s)` | O(n) | O(n) | `-` and `_` instead of `+` and `/` |
 
-## Base64 Encoding/Decoding
+### Base32 and Base16
 
-### Basic Encoding
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `base64.b32encode(s)` | O(n) | O(n) | A Python loop over 5-byte groups |
+| `base64.b32decode(s, casefold=False, map01=None)` | O(n) | O(n) | A Python loop over 8-character groups |
+| `base64.b32hexencode(s)`, `base64.b32hexdecode(s, casefold=False)` | O(n) | O(n) | Base32 with the extended hex alphabet |
+| `base64.b16encode(s)` | O(n) | O(n) | Uppercase hexadecimal |
+| `base64.b16decode(s, casefold=False)` | O(n) | O(n) | Rejects lowercase unless `casefold=True` |
+
+### Ascii85, Base85 and Z85
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `base64.a85encode(b, *, foldspaces=False, wrapcol=0, pad=False, adobe=False)` | O(n) | O(n) | A Python loop over 4-byte groups |
+| `base64.a85decode(b, *, foldspaces=False, adobe=False, ignorechars=b' \t\n\r\v')` | O(n) | O(n) | A Python loop over each character; skips `ignorechars` |
+| `base64.b85encode(b, pad=False)`, `base64.b85decode(b)` | O(n) | O(n) | The same loops with the Base85 alphabet |
+| `base64.z85encode(s)`, `base64.z85decode(s)` | O(n) | O(n) | Base85 plus one translation pass; Python 3.13+ |
+
+### Legacy interface
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `base64.encode(input, output)` | O(n) | O(1) | Reads 57 bytes at a time and writes one 76-character line for each |
+| `base64.decode(input, output)` | O(n) | O(L) | Decodes one line at a time |
+| `base64.encodebytes(s)` | O(n) | O(n) | Base64 with a newline after every 76 characters |
+| `base64.decodebytes(s)` | O(n) | O(n) | Accepts the lines `encodebytes()` writes |
+| `base64.main()` | O(n) | O(1) to encode, O(L) to decode | `python -m base64 [-d] [file]`: `encode()` or `decode()` from a file or pipe to stdout |
+
+## Encoding and Decoding
+
+Encoders take a bytes-like object. The `b64`, `b32`, `b16`, `a85`, `b85` and `z85` decoders also
+accept an ASCII `str`, which they encode first; `decodebytes()` does not.
 
 ```python
 import base64
 
-# Encode bytes to base64 - O(n)
 data = b"Hello, World!"
-encoded = base64.b64encode(data)  # O(len(data))
-# Result: b'SGVsbG8sIFdvcmxkIQ=='
+encoded = base64.b64encode(data)  # O(n)
+assert encoded == b'SGVsbG8sIFdvcmxkIQ=='
 
-# Decode base64 to bytes - O(n)
-decoded = base64.b64decode(encoded)  # O(len(encoded))
-# Result: b'Hello, World!'
+assert base64.b64decode(encoded) == data  # O(n)
+assert base64.b64decode('SGVsbG8sIFdvcmxkIQ==') == data  # an ASCII str works too
 
-assert decoded == data
+# Encoders refuse str: encode the text first
+try:
+    base64.b64encode("Hello")
+except TypeError as error:
+    assert 'bytes-like object' in str(error)
+else:
+    raise AssertionError('an encoder accepted str')
+
+text = base64.b64encode("Hello".encode('utf-8')).decode('ascii')
+assert text == 'SGVsbG8='
 ```
 
-### String Encoding
+### Output Size
+
+Each encoding expands its input by a fixed ratio, plus padding, so the choice of encoding sets
+the size of what you store or send. Ascii85 can come out shorter: it writes an all-zero group as
+`z`.
 
 ```python
 import base64
 
-# Encode string (requires encoding first) - O(n)
-text = "Hello, World!"
-encoded = base64.b64encode(text.encode('utf-8'))  # O(len(text))
-# Result: b'SGVsbG8sIFdvcmxkIQ=='
+original = b"x" * 100
 
-# Decode and convert back - O(n)
-decoded = base64.b64decode(encoded).decode('utf-8')  # O(len(encoded))
-# Result: 'Hello, World!'
+assert len(base64.b64encode(original)) == 136  # 4/3, padded to a multiple of 4
+assert len(base64.b32encode(original)) == 160  # 8/5
+assert len(base64.b16encode(original)) == 200  # 2
+assert len(base64.b85encode(original)) == 125  # 5/4
+assert len(base64.a85encode(original)) == 125  # 5/4
+assert base64.a85encode(b"\0" * 8) == b'zz'     # one character per zero group
 ```
 
-## Different Base64 Variants
-
-### Standard Base64
+### Choosing an Alphabet
 
 ```python
 import base64
 
-data = b"Hello"
+data = b"\xfb\xff"
 
-# Standard (with + and /) - O(n)
-encoded = base64.b64encode(data)  # O(5)
-# May contain: + / =
+assert base64.b64encode(data) == b'+/8='          # O(n)
+assert base64.urlsafe_b64encode(data) == b'-_8='  # O(n) - safe in URLs and file names
+assert base64.urlsafe_b64decode(b'-_8=') == data
 
-# With newlines every 76 chars - O(n)
-encoded_multiline = base64.b64encode(data)
-# Standard base64 (no newlines added by default)
+assert base64.b32encode(b"Hello") == b'JBSWY3DP'     # O(n)
+assert base64.b32hexencode(b"Hello") == b'91IMOR3F'  # O(n)
+assert base64.b16encode(b"Hello") == b'48656C6C6F'   # O(n)
+assert base64.b16decode(b'48656c6c6f', casefold=True) == b"Hello"
+assert base64.b85encode(b"Hello") == b'NM&qnZv'      # O(n)
+assert base64.a85encode(b"Hello") == b'87cURDZ'      # O(n)
 ```
 
-### URL-Safe Base64
+## Decoding Untrusted Input
+
+By default `b64decode()` drops every character outside the alphabet, so stray whitespace or
+line breaks decode without complaint. `validate=True` rejects them instead. Either way, a
+missing `=` raises `binascii.Error`; the decoder does not guess the padding.
 
 ```python
 import base64
+import binascii
 
-data = b"Hello?"
+assert base64.b64decode(b"SGVs bG8=") == b"Hello"  # the space is discarded
 
-# URL-safe (- and _ instead of + /) - O(n)
-encoded = base64.urlsafe_b64encode(data)  # O(6)
-# Uses - and _ instead of + /
+try:
+    base64.b64decode(b"SGVs bG8=", validate=True)
+except binascii.Error as error:
+    assert 'base64' in str(error)
+else:
+    raise AssertionError('validate=True accepted a space')
 
-# Decode URL-safe - O(n)
-decoded = base64.urlsafe_b64decode(encoded)  # O(len(encoded))
+try:
+    base64.b64decode(b"SGVsbG8")
+except binascii.Error as error:
+    assert 'padding' in str(error)
+else:
+    raise AssertionError('missing padding was accepted')
+
+# Restore the padding when a producer strips it
+stripped = b"SGVsbG8"
+assert base64.b64decode(stripped + b"=" * (-len(stripped) % 4)) == b"Hello"
 ```
 
-## Base32 and Base16
+## Streaming Files
 
-### Base32 Encoding
+`encode()` and `decode()` copy from one binary file to another a line at a time, so memory
+follows the line rather than the file. `encode()` writes 76-character lines; `decode()` reads
+whatever lines it is given, so a file that is one long line is held whole.
 
 ```python
 import base64
+import io
 
-data = b"Hello"
+source = io.BytesIO(b"x" * 1000)
+encoded = io.BytesIO()
+base64.encode(source, encoded)  # O(n) time, O(1) working memory; `encoded` keeps the output
+lines = encoded.getvalue().splitlines()
+assert max(len(line) for line in lines) == 76
 
-# Base32 (5 bits per char) - O(n)
-encoded = base64.b32encode(data)  # O(5)
-# Result: b'JBSWY3DPEBLW64TMMQ======'
+decoded = io.BytesIO()
+base64.decode(io.BytesIO(encoded.getvalue()), decoded)  # O(n) time, O(L) working memory
+assert decoded.getvalue() == b"x" * 1000
 
-# Decode Base32 - O(n)
-decoded = base64.b32decode(encoded)  # O(len(encoded))
-# Result: b'Hello'
-```
-
-### Base16 (Hex) Encoding
-
-```python
-import base64
-
-data = b"Hello"
-
-# Base16 (hex) - O(n)
-encoded = base64.b16encode(data)  # O(5)
-# Result: b'48656C6C6F'
-
-# Decode Base16 - O(n)
-decoded = base64.b16decode(encoded)  # O(len(encoded))
-# Result: b'Hello'
+# encodebytes() is the in-memory form: the same 76-character lines
+assert base64.encodebytes(b"x" * 1000) == encoded.getvalue()  # O(n)
+assert base64.decodebytes(encoded.getvalue()) == b"x" * 1000  # O(n)
 ```
 
 ## Common Patterns
 
-### Encoding Binary Data
+### Binary Data in JSON
 
 ```python
 import base64
-
-# Binary data (e.g., image file) - O(n)
-with open('image.png', 'rb') as f:
-    image_data = f.read()  # O(n)
-
-# Encode for transmission - O(n)
-encoded = base64.b64encode(image_data)  # O(n)
-
-# Send as text (email, JSON, etc.)
 import json
-payload = json.dumps({'image': encoded.decode('ascii')})
 
-# Decode on other end - O(n)
-decoded_image = base64.b64decode(encoded)  # O(n)
+payload = json.dumps({'content': base64.b64encode(b"\x00\x01\x02").decode('ascii')})  # O(n)
+
+content = base64.b64decode(json.loads(payload)['content'])  # O(n)
+assert content == b"\x00\x01\x02"
 ```
 
 ### Data URLs
@@ -158,264 +194,36 @@ decoded_image = base64.b64decode(encoded)  # O(n)
 ```python
 import base64
 
-# Create data URL - O(n)
-with open('logo.png', 'rb') as f:
-    image_data = f.read()  # O(n)
+image = b"\x89PNG\r\n\x1a\n"
+data_url = "data:image/png;base64," + base64.b64encode(image).decode('ascii')  # O(n)
 
-encoded = base64.b64encode(image_data)  # O(n)
-data_url = f"data:image/png;base64,{encoded.decode('ascii')}"
-
-# Use in HTML
-html = f'<img src="{data_url}">'
-
-# Decode from data URL - O(n)
-base64_part = data_url.split(',')[1]
-decoded = base64.b64decode(base64_part)  # O(n)
+header, _, body = data_url.partition(',')
+assert header == 'data:image/png;base64'
+assert base64.b64decode(body) == image  # O(n)
 ```
 
-### JSON Serialization
-
-```python
-import base64
-import json
-
-# Binary data to JSON - O(n)
-binary_data = b"Some binary content"
-encoded = base64.b64encode(binary_data)  # O(n)
-
-# In JSON - O(n)
-data = {
-    'content': encoded.decode('ascii'),
-    'type': 'binary'
-}
-json_str = json.dumps(data)  # O(n)
-
-# From JSON - O(n)
-loaded = json.loads(json_str)
-decoded = base64.b64decode(loaded['content'])  # O(n)
-```
-
-## Streaming/Large Data
-
-### Processing Large Files
-
-```python
-import base64
-
-def encode_large_file(input_path, output_path):
-    """Encode file in chunks - O(n)"""
-    with open(input_path, 'rb') as infile:
-        with open(output_path, 'wb') as outfile:
-            # Process in chunks - O(n) total
-            while True:
-                chunk = infile.read(1024 * 1024)  # 1MB
-                if not chunk:
-                    break
-                
-                # Encode chunk - O(chunk_size)
-                encoded = base64.b64encode(chunk)  # O(1MB)
-                outfile.write(encoded)
-                outfile.write(b'\n')  # Newline for readability
-
-# Usage - O(n) where n = file size
-encode_large_file('large.bin', 'large.b64')
-```
-
-### Memory-Efficient Decoding
-
-```python
-import base64
-
-def decode_large_file(input_path, output_path):
-    """Decode file in chunks - O(n)"""
-    with open(input_path, 'rb') as infile:
-        with open(output_path, 'wb') as outfile:
-            # Process in chunks - O(n) total
-            for line in infile:
-                # Decode chunk - O(line_size)
-                decoded = base64.b64decode(line)  # O(line_size)
-                outfile.write(decoded)
-
-# Usage - O(n)
-decode_large_file('large.b64', 'large.bin')
-```
-
-
-## Performance Considerations
-
-### Encoding Size
-
-```python
-import base64
-
-# Base64 expands size by ~33%
-original = b"x" * 100
-encoded = base64.b64encode(original)
-
-print(len(original))  # 100
-print(len(encoded))   # ~137 (padded to multiple of 4)
-print(len(encoded) / len(original))  # ~1.37
-
-# Base32 expands size by ~60%
-encoded32 = base64.b32encode(original)
-print(len(encoded32))  # ~165
-
-# Base16 (hex) doubles size
-encoded16 = base64.b16encode(original)
-print(len(encoded16))  # ~200
-```
-
-### Encoding vs Decoding Speed
-
-```python
-import base64
-import time
-
-data = b"x" * (1024 * 1024)  # 1MB
-
-# Encoding
-start = time.time()
-encoded = base64.b64encode(data)  # O(n)
-encode_time = time.time() - start
-
-# Decoding
-start = time.time()
-decoded = base64.b64decode(encoded)  # O(n)
-decode_time = time.time() - start
-
-print(f"Encode: {encode_time:.4f}s")
-print(f"Decode: {decode_time:.4f}s")
-# Usually similar, both O(n)
-```
-
-## Use Cases
-
-### Token/Session Encoding
-
-```python
-import base64
-import json
-
-# Create token - O(n)
-token_data = {
-    'user_id': 123,
-    'expires': 1640995200,
-    'scopes': ['read', 'write']
-}
-
-json_str = json.dumps(token_data)  # O(n)
-token = base64.urlsafe_b64encode(json_str.encode())  # O(n)
-
-# Send token
-send_header(f"Authorization: Bearer {token.decode()}")
-
-# Receive and decode - O(n)
-decoded_json = base64.urlsafe_b64decode(token).decode()
-decoded_data = json.loads(decoded_json)  # O(n)
-```
-
-### File Attachments
-
-```python
-import base64
-
-# Email attachment - O(n)
-with open('document.pdf', 'rb') as f:
-    pdf_data = f.read()  # O(n)
-
-# Encode for email - O(n)
-encoded = base64.b64encode(pdf_data)  # O(n)
-
-# Add to email
-email_body = f"""
-Content-Disposition: attachment; filename="document.pdf"
-Content-Transfer-Encoding: base64
-
-{encoded.decode('ascii')}
-"""
-
-# On receive side - O(n)
-attachment_data = base64.b64decode(encoded)
-```
-
-## Avoiding Common Issues
-
-```python
-import base64
-
-# Issue 1: Whitespace in encoded data
-bad_encoded = b"SGVs bG8="  # Has space
-try:
-    decoded = base64.b64decode(bad_encoded)  # Might fail
-except:
-    # Solution: strip whitespace
-    decoded = base64.b64decode(bad_encoded.replace(b' ', b''))
-
-# Issue 2: Missing padding
-bad_encoded = b"SGVsbG8"  # Missing =
-try:
-    decoded = base64.b64decode(bad_encoded)  # Might work or fail
-except:
-    # Solution: add padding
-    padding = 4 - (len(bad_encoded) % 4)
-    if padding != 4:
-        bad_encoded += b'=' * padding
-    decoded = base64.b64decode(bad_encoded)
-
-# Issue 3: Unicode vs bytes
-text = "SGVsbG8="
-decoded = base64.b64decode(text.encode())  # Convert to bytes first
-```
-
-## Comparison: When to Use
-
-```python
-import base64
-import binascii
-
-data = b"Hello"
-
-# Base64 - compact, readable, safe for text - O(n)
-b64 = base64.b64encode(data)  # Most common
-
-# Base32 - even safer, less compact - O(n)
-b32 = base64.b32encode(data)
-
-# Base16 (hex) - safest but large - O(n)
-b16 = base64.b16encode(data)
-
-# Hex string (similar to base16) - O(n)
-hex_str = binascii.hexlify(data)
-
-# Use base64 most of the time
-```
-
-## Version Notes
-
-- **Python 2.x**: base64 module available
-- **Python 3.x**: Consistent encoding/decoding
-- **All versions**: O(n) complexity for n bytes
-
-## Related Modules
-
-- **[binascii](binascii.md)** - Hex and other encodings
-- **[urllib.parse](urllib.md)** - URL quoting (similar purpose)
-- **[hashlib](hashlib.md)** - Binary data hashing
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use base64 for binary data in text protocols
-- Use urlsafe variant for URLs/file names
-- Process large files in chunks
-- Remove whitespace when decoding untrusted input
-- Document encoding used in serialized data
+- Use Base64 or Base16 for bulk data: they run in C, while the other encodings loop in Python
+- Stream large files with `encode()` and `decode()` when 76-character lines are acceptable output
+- Pass `validate=True` when stray characters in the input should be an error
+- Use the URL-safe alphabet for data that goes into URLs or file names
 
 ❌ **Avoid**:
 
-- Using base64 for encryption (it's just encoding, not secure)
-- Assuming base64 is one-way (it's trivially reversible)
-- Forgetting to handle padding in edge cases
-- Mixing encoding/decoding (encode with b64encode, decode with b64decode)
-- Using base64 when JSON serialization is appropriate
+- Base32 or the 85 family for large payloads unless the format requires them
+- Encoding a large file in fixed-size chunks with `b64encode()` and joining the pieces: a chunk
+  whose length is not a multiple of 3 puts padding in the middle
+- Treating Base64 as protection: anyone can decode it
+
+## Version Notes
+
+- **Python 3.13+**: Added `z85encode()` and `z85decode()`
+
+## Related Modules
+
+- **[binascii](binascii.md)** - The C conversions under Base64 and Base16
+- **[codecs](codecs.md)** - `codecs.encode(data, 'base64')` uses `encodebytes()`
+- **[json](json.md)** - Carrying encoded binary data in text
