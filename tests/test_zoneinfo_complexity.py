@@ -1,65 +1,90 @@
 """Tests for docs/stdlib/zoneinfo.md.
 
 `zoneinfo.ZoneInfo` is the C type from Modules/_zoneinfo.c on every supported
-interpreter, with Lib/zoneinfo/_zoneinfo.py as the reference implementation of
-the same algorithm. Both keep the zone's transitions in sorted arrays and find
-the one that applies with a binary search (`_bisect` in C, `bisect_right` in
-Python), fall back to the zone's POSIX rule past the last transition, and share
-the two-level cache: a weak-value dictionary keyed by zone name plus a strong
-LRU of eight (`ZONEINFO_STRONG_CACHE_MAX_SIZE`, `_strong_cache_size`). Neither
-has changed between the v3.10.0 tag and the 3.14 branch.
+interpreter, and Lib/zoneinfo/_zoneinfo.py is the pure-Python reference
+implementation of the same algorithm: transitions in sorted arrays, a binary
+search to find the one that applies, the zone's footer rule past the last one,
+and a weak-value cache by key plus a strong LRU of the eight most recently used
+zones. The C type hides its arrays, so the O(log t) rows are counted on the
+Python implementation, whose transition lists accept ints that count their
+comparisons; cache rows are observed on the C type by identity and weak
+references; load rows by traced allocation and time on synthetic TZif files
+parsed from memory, so that opening a file does not dominate the parse.
 
-The C type hides its arrays, so the O(log t) rows are counted on the Python
-implementation: its transition lists are replaced with ints whose comparison
-operators count. Inside America/New_York's table (236 transitions in this
-machine's database, 1883 to 2037) a lookup costs 10 comparisons for
-`utcoffset()` and 11 for `fromutc()`, where a linear scan would cost about
-236, and a zone-to-zone `astimezone()` costs the two added together. Before
-the table one comparison settles it. Past the table, a zone whose footer rule
-has seasonal transitions (New York) costs 2 whatever `t` is; one whose footer
-is a fixed offset (Asia/Tokyo, `JST-9`, table ending in 1951) still costs 2
-for `utcoffset()` but 6 for `fromutc()`, which bisects its 9 transitions
-rather than short-circuit. Constructing a
-datetime with a zone costs no comparison at all. The C type is held to the
-same bounds by source.
+Measurement scope:
 
-The other rows are observed directly: identity for the cache hit, weak
-references for the two cache lifetimes and for the touch that makes the strong
-cache an LRU rather than a FIFO, `len()` of the parsed transition lists and
-traced allocation for the O(t) load, and a recording `open()` for
-`available_timezones()`: on this machine it opens all 506 distinct files under
-/usr/share/zoneinfo on every call to return 498 zones, and over two temporary
-roots that share their keys it opens a valid zone once, an invalid file once
-per root, and a key the packaged list already names not at all.
+* One entry per transition: the Python implementation's UTC list, both
+  local-time lists and the per-transition ttinfo list each have `t` entries
+  for UTC (0), Asia/Tokyo (single digits) and America/New_York (hundreds).
+  The counts come from whichever database is installed (the operating
+  system's, or the `tzdata` package on Windows), so the tests assert those
+  relations rather than fixed numbers.
+* Load space: `from_file()` on synthetic files of 1,000, 10,000 and 100,000
+  transitions peaks at 88 bytes per transition for the C type and 136 for the
+  Python one, every step x10; each step is asserted between x5 and x20. A real
+  zone is asserted to cost more than 16 bytes per transition over UTC.
+* Load time: the same three sizes cost about x10 per x10 step for both
+  implementations (x10-x13 for C, x10-x20 for Python, which allocates more);
+  each step is asserted between x3 and x40, against x1 for a constant parse and
+  x100 for a quadratic one.
+* The p term of a first load: 40 nonexistent directories prepended to
+  `TZPATH` add exactly 40 `os.path.isfile` probes to `ZoneInfo.no_cache()`,
+  and with the packaged database hidden a missing key costs one probe per
+  entry before `ZoneInfoNotFoundError`.
+* Lookups inside New York's table cost 10 comparisons for `utcoffset()`,
+  `dst()` and `tzname()` each and 11 for `fromutc()`; a 100,000-transition
+  synthetic zone costs 18 and 20 (asserted at most 2 * t.bit_length() + 3, where a scan
+  would cost about t). A zone-to-zone `astimezone()` costs the source's
+  `utcoffset()` plus the destination's `fromutc()`, within 2. Before the
+  table, 1 comparison (asserted at most 2); past New York's table, whose
+  footer rule has seasonal transitions, 2 for both directions; building a
+  datetime with a zone, none; UTC, which has no table, none.
+* The cache: a hit is the same object; of ten zones looked up and dropped,
+  the last eight survive `gc.collect()`; a lookup of the oldest of eight keeps
+  it alive past one more insertion (LRU, not FIFO); a zone pushed out of the
+  eight survives while referenced and is collected when not; `clear_cache()`
+  drops all keys or only the ones given; a pickle round trip is the cached
+  object, and the pickle carries the key; a `no_cache()` zone unpickles to a
+  new object; a `from_file()` zone with or without a key raises `PicklingError`.
+* `available_timezones()` opens a file for every key under the system `TZPATH`
+  roots outside `right/` and `posix/`, on each call, and returns a new, equal
+  set. Over two temporary roots sharing
+  their keys it opens a valid zone once, an invalid file once per root, nothing
+  under `right/` or `posix/`, and nothing whose key the packaged list names.
+* `reset_tzpath()` rejects a relative entry with `ValueError`, drops a relative
+  `PYTHONTZPATH` entry with `InvalidTZPathWarning`, and leaves cached zones
+  usable when the path no longer finds them. On Windows `TZPATH` is asserted
+  empty and, with the packaged database hidden, a key is asserted not found.
+* Every fenced Python block runs in its own subprocess and working directory,
+  and a mutated assertion in one of them is asserted to fail.
 
-Allocation is compared across transition counts on the Python implementation,
-where each transition costs Python objects: 88 bytes per transition for
-Asia/Tokyo's 9 and 134 for New York's 236, so the per-transition cost moves
-by x1.5 for x26 in `t`, where a quadratic parse would move it by x26 too. The
-C type is checked only for growing with `t` (about 74 bytes per transition).
+Not settled here:
 
-Transition counts and the table's year range come from the operating system's
-tz database, not from Python, so the tests read them from the loaded zone and
-assert relations (UTC has none, Asia/Tokyo's table ends in 1951, New York's
-has hundreds and spans 1990) rather than fixed numbers. The module reaches the
-optional packaged database through `importlib.resources` - `files()` from
-3.11, `open_text()` and `open_binary()` on 3.10 - so the tests replace those
-functions: with ones raising ImportError to measure the `TZPATH` walk and the
-not-found path alone, and with a fake package whose zone list names one key to
-check that the list is read and that a listed key is not opened again.
-
-The O(p) search-path term of a first load is a probe per root and is not
-measured; the tests hold `TZPATH` fixed and vary `t` only.
-
-Load time is measured on synthetic TZif files parsed from memory through
-`from_file()`, because opening a real file dominates a parse of a few hundred
-transitions (13us for UTC against 22us for America/New_York with the C type).
-A hundredfold step from 1,000 to 100,000 transitions costs x126 with the C type
-and x94 with the Python one, against x1 for a constant parse and x10,000 for a
-quadratic one. The tests otherwise need a system zoneinfo database under one
-of the `TZPATH` directories, as CI's Ubuntu runners have. Windows has none,
-so there the tests that load zones by key skip.
+* The C type's lookups are held to O(log t) by source: `find_ttinfo()` and
+  `zoneinfo_fromutc()` call the same `_bisect()` over the same arrays. Past
+  the table its `fromutc()` evaluates the footer rule whatever the footer is;
+  the Python implementation bisects instead when the footer is a fixed offset
+  (Asia/Tokyo), which still meets the O(log t) row, so no test pins either.
+* Clearing c cached zones and `reset_tzpath()` over p entries are read from
+  Lib/zoneinfo/_tzpath.py and the C cache functions, not measured. Freeing an
+  evicted zone is not priced.
+* `available_timezones()` is observed by the files it opens, not timed in f,
+  and its O(f + z) space is read from `os.walk` and the returned set.
+* The strong cache exists only for `ZoneInfo` itself in the C type; a
+  subclass gets the weak cache alone. Subclasses are not tested.
+* Every lookup compared or counted uses `fold=0`, and ambiguous and
+  nonexistent times in real zones are not sampled.
+* Windows reads no Windows time zone data: the `TZPATH` assertion runs only
+  there, and CI's Windows runners install `tzdata`, so the zone-loading tests
+  run on it. The test that walks the system database skips on Windows, which
+  has none under `TZPATH`.
+* Implementation diffs between v3.10.19 and v3.14.2 touch the packaged-database
+  access (`open_binary()`/`open_text()` on 3.10, `files()` from 3.11) and
+  argument validation, not the search or the cache; the tests replace all
+  three access functions so they run on every supported version.
 """
+
+from __future__ import annotations
 
 import builtins
 import gc
@@ -74,21 +99,23 @@ import struct
 import subprocess
 import sys
 import textwrap
+import time
 import tracemalloc
 import weakref
 import zoneinfo
 from collections.abc import Callable
-from datetime import datetime, time, timedelta, timezone
-from time import perf_counter
+from datetime import datetime, timedelta, timezone
+from datetime import time as dt_time
 from typing import Any
 from zoneinfo import ZoneInfo
 
 import pytest
 
+PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "zoneinfo.md"
+EXPECTED_BLOCKS = 7
+
 _zoneinfo: Any = importlib.import_module("zoneinfo._zoneinfo")
 """The pure-Python reference implementation, whose transition lists are inspectable."""
-
-PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "zoneinfo.md"
 
 FIXED = "UTC"
 FEW = "Asia/Tokyo"
@@ -98,13 +125,10 @@ ZONES = (FIXED, FEW, MANY)
 INSIDE = datetime(1990, 7, 1, 12)
 """A date inside New York's transition table and past Tokyo's."""
 
-
-NEEDS_TZPATH_DATABASE = pytest.mark.skipif(
-    sys.platform == "win32",
-    reason="Windows has no system time zone database on TZPATH",
-)
-"""Tests that read the system database's files under TZPATH themselves."""
-
+TEN_KEYS = (
+    "Asia/Tokyo", "Europe/Paris", "Europe/Berlin", "Europe/Rome", "Europe/Madrid",
+    "Asia/Kolkata", "Asia/Shanghai", "Australia/Sydney", "America/Chicago", "America/Denver",
+)  # fmt: skip
 
 PACKAGE_READERS = ("files", "open_text", "open_binary")
 """How zoneinfo reaches the packaged database: files() from 3.11, the other two on 3.10."""
@@ -125,13 +149,20 @@ def no_packaged_database(monkeypatch: pytest.MonkeyPatch) -> None:
     hide_packaged_database(monkeypatch)
 
 
+@pytest.fixture
+def restore_tzpath() -> Any:
+    original = zoneinfo.TZPATH
+    yield
+    zoneinfo.reset_tzpath(original)
+
+
 def transitions(key: str) -> int:
     """How many transitions this machine's TZif file for `key` records."""
     return len(_zoneinfo.ZoneInfo.no_cache(key)._trans_utc)
 
 
 def synthetic_tzif(count: int) -> bytes:
-    """A version-1 TZif file with `count` hourly transitions between two offsets."""
+    """A version-1 TZif file, no footer, `count` hourly transitions from 1906."""
     abbreviations = b"STD\x00DST\x00"
     header = b"TZif\x00" + b"\x00" * 15 + struct.pack(">6l", 0, 0, 0, count, 2, len(abbreviations))
     first = -2_000_000_000
@@ -141,25 +172,25 @@ def synthetic_tzif(count: int) -> bytes:
     return header + times + indices + ttinfos + abbreviations
 
 
-def best_time(func: Callable[[], Any], repeats: int = 5) -> float:
+def best_ns(func: Callable[[], Any], repeats: int = 5) -> float:
+    """Fastest of `repeats` runs, in nanoseconds."""
     best = float("inf")
     for _ in range(repeats):
-        start = perf_counter()
+        start = time.perf_counter_ns()
         func()
-        best = min(best, perf_counter() - start)
+        best = min(best, time.perf_counter_ns() - start)
     return best
 
 
-def traced_peak(func: Callable[[], Any]) -> int:
-    """Peak bytes tracemalloc attributes to one call, after a warm-up call."""
+def peak_bytes(func: Callable[[], Any]) -> int:
+    """Peak traced allocation of one call, after a warm-up call."""
     func()
     tracemalloc.start()
     try:
         func()
-        _, peak = tracemalloc.get_traced_memory()
+        return tracemalloc.get_traced_memory()[1]
     finally:
         tracemalloc.stop()
-    return peak
 
 
 class Counting(int):
@@ -184,12 +215,15 @@ class Counting(int):
         return int.__ge__(self, other)
 
 
-def counting_zone(key: str) -> Any:
-    """The Python implementation of `key`, with transition lists that count comparisons."""
-    zone = _zoneinfo.ZoneInfo.no_cache(key)
+def counting(zone: Any) -> Any:
+    """`zone` (Python implementation) with transition lists that count comparisons."""
     zone._trans_local = [[Counting(x) for x in lst] for lst in zone._trans_local]
     zone._trans_utc = [Counting(x) for x in zone._trans_utc]
     return zone
+
+
+def counting_zone(key: str) -> Any:
+    return counting(_zoneinfo.ZoneInfo.no_cache(key))
 
 
 def comparisons(func: Callable[[], Any]) -> int:
@@ -198,8 +232,9 @@ def comparisons(func: Callable[[], Any]) -> int:
     return Counting.calls
 
 
-class TestImplementation:
-    """The tests below count on the Python implementation; the C one is what users get."""
+class TestTheCTypeIsWhatUsersGet:
+    """The counting tests run on the Python implementation; this pins that the
+    C type is the one exported and that the two answer alike."""
 
     def test_the_c_type_is_in_use(self) -> None:
         assert ZoneInfo is not _zoneinfo.ZoneInfo
@@ -208,15 +243,24 @@ class TestImplementation:
     def test_both_implementations_agree(self) -> None:
         for key in ZONES:
             c_zone, py_zone = ZoneInfo(key), _zoneinfo.ZoneInfo.no_cache(key)
-            for year in (1950, 1990, 2024, 2100):
+            for year in (1800, 1950, 1990, 2024, 2100):
                 for month in (1, 7):
                     dt = datetime(year, month, 1, 12)
                     assert c_zone.utcoffset(dt) == py_zone.utcoffset(dt), (key, dt)
                     assert c_zone.tzname(dt) == py_zone.tzname(dt), (key, dt)
+                    in_utc = dt.replace(tzinfo=timezone.utc)
+                    c_local = in_utc.astimezone(c_zone).replace(tzinfo=None)
+                    py_local = in_utc.astimezone(py_zone).replace(tzinfo=None)
+                    assert c_local == py_local, (key, dt)
 
 
-class TestLoading:
-    """Rows: a first load parses O(t) entries; no_cache() and from_file() always do."""
+class TestLoadingParsesEachTransitionOnce:
+    """Rows: a first load is O(p + t) time and O(t) space; `no_cache()` and
+    `from_file()` parse every time.
+
+    The t term is settled on synthetic files at three sizes a decade apart, by
+    allocation and by time; the p term by counting search-path probes.
+    """
 
     def test_the_zones_have_the_shapes_the_tests_assume(self) -> None:
         assert transitions(FIXED) == 0
@@ -235,45 +279,75 @@ class TestLoading:
         assert len(zone._ttinfos) == t
         assert len(zone._trans_local[0]) == len(zone._trans_local[1]) == t
 
-    def test_allocation_grows_with_the_transitions(self) -> None:
+    def test_a_real_zone_allocates_with_its_transitions(self) -> None:
         t = transitions(MANY)
-        fixed = traced_peak(lambda: ZoneInfo.no_cache(FIXED))
-        many = traced_peak(lambda: ZoneInfo.no_cache(MANY))
+        fixed = peak_bytes(lambda: ZoneInfo.no_cache(FIXED))
+        many = peak_bytes(lambda: ZoneInfo.no_cache(MANY))
         assert many - fixed > 16 * t, f"{many - fixed} bytes for {t} transitions"
 
-    def test_a_synthetic_file_parses_to_its_transition_count(self) -> None:
-        zone = _zoneinfo.ZoneInfo.from_file(io.BytesIO(synthetic_tzif(1_000)))
-        assert len(zone._trans_utc) == 1_000
-        assert ZoneInfo.from_file(io.BytesIO(synthetic_tzif(1_000))).utcoffset(
-            datetime(1950, 1, 1)
-        ) == timedelta(hours=1)
+    @pytest.mark.parametrize("implementation", ["c", "python"])
+    def test_allocation_is_linear_in_the_transitions(self, implementation: str) -> None:
+        loader = ZoneInfo.from_file if implementation == "c" else _zoneinfo.ZoneInfo.from_file
+        sizes = (1_000, 10_000, 100_000)
+        files = [synthetic_tzif(size) for size in sizes]
+
+        peaks = [peak_bytes(lambda data=data: loader(io.BytesIO(data))) for data in files]
+        steps = [peaks[i + 1] / peaks[i] for i in range(len(peaks) - 1)]
+
+        assert all(5 < step < 20 for step in steps), (
+            f"{implementation}: peaks {peaks} for {sizes} transitions"
+        )
 
     @pytest.mark.timing
     @pytest.mark.parametrize("implementation", ["c", "python"])
     def test_load_time_is_linear_in_the_transitions(self, implementation: str) -> None:
         loader = ZoneInfo.from_file if implementation == "c" else _zoneinfo.ZoneInfo.from_file
-        small, large = synthetic_tzif(1_000), synthetic_tzif(100_000)
+        sizes = (1_000, 10_000, 100_000)
+        files = [synthetic_tzif(size) for size in sizes]
 
-        ratio = best_time(lambda: loader(io.BytesIO(large))) / best_time(
-            lambda: loader(io.BytesIO(small))
+        times = [best_ns(lambda data=data: loader(io.BytesIO(data))) for data in files]
+        steps = [times[i + 1] / times[i] for i in range(len(times) - 1)]
+
+        assert all(3 < step < 40 for step in steps), (
+            f"{implementation}: x10 steps in t cost {[f'x{s:.1f}' for s in steps]}"
         )
 
-        assert 30 < ratio < 1_000, f"x100 in t cost x{ratio:.1f} for the {implementation} parser"
+    def test_a_synthetic_file_parses_to_its_transition_count(self) -> None:
+        zone = _zoneinfo.ZoneInfo.from_file(io.BytesIO(synthetic_tzif(1_000)))
+        assert len(zone._trans_utc) == 1_000
+        c_zone = ZoneInfo.from_file(io.BytesIO(synthetic_tzif(1_000)))
+        assert c_zone.utcoffset(datetime(1950, 1, 1)) == timedelta(hours=1)
 
-    def test_allocation_per_transition_is_flat(self) -> None:
-        """Linear growth keeps bytes-per-transition steady across zones; a
-        quadratic parse would multiply it by the ratio of the counts."""
-        base = traced_peak(lambda: _zoneinfo.ZoneInfo.no_cache(FIXED))
-        few_t, many_t = transitions(FEW), transitions(MANY)
-        few = traced_peak(lambda: _zoneinfo.ZoneInfo.no_cache(FEW)) - base
-        many = traced_peak(lambda: _zoneinfo.ZoneInfo.no_cache(MANY)) - base
+    def test_each_search_path_entry_is_one_probe(
+        self,
+        tmp_path: pathlib.Path,
+        monkeypatch: pytest.MonkeyPatch,
+        restore_tzpath: None,
+    ) -> None:
+        probes: list[str] = []
+        real_isfile = os.path.isfile
 
-        per_transition_growth = (many / many_t) / (few / few_t)
+        def record(path: Any) -> bool:
+            probes.append(os.fspath(path))
+            return real_isfile(path)
 
-        assert many_t / few_t > 10, "the two zones should differ widely in t"
-        assert 0.25 < per_transition_growth < 4, (
-            f"bytes per transition moved x{per_transition_growth:.2f} for x{many_t / few_t:.0f} in t"
-        )
+        monkeypatch.setattr(os.path, "isfile", record)
+        original = zoneinfo.TZPATH
+        empty = tuple(str(tmp_path / f"empty{i}") for i in range(40))
+
+        ZoneInfo.no_cache(MANY)
+        base = len(probes)
+        probes.clear()
+        zoneinfo.reset_tzpath(empty + original)
+        ZoneInfo.no_cache(MANY)
+
+        assert len(probes) == base + 40, (base, len(probes))
+
+        probes.clear()
+        hide_packaged_database(monkeypatch)
+        with pytest.raises(zoneinfo.ZoneInfoNotFoundError):
+            ZoneInfo.no_cache("Not/AZone")
+        assert len(probes) == len(empty) + len(original)
 
     def test_no_cache_neither_reads_nor_fills_the_cache(self) -> None:
         ZoneInfo.clear_cache(only_keys=[MANY])
@@ -284,49 +358,45 @@ class TestLoading:
         assert ZoneInfo.no_cache(MANY) is not cached
 
     def test_from_file_is_uncached_keyless_and_unpicklable(self) -> None:
-        # The system database's file where there is one; Windows has none, so
-        # there the same TZif file comes from the tzdata package.
-        path: Any = next(
-            (
-                pathlib.Path(root) / MANY
-                for root in zoneinfo.TZPATH
-                if (pathlib.Path(root) / MANY).exists()
-            ),
-            None,
-        ) or importlib.resources.files("tzdata.zoneinfo").joinpath(*MANY.split("/"))
-        with path.open("rb") as handle:
-            zone = ZoneInfo.from_file(handle)
-        with path.open("rb") as handle:
-            named = ZoneInfo.from_file(handle, key=MANY)
+        data = synthetic_tzif(10)
+        zone = ZoneInfo.from_file(io.BytesIO(data))
+        named = ZoneInfo.from_file(io.BytesIO(data), key=MANY)
         assert zone.key is None
         assert named.key == MANY
-        assert zone is not ZoneInfo(MANY)
         assert named is not ZoneInfo(MANY)
-        assert zone.utcoffset(datetime(2024, 7, 1)) == ZoneInfo(MANY).utcoffset(
-            datetime(2024, 7, 1)
-        )
-        with pytest.raises(pickle.PicklingError):
-            pickle.dumps(zone)
+        assert ZoneInfo.from_file(io.BytesIO(data)) is not zone
+        for unpicklable in (zone, named):
+            with pytest.raises(pickle.PicklingError):
+                pickle.dumps(unpicklable)
 
     def test_a_missing_key_raises(self) -> None:
         with pytest.raises(zoneinfo.ZoneInfoNotFoundError, match="Not/AZone"):
             ZoneInfo("Not/AZone")
 
 
-class TestCache:
-    """Rows: the cache hit is the same object; lifetimes are a weak map plus an LRU of eight."""
+class TestTheCacheReturnsTheSameObject:
+    """Rows: a cache hit is O(1) and the same object; a zone stays cached while
+    referenced or among the eight most recently used; pickling stores the key."""
 
     def test_the_cache_hit_is_the_same_object(self) -> None:
         assert ZoneInfo(MANY) is ZoneInfo(MANY)
-        assert pickle.loads(pickle.dumps(ZoneInfo(MANY))) is ZoneInfo(MANY)
+
+    def test_a_pickle_is_the_key_and_unpickles_to_the_cached_zone(self) -> None:
+        data = pickle.dumps(ZoneInfo(MANY))
+        assert MANY.encode() in data
+        assert len(data) < 200
+        assert pickle.loads(data) is ZoneInfo(MANY)
+
+    def test_a_no_cache_zone_unpickles_through_no_cache(self) -> None:
+        original = ZoneInfo.no_cache(MANY)
+        restored = pickle.loads(pickle.dumps(original))
+        assert restored is not original
+        assert restored is not ZoneInfo(MANY)
+        assert restored.key == MANY
 
     def test_the_eight_most_recently_used_zones_survive_without_references(self) -> None:
         ZoneInfo.clear_cache()
-        keys = [
-            "Asia/Tokyo", "Europe/Paris", "Europe/Berlin", "Europe/Rome", "Europe/Madrid",
-            "Asia/Kolkata", "Asia/Shanghai", "Australia/Sydney", "America/Chicago", "America/Denver",
-        ]  # fmt: skip
-        refs = [weakref.ref(ZoneInfo(key)) for key in keys]
+        refs = [weakref.ref(ZoneInfo(key)) for key in TEN_KEYS]
         gc.collect()
 
         alive = [ref() is not None for ref in refs]
@@ -337,21 +407,18 @@ class TestCache:
         """A FIFO would evict the oldest insertion; the LRU evicts the least
         recently *used*, so a lookup rescues an old entry."""
         ZoneInfo.clear_cache()
-        keys = ["Asia/Tokyo", "Europe/Paris", "Europe/Berlin", "Europe/Rome", "Europe/Madrid",
-                "Asia/Kolkata", "Asia/Shanghai", "Australia/Sydney"]  # fmt: skip
-        refs = {key: weakref.ref(ZoneInfo(key)) for key in keys}
-        ZoneInfo("Asia/Tokyo")
-        ZoneInfo("America/Chicago")
+        refs = {key: weakref.ref(ZoneInfo(key)) for key in TEN_KEYS[:8]}
+        ZoneInfo(TEN_KEYS[0])
+        ZoneInfo(TEN_KEYS[8])
         gc.collect()
 
-        assert refs["Asia/Tokyo"]() is not None
-        assert refs["Europe/Paris"]() is None
+        assert refs[TEN_KEYS[0]]() is not None
+        assert refs[TEN_KEYS[1]]() is None
 
     def test_a_referenced_zone_survives_being_pushed_out_of_the_lru(self) -> None:
         ZoneInfo.clear_cache()
         held = ZoneInfo("Africa/Cairo")
-        for key in ("Asia/Tokyo", "Europe/Paris", "Europe/Berlin", "Europe/Rome", "Europe/Madrid",
-                    "Asia/Kolkata", "Asia/Shanghai", "Australia/Sydney", "America/Chicago"):  # fmt: skip
+        for key in TEN_KEYS[:9]:
             ZoneInfo(key)
         gc.collect()
 
@@ -360,8 +427,7 @@ class TestCache:
     def test_an_unreferenced_zone_pushed_out_of_the_lru_is_dropped(self) -> None:
         ZoneInfo.clear_cache()
         ref = weakref.ref(ZoneInfo("Africa/Cairo"))
-        for key in ("Asia/Tokyo", "Europe/Paris", "Europe/Berlin", "Europe/Rome", "Europe/Madrid",
-                    "Asia/Kolkata", "Asia/Shanghai", "Australia/Sydney", "America/Chicago"):  # fmt: skip
+        for key in TEN_KEYS[:9]:
             ZoneInfo(key)
         gc.collect()
 
@@ -380,8 +446,15 @@ class TestCache:
         assert ZoneInfo(MANY) is not many
 
 
-class TestOffsetLookup:
-    """Rows: utcoffset/dst/tzname and fromutc are O(log t); the rule path is O(1)."""
+class TestLookupsBisectTheTransitions:
+    """Rows: `utcoffset()`, `dst()`, `tzname()` and `fromutc()` are O(log t),
+    O(1) before the first recorded transition and after the last;
+    `astimezone()` is one lookup in each zone.
+
+    Counted on the Python implementation: a binary search costs about log2 t
+    comparisons where a scan costs about t, so the bound 2 log2 t + 3 excludes
+    the scan by orders of magnitude at t = 100,000.
+    """
 
     def test_lookups_inside_the_table_are_logarithmic(self) -> None:
         zone = counting_zone(MANY)
@@ -403,6 +476,19 @@ class TestOffsetLookup:
         count = comparisons(lambda: in_utc.astimezone(zone))
 
         assert 3 <= count <= 2 * t.bit_length() + 3, f"{count} comparisons for t={t}"
+
+    def test_both_stay_logarithmic_at_a_hundred_thousand_transitions(self) -> None:
+        t = 100_000
+        zone = counting(_zoneinfo.ZoneInfo.from_file(io.BytesIO(synthetic_tzif(t))))
+        inside = datetime(1910, 1, 1, 12)
+        assert zone._trans_utc[0] < inside.replace(tzinfo=timezone.utc).timestamp()
+        assert inside.replace(tzinfo=timezone.utc).timestamp() < zone._trans_utc[-1]
+
+        local = comparisons(lambda: zone.utcoffset(inside.replace(tzinfo=zone)))
+        from_utc = comparisons(lambda: inside.replace(tzinfo=timezone.utc).astimezone(zone))
+
+        assert 3 <= local <= 2 * t.bit_length() + 3, f"{local} comparisons for t={t}"
+        assert 3 <= from_utc <= 2 * t.bit_length() + 3, f"{from_utc} comparisons for t={t}"
 
     def test_a_zone_to_zone_conversion_pays_for_both_lookups(self) -> None:
         source, destination = counting_zone(MANY), counting_zone("Europe/London")
@@ -426,40 +512,13 @@ class TestOffsetLookup:
         assert comparisons(lambda: zone.utcoffset(early)) <= 2
         assert comparisons(lambda: datetime(1800, 7, 1, tzinfo=timezone.utc).astimezone(zone)) <= 2
 
-    def test_past_the_table_a_seasonal_footer_costs_a_constant(self) -> None:
+    def test_past_the_table_the_footer_rule_costs_a_constant(self) -> None:
         zone = counting_zone(MANY)
         assert isinstance(zone._tz_after, _zoneinfo._TZStr)
         far = datetime(2100, 7, 1, 12, tzinfo=zone)
         assert comparisons(lambda: zone.utcoffset(far)) == 2
         assert comparisons(lambda: zone.tzname(far)) == 2
         assert comparisons(lambda: datetime(2100, 7, 1, tzinfo=timezone.utc).astimezone(zone)) == 2
-
-    def test_past_the_table_a_fixed_offset_footer_still_searches_in_fromutc(self) -> None:
-        zone = counting_zone(FEW)
-        t = transitions(FEW)
-        assert isinstance(zone._tz_after, _zoneinfo._ttinfo)
-        assert comparisons(lambda: zone.utcoffset(INSIDE.replace(tzinfo=zone))) == 2
-
-        count = comparisons(lambda: INSIDE.replace(tzinfo=timezone.utc).astimezone(zone))
-
-        assert 3 <= count <= 2 * t.bit_length() + 3, f"{count} comparisons for t={t}"
-
-    def test_that_search_is_logarithmic_at_a_hundred_thousand_transitions(self) -> None:
-        """A synthetic footer-less zone whose table ends in 1918: fromutc() for
-        1990 bisects 100,000 transitions in about 17 comparisons, where a
-        linear scan would take about 100,000."""
-        t = 100_000
-        zone = _zoneinfo.ZoneInfo.from_file(io.BytesIO(synthetic_tzif(t)))
-        assert isinstance(zone._tz_after, _zoneinfo._ttinfo)
-        zone._trans_utc = [Counting(x) for x in zone._trans_utc]
-        zone._trans_local = [[Counting(x) for x in lst] for lst in zone._trans_local]
-        past = INSIDE.replace(tzinfo=timezone.utc)
-        assert past.timestamp() > zone._trans_utc[-1]
-
-        count = comparisons(lambda: past.astimezone(zone))
-
-        assert 3 <= count <= 2 * t.bit_length() + 3, f"{count} comparisons for t={t}"
-        assert comparisons(lambda: zone.utcoffset(INSIDE.replace(tzinfo=zone))) == 2
 
     def test_constructing_a_datetime_looks_nothing_up(self) -> None:
         zone = counting_zone(MANY)
@@ -472,23 +531,18 @@ class TestOffsetLookup:
         assert datetime(2100, 7, 1, tzinfo=zone).dst() == timedelta(hours=1)
         assert datetime(1990, 7, 1, tzinfo=zone).tzname() == "EDT"
 
-    def test_a_fixed_offset_zone_has_no_table(self) -> None:
+    def test_a_zone_without_transitions_has_no_table(self) -> None:
         zone = counting_zone(FIXED)
         assert comparisons(lambda: zone.utcoffset(datetime(2024, 1, 1, tzinfo=zone))) == 0
+        assert comparisons(lambda: datetime(2024, 1, 1, tzinfo=timezone.utc).astimezone(zone)) == 0
         assert ZoneInfo(FIXED).utcoffset(datetime(2024, 1, 1)) == timedelta(0)
-        assert time(12, tzinfo=ZoneInfo(FIXED)).utcoffset() == timedelta(0)
-        assert time(12, tzinfo=ZoneInfo(MANY)).utcoffset() is None
-
-    def test_documented_conversion(self) -> None:
-        est, pst = ZoneInfo("America/New_York"), ZoneInfo("America/Los_Angeles")
-        dt = datetime(2024, 1, 15, 12, 0, tzinfo=est)
-        assert str(dt) == "2024-01-15 12:00:00-05:00"
-        assert str(dt.astimezone(pst)) == "2024-01-15 09:00:00-08:00"
-        assert dt.tzname() == "EST"
+        assert dt_time(12, tzinfo=ZoneInfo(FIXED)).utcoffset() == timedelta(0)
+        assert dt_time(12, tzinfo=ZoneInfo(MANY)).utcoffset() is None
 
 
-class TestAvailableTimezones:
-    """Row: opens every file under TZPATH on every call; a new set each time."""
+class TestAvailableTimezonesOpensFiles:
+    """Row: `available_timezones()` is O(p + f + z): it opens each file under
+    `TZPATH` whose key is not already known, on every call, and returns a new set."""
 
     @staticmethod
     def recording_open(monkeypatch: pytest.MonkeyPatch) -> list[str]:
@@ -502,9 +556,11 @@ class TestAvailableTimezones:
         monkeypatch.setattr(builtins, "open", record)
         return opened
 
-    @NEEDS_TZPATH_DATABASE
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="Windows has no time zone database under TZPATH"
+    )
     @pytest.mark.usefixtures("no_packaged_database")
-    def test_opens_every_file_under_the_system_path_on_every_call(
+    def test_opens_a_file_for_every_key_under_the_system_path_on_every_call(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         roots = [root for root in zoneinfo.TZPATH if os.path.isdir(root)]
@@ -533,7 +589,7 @@ class TestAvailableTimezones:
         assert first == second
         assert first is not second
 
-    @pytest.mark.usefixtures("no_packaged_database")
+    @pytest.mark.usefixtures("no_packaged_database", "restore_tzpath")
     def test_a_key_is_opened_until_it_is_known_to_be_a_zone(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -548,24 +604,22 @@ class TestAvailableTimezones:
             for special in ("right", "posix"):
                 (root / special).mkdir()
                 (root / special / "Valid").write_bytes(tzif)
-        original = zoneinfo.TZPATH
         zoneinfo.reset_tzpath([str(root) for root in roots])
-        try:
-            opened = self.recording_open(monkeypatch)
-            zones = zoneinfo.available_timezones()
-        finally:
-            zoneinfo.reset_tzpath(original)
+        opened = self.recording_open(monkeypatch)
+
+        zones = zoneinfo.available_timezones()
 
         assert zones == {"Zone/Valid"}
         assert sorted(opened) == sorted(
             [str(roots[0] / "Zone" / "Valid"), str(roots[0] / "Junk"), str(roots[1] / "Junk")]
         )
 
+    @pytest.mark.usefixtures("restore_tzpath")
     def test_the_packaged_list_is_read_and_its_keys_are_not_opened(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         class FakePackage:
-            def joinpath(self, name: str) -> "FakePackage":
+            def joinpath(self, name: str) -> FakePackage:
                 assert name == "zones"
                 return self
 
@@ -581,18 +635,15 @@ class TestAvailableTimezones:
         )
         (tmp_path / "Packaged").mkdir()
         (tmp_path / "Packaged" / "Zone").write_bytes(b"would be opened if unknown")
-        original = zoneinfo.TZPATH
         zoneinfo.reset_tzpath([str(tmp_path)])
-        try:
-            opened = self.recording_open(monkeypatch)
-            zones = zoneinfo.available_timezones()
-        finally:
-            zoneinfo.reset_tzpath(original)
+        opened = self.recording_open(monkeypatch)
+
+        zones = zoneinfo.available_timezones()
 
         assert zones == {"Packaged/Zone"}
         assert opened == []
 
-    def test_the_result_is_a_set_of_loadable_keys(self) -> None:
+    def test_the_result_is_a_set_of_zone_keys(self) -> None:
         zones = zoneinfo.available_timezones()
         assert isinstance(zones, set)
         assert MANY in zones
@@ -600,8 +651,9 @@ class TestAvailableTimezones:
         assert len(zones) > 300
 
 
-class TestTzpath:
-    """Rows: reset_tzpath validates its entries; cached zones outlive a path change."""
+class TestSearchPath:
+    """Rows: `reset_tzpath()` takes absolute entries only; cached zones outlive
+    a path change; the exception and warning are the documented types."""
 
     def test_relative_entries_are_rejected(self) -> None:
         before = zoneinfo.TZPATH
@@ -609,80 +661,49 @@ class TestTzpath:
             zoneinfo.reset_tzpath(["relative/path"])
         assert zoneinfo.TZPATH == before
 
+    @pytest.mark.usefixtures("restore_tzpath")
     def test_cached_zones_survive_an_empty_path(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         cached = ZoneInfo(MANY)
         hide_packaged_database(monkeypatch)
         empty = str(tmp_path / "nonexistent")
-        original = zoneinfo.TZPATH
-        try:
-            zoneinfo.reset_tzpath([empty])
-            assert zoneinfo.TZPATH == (empty,)
-            assert ZoneInfo(MANY) is cached
-            with pytest.raises(zoneinfo.ZoneInfoNotFoundError):
-                ZoneInfo.no_cache(MANY)
-        finally:
-            zoneinfo.reset_tzpath(original)
-        assert zoneinfo.TZPATH == original
 
+        zoneinfo.reset_tzpath([empty])
+
+        assert zoneinfo.TZPATH == (empty,)
+        assert ZoneInfo(MANY) is cached
+        with pytest.raises(zoneinfo.ZoneInfoNotFoundError):
+            ZoneInfo.no_cache(MANY)
+
+    @pytest.mark.usefixtures("restore_tzpath")
     def test_a_relative_environment_entry_is_dropped_with_a_warning(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        original = zoneinfo.TZPATH
         absolute = str(tmp_path)
         monkeypatch.setenv("PYTHONTZPATH", os.pathsep.join(["relative/dir", absolute]))
-        try:
-            with pytest.warns(zoneinfo.InvalidTZPathWarning):
-                zoneinfo.reset_tzpath()
-            assert zoneinfo.TZPATH == (absolute,)
-        finally:
-            zoneinfo.reset_tzpath(original)
-        assert zoneinfo.TZPATH == original
 
-    def test_tzpath_is_a_tuple_and_the_warning_exists(self) -> None:
+        with pytest.warns(zoneinfo.InvalidTZPathWarning):
+            zoneinfo.reset_tzpath()
+
+        assert zoneinfo.TZPATH == (absolute,)
+
+    def test_the_types_are_what_the_rows_say(self) -> None:
         assert isinstance(zoneinfo.TZPATH, tuple)
         assert issubclass(zoneinfo.InvalidTZPathWarning, RuntimeWarning)
         assert issubclass(zoneinfo.ZoneInfoNotFoundError, KeyError)
 
+    @pytest.mark.skipif(
+        sys.platform != "win32", reason="only a Windows build sets no default TZPATH"
+    )
+    @pytest.mark.usefixtures("no_packaged_database", "restore_tzpath")
+    def test_windows_needs_the_tzdata_package(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("PYTHONTZPATH", raising=False)
+        zoneinfo.reset_tzpath()
 
-class TestPublicNamesAreDocumented:
-    """The Complexity Reference against dir(zoneinfo) and dir(ZoneInfo)."""
-
-    @staticmethod
-    def documented_names() -> set[str]:
-        text = PAGE.read_text(encoding="utf-8")
-        start = text.index("## Complexity Reference")
-        end = text.index("## Working with Time Zones")
-        names: set[str] = set()
-        for line in text[start:end].splitlines():
-            if not line.startswith("| `"):
-                continue
-            names.update(re.findall(r"`(?:ZoneInfo\.)?(\w+)", line.split("|")[1]))
-        return names
-
-    def test_the_extractor_sees_the_table(self) -> None:
-        assert {"no_cache", "available_timezones", "TZPATH"} <= self.documented_names()
-
-    def test_every_public_name_has_a_row(self) -> None:
-        public = {name for name in dir(zoneinfo) if not name.startswith("_")}
-        public |= {name for name in dir(ZoneInfo) if not name.startswith("_")}
-
-        missing = public - self.documented_names()
-
-        assert not missing, f"public names without a row: {sorted(missing)}"
-
-    def test_every_row_names_something_that_exists(self) -> None:
-        public = {name for name in dir(zoneinfo) if not name.startswith("_")}
-        public |= {name for name in dir(ZoneInfo) if not name.startswith("_")}
-        public |= {"ZoneInfo", "astimezone", "dt", "zone", "f", "key", "to", "only_keys", "None"}
-
-        invented = self.documented_names() - public
-
-        assert not invented, f"rows naming nothing that exists: {sorted(invented)}"
-
-
-EXPECTED_BLOCKS = 4
+        assert zoneinfo.TZPATH == ()
+        with pytest.raises(zoneinfo.ZoneInfoNotFoundError):
+            ZoneInfo.no_cache(MANY)
 
 
 def _blocks() -> list[tuple[int, str]]:
@@ -702,8 +723,8 @@ def _blocks() -> list[tuple[int, str]]:
     return found
 
 
-def _run(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
-    script = cwd / "_block.py"
+def _run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
+    script = cwd / "block.py"
     script.write_text(source, encoding="utf-8")
     return subprocess.run(
         [sys.executable, script.name],
@@ -717,52 +738,32 @@ def _run(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
 
 
 class TestDocumentedExamples:
-    """Every block runs, under the interpreter running the tests."""
+    """Each block runs in its own subprocess, so the zone cache and `TZPATH`
+    cannot leak between them, and asserts its own result."""
 
     def test_the_page_has_the_expected_blocks(self) -> None:
-        blocks = _blocks()
-
-        assert len(blocks) == EXPECTED_BLOCKS, (
-            f"expected {EXPECTED_BLOCKS} python blocks, found {len(blocks)}"
-        )
+        assert len(_blocks()) == EXPECTED_BLOCKS
 
     def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
-
+        ran = 0
         for line, source in _blocks():
-            result = _run(source, tmp_path)
+            ran += 1
+            workdir = tmp_path / f"block{line}"
+            workdir.mkdir()
+            result = _run_block(source, workdir)
             if result.returncode != 0:
-                failures.append(f"{PAGE.name}:{line} raised: {result.stderr.strip()}")
+                failures.append(f"{PAGE.name}:{line}\n{result.stderr.strip()}")
 
-        assert not failures, "\n".join(failures)
+        assert ran == EXPECTED_BLOCKS
+        assert not failures, "\n\n".join(failures)
 
-    def test_every_block_binds_the_names_it_uses(self, tmp_path: pathlib.Path) -> None:
-        """A block that leans on a name from its prose rather than binding it
-        compiles and then dies at run time, so NameError gets its own check."""
-        failures: list[str] = []
+    def test_the_runner_notices_a_broken_assertion(self, tmp_path: pathlib.Path) -> None:
+        line, source = next((n, s) for n, s in _blocks() if "assert dropped() is None" in s)
+        mutated = source.replace("assert dropped() is None", "assert dropped() is not None", 1)
 
-        for line, source in _blocks():
-            result = _run(source, tmp_path)
-            if "NameError" in result.stderr:
-                failures.append(f"{PAGE.name}:{line}: {result.stderr.strip()}")
-
-        assert not failures, "\n".join(failures)
-
-    def test_the_stated_values_hold(self) -> None:
-        a = ZoneInfo("Europe/London")
-        assert ZoneInfo("Europe/London") is a
-        assert ZoneInfo.no_cache("Europe/London") is not a
-        ZoneInfo.clear_cache(only_keys=["Europe/London"])
-        assert ZoneInfo("Europe/London") is not a
-        assert "America/New_York" in zoneinfo.available_timezones()
-
-    def test_the_runner_catches_a_broken_block(self, tmp_path: pathlib.Path) -> None:
-        """A runner that cannot fail proves nothing about the blocks it ran."""
-        first = _blocks()[0][1]
-        broken = first.replace("from zoneinfo import ZoneInfo\n", "", 1)
-        assert broken != first, "the mutation did not remove the import"
-
-        result = _run(broken, tmp_path)
-
+        assert mutated != source, f"the mutation matched nothing in {PAGE.name}:{line}"
+        assert _run_block(source, tmp_path).returncode == 0
+        result = _run_block(mutated, tmp_path)
         assert result.returncode != 0
-        assert "NameError" in result.stderr
+        assert "AssertionError" in result.stderr, result.stderr

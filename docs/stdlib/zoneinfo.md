@@ -1,119 +1,204 @@
 # zoneinfo Module Complexity
 
-The `zoneinfo` module provides IANA time zone support for `datetime`,
-including daylight saving time. A `ZoneInfo` object is parsed once from a
-TZif file and cached. A lookup inside its recorded transitions is a binary
-search; one before the first is constant, and so is one after the last when
-the zone's footer rule has seasonal transitions to evaluate.
+The `zoneinfo` module provides IANA time zones for `datetime`, daylight saving time included. A
+`ZoneInfo` is parsed once from a TZif file into sorted arrays of transition times, and is cached by
+key. Every offset lookup is a binary search over those arrays, or constant time before the first
+recorded transition and after the last.
+
+`t` is the transitions recorded in a zone's TZif file (a few hundred for a zone with daylight saving
+time, none for `UTC`), and `s` is the same for the zone a datetime is converted from. `p` is the
+entries on the search path, `f` the files and directories under the `TZPATH` trees, `z` the zones
+found there or listed by the packaged `tzdata` database, and `c` the cached zones. Checking whether
+one search-path entry holds a key is one filesystem probe, and hashing a key is treated as O(1).
 
 ## Complexity Reference
 
-Let `t` be the number of transitions in a zone's TZif file (a few hundred for
-a zone with daylight saving time, none for `UTC`), `s` the same for the zone a
-datetime is converted from, `f` the number of files and directories under the
-`TZPATH` trees, `z` the number of zones found there or listed by the packaged
-database, `c` the number of cached zones, and `p` the number of search-path
-entries.
+### ZoneInfo
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `ZoneInfo(key)`, first load | O(p + t) | O(t) | Probes the search path for the file, then reads and parses it, one entry per transition, and caches the instance |
-| `ZoneInfo(key)`, cached | O(1) | O(1) | Returns the same object. It lives while referenced, and the eight most recently used zones stay alive regardless |
-| `ZoneInfo.no_cache(key)` | O(p + t) | O(t) | Probes and parses every time; neither reads nor fills the cache |
-| `ZoneInfo.from_file(f, key=None)` | O(t) | O(t) | Never cached; the result cannot be pickled |
-| `ZoneInfo.clear_cache(only_keys=None)` | O(c) | O(1) | Drops every cached zone, or O(len(only_keys)) for the keys given; the next load parses again |
-| `utcoffset(dt)`, `dst(dt)`, `tzname(dt)` | O(log t) | O(1) | Binary search over the transitions in local time. O(1) before the first transition and after the last, where the zone's footer rule is evaluated for the year of `dt` |
-| `fromutc(dt)` | O(log t) | O(1) | The same search over the UTC transitions, plus the fold check. O(1) before the first transition, and after the last only when the footer rule has seasonal transitions; a fixed-offset footer still searches |
-| `dt.astimezone(zone)` | O(log s + log t) | O(1) | The source zone's `utcoffset()`, then `zone.fromutc()` |
-| `ZoneInfo.key` | O(1) | O(1) | `None` for a `from_file()` zone unless one was passed |
-| `available_timezones()` | O(p + f + z) | O(z + f) | Reads the packaged zone list if one is installed, then walks the `TZPATH` trees, skipping `right` and `posix`, and opens each file whose key is not yet a known zone to check for the TZif magic; the walk's listings are the `f` term. Nothing is cached: every call walks again and returns a new set |
-| `reset_tzpath(to=None)` | O(p) | O(p) | `to`'s entries, or with `None` those of `PYTHONTZPATH` or the build's default. An entry of `to` must be absolute, `ValueError` otherwise; a relative `PYTHONTZPATH` entry is dropped with `InvalidTZPathWarning`. Zones already cached stay usable |
-| `TZPATH` | O(1) | — | The tuple of search directories |
-| `ZoneInfoNotFoundError`, `InvalidTZPathWarning` | — | — | Raised when no file matches `key`; warned when `PYTHONTZPATH` holds a relative entry |
+| `zoneinfo.ZoneInfo(key)`, first load | O(p + t) | O(t) | Probes the search path for the file, falling back to the `tzdata` package; parses it and caches the result |
+| `zoneinfo.ZoneInfo(key)`, cached | O(1) | O(1) | Returns the same object. It stays cached while referenced, and the eight most recently looked up stay alive regardless |
+| `ZoneInfo.no_cache(key)` | O(p + t) | O(t) | Loads and parses every time; neither reads nor fills the cache |
+| `ZoneInfo.from_file(file_obj, /, key=None)` | O(t) | O(t) | Never cached, and cannot be pickled |
+| `ZoneInfo.clear_cache(*, only_keys=None)` | O(c) | O(1) | O(len(only_keys)) with `only_keys`; the next lookup of a dropped key loads it again |
+| `ZoneInfo.utcoffset(dt)`, `ZoneInfo.dst(dt)`, `ZoneInfo.tzname(dt)` | O(log t) | O(1) | O(1) before the first recorded transition and after the last |
+| `ZoneInfo.fromutc(dt)` | O(log t) | O(1) | O(1) before the first recorded transition and after the last; `astimezone()` calls it |
+| `dt.astimezone(zone)` | O(log s + log t) | O(1) | One `utcoffset()` in the source zone, then `zone.fromutc()` |
+| `ZoneInfo.key` | O(1) | O(1) | `None` for a `from_file()` zone unless a key was passed |
+| Pickling a `ZoneInfo` | O(1) | O(1) | Pickled by key, without the transition data; unpickling is `ZoneInfo(key)`, or `ZoneInfo.no_cache(key)` for a zone `no_cache()` made |
 
-## Working with Time Zones
+### Search path
 
-### Using Timezones
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `zoneinfo.available_timezones()` | O(p + f + z) | O(f + z) | Opens each file under the `TZPATH` trees, outside `right/` and `posix/`, whose key is not already known to be a zone; nothing is cached, so every call walks again and returns a new set |
+| `zoneinfo.reset_tzpath(to=None)` | O(p) | O(p) | Entries of `to` must be absolute; zones already cached stay usable |
+| `zoneinfo.TZPATH` | O(1) | O(1) | The tuple of search directories |
 
-```python
-from zoneinfo import ZoneInfo
-from datetime import datetime
+### Exceptions and warnings
 
-# Create timezone - O(p + t) on first load, O(1) from the cache afterwards
-est = ZoneInfo("America/New_York")
-pst = ZoneInfo("America/Los_Angeles")
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `zoneinfo.ZoneInfoNotFoundError` | O(1) | O(1) | A `KeyError` subclass, raised when neither the search path nor the `tzdata` package has the key |
+| `zoneinfo.InvalidTZPathWarning` | O(1) | O(1) | Warned when `PYTHONTZPATH` holds a relative entry, which is dropped |
 
-# Create datetime with timezone - O(1)
-dt = datetime(2024, 1, 15, 12, 0, tzinfo=est)
-print(dt)  # 2024-01-15 12:00:00-05:00
-
-# Convert timezone - O(log s + log t), one lookup in each zone
-dt_pst = dt.astimezone(pst)
-print(dt_pst)  # 2024-01-15 09:00:00-08:00
-
-# Get timezone name - O(log t)
-print(dt.tzname())  # EST
-```
+## Loading and Caching Zones
 
 ### The Cache
 
+A first lookup searches for the file and parses it; a later lookup of the same key returns the same
+object for as long as the zone stays cached. `no_cache()` always parses and leaves the cache alone, and `clear_cache()` makes the
+next lookup parse again.
+
 ```python
 from zoneinfo import ZoneInfo
 
-# O(1) - the second call returns the very same object
-a = ZoneInfo("Europe/London")
-b = ZoneInfo("Europe/London")
-a is b  # True
+a = ZoneInfo("Europe/London")  # O(p + t) on first load
+b = ZoneInfo("Europe/London")  # O(1) - the cached object
+assert a is b
 
-# O(p + t) - a fresh probe and parse that leaves the cache alone
-c = ZoneInfo.no_cache("Europe/London")
-c is a  # False
+c = ZoneInfo.no_cache("Europe/London")  # O(p + t) every time
+assert c is not a
+assert ZoneInfo("Europe/London") is a  # no_cache() did not replace it
 
-# O(1) - one key to drop; the next lookup parses again
-ZoneInfo.clear_cache(only_keys=["Europe/London"])
-ZoneInfo("Europe/London") is a  # False
+ZoneInfo.clear_cache(only_keys=["Europe/London"])  # O(len(only_keys))
+assert ZoneInfo("Europe/London") is not a  # parsed again
+```
+
+### Cache Lifetime
+
+The cache holds a zone weakly once it falls out of the eight most recently looked up, so a zone you
+keep a reference to stays cached, and one you drop may be parsed again.
+
+```python
+import gc
+import weakref
+from zoneinfo import ZoneInfo
+
+ZoneInfo.clear_cache()
+held = ZoneInfo("Africa/Cairo")
+dropped = weakref.ref(ZoneInfo("Africa/Lagos"))
+
+for key in ["Asia/Tokyo", "Europe/Paris", "Europe/Berlin", "Europe/Rome",
+            "Europe/Madrid", "Asia/Kolkata", "Asia/Shanghai", "Australia/Sydney"]:
+    ZoneInfo(key)  # pushes Cairo and Lagos out of the eight most recent
+gc.collect()
+
+assert ZoneInfo("Africa/Cairo") is held  # O(1) - still cached through the reference
+assert dropped() is None  # gone: the next ZoneInfo("Africa/Lagos") parses again
+```
+
+### Pickling
+
+A `ZoneInfo` is pickled by key, without its transition data, so unpickling a zone made by
+`ZoneInfo(key)` is `ZoneInfo(key)` again: a cache hit where the zone is cached, a load where it is
+not, and the receiving process needs the same zone in its own database. A `from_file()` zone cannot
+be pickled, even when it was given a key.
+
+```python
+import pickle
+from zoneinfo import ZoneInfo
+
+zone = ZoneInfo("America/New_York")
+data = pickle.dumps(zone)  # O(1) - the key only
+assert b"America/New_York" in data
+assert pickle.loads(data) is zone  # O(1) - a cache hit
+```
+
+## Looking Up Offsets
+
+### Converting Between Zones
+
+Attaching a zone to a datetime looks nothing up. Each offset, name or conversion is at most one
+binary search over the zone's transitions, and a conversion between two zones at most one in each.
+
+```python
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+new_york = ZoneInfo("America/New_York")
+los_angeles = ZoneInfo("America/Los_Angeles")
+
+dt = datetime(2024, 1, 15, 12, 0, tzinfo=new_york)  # O(1) - no lookup yet
+assert str(dt) == "2024-01-15 12:00:00-05:00"  # O(log t)
+assert dt.tzname() == "EST"  # O(log t)
+
+converted = dt.astimezone(los_angeles)  # O(log s + log t)
+assert str(converted) == "2024-01-15 09:00:00-08:00"
 ```
 
 ### Beyond the Transition Table
 
+A TZif file records transitions up to some year, and may end with a rule for the years after it.
+A lookup past the last recorded transition evaluates that rule for the datetime's year, or takes
+the last recorded offset where there is no rule; either costs the same whatever `t` is.
+
 ```python
-from zoneinfo import ZoneInfo
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 zone = ZoneInfo("America/New_York")
 
-# O(log t) - inside the table of recorded transitions
-datetime(1990, 7, 1, tzinfo=zone).tzname()  # 'EDT'
-
-# O(1) - after the last recorded transition the footer rule decides
-datetime(2100, 7, 1, tzinfo=zone).tzname()  # 'EDT'
-datetime(2100, 1, 1, tzinfo=zone).tzname()  # 'EST'
+assert datetime(1990, 7, 1, tzinfo=zone).tzname() == "EDT"  # O(log t) - a recorded transition
+assert datetime(2100, 7, 1, tzinfo=zone).tzname() == "EDT"  # O(1) - the rule
+assert datetime(2100, 1, 1, tzinfo=zone).tzname() == "EST"  # O(1)
 ```
 
-### Listing Zones
+## Listing Zones
+
+`available_timezones()` finds zones by opening files: it walks every `TZPATH` tree and reads the
+first bytes of each file it does not already know to be a zone. Nothing is cached between calls.
 
 ```python
 from zoneinfo import available_timezones
 
-# O(p + f + z) - walks the search path, opening files as it goes; call it once and keep the set
-zones = available_timezones()
-"America/New_York" in zones  # True
+zones = available_timezones()  # O(p + f + z) - opens the files under TZPATH
+assert "America/New_York" in zones  # O(1) - a set
+assert available_timezones() is not zones  # O(p + f + z) again
 ```
 
-## Best Practices
+## Common Patterns
+
+### Converting a Batch of Timestamps
+
+```python
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+zone = ZoneInfo("America/New_York")  # O(p + t) once
+timestamps = [0, 1_700_000_000, 2_000_000_000]
+
+local = [datetime.fromtimestamp(ts, zone) for ts in timestamps]  # O(log t) each
+assert [dt.isoformat() for dt in local] == [
+    "1969-12-31T19:00:00-05:00",
+    "2023-11-14T17:13:20-05:00",
+    "2033-05-17T23:33:20-04:00",
+]
+```
+
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Look zones up by key and let the cache hold them
+- Look zones up by key and let the cache hold them: a cache hit is O(1)
+- Keep a reference to a zone you use often, so it is not parsed again once it leaves the eight
+  most recently looked up
 - Call `available_timezones()` once and keep the set
-- Keep a reference to a zone you use often, so it survives beyond the eight
-  the cache holds on its own
 
 ❌ **Avoid**:
 
 - `no_cache()` or `from_file()` in a loop - every call parses the file again
-- Calling `available_timezones()` per request - it walks the search path every time
+- `available_timezones()` per request - it opens the files under `TZPATH` every time
 
-## Related Documentation
+## Version Notes
 
-- [datetime Module](datetime.md)
+- **Python 3.9+**: Added the module
+- **All Python 3**: The default `TZPATH` is empty on Windows, and the module reads no Windows time
+  zone data; without the `tzdata` package or a database named in `PYTHONTZPATH`, every key raises
+  `ZoneInfoNotFoundError`
+
+## Related Modules
+
+- **[datetime](datetime.md)** - the `datetime` and `tzinfo` types a `ZoneInfo` is attached to
+- **[time](time.md)** - the process-wide local time zone, without the IANA database
