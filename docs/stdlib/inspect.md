@@ -17,10 +17,10 @@ the lines from a definition to the end of that file and `b` the lines in the def
 block. For a docstring: `n` is its characters, `L` its lines and `z` its leading blank ones.
 Finally `d` is the frames on the stack and `M` the modules in `sys.modules`.
 
-Two things are treated as O(1) throughout: reading one attribute with `getattr`, and one operation
-on a short string such as a name, a path or a suffix. Everything counted above is a number of
-*items* — lines, names, parameters, frames — not the characters inside one. The functions that walk
-the MRO in Python rather than in C are priced in `c`.
+Two things are treated as O(1) unless a row says otherwise: reading one attribute with `getattr`,
+and one operation on a short string such as a name, a path or a suffix. Everything counted above is
+a number of *items* — lines, names, parameters, frames — not the characters inside one. The
+functions that walk the MRO in Python rather than in C are priced in `c`.
 
 ## Complexity Reference
 
@@ -49,7 +49,7 @@ the MRO in Python rather than in C are priced in `c`.
 | `inspect.getmembers_static(object, predicate=None)` | O(m·c·y + m log m) | O(m + c) | Python 3.11+; same shape with `getattr_static`, so no property or descriptor is invoked, and each name walks the MRO in Python |
 | `inspect.getattr_static(obj, attr, default)` | O(c·y) | O(c) from Python 3.12.10 and 3.13, O(1) before | Searches the instance dict and each MRO `__dict__` without invoking `__getattr__` or the descriptor protocol, checking each entry's metaclass for a shadowed `__dict__` as it goes. The newer versions build a weak reference per MRO entry on the way, so the space is no longer constant |
 | `inspect.getmro(cls)` | O(1) | O(1) | Returns `cls.__mro__` itself — the existing tuple, not a copy |
-| `inspect.classify_class_attrs(cls)` | O(m·(c + y)) | O(m + c + y) | For each name in `dir(cls)`, searches the MRO and then the metaclass MRO for its home class, having first joined the two into a tuple of its own |
+| `inspect.classify_class_attrs(cls)` | O(m·(c² + y)) | O(m + c + y) | For each name in `dir(cls)`, searches the MRO with up to one `getattr` per class and then the metaclass MRO for its home class, having first joined the two into a tuple of its own. In a deep hierarchy those m·c lookups outgrow the interpreter's type attribute cache and each walks a class's MRO, so here a `getattr` costs O(c), not O(1) |
 | `inspect.Attribute` | O(1) | O(1) | The `(name, kind, defining_class, object)` named tuple `classify_class_attrs` yields |
 | `inspect.getclasstree(classes, unique=False)` | O(e·q + T log T) | O(T) | q = classes given, e = their base links, T = entries in the returned tree; membership is tested against lists, so every base link rescans a child list. A class is repeated under every base it reaches, and its descendants with it, so T can far exceed q. `unique=True` stops at the first base that is itself in `classes` — it deduplicates within the list, not against bases outside it |
 | `inspect.walktree(classes, children, parent)` | O(T log T) | O(T) | The recursive helper behind `getclasstree`, and what builds T; it sorts each sibling list **in place** |

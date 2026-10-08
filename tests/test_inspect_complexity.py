@@ -31,9 +31,15 @@ Measurement scope:
   the root of a 4-deep and a 128-deep single-inheritance chain: 32x the depth
   costs more than 5x. The metaclass term is timed separately, with the MRO
   held at 34 entries while the metaclass chain goes from 1 to 128: more than
-  5x again. `classify_class_attrs()` over the first two chains, with the name
-  count held at `dir(object)`, costs more than 3x; its own metaclass term is
-  the same walk and is not timed separately.
+  5x again. `classify_class_attrs()` is timed over chains 100, 400 and 1,600
+  deep, with the name count held at `dir()` of an empty chain: 16x the depth
+  costs over 40x and under 1,000x, where linear predicts 16x, quadratic 256x
+  and cubic 4,096x (about x80 measured on 3.10 and x125 on 3.14; the shallow
+  end still fits the type attribute cache). Its m·c `getattr` calls on
+  classes are what grow: swept over every class and name of the chain, the
+  cost per lookup rises over 4x from 100 to 1,600 deep (x20 measured), while
+  repeating one lookup m·c times stays under 2x. Its metaclass term is the
+  same walk as `getattr_static()`'s and is not timed separately.
 * `getclasstree()` is timed on 250 and 1,000 unrelated classes, each with a
   single base so the tree stays the size of the list: 4x the input costs more
   than 8x, which excludes any linear bound. The tree's own term is observed
@@ -511,11 +517,20 @@ class TestStaticLookupWalksTheMro:
         assert far > 5 * near, f"128x the metaclass depth cost {far / near:.1f}x ({near:.2f}us)"
 
 
+@pytest.fixture(scope="module")
+def deep_chains() -> dict[int, type]:
+    """Chains 100, 400 and 1,600 deep: the deepest, and two of its own
+    ancestors, since building a chain costs more than classifying it."""
+    deepest = chain(1_600)
+    return {depth: deepest.__mro__[1_600 - depth] for depth in (100, 400, 1_600)}
+
+
 class TestClassifyClassAttrsSearchesPerName:
-    """`classify_class_attrs()` | O(m·c) | O(m).
+    """`classify_class_attrs()` | O(m·(c² + y)) | O(m + c + y).
 
     The name count is held at whatever `dir()` reports for an empty chain,
-    which is the same for both inputs, so only `c` moves.
+    which is the same for every depth, so only `c` moves. Not varied: names
+    defined along the chain, and the metaclass chain.
     """
 
     def test_it_reports_the_defining_class(self) -> None:
@@ -532,15 +547,63 @@ class TestClassifyClassAttrsSearchesPerName:
         assert attributes["method"].object is Base.__dict__["method"]
 
     @pytest.mark.timing
-    def test_cost_tracks_the_mro(self) -> None:
-        shallow = chain(4)
-        deep = chain(128)
-        assert len(dir(shallow)) == len(dir(deep))
+    def test_cost_grows_between_linear_and_cubic_in_the_mro(
+        self, deep_chains: dict[int, type]
+    ) -> None:
+        """16x the depth: linear predicts x16, quadratic x256, cubic x4,096.
+        The quadratic upper bound is read from Lib/inspect.py: up to c + 1
+        `getattr` calls per name, each walking at most c classes."""
+        chains = deep_chains
+        assert [len(cls.__mro__) for cls in chains.values()] == [102, 402, 1_602]
+        assert len({len(dir(cls)) for cls in chains.values()}) == 1
 
-        near = best_us(lambda: inspect.classify_class_attrs(shallow), inner=20)
-        far = best_us(lambda: inspect.classify_class_attrs(deep), inner=20)
+        costs = [
+            best_us(lambda cls=cls: inspect.classify_class_attrs(cls), repeats=3)
+            for cls in chains.values()
+        ]
 
-        assert far > 3 * near, f"32x the depth cost {far / near:.1f}x ({near:.1f}us)"
+        ratio = costs[2] / costs[0]
+        assert 40 < ratio < 1_000, (
+            f"16x the depth cost x{ratio:.0f} ({costs} us); "
+            "linear gives x16, quadratic x256, cubic x4,096"
+        )
+
+    @pytest.mark.timing
+    def test_its_lookups_on_classes_grow_with_the_mro(self, deep_chains: dict[int, type]) -> None:
+        """The c inside c²: for each name a `getattr` on each class of the
+        chain, in the search's own order, costs more per lookup in a deeper
+        chain. Repeating one lookup as many times is the control."""
+
+        def per_lookup(leaf: type) -> tuple[float, float]:
+            classes, names = leaf.__mro__, dir(leaf)
+            lookups = len(classes) * len(names)
+
+            def sweep() -> None:
+                for name in names:
+                    for cls in classes:
+                        getattr(cls, name, None)
+
+            def repeat() -> None:
+                for _ in range(lookups):
+                    getattr(leaf, "__init__", None)
+
+            return (
+                best_us(sweep, repeats=3) / lookups,
+                best_us(repeat, repeats=3) / lookups,
+            )
+
+        chains = deep_chains
+        (shallow_sweep, shallow_repeat), (deep_sweep, deep_repeat) = (
+            per_lookup(chains[100]),
+            per_lookup(chains[1_600]),
+        )
+
+        assert deep_sweep > 4 * shallow_sweep, (
+            f"per lookup {shallow_sweep:.3f}us at 100 deep, {deep_sweep:.3f}us at 1,600"
+        )
+        assert deep_repeat < 2 * shallow_repeat, (
+            f"one repeated lookup {shallow_repeat:.3f}us against {deep_repeat:.3f}us"
+        )
 
 
 class TestGetclasstreeIsQuadratic:
