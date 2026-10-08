@@ -62,7 +62,9 @@ Measurement scope:
   `ValueError`; with `check_circular=False` a cycle raises `RecursionError`.
   On 3.13 and later `dumps(indent=2)` is observed not to build the
   pure-Python encoder; before 3.13 it is observed to. `skipkeys` with
-  `sort_keys` is asserted to raise `TypeError` on a tuple key.
+  `sort_keys` is asserted to raise `TypeError` on a tuple key, and a
+  skipped entry is observed to write nothing and to hand neither its key
+  nor its value to `default`.
 * `loads()` on `bytes` peaks more than half the text length above `loads()`
   on the same `str`; `load()` peaks more than half the text length above
   `loads()`, and calls `read()` once with no size. `detect_encoding()` on a
@@ -98,7 +100,13 @@ Measurement scope:
   first line: before 3.13.14, and on 3.14.0 to 3.14.4, the first line comes
   back while the pipe is open; from 3.13.14 and 3.14.5 nothing comes back
   until the pipe closes. That boundary is the `gh-132631` entry in the
-  release notes of those two releases, and CI runs the matrix.
+  release notes of those two releases, and CI runs the matrix. With colour
+  forced through `FORCE_COLOR`, `json.tool.main()` on 3.14 and later is
+  observed to call `dumps()` and not `dump()` and to write escape codes;
+  with `PYTHON_COLORS=0`, and on every version before 3.14, it calls
+  `dump()` and not `dumps()`. On 3.14 and later `python -m json` prints
+  what `python -m json.tool` prints. The other subprocesses run with
+  `PYTHON_COLORS=0`, so they compare plain output.
 * Every fenced Python block runs in its own subprocess and working
   directory, and a flipped identity assertion in one of them is asserted
   to fail.
@@ -129,11 +137,13 @@ Not settled here:
 * Axes held fixed: scalar kind for the O(d + s) bound (only `str` is
   measured, not a long `int` or `float`); escaping, which lengthens an
   encoded string beyond its source; record shape for the timing tests,
-  which use two-field objects only.
+  which use two-field objects only; the C encoder for skipped entries,
+  which are observed through `dumps()` alone.
 * The audit's unclassified names are implementation: the `json.decoder`,
   `json.encoder` and `json.scanner` submodules with their `scanstring`,
   `JSONObject`, `JSONArray`, `make_scanner`, `encode_basestring*` and
-  `c_make_encoder` members, and `json.tool.main` and `json.tool.get_theme`.
+  `c_make_encoder` members, their `py_` fallbacks, and `json.tool.main` and
+  `json.tool.get_theme`.
   None is in the documented API, and the page prices the calls that reach
   them. `detect_encoding`, `item_separator` and `key_separator` are on the
   page.
@@ -692,6 +702,17 @@ class TestKeyAndFloatOptions:
 
         assert json.dumps({(1, 2): 1, "a": 2}, skipkeys=True) == '{"a": 2}'
 
+    def test_a_skipped_entry_writes_nothing_and_reaches_no_hook(self) -> None:
+        """`skipkeys=True` writes nothing for the entry, so its examination is
+        cost the output length does not count: neither the key nor its value
+        reaches `default`."""
+        seen: list[Any] = []
+
+        text = json.dumps({object(): object(), "a": 2}, skipkeys=True, default=seen.append)
+
+        assert seen == []
+        assert text == '{"a": 2}'
+
     def test_skipkeys_does_not_protect_a_sort(self) -> None:
         with pytest.raises(TypeError, match="not supported between"):
             json.dumps({(1, 2): 1, "a": 2}, skipkeys=True, sort_keys=True)
@@ -990,23 +1011,27 @@ class TestNestingIsBoundedByRecursion:
             encode(deep(sys.getrecursionlimit() * 2))
 
 
+# Forced colour would put escape codes into output the tests compare exactly.
+PLAIN_ENV = {**os.environ, "PYTHON_COLORS": "0"}
 READS_ALL_LINES_FIRST = sys.version_info >= (3, 14, 5) or (3, 13, 14) <= sys.version_info < (3, 14)
 
 
 class TestJsonTool:
     """`python -m json.tool` parses the whole input before writing; with
     `--json-lines` it parses and prints one line at a time, reading the
-    lines one at a time before 3.13.14 and 3.14.5 and all at once after."""
+    lines one at a time before 3.13.14 and 3.14.5 and all at once after;
+    from 3.14 coloured output is built whole."""
 
     @staticmethod
-    def _run(stdin: str, *args: str) -> subprocess.CompletedProcess[str]:
+    def _run(stdin: str, *args: str, module: str = "json.tool") -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [sys.executable, "-m", "json.tool", *args],
+            [sys.executable, "-m", module, *args],
             input=stdin,
             capture_output=True,
             text=True,
             timeout=120,
             check=False,
+            env=PLAIN_ENV,
         )
 
     def test_it_pretty_prints_with_four_spaces(self) -> None:
@@ -1014,6 +1039,15 @@ class TestJsonTool:
 
         assert result.returncode == 0
         assert result.stdout == '{\n    "b": 1,\n    "a": [\n        1,\n        2\n    ]\n}\n'
+
+    @pytest.mark.skipif(sys.version_info < (3, 14), reason="version: python -m json is 3.14+")
+    def test_python_m_json_is_the_same_tool(self) -> None:
+        text = '{"b": 1, "a": [1, 2]}\n'
+
+        alias, tool = self._run(text, module="json"), self._run(text)
+
+        assert (alias.returncode, tool.returncode) == (0, 0)
+        assert alias.stdout == tool.stdout != ""
 
     def test_a_second_document_prints_nothing_by_default(self) -> None:
         result = self._run('{"a": 1}\n{"b": 2}\n')
@@ -1029,6 +1063,49 @@ class TestJsonTool:
         assert result.stdout == '{"a": 1}\n'
         assert "Expecting value" in result.stderr
 
+    @pytest.mark.parametrize("coloured", [True, False])
+    def test_coloured_output_is_built_whole_from_314(
+        self, coloured: bool, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+    ) -> None:
+        """Space O(n + m) when coloured: from 3.14 the tool builds each
+        document's text with `dumps()` to colour it; otherwise it streams
+        through `dump()`. The escape codes show the colour path ran."""
+        import json.tool
+
+        calls: list[str] = []
+        real_dump, real_dumps = json.dump, json.dumps
+
+        def dump(*args: Any, **kwargs: Any) -> Any:
+            calls.append("dump")
+            return real_dump(*args, **kwargs)
+
+        def dumps(*args: Any, **kwargs: Any) -> Any:
+            calls.append("dumps")
+            return real_dumps(*args, **kwargs)
+
+        monkeypatch.setattr(json, "dump", dump)
+        monkeypatch.setattr(json, "dumps", dumps)
+        for name in ("NO_COLOR", "PYTHON_COLORS", "FORCE_COLOR"):
+            monkeypatch.delenv(name, raising=False)
+        if coloured:
+            monkeypatch.setenv("FORCE_COLOR", "1")
+        else:
+            monkeypatch.setenv("PYTHON_COLORS", "0")
+        infile, outfile = tmp_path / "in.json", tmp_path / "out.json"
+        infile.write_text('{"a": [1, "x"]}', encoding="utf-8")
+        monkeypatch.setattr(sys, "argv", ["json.tool", str(infile), str(outfile)])
+
+        json.tool.main()
+
+        output = outfile.read_text(encoding="utf-8")
+        if coloured and sys.version_info >= (3, 14):
+            assert calls == ["dumps"]
+            assert "\x1b[" in output
+        else:
+            assert calls == ["dump"]
+            assert "\x1b[" not in output
+        assert json.loads(re.sub(r"\x1b\[[0-9;]*m", "", output)) == {"a": [1, "x"]}
+
     def test_whether_json_lines_reads_one_line_at_a_time(self) -> None:
         """A pipe held open after the first line separates the two readers:
         a line-at-a-time reader prints the first line while the pipe is open,
@@ -1041,6 +1118,7 @@ class TestJsonTool:
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            env=PLAIN_ENV,
         )
         assert process.stdin is not None and process.stdout is not None
         assert process.stderr is not None

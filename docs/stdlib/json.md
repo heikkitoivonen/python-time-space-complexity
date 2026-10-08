@@ -73,7 +73,7 @@ limit has been disabled, an `int` longer than `sys.get_int_max_str_digits()` dig
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `python -m json.tool [infile] [outfile]` | O(n + m) | O(n + d²) | n = input, m = output: `load()` then `dump(indent=4)`, so the whole input is parsed before anything is written and the output is indented, with `dump()` holding the indentation of every open level. `--json-lines` parses and prints one line at a time; from 3.13.14 and 3.14.5 it reads every line into memory first, so only the trees arrive one at a time |
+| `python -m json.tool [infile] [outfile]` | O(n + m) | O(n + d²), or O(n + m) coloured | n = input, m = output: `load()` then `dump(indent=4)`, so the whole input is parsed before anything is written and the output is indented, with `dump()` holding the indentation of every open level. From 3.14, coloured output, the default on a terminal, is built whole with `dumps()` before it is written, and `python -m json` runs the same tool. `--json-lines` parses and prints one line at a time; from 3.13.14 and 3.14.5 it reads every line into memory first, so only the trees arrive one at a time |
 
 ## Writing Output
 
@@ -361,6 +361,8 @@ assert json.load(buffer) == data  # O(n): reads it all, then parses it all
   O(n·d) relay; pretty-printed and compact output are the same C pass
 - **Python 3.13.14+ and 3.14.5+**: `python -m json.tool --json-lines` reads the whole input
   before parsing its first line; earlier releases read one line at a time
+- **Python 3.14+**: `python -m json` runs `json.tool`, whose output is coloured on a terminal;
+  coloured output is built whole with `dumps()`, so each document's output is held beside its tree
 - **Python 3.10.7+**: unless the limit is disabled, an integer longer than
   `sys.get_int_max_str_digits()` digits raises `ValueError` when parsed or written; `parse_int`
   can read one as something other than `int`
