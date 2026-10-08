@@ -1,233 +1,205 @@
-# cgitb Module
+# cgitb Module Complexity
 
-⚠️ **REMOVED IN PYTHON 3.13**: The `cgitb` module was deprecated in Python 3.11 and removed in Python 3.13.
+The `cgitb` module formats a traceback as a detailed HTML or plain-text report: for every frame it
+shows the surrounding source lines and the values of the names on the failing line. Installing it
+costs nothing; the whole cost lands when an exception is formatted, and the report is built as one
+string before it is written.
 
-The `cgitb` module provides a CGI error handler that displays detailed tracebacks in HTML format for debugging CGI scripts.
+!!! warning "Removed in Python 3.13"
+    Deprecated in Python 3.11 and removed in Python 3.13 by PEP 594. The examples that import it
+    need Python 3.10, 3.11 or 3.12; new code should use `traceback` and `logging`.
+
+`d` is the frames in the traceback and `c` is the source lines shown per frame (`context`, 5 by
+default, at least 1). The bounds count frames and lines, pricing one source line, each frame's
+failing statement with the names in it, and the exception message as O(1). They exclude the
+`repr()` of the values shown, which is your objects' cost, and the first read of each source file,
+which `linecache` then keeps.
 
 ## Complexity Reference
 
+### Functions
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `enable()` | O(1) | O(1) | Install handler |
-| `hook()` | O(1) | O(1) | Install hook |
-| Traceback generation | O(n) | O(n) | n = stack depth |
+| `cgitb.enable(display=1, logdir=None, context=5, format="html")` | O(1) | O(1) | Replaces `sys.excepthook` with a `Hook` writing to the current `sys.stdout`; nothing is formatted until an uncaught exception reaches it |
+| `cgitb.handler(info=None)` | O(d·c) | O(d·c) | Reports `info`, or `sys.exc_info()` when omitted, as HTML to the `sys.stdout` that was current when `cgitb` was imported |
+| `cgitb.html(info, context=5)` | O(d·c) | O(d·c) | Returns the HTML report as a string and writes nothing |
+| `cgitb.text(info, context=5)` | O(d·c) | O(d·c) | Returns the plain-text report as a string and writes nothing |
 
-## Basic Usage
+### Hook
 
-### Enable HTML Error Handling
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `cgitb.Hook(display=1, logdir=None, context=5, file=None, format="html")` | O(1) | O(1) | `file` defaults to the `sys.stdout` current when the hook is built |
+| `Hook.handle(info=None)` | O(d·c) | O(d·c) | Builds the whole report even with `display=0`, which only stops it being written to `file`; with `logdir`, each call writes it to a new file there |
+| Calling a `Hook(etype, evalue, etb)` | O(d·c) | O(d·c) | The `sys.excepthook` signature; calls `handle()` and returns `None` |
 
-```python
-#!/usr/bin/env python3
+## Installing the Handler
 
-import cgitb
-
-# Enable HTML error display - O(1)
-cgitb.enable()
-
-# Now any exception will show detailed HTML traceback
-# instead of plain text
-
-print("Content-Type: text/html\n")
-print("<h1>My CGI Script</h1>")
-
-# This error will show detailed traceback
-undefined_variable  # NameError
-```
-
-### Custom Configuration
+`enable()` only swaps `sys.excepthook`. An exception you catch never reaches the hook; one that
+escapes the script does, and that is when the report is formatted.
 
 ```python
-import cgitb
-
-# Enable with custom display - O(1)
-cgitb.enable(display=1, logdir='/tmp/cgi_errors')
-
-# display=1: show traceback
-# logdir: save copies of tracebacks
-```
-
-## Error Handling Pattern
-
-### Exception Handler
-
-```python
-import cgitb
-import sys
-from io import StringIO
-
-def run_cgi_script():
-    cgitb.enable()  # O(1) - installs the handler, costs nothing until a raise
-    
-    print("Content-Type: text/html\n")
-    print("<h1>Processing</h1>")
-    
-    # Your CGI code
-    try:
-        result = 10 / 0  # Will trigger cgitb handler
-    except ZeroDivisionError:
-        # cgitb will catch and format it
-        pass
-
-if __name__ == "__main__":
-    run_cgi_script()
-```
-
-## Manual Error Display
-
-### Generating HTML Tracebacks
-
-```python
-import cgitb
+import contextlib
+import io
 import sys
 
-def display_error():
-    # Generate HTML traceback manually - O(n)
+import cgitb  # Python 3.10-3.12 only
+
+out = io.StringIO()
+original = sys.excepthook
+with contextlib.redirect_stdout(out):
+    cgitb.enable(format='text')  # O(1) - the hook keeps the sys.stdout current now
+assert isinstance(sys.excepthook, cgitb.Hook)
+
+try:
+    1 / 0
+except ZeroDivisionError:
+    pass  # caught: the hook never sees it
+assert out.getvalue() == ''
+
+# What the interpreter does with an uncaught exception
+try:
+    1 / 0
+except ZeroDivisionError:
+    sys.excepthook(*sys.exc_info())  # O(d·c)
+assert 'ZeroDivisionError' in out.getvalue()
+
+sys.excepthook = original
+```
+
+## Formatting a Caught Exception
+
+`html()` and `text()` return the report and write nothing. `Hook.handle()` writes it to the hook's
+`file`; `cgitb.handler()` is the same method on a hook built at import time, so it writes to that
+`sys.stdout` even after you redirect it.
+
+```python
+import io
+import sys
+
+import cgitb  # Python 3.10-3.12 only
+
+def parse(value):
+    return int(value)
+
+try:
+    parse('not a number')
+except ValueError:
+    info = sys.exc_info()
+
+page = cgitb.html(info)  # O(d·c) - one string, nothing written
+assert '<body' in page and 'ValueError' in page
+
+report = cgitb.text(info, context=1)  # O(d·c)
+assert "value = 'not a number'" in report
+
+out = io.StringIO()
+hook = cgitb.Hook(file=out, format='text')  # O(1)
+assert hook.handle(info) is None  # O(d·c) - the report goes to file
+assert 'invalid literal' in out.getvalue()
+```
+
+## Traceback Depth and Context
+
+Every frame gets up to `c` lines of source, where its file has them, and a dump of the names on its
+failing line, so the report grows with the stack and with `context`.
+
+```python
+import re
+import sys
+
+import cgitb  # Python 3.10-3.12 only
+
+def recurse(depth):
+    if depth == 0:
+        raise ValueError('bottom')
+    recurse(depth - 1)
+
+def report(depth, context):
     try:
-        result = int("not a number")
+        recurse(depth)
     except ValueError:
-        # Get exception info - O(1)
-        etype, value, tb = sys.exc_info()
-        
-        # Create handler - O(1)
-        handler = cgitb.Hook(display=1, logdir='/tmp')
-        
-        # Format as HTML - O(n)
-        html = handler(etype, value, tb)
-        
-        print("Content-Type: text/html\n")
-        print(html)
+        return cgitb.text(sys.exc_info(), context)  # O(d·c)
 
-display_error()
+def source_lines(text):
+    return sum(1 for line in text.splitlines() if re.match(r' *[0-9]+ ', line))
+
+assert source_lines(report(100, 1)) - source_lines(report(10, 1)) == 90  # one per extra frame
+assert source_lines(report(10, 3)) == 3 * source_lines(report(10, 1))  # c per frame
 ```
 
-## Logging Errors
+## Logging Reports to a Directory
 
-### Save Error Reports
+With `logdir`, each handled exception becomes a new file there. `display=0` keeps the report off
+`file`, but it is still built in full, so it saves the writing, not the formatting.
 
 ```python
-import cgitb
+import io
 import os
+import tempfile
 
-# Setup error directory
-error_dir = '/var/log/cgi_errors'
-os.makedirs(error_dir, exist_ok=True)
+import cgitb  # Python 3.10-3.12 only
 
-# Enable with logging - O(1)
-cgitb.enable(display=1, logdir=error_dir)
+with tempfile.TemporaryDirectory() as logdir:
+    out = io.StringIO()
+    hook = cgitb.Hook(display=0, logdir=logdir, file=out, format='text')  # O(1)
 
-# Exceptions will be logged to disk
-# and displayed in HTML format
-
-print("Content-Type: text/html\n")
-print("<h1>Safe to fail now</h1>")
-
-# Error will be logged
-1 / 0  # ZeroDivisionError
-```
-
-## Modern Alternatives
-
-### Using Standard Logging
-
-```python
-# ✅ Modern approach: Use logging module
-import logging
-import traceback
-from html import escape
-
-logging.basicConfig(
-    filename='/var/log/app.log',
-    level=logging.ERROR,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-
-def safe_handler():
-    try:
-        # Your code
-        result = 10 / 0
-    except Exception as e:
-        # Log error - O(1)
-        logging.exception("CGI script failed")
-        
-        # Return error to user
-        print("Content-Type: text/html\n")
-        print("<h1>Error</h1>")
-        print("<p>An error occurred. Please contact support.</p>")
-```
-
-### Using WSGI Middleware
-
-```python
-from wsgiref.simple_server import make_server
-import traceback
-from html import escape
-
-class ErrorHandlingMiddleware:
-    def __init__(self, app):
-        self.app = app
-    
-    def __call__(self, environ, start_response):
+    for _ in range(2):
         try:
-            return self.app(environ, start_response)
-        except Exception as e:
-            # Generate error HTML - O(n)
-            html = f"""
-            <h1>Internal Server Error</h1>
-            <pre>{escape(traceback.format_exc())}</pre>
-            """
-            
-            start_response('500 Internal Server Error',
-                         [('Content-Type', 'text/html')])
-            return [html.encode()]
+            1 / 0
+        except ZeroDivisionError:
+            hook.handle()  # O(d·c) - formatted, then written to a new file
 
-def simple_app(environ, start_response):
-    start_response('200 OK', [('Content-Type', 'text/plain')])
-    return [b'Hello World']
-
-app = ErrorHandlingMiddleware(simple_app)
-
-if __name__ == '__main__':
-    server = make_server('localhost', 8000, app)
-    server.serve_forever()
+    names = os.listdir(logdir)
+    assert len(names) == 2 and all(name.endswith('.txt') for name in names)
+    assert 'ZeroDivisionError' not in out.getvalue()
+    assert 'contains the description of this error' in out.getvalue()
 ```
 
-## Removal Notice
+## Replacing cgitb
+
+From Python 3.13 there is no `cgitb`. `traceback.format_exception()` shows each frame's failing
+source but no variable values, and `html.escape()` makes it safe to put in a page.
 
 ```python
-# ❌ DON'T: Use cgitb (removed in 3.13)
-import cgitb
-cgitb.enable()
+import html
+import traceback
 
-# ✅ DO: Use modern alternatives
-# - logging module for production
-# - Custom WSGI middleware
-# - Proper monitoring/alerting tools
+def render_error(error):
+    text = ''.join(traceback.format_exception(error))  # O(d)
+    return '<pre>' + html.escape(text) + '</pre>'
+
+try:
+    {}['missing']
+except KeyError as error:
+    page = render_error(error)
+
+assert page.startswith('<pre>Traceback') and 'KeyError: &#x27;missing&#x27;' in page
 ```
 
-## Best Practices
+## Performance Best Practices
 
-```python
-# ✅ Legacy only (Python <= 3.12): use cgitb in development
-import cgitb
-cgitb.enable()  # O(1) to install; O(n) in stack depth when it formats a
-                # traceback. Use only in development
+✅ **Do**:
 
-# ✅ DO: Log errors in production
-import logging
-logging.exception("Error details")
+- Install with `enable()` at the top of a script: it costs nothing until an exception escapes
+- Lower `context` for deep stacks; the report grows with frames times context lines
+- Use `html()` or `text()` when you want the report as a string rather than written out
 
-# ✅ DO: Show safe error messages to users
-print("<h1>Error</h1>")
-print("<p>An error occurred. Please try again later.</p>")
+❌ **Avoid**:
 
-# ❌ DON'T: Show detailed tracebacks to users
-# ❌ DON'T: Expose sensitive information
-# ❌ DON'T: Use cgitb in production
-```
+- `display=0` as a way to save work - the report is still built, only not written
+- `cgitb.handler()` after redirecting `sys.stdout` - it writes to the stream current at import
+- Showing reports to users: they include local variable values
+
+## Version Notes
+
+- **Python 3.11+**: Importing the module emits a `DeprecationWarning`
+- **Python 3.13+**: Removed by PEP 594; `import cgitb` raises `ModuleNotFoundError`
 
 ## Related Modules
 
-- [logging Module](logging.md) - Error logging
-- [traceback Module](traceback.md) - Traceback handling
-- [sys Module](sys.md) - System information
-- [html Module](html.md) - HTML utilities
+- **[traceback](traceback.md)** - the replacement; formats a traceback without variable values
+- **[logging](logging.md)** - `logging.exception()` writes the traceback to a log rather than to the page
+- **[linecache](linecache.md)** - the source-line cache the reports read from
+- **[cgi](cgi.md)** - the CGI module removed alongside it
