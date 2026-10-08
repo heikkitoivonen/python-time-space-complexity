@@ -34,8 +34,11 @@ Measurement scope:
   call; and `datetime.datetime.strptime()` fills the same dictionary.
 * The 3.13 `DeprecationWarning` for `%m-%d` without a year is asserted
   present on 3.13+ and absent before it, guarded on `sys.version_info`.
-* `sleep()` is asserted to block for at least the requested 0.05 s, and to
-  use under 10 ms of `process_time()` for sleeps of 0.05 s and 0.2 s.
+* `sleep()` is asserted to block for at least the requested 0.05 s. For
+  sleeps of 0.2 s and 1 s, the least `process_time()` across three samples
+  must be under one quarter of the requested wait. These durations allow
+  coarse CPU accounting (Windows can advance in roughly 16 ms ticks) while
+  separating a blocked wait from spending the requested duration on CPU.
   `perf_counter()` advances by at least the sleep. While a second thread
   spins until its own `thread_time()` reaches 0.2 s, the thread waiting on it
   is charged under 50 ms of `thread_time()` and `process_time()` advances by
@@ -429,14 +432,16 @@ class TestSleepBlocksWithoutWorking:
 
         assert time.monotonic() - start >= 0.05
 
+    @pytest.mark.timing
     def test_the_wait_costs_no_cpu_time(self) -> None:
-        spent: list[float] = []
-        for secs in (0.05, 0.2):
-            before = time.process_time()
-            time.sleep(secs)
-            spent.append(time.process_time() - before)
+        for secs in (0.2, 1.0):
+            spent: list[float] = []
+            for _ in range(3):
+                before = time.process_time()
+                time.sleep(secs)
+                spent.append(time.process_time() - before)
 
-        assert all(cpu < 0.01 for cpu in spent), f"sleep consumed CPU: {spent}"
+            assert min(spent) < secs / 4, f"sleep({secs}) consumed CPU: {spent}"
 
 
 class TestPosixClocks:
