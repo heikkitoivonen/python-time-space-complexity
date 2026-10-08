@@ -1,274 +1,187 @@
-# defaultdict - Dictionary with Default Values Complexity
+# defaultdict Complexity
 
-The `defaultdict` class from `collections` provides a dictionary that returns a default value for missing keys instead of raising KeyError.
+`collections.defaultdict` is a `dict` subclass that fills in a missing key when it is read:
+`dd[key]` on an absent key calls `default_factory()`, stores the result under the key and returns
+it. Lookups and updates are the inherited `dict` code, so a hit is a `dict` lookup and a miss adds
+one factory call and one insertion.
+
+`n` is the keys in the `defaultdict`, `m` is the entries supplied by the other mapping, iterable or
+keyword arguments an operation takes, and `f` is the cost of one call to `default_factory`, both
+the time it takes and the value it returns. Bounds treat hashing a key and comparing keys or values
+as O(1).
 
 ## Complexity Reference
 
+### defaultdict
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `defaultdict()` | O(1) | O(1) | Create dict |
-| Lookup existing key | O(1) avg | O(1) | O(n) worst case due to hash collisions |
-| Lookup missing key | O(1) avg | O(1) | Creates default; O(n) worst case |
-| Insert | O(1) avg | O(1) | O(n) worst case due to hash collisions |
-| Delete | O(1) avg | O(1) | O(n) worst case due to hash collisions |
-| `copy()` | O(n) | O(n) | n = stored keys; shallow copy retaining the factory |
+| `defaultdict(default_factory=None, /, *args, **kwargs)` | O(m) | O(m) | The remaining arguments go to `dict()`; a first argument that is neither callable nor `None` raises `TypeError` |
+| `dd[key]`, key present | O(1) | O(1) | The factory is not called |
+| `dd[key]`, key missing | O(1 + f) amortized | O(1 + f) amortized | Calls `__missing__`, which stores and returns the factory's value; with no factory it raises `KeyError` |
+| `dd[key] += 1` | O(1 + f) amortized | O(1 + f) amortized | A read and a store; on a missing key the read stores the factory's value first |
+| `defaultdict.__missing__(key)` | O(1 + f) amortized | O(1 + f) amortized | What `dd[key]` calls on a miss; `get()`, `in`, `setdefault()` and `pop()` never call it |
+| `defaultdict.default_factory` | O(1) | O(1) | Read or reassign at any time; `None` makes a miss raise `KeyError` |
+| `defaultdict.copy()`, `copy.copy(dd)` | O(n) | O(n) | Shallow; the copy keeps the same factory |
+| `dd \| other`, `other \| dd` | O(n + m) | O(n + m) | A new `defaultdict` with the factory of the `defaultdict` operand, the left one if both are; `other` must be a `dict` |
+| `dd \|= other` | O(m) amortized | O(m) amortized | The inherited `dict` update; takes any mapping or iterable of pairs |
+| `defaultdict.fromkeys(iterable, value=None)` | O(m) | O(m) | Inherited; the result's `default_factory` is `None` |
+| `pickle.dumps(dd)` | O(n) | O(n) | Keys and values priced as for a `dict`; the factory has to be picklable too, and a lambda is not |
 
-## Basic Usage
+### Inherited from dict
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `dd.get(key, default=None)`, `key in dd` | O(1) | O(1) | Never call the factory and never insert |
+| `dd.setdefault(key, default=None)`, `dd.pop(key[, default])` | O(1) amortized | O(1) amortized | Use their own default, never the factory |
+| `dd[key] = value`, `del dd[key]` | O(1) amortized | O(1) amortized | |
+| `len(dd)`, `dd.keys()`, `dd.values()`, `dd.items()` | O(1) | O(1) | Views are live; iterating one is O(n) |
+| `dd == other` | O(n) | O(1) | Compares items only: the factory is ignored, and a `defaultdict` equals a `dict` with the same items |
+
+The other `dict` methods are inherited unchanged and cost what they cost on a
+[dict](../builtins/dict.md).
+
+## Reading a Missing Key Inserts It
+
+`dd[key]` fills in a missing key even when the code only meant to look. `get()` and `in` look
+without inserting.
 
 ```python
 from collections import defaultdict
 
-# Create with default factory - O(1)
-dd = defaultdict(list)  # O(1)
+groups = defaultdict(list)  # O(1)
+groups['a'].append(1)       # O(1 + f) - missing: list() runs and [] is stored
+groups['a'].append(2)       # O(1) - present: the factory is not called
+assert groups == {'a': [1, 2]}
 
-# Missing key returns default - O(1)
-dd['key'].append(1)  # O(1) - creates empty list
-
-# Regular dict behavior for existing keys - O(1)
-dd['key'].append(2)  # O(1) - appends to list
-
-# Access - O(1)
-print(dd['key'])  # [1, 2]
-print(dd['missing'])  # []
+assert groups.get('b') is None  # O(1) - no insert
+assert 'b' not in groups        # O(1) - no insert
+assert groups['b'] == []        # O(1 + f) - and now it is there
+assert len(groups) == 2
 ```
 
 ## Default Factories
 
-`default_factory` holds the callable supplying missing values, or `None` to
-raise `KeyError` on a missing key. Existing keys do not call the factory.
-An increment such as `d[key] += 1` performs a get and a set; on a missing key,
-the factory supplies and stores the initial value as well.
+The factory is any zero-argument callable, called once per miss and never for a present key.
+`default_factory` can be reassigned at any time; `None` turns a miss back into `KeyError`.
 
 ```python
 from collections import defaultdict
 
-original = defaultdict(list, items=[1])
-copied = original.copy()  # O(n) time and space
-assert copied.default_factory is list
-assert copied['items'] is original['items']  # Shallow copy
-copied.default_factory = None
+counts = defaultdict(int)  # int() -> 0
+counts['x'] += 1           # O(1 + f) - a read that stores 0, then a store of 1
+assert counts == {'x': 1}
+
+members = defaultdict(set)  # set() -> set()
+members['team'].add('alice')
+assert members['team'] == {'alice'}
+
+nested = defaultdict(lambda: defaultdict(int))  # each miss builds an inner defaultdict
+nested['2024']['jan'] += 5
+assert nested['2024']['jan'] == 5
+
+counts.default_factory = None  # O(1) - misses raise again
 try:
-    copied['missing']
-except KeyError:
-    print('No default factory')
+    counts['missing']
+except KeyError as error:
+    assert error.args == ('missing',)
+else:
+    raise AssertionError('a missing key was filled in without a factory')
+assert counts == {'x': 1}
 ```
 
-### Common Factories
+## Copying, Merging and Pickling
+
+`copy()` and `|` build a new `defaultdict` that keeps the factory. `fromkeys()` is the inherited
+class method, so its result has no factory. Pickling stores the factory along with the items, and
+a lambda cannot be pickled.
 
 ```python
+import pickle
 from collections import defaultdict
 
-# Default to list - O(1)
-dd_list = defaultdict(list)
-dd_list['items'].append('a')  # Creates []
+original = defaultdict(list, a=[1])  # O(m)
+copied = original.copy()             # O(n), shallow
+assert copied.default_factory is list
+assert copied['a'] is original['a']  # the values are shared, not copied
 
-# Default to int - O(1)
-dd_int = defaultdict(int)
-dd_int['count'] += 1  # Creates 0, then += 1
+merged = original | {'b': [2]}  # O(n + m)
+assert type(merged) is defaultdict and merged.default_factory is list
+reflected = {'b': [2]} | original  # O(n + m), still a defaultdict
+assert type(reflected) is defaultdict and list(reflected) == ['b', 'a']
 
-# Default to set - O(1)
-dd_set = defaultdict(set)
-dd_set['members'].add('alice')  # Creates set()
+original |= [('c', [3])]  # O(m), in place
+assert list(original) == ['a', 'c']
 
-# Default to dict - O(1)
-dd_dict = defaultdict(dict)
-dd_dict['nested']['key'] = 'value'  # Creates {}
-```
+keys = defaultdict.fromkeys('xy', 0)  # O(m)
+assert keys.default_factory is None
 
-### Custom Factories
+restored = pickle.loads(pickle.dumps(original))  # O(n)
+assert restored == original and restored.default_factory is list
 
-```python
-from collections import defaultdict
-
-# Lambda function - O(1)
-dd_lambda = defaultdict(lambda: 'default')
-print(dd_lambda['missing'])  # 'default'
-
-# Callable returning list - O(1)
-def default_list():
-    return []
-
-dd_custom = defaultdict(default_list)
-dd_custom['items'].append(1)
-
-# Callable with arguments (use lambda) - O(1)
-dd_tuple = defaultdict(lambda: (0, 0))
-print(dd_tuple['point'])  # (0, 0)
+try:
+    pickle.dumps(defaultdict(lambda: 0))
+except (pickle.PicklingError, AttributeError):
+    pass
+else:
+    raise AssertionError('a lambda factory was pickled')
 ```
 
 ## Common Patterns
 
-### Counting Items
+### Grouping
 
 ```python
 from collections import defaultdict
 
-# Count occurrences - O(n)
-words = ['apple', 'banana', 'apple', 'cherry', 'banana', 'apple']
-
-word_count = defaultdict(int)
-for word in words:  # O(n)
-    word_count[word] += 1  # O(1)
-
-print(word_count)  # {'apple': 3, 'banana': 2, 'cherry': 1}
-
-# Compare with regular dict - more code
-word_count_dict = {}
-for word in words:  # O(n)
-    if word in word_count_dict:  # O(1)
-        word_count_dict[word] += 1
-    else:
-        word_count_dict[word] = 1
-```
-
-### Grouping Items
-
-```python
-from collections import defaultdict
-
-# Group by key - O(n)
-students = [
-    ('Alice', 'A'),
-    ('Bob', 'B'),
-    ('Charlie', 'A'),
-    ('David', 'C'),
-]
-
-grades = defaultdict(list)
-for name, grade in students:  # O(n)
-    grades[grade].append(name)  # O(1)
-
-print(grades)  # {'A': ['Alice', 'Charlie'], 'B': ['Bob'], 'C': ['David']}
-```
-
-### Building Graphs
-
-```python
-from collections import defaultdict
-
-# Build adjacency list - O(E)
-edges = [('A', 'B'), ('B', 'C'), ('A', 'C')]
+edges = [('a', 'b'), ('b', 'c'), ('a', 'c')]
 
 graph = defaultdict(list)
-for u, v in edges:  # O(E)
-    graph[u].append(v)  # O(1)
+for u, v in edges:
+    graph[u].append(v)  # O(1) amortized per edge
+assert graph == {'a': ['b', 'c'], 'b': ['c']}
 
-print(graph)  # {'A': ['B', 'C'], 'B': ['C']}
+assert graph.get('c', []) == []  # O(1) - looks without adding 'c'
+assert 'c' not in graph
 ```
 
-### Inverse Mapping
+### Counting
 
 ```python
-from collections import defaultdict
+from collections import Counter, defaultdict
 
-# One-to-many mapping - O(n)
-data = {'a': 1, 'b': 2, 'c': 1, 'd': 3, 'e': 2}
+words = ['apple', 'banana', 'apple', 'cherry', 'banana', 'apple']
 
-inverse = defaultdict(list)
-for key, value in data.items():  # O(n)
-    inverse[value].append(key)  # O(1)
+counts = defaultdict(int)
+for word in words:
+    counts[word] += 1  # O(1) amortized per word
+assert counts == {'apple': 3, 'banana': 2, 'cherry': 1}
 
-print(inverse)  # {1: ['a', 'c'], 2: ['b', 'e'], 3: ['d']}
+# Counter builds the same mapping and adds most_common() and multiset arithmetic
+assert Counter(words) == counts
 ```
 
-## Compared to Regular Dict
-
-```python
-from collections import defaultdict
-
-# Regular dict - KeyError on missing key
-d = {'a': 1}
-# d['missing']  # KeyError!
-
-# defaultdict - returns default
-dd = defaultdict(int)
-dd['missing']  # O(1) avg - returns 0 and inserts the key
-
-# Or handle in regular dict
-value = d.get('missing', 0)  # O(1) avg - same cost, more verbose, no insert
-```
-
-## Counter vs defaultdict(int)
-
-```python
-from collections import defaultdict, Counter
-
-# defaultdict(int) - O(n)
-dd = defaultdict(int)
-for x in [1, 2, 2, 3, 3, 3]:  # O(n)
-    dd[x] += 1
-# Result: {1: 1, 2: 2, 3: 3}
-
-# Counter - O(n) but with more methods
-c = Counter([1, 2, 2, 3, 3, 3])  # O(n)
-# Same result, but Counter has most_common(), etc.
-
-# Use Counter for frequency counting
-# Use defaultdict(int) for general counting
-```
-
-## When to Use defaultdict
-
-### Good For:
-- Counting occurrences
-- Grouping items
-- Building graphs/networks
-- Nested structures
-- Avoiding KeyError checks
-
-### Not Good For:
-- One-to-one mappings (use dict)
-- Frequency counting only (use Counter)
-- When default creation has side effects
-- Performance critical code (dict is slightly faster)
-
-## Performance Comparison
-
-```python
-from collections import defaultdict
-import time
-
-# Regular dict with get - O(n)
-d = {}
-start = time.time()
-for i in range(1000000):
-    d[i % 1000] = d.get(i % 1000, 0) + 1  # O(1)
-dict_time = time.time() - start
-
-# defaultdict - O(n)
-dd = defaultdict(int)
-start = time.time()
-for i in range(1000000):
-    dd[i % 1000] += 1  # O(1)
-dd_time = time.time() - start
-
-# defaultdict is typically faster due to C optimization
-```
-
-## Version Notes
-
-- **Python 2.x**: Available in collections
-- **Python 3.x**: Same functionality
-- **All versions**: O(1) average dict operations
-
-## Related Modules
-
-- **[dict](../builtins/dict.md)** - Regular dictionary
-- **[Counter](counter.md)** - Specialized counter
-- **[OrderedDict](ordereddict.md)** - Insertion-order dict
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use for grouping/counting
-- Use for nested structures
-- Use with appropriate default factory
-- Provide default factory explicitly
+- Look with `in` or `get()` when you do not want the key added; `dd[key]` inserts what it misses
+- Set `default_factory = None` once the mapping is built, so a later miss raises instead of growing it
+- Use a class such as `int` or `list`, or a module-level function, as the factory if the mapping will be pickled
 
 ❌ **Avoid**:
 
-- Complex default factory logic
-- Side effects in default factory
-- When regular dict with get() is clearer
-- When Counter is more appropriate
+- Reading `dd[key]` for keys that may be absent just to check them: every miss stores an entry
+- An expensive factory; every miss pays `f`
+- `defaultdict.fromkeys()` when you want a factory; the result has none
+
+## Version Notes
+
+- **All Python 3**: `dd[key]` calls the factory on a miss; `get()`, `in`, `setdefault()` and `pop()` do not
+
+## Related Modules
+
+- **[dict](../builtins/dict.md)** - the base type, and the cost of every inherited operation
+- **[Counter](counter.md)** - a `dict` subclass for counting, with `most_common()` and multiset arithmetic
+- **[OrderedDict](ordereddict.md)** - the other `dict` subclass in `collections`, for reordering
+- **[collections](collections.md)** - the module `defaultdict` belongs to

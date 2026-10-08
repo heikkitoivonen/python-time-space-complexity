@@ -10,7 +10,6 @@ Each test pins one such behaviour, alongside the page that documents it:
 * ``mode()`` on a tie returns a value, it does not raise
 * ``SequenceMatcher`` indexes its second sequence during construction
 * installing a warnings filter scans the filter list
-* ``d[k] += 1`` on a defaultdict is more than one dict operation
 * equal-hashing keys still compare their elements
 * ``int(str)`` and ``Decimal`` arithmetic are superlinear, not linear
 * Unicode normalization was superlinear before CPython's CVE-2026-3276 fix

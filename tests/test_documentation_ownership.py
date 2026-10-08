@@ -5,7 +5,8 @@ collections in the subprocess's temporary working directory.
 These checks cover example execution and page ownership, not every complexity
 claim on the destination pages; those belong to the type-specific tests.
 The collections page's own examples run in tests/test_collections_complexity.py,
-and the ElementTree page's in tests/test_xml_etree_elementtree_complexity.py.
+the defaultdict page's in tests/test_defaultdict_complexity.py, and the
+ElementTree page's in tests/test_xml_etree_elementtree_complexity.py.
 """
 
 import collections
@@ -102,7 +103,6 @@ def _run(source: str, cwd: Path) -> subprocess.CompletedProcess[str]:
     ("page", "count"),
     [
         ("counter.md", 11),
-        ("defaultdict.md", 11),
     ],
 )
 def test_owned_examples_run(page: str, count: int, tmp_path: Path) -> None:

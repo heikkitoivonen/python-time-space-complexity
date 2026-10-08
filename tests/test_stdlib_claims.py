@@ -11,6 +11,7 @@ proves it reads nothing at construction, and no tolerance is involved.
 
 docs/stdlib/array.md's claims live in tests/test_array_complexity.py,
 docs/stdlib/decimal.md's in tests/test_decimal_complexity.py,
+docs/stdlib/defaultdict.md's in tests/test_defaultdict_complexity.py,
 docs/stdlib/fnmatch.md's in tests/test_fnmatch_complexity.py,
 docs/stdlib/multiprocessing.md's in tests/test_multiprocessing_complexity.py,
 docs/stdlib/numbers.md's in tests/test_numbers_complexity.py,
@@ -36,7 +37,7 @@ import queue
 import sqlite3
 import threading
 import time
-from collections import defaultdict, deque
+from collections import deque
 from collections.abc import Callable
 from functools import cmp_to_key
 from pathlib import Path
@@ -53,27 +54,6 @@ def best_time(func: Callable[[], Any], repeats: int = 5) -> float:
         func()
         times.append(time.perf_counter() - start)
     return min(times)
-
-
-class TestDefaultdictInsertsOnRead:
-    """docs/stdlib/defaultdict.md: reading a missing key returns the default
-    *and inserts it*, where dict.get() does not."""
-
-    def test_reading_a_missing_key_inserts_it(self) -> None:
-        counts: defaultdict[str, int] = defaultdict(int)
-        assert counts["missing"] == 0
-        assert "missing" in counts, "the read was also a write"
-
-    def test_get_does_not_insert(self) -> None:
-        plain = {"a": 1}
-        assert plain.get("missing", 0) == 0
-        assert "missing" not in plain
-
-    def test_the_difference_shows_up_in_length(self) -> None:
-        counts: defaultdict[str, int] = defaultdict(int)
-        for key in ("a", "b", "c"):
-            _ = counts[key]
-        assert len(counts) == 3
 
 
 class TestFilecmpIsLazy:
