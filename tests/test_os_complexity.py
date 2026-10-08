@@ -62,7 +62,11 @@ produces, but by the components it walks. Counted on inputs with no symlinks it
 is one lstat per component (4, 6 and 10 calls at depths 2, 4 and 8), but a
 two-component argument reaching a 12-deep target through one link costs 17, and
 through a chain of eight links costs 38 - and those two resolve to the same
-path, which is what rules the result out as the bound.
+path, which is what rules the result out as the bound. Its O(k·R) string work
+and O((j + 1)·R) space, and the per-substitution rebuild in expandvars before
+3.14.1, 3.13.10, 3.12.13, 3.11.15 and 3.10.20, are measured in
+tests/test_posixpath_complexity.py: on POSIX os.path is posixpath, which is
+asserted here.
 os.path.ismount inherits that through 3.12, where it always resolves the
 parent with realpath() before comparing: 5 lstat calls for a shallow path
 against 14 for one ten deep on 3.12, and 7 for the shallow case on 3.10. From
@@ -1063,7 +1067,11 @@ class TestPathOperationsAreStringWork:
         assert os.path.commonprefix(paths) == "/usr/lib", "character-wise, mid-component"
 
     def test_expandvars_output_follows_the_substituted_value(self) -> None:
-        """`os.path.expandvars(path)` | O(L + s) - s is not bounded by L."""
+        """`os.path.expandvars(path)` | O(L + s) - s is not bounded by L.
+
+        The O(e·(L + s)) rebuild before the listed releases is timed on
+        posixpath.expandvars in tests/test_posixpath_complexity.py.
+        """
         os.environ["OS_PAGE_PROBE"] = "z" * 5_000
         try:
             expanded = os.path.expandvars("$OS_PAGE_PROBE")
@@ -1151,26 +1159,30 @@ class TestPathOperationsAreStringWork:
 
 
 class TestRealpathFollowsTheResolvedPath:
-    """`os.path.realpath(path)` | O(R) | O(R), R = the path text it walks.
+    """`os.path.realpath(path)` | O(k·R) | O((j + 1)·R), R = the path text it
+    walks, k its components and j the symlinks followed.
 
     The argument's own length does not bound the work. Every link resolved
     splices its target into the path still to be walked, and those components
     are lstat'ed in turn, so a two-component argument can cost more than a
     sixteen-component one that contains no links.
 
-    Everything here counts lstat calls, which is exact. Elapsed time is not
-    used: realpath rebuilds `newpath = path + sep + name` at every component,
-    which is superlinear in principle, but a deeper path also makes the kernel
-    resolve more components per lstat, and a stopwatch cannot separate the two
-    under this page's convention that a syscall is O(1). Stubbing lstat out
-    entirely leaves the Python-side work close to linear over 100..800
-    components (x2.21, x2.34, x2.24), so the rebuilding never takes over at
-    any depth a real path reaches.
+    Everything here counts lstat calls, which is exact. The k·R string work
+    and the (j + 1)·R space are measured on posixpath.realpath in
+    tests/test_posixpath_complexity.py; on POSIX this row is that function.
 
     Not varied here: the width of each component, the encoding of the path,
     and relative link targets, which re-enter the same loop rather than a
     different one.
     """
+
+    @POSIX_ONLY
+    def test_on_posix_the_row_is_posixpath(self) -> None:
+        import posixpath
+
+        assert os.path is posixpath
+        assert os.path.realpath is posixpath.realpath
+        assert os.path.expandvars is posixpath.expandvars
 
     @POSIX_ONLY
     def test_a_link_free_path_costs_one_lstat_per_component(self, tmp_path: pathlib.Path) -> None:

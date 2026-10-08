@@ -31,7 +31,7 @@ produced before anything can be done with them.
 | `os.path.islink(path)` | O(1) | O(1) | One lstat |
 | `os.path.isjunction(path)` | O(1) | O(1) | 3.12+; one lstat on Windows, and `False` without touching the disk elsewhere |
 | `os.path.isdevdrive(path)` | O(L + C) | O(L + C) | On Windows an `abspath()` then one volume query, `False` if that fails; O(1) and always `False` elsewhere. Windows 3.12+, every platform 3.13+ |
-| `os.path.ismount(path)` | O(R) | O(R) | POSIX: from 3.13 two lstat calls over O(L) of text; through 3.12 a `realpath()` of the parent runs first, carrying its cost. Windows: an `abspath()` and one volume query on every version, see [ntpath](ntpath.md) |
+| `os.path.ismount(path)` | O(k·R) | O((j + 1)·R) | POSIX: from 3.13 two lstat calls over O(L) of text when `path/..` can be lstat'ed; otherwise, and always through 3.12, a `realpath()` of the parent runs, carrying its cost - a regular file or a directory without search permission takes that path on 3.13+ too, see [posixpath](posixpath.md). Windows: an `abspath()` and one volume query on every version, see [ntpath](ntpath.md) |
 | `os.path.getsize(path)` | O(1) | O(1) | One stat |
 | `os.path.getatime(path)` | O(1) | O(1) | One stat |
 | `os.path.getmtime(path)` | O(1) | O(1) | One stat |
@@ -363,10 +363,10 @@ network, or a cache in front of either.
 | `os.path.relpath(path, start)` | O(L + S + C) | O(L + S + C) | S = length of `start`; one `getcwd()` per relative argument, so two when both are. Windows 3.10 first runs each argument through its Python `normpath()`, with that row's quadratic case, see [ntpath](ntpath.md) |
 | `os.path.commonpath(paths)` | O(B) | O(B) | B = total length of every path given |
 | `os.path.commonprefix(paths)` | O(B) | O(B) | Character-wise, so it can end mid-component |
-| `os.path.expandvars(path)` | O(L + s) | O(L + s) | s = total length of the values substituted in |
+| `os.path.expandvars(path)` | O(L + s) | O(L + s) | s = total length of the values substituted in. POSIX releases before 3.14.1, 3.13.10, 3.12.13, 3.11.15 and 3.10.20 rebuild the path for each substitution: O(e·(L + s)) for e substitutions, see [posixpath](posixpath.md) |
 | `os.path.expanduser(path)` | O(L + H) | O(L + H) | H = the home directory spliced in; `~user`, and a bare `~` with no `HOME` set, consult the password database at whatever that backend costs |
 | `os.path.abspath(path)` | O(L + C) | O(L + C) | C = length of the working directory, which a relative path is prefixed with after one `getcwd()` |
-| `os.path.realpath(path)` | O(R) | O(R) | POSIX: R = the path text walked, the argument (rooted at the working directory if relative) plus every symlink target spliced into it; one lstat per component. Windows: no walk for a path it can open, O(L + C + F) with F the result's length; each trailing component it cannot open (missing, access denied) adds O(L + C); a link Windows will not resolve (a missing target, a loop, a chain longer than one open follows) is read one `readlink()` per link, adding O(W) with W the length of every path reached that way; and on 3.10 a path of many `.` or `..` components adds O(L²); see [ntpath](ntpath.md) |
+| `os.path.realpath(path)` | O(k·R) | O((j + 1)·R) | POSIX: R = the path text walked, the argument (rooted at the working directory if relative) plus every symlink target spliced into it, k = its components and j = the symlinks followed; one lstat per component, and each component builds the resolved path so far as a new string, see [posixpath](posixpath.md). Windows: no walk for a path it can open, O(L + C + F) with F the result's length; each trailing component it cannot open (missing, access denied) adds O(L + C); a link Windows will not resolve (a missing target, a loop, a chain longer than one open follows) is read one `readlink()` per link, adding O(W) with W the length of every path reached that way; and on 3.10 a path of many `.` or `..` components adds O(L²); see [ntpath](ntpath.md) |
 | `os.path.samefile(p1, p2)` | O(1) | O(1) | Two stat calls |
 | `os.path.sameopenfile(fd1, fd2)` | O(1) | O(1) | |
 | `os.path.samestat(s1, s2)` | O(1) | O(1) | Compares two `stat_result` objects |
