@@ -1,19 +1,14 @@
-"""Package overviews link to dedicated references and retain working examples.
+"""Package overviews link to dedicated references instead of pricing their types.
 
-Only the explicitly listed pages are executed. Their examples use in-memory
-collections in the subprocess's temporary working directory.
-These checks cover example execution and page ownership, not every complexity
-claim on the destination pages; those belong to the type-specific tests.
+These checks cover page ownership, not the complexity claims or examples on the
+destination pages; those belong to the type-specific tests.
 The collections page's own examples run in tests/test_collections_complexity.py,
-the defaultdict page's in tests/test_defaultdict_complexity.py, and the
-ElementTree page's in tests/test_xml_etree_elementtree_complexity.py.
-"""
+the defaultdict page's in tests/test_defaultdict_complexity.py, the Counter
+page's in tests/test_counter_complexity.py, and the ElementTree page's in
+tests/test_xml_etree_elementtree_complexity.py."""
 
 import collections
 import re
-import subprocess
-import sys
-import textwrap
 from pathlib import Path
 
 import pytest
@@ -77,47 +72,3 @@ def test_xml_parsers_expat_reexports_pyexpat() -> None:
     assert expat is not pyexpat
     for name in ("ParserCreate", "ExpatError", "XMLParserType", "ErrorString", "errors", "model"):
         assert getattr(expat, name) is getattr(pyexpat, name)
-
-
-def _blocks(page: str) -> list[tuple[int, str]]:
-    text = (DOCS / page).read_text(encoding="utf-8")
-    return [
-        (text.count("\n", 0, match.start()) + 1, textwrap.dedent(match.group(1)))
-        for match in re.finditer(r"^```python\n(.*?)^```", text, re.M | re.S)
-    ]
-
-
-def _run(source: str, cwd: Path) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, "-c", source],
-        cwd=cwd,
-        stdin=subprocess.DEVNULL,
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=False,
-    )
-
-
-@pytest.mark.parametrize(
-    ("page", "count"),
-    [
-        ("counter.md", 11),
-    ],
-)
-def test_owned_examples_run(page: str, count: int, tmp_path: Path) -> None:
-    blocks = _blocks(page)
-    assert len(blocks) == count
-    for line, source in blocks:
-        cwd = tmp_path / str(line)
-        cwd.mkdir()
-        result = _run(source, cwd)
-        assert result.returncode == 0, f"{page}:{line}\n{result.stdout}\n{result.stderr}"
-
-
-def test_example_runner_reports_broken_code(tmp_path: Path) -> None:
-    source = _blocks("counter.md")[0][1]
-    broken = source.replace("c = Counter(", "other = Counter(", 1)
-    assert broken != source
-    result = _run(broken, tmp_path)
-    assert result.returncode != 0 and "NameError" in result.stderr
