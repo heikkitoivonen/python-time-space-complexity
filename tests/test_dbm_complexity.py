@@ -1,39 +1,71 @@
 """Tests for docs/stdlib/dbm.md.
 
-This file settles the page's `dbm.sqlite3` rows, the claims around them and the
-version note, and runs the page's self-contained examples. The `dbm.sqlite3`
-backend stores each pair as a row of one SQLite table with a unique key, so
-the page prices single-key operations as indexed lookups and whole-database
-operations as scans. Those bounds are settled by timing two databases of
-1,000 and 100,000 keys, built directly through `sqlite3` in the file
-`dbm.sqlite3.open()` creates so that the build does not pay one commit per
-key; space by traced allocation against a 10,000,000-byte value; and the
-behavioural notes by observation.
+The page prices each backend separately: `dbm.sqlite3` as indexed lookups and
+whole-table scans, `dbm.ndbm` and `dbm.gnu` as hash buckets with a cached key
+count, and `dbm.dumb` as an in-memory index beside a data file. The
+`dbm.sqlite3` and `dbm.ndbm` bounds are settled by timing pairs of databases
+of 1,000 and 100,000 keys (500 and 4,000 for the quadratic `clear()`), space
+by traced allocation against a 10,000,000-byte value, and `dbm.dumb` mostly by
+observation: a recording stand-in for the module's `_io` lists every file it
+opens, and a wrapper around its index commit records each rewrite. The
+`dbm.sqlite3` databases are built directly through `sqlite3` in the file
+`dbm.sqlite3.open()` creates, so the build does not pay one commit per key.
 
 Measurement scope:
 
 * `dbm.sqlite3.open()` costs under 3x at 100x the keys, and a lookup, and a
   delete followed by a store of the same key, each cost under 5x there: a scan
-  would cost about 100x. `len()` costs more than 10x at 100x the keys, measured
-  as the fastest of five calls on one open database, so a cached count would
-  have made it flat.
-* Reading the 10,000,000-byte value, and `key in db` for its key, each peak
-  above 9,000,000 traced bytes, where the same calls for a one-byte value peak
-  under 100,000: `in` fetches the value it does not return.
-* Iterating 100,000 keys without keeping them peaks under 100,000 bytes; the
-  same database's `keys()` peaks above 1,000,000.
-* `items()` and `values()` over 50 keys are observed through SQLite's trace
-  callback on the connection `dbm.sqlite3` opens: at least one `SELECT` per key,
-  where one query for the whole walk would be one.
-* A store is visible through a second handle on the same file before the
-  first handle is closed. The write-ahead log file exists and is non-empty
-  after 100 stores, and is gone after `close()`, and a new handle reads back
-  exactly the 100 pairs stored.
-* The v term in the delete and store rows covers the value removed: in a
-  timing test, deleting a 64,000,000-byte value, and replacing one with a
-  single byte, each cost more than 5x the same operation on a one-byte value.
-* `dbm.sqlite3.error` is a subclass of `OSError`; opening a missing file
-  read-only raises it, and `except dbm.error` catches it.
+  would cost about 100x. `len()` and `bool()` each cost more than 10x at 100x
+  the keys, measured as the fastest of five calls on one open database, so a
+  cached count would have made them flat.
+* Reading the 10,000,000-byte value from `dbm.sqlite3`, and `key in db` for
+  its key, each peak above 9,000,000 traced bytes, where the same calls for a
+  one-byte value peak under 100,000: `in` fetches the value it does not return.
+* Iterating 100,000 `dbm.sqlite3` keys without keeping them peaks under
+  100,000 bytes; the same database's `keys()` peaks above 1,000,000.
+* `items()`, `values()` and `clear()` over 50 `dbm.sqlite3` keys are observed
+  through SQLite's trace callback on the connection `dbm.sqlite3` opens: at
+  least one `SELECT` per key for the first two, and exactly one value lookup
+  and one `DELETE` per key for `clear()`, where one statement for the whole
+  walk would be one.
+* A `dbm.sqlite3` store is visible through a second handle on the same file
+  before the first handle is closed. The write-ahead log file exists and is
+  non-empty after 100 stores, and is gone after `close()`, and a new handle
+  reads back exactly the 100 pairs stored.
+* The v term in the `dbm.sqlite3` delete and store rows covers the value
+  removed: in a timing test, deleting a 64,000,000-byte value, and replacing
+  one with a single byte, each cost more than 5x the same operation on a
+  one-byte value.
+* `dbm.ndbm.open()` costs under 3x at 100x the keys. On the 100,000-key
+  database, the first `len()` after a store costs more than 100x a second
+  `len()`: counted once, then cached. Timed alone, right after a store and
+  delete of a scratch key has emptied the cache, `bool()` costs under 1/100
+  of `len()` there from 3.12, and more than 1/10 of it before 3.12, where it
+  calls `len()`. The b term: a file that held 20,000 keys, all deleted, makes
+  `len()` and `bool()` each cost more than 50x what they cost on a new file
+  (both files have had the scratch key stored and deleted before each call). `key in db` for a 10,000,000-byte value costs more than 50x
+  the same check for a one-byte value. `clear()` (3.13+) on 4,000 keys costs
+  more than 20x `clear()` on 500, where linear would be 8x and quadratic 64x;
+  b grows with n there, so this is the O(n·b) row with b proportional to n.
+* `dbm.dumb`: opening 20,000 keys peaks at more than 5x opening 200, and
+  opening the 20,000 with `flag='n'` peaks at under a fifth of opening them
+  with `'w'`. In a timing test, deleting one key from 20,000 costs more than
+  5x deleting one from 200. By the recording `_io`: `key in db`, `len()` and
+  `bool()` open no file; a lookup opens only the data file, once; storing a
+  new key appends to the index file and never rewrites it, and replacing a
+  value opens only the data file; a delete rewrites the index file once;
+  `sync()` with nothing written opens nothing, and after a store rewrites the
+  index once, as `close()` does; iterating `values()` opens the data file
+  once per key. `clear()` on 50 keys reads the data file 50 times and
+  commits the index 50 times, writing 50 x 49 / 2 index entries in all. A
+  replacement too large for its old blocks grows the data file, and a later
+  new key grows it again rather than reusing the abandoned blocks; a
+  replacement that fits leaves it unchanged.
+* `dbm.error` is a tuple holding `OSError`, and every importable backend's
+  `error` is `OSError` or a subclass of it. `dbm.sqlite3.error` is raised by
+  opening a missing file read-only, and `except dbm.error` catches it.
+  `dbm.whichdb()` on a 10,000,000-byte file of unknown format peaks under
+  500,000 traced bytes and returns `""`.
 * On 3.13+ `dbm.open(path, "c")` for a new file makes a database that
   `dbm.whichdb()` reports as `dbm.sqlite3`; before 3.13 the module does not
   exist. A `dbm.ndbm` database has `clear()` exactly from 3.13, where that
@@ -42,36 +74,48 @@ Measurement scope:
   iterable and has no `items()` or `values()` attribute while its `keys()`
   lists every key, and a `dbm.dumb` database iterates, and its `items()` is a
   list.
-* `dbm.dumb` is O(n) to open and to delete from. Opening a database of 20,000
-  keys peaks at more than 5x one of 200 (the whole key index is read into a
-  dict). In a timing test, deleting one key from 20,000 costs more than 5x
-  deleting one from 200, because each delete rewrites the index file.
 * Every fenced Python block runs in its own subprocess and working directory
   on every version, except the SQLite block, which is about `dbm.sqlite3` and
-  is skipped before 3.13. The iteration example checks the backend
-  `dbm.whichdb()` reports and asserts `TypeError` from `iter()` where the
-  backend is not iterable, so it holds on every version. A mutated assertion
-  in it is asserted to make the block fail.
+  is skipped before 3.13. The examples that use `dbm.open()` hold whichever
+  backend it picks. A mutated assertion in one block is asserted to make it
+  fail.
 
 Not settled here:
 
-* The rest of the page's generic table - the per-backend single-key bounds
-  other than `dbm.dumb`'s delete - and the `dbm.gnu` table. `dbm.gnu` cannot be
-  imported on this project's builds (CPython has no `_gdbm` without the GDBM
-  library), so its rows - `open()`, `open_flags`, `error`, the cached `len()`,
-  `firstkey()`/`nextkey()`, `keys()`, `reorganize()`, `sync()`, `clear()` and
-  `close()` - are read from the official documentation and
-  Modules/_gdbmmodule.c on each supported version, not measured. The O(1)
-  average single-key bound, `open()` reading the bucket directory into
-  memory, and the per-walk, sync and disk costs are the GDBM library's own,
-  not CPython's, and can vary with the library version.
+* The `dbm.gnu` table. `dbm.gnu` cannot be imported on this project's builds
+  (CPython has no `_gdbm` without the GDBM library), so it is listed by the
+  API audit as an import error and its rows are read from the official
+  documentation and Modules/_gdbmmodule.c on each supported version, not
+  measured: `open()`, `open_flags`, `error`, the single-key rows, `key in`
+  calling `gdbm_exists()` without a fetch, the cached `len()`, `bool()` from
+  3.12, `firstkey()`/`nextkey()`, `keys()`, `reorganize()`, `sync()`,
+  `clear()` and `close()`. `bool()` and `clear()` call `gdbm_firstkey()`;
+  that GDBM's first-key walk passes emptied buckets, making both follow b as
+  `dbm.ndbm`'s do, is the GDBM library's behaviour, as are the O(1) average
+  single-key bound, `open()` reading the bucket directory, and the sync,
+  close and reorganize costs.
+* The `dbm.ndbm` single-key rows other than `in`, and `close()`, are the ndbm
+  library's: Berkeley DB on the builds measured, GDBM's emulation or the
+  system's own elsewhere. Every `dbm.ndbm` measurement is of the library this
+  build reports; that a build on GDBM's emulation opens in O(b), as
+  `dbm.gnu.open()` does, is not measured. The space of `key in db` on
+  `dbm.ndbm` is the library's own copy of the value, which tracemalloc does
+  not see. That deleted keys leave b unchanged is inferred from the emptied
+  file's walk cost, not read from the file.
 * The log n in the `dbm.sqlite3` lookup, store and delete rows is SQLite's
   B-tree depth; the timings exclude a scan but cannot tell O(log n) from O(1).
-  Likewise the `items()` row's n log n is one lookup per key, observed as a
-  count of statements, not timed. The O(w) close is SQLite's checkpoint of
+  Likewise the `items()` and `clear()` rows' n log n is one statement per key,
+  observed as a count, not timed. The O(w) close is SQLite's checkpoint of
   its write-ahead log; the test shows the log is folded into the database on
   close, not how that cost scales.
+* `dbm.dumb`'s `close()` is O(n) for releasing the index as well as for the
+  rewrite; only the rewrite is observed.
 * Only short keys are used, and one large value; key length is not varied.
+  The `dbm.ndbm` membership test assumes the library accepts a
+  10,000,000-byte value. Keys hash evenly here; hash prefixes skewed enough
+  to grow GDBM's directory faster than its buckets are outside the page's
+  assumption that b is O(n). Bounds read with n >= 1: `clear()` on an
+  already-empty `dbm.ndbm` or `dbm.gnu` file still makes one O(b) walk.
 * `dbm.ndbm.error.winerror` and `dbm.sqlite3.error.winerror`, which the audit
   lists for classification, are `OSError` attributes inherited by both
   exception classes, not `dbm` APIs.
@@ -83,6 +127,8 @@ import dbm
 import dbm.dumb
 import importlib
 import importlib.util
+import io
+import os
 import pathlib
 import re
 import sqlite3
@@ -97,7 +143,7 @@ from typing import Any
 import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "dbm.md"
-EXPECTED_BLOCKS = 16
+EXPECTED_BLOCKS = 10
 HAS_SQLITE_BACKEND = sys.version_info >= (3, 13)
 
 
@@ -166,6 +212,21 @@ def databases(tmp_path_factory: pytest.TempPathFactory) -> tuple[pathlib.Path, p
         pytest.skip("version: dbm.sqlite3 is 3.13+")
     directory = tmp_path_factory.mktemp("dbm")
     return build(directory / "small.sqlite", 1_000), build(directory / "large.sqlite", 100_000)
+
+
+@pytest.fixture
+def statements(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Every SQL statement run on a connection opened while the test runs."""
+    seen: list[str] = []
+    real_connect = sqlite3.connect
+
+    def connect(*args: Any, **kwargs: Any) -> sqlite3.Connection:
+        connection = real_connect(*args, **kwargs)
+        connection.set_trace_callback(seen.append)
+        return connection
+
+    monkeypatch.setattr(sqlite3, "connect", connect)
+    return seen
 
 
 @SQLITE_ONLY
@@ -284,21 +345,23 @@ class TestReadsCostTheValue:
 
 @SQLITE_ONLY
 class TestWholeDatabaseOperationsScan:
-    """`len(db)` O(n), iteration O(n) time and O(1) space, `keys()` O(n) space."""
+    """`len(db)` and `bool(db)` O(n), iteration O(n) time and O(1) space,
+    `keys()` O(n) space."""
 
     @pytest.mark.timing
-    def test_len_counts_the_keys_on_every_call(
-        self, databases: tuple[pathlib.Path, pathlib.Path]
+    @pytest.mark.parametrize("count", [len, bool], ids=["len", "bool"])
+    def test_counting_scans_the_keys_on_every_call(
+        self, databases: tuple[pathlib.Path, pathlib.Path], count: Callable[[Any], object]
     ) -> None:
         backend = sqlite_backend()
         small, large = (backend.open(path, "r") for path in databases)
         try:
-            ratio = best_ns(lambda: len(large)) / best_ns(lambda: len(small))
+            ratio = best_ns(lambda: count(large)) / best_ns(lambda: count(small))
         finally:
             small.close()
             large.close()
 
-        assert ratio > 10, f"100x the keys cost only x{ratio:.1f} per len()"
+        assert ratio > 10, f"100x the keys cost only x{ratio:.1f} per {count.__name__}()"
 
     @pytest.mark.serial
     def test_iteration_streams_and_keys_builds_a_list(
@@ -322,36 +385,40 @@ class TestWholeDatabaseOperationsScan:
 
 
 @SQLITE_ONLY
-class TestItemsLooksUpEachKey:
-    """`items()` and `values()`: one lookup per key on top of the key scan."""
+class TestStatementsPerKey:
+    """`items()` and `values()` look up each key on top of the key scan, and
+    `clear()` runs one `DELETE` per key."""
 
-    @pytest.fixture
-    def statements(self, monkeypatch: pytest.MonkeyPatch) -> list[str]:
-        seen: list[str] = []
-        real_connect = sqlite3.connect
-
-        def connect(*args: Any, **kwargs: Any) -> sqlite3.Connection:
-            connection = real_connect(*args, **kwargs)
-            connection.set_trace_callback(seen.append)
-            return connection
-
-        monkeypatch.setattr(sqlite3, "connect", connect)
-        return seen
+    @staticmethod
+    def _fifty(path: pathlib.Path) -> Any:
+        db = sqlite_backend().open(path, "c")
+        for index in range(50):
+            db[b"k%d" % index] = b"v"
+        return db
 
     @pytest.mark.parametrize("view", ["items", "values"])
     def test_one_select_per_key(
         self, tmp_path: pathlib.Path, statements: list[str], view: str
     ) -> None:
-        with sqlite_backend().open(tmp_path / "fifty.sqlite", "c") as db:
-            for index in range(50):
-                db[b"k%d" % index] = b"v"
+        with self._fifty(tmp_path / "fifty.sqlite") as db:
             statements.clear()
-
             walked = list(getattr(db, view)())
             selects = [text for text in statements if text.lstrip().upper().startswith("SELECT")]
 
         assert len(walked) == 50
         assert len(selects) >= 50, f"{len(selects)} SELECT statements for 50 keys"
+
+    def test_clear_deletes_key_by_key(self, tmp_path: pathlib.Path, statements: list[str]) -> None:
+        with self._fifty(tmp_path / "fifty.sqlite") as db:
+            statements.clear()
+            db.clear()
+            assert len(db) == 0
+
+        def starting(prefix: str) -> int:
+            return sum(text.lstrip().upper().startswith(prefix) for text in statements)
+
+        assert starting("DELETE") == 50, f"{starting('DELETE')} DELETE statements for 50 keys"
+        assert starting("SELECT VALUE") == 50, f"{starting('SELECT VALUE')} lookups for 50 keys"
 
 
 @SQLITE_ONLY
@@ -387,10 +454,25 @@ class TestWritesAndClose:
             assert dict(reopened.items()) == {b"%d" % i: b"x" * 100 for i in range(100)}
 
 
-@SQLITE_ONLY
 class TestErrors:
-    """`dbm.sqlite3.error`: an `OSError`, caught by `except dbm.error`."""
+    """`dbm.error` catches every backend's error; `dbm.sqlite3.error` is an `OSError`."""
 
+    def test_every_backend_error_is_an_oserror(self) -> None:
+        assert isinstance(dbm.error, tuple) and OSError in dbm.error
+        names = ["dbm.dumb", "dbm.ndbm", "dbm.gnu", "dbm.sqlite3"]
+        backends = [m for m in names if importlib.util.find_spec(m) is not None]
+        checked = 0
+        for name in backends:
+            try:
+                module = importlib.import_module(name)
+            except ImportError:
+                continue
+            assert issubclass(module.error, OSError), name
+            checked += 1
+        assert checked >= 1
+        assert dbm.dumb.error is OSError
+
+    @SQLITE_ONLY
     def test_a_missing_file_opened_read_only_raises_it(self, tmp_path: pathlib.Path) -> None:
         backend = sqlite_backend()
         assert issubclass(backend.error, OSError)
@@ -401,10 +483,148 @@ class TestErrors:
         assert isinstance(caught.value, backend.error)
 
 
-class TestBackendsDiffer:
-    """Which backends iterate, and `dbm.dumb`'s O(n) open and delete."""
+class TestWhichdbReadsAHeader:
+    """`dbm.whichdb()` O(1): it reads at most 16 bytes of a file."""
 
-    def test_ndbm_lists_keys_but_does_not_iterate(self, tmp_path: pathlib.Path) -> None:
+    @pytest.mark.serial
+    def test_a_large_unknown_file_is_not_read(self, tmp_path: pathlib.Path) -> None:
+        path = tmp_path / "unknown"
+        path.write_bytes(b"\x01" * BIG)
+
+        result: list[str | None] = []
+        peak = peak_bytes(lambda: result.append(dbm.whichdb(str(path))))
+
+        assert result == [""]
+        assert peak < BIG // 20, f"whichdb() of a {BIG}-byte file peaked at {peak} B"
+
+
+@pytest.fixture(scope="module")
+def ndbm_databases(tmp_path_factory: pytest.TempPathFactory) -> tuple[str, str]:
+    """dbm.ndbm files of 1,000 and 100,000 short pairs."""
+    ndbm = importable_ndbm()
+    directory = tmp_path_factory.mktemp("ndbm")
+    paths: list[str] = []
+    for keys in (1_000, 100_000):
+        path = str(directory / f"ndbm{keys}")
+        with ndbm.open(path, "n") as db:
+            for index in range(keys):
+                db[b"k%d" % index] = b"v"
+        paths.append(path)
+    return paths[0], paths[1]
+
+
+def probe_after_a_write(db: Any, probe: Callable[[Any], object], repeats: int = 3) -> float:
+    """Fastest `probe(db)`, in nanoseconds, each timed right after a store and
+    delete of a scratch key has emptied the cached key count."""
+    best: float | None = None
+    for _ in range(repeats):
+        db[b"scratch"] = b"v"
+        del db[b"scratch"]
+        start = time.perf_counter_ns()
+        probe(db)
+        elapsed = time.perf_counter_ns() - start
+        best = elapsed if best is None else min(best, elapsed)
+    assert best is not None
+    return best
+
+
+class TestNdbm:
+    """`dbm.ndbm`: O(1) open, an O(b) key count cached until the next write,
+    `bool()` stopping at the first key from 3.12 but still walking emptied
+    buckets, `in` fetching the value, and O(n·b) `clear()`."""
+
+    @pytest.mark.timing
+    def test_opening_does_not_follow_the_keys(self, ndbm_databases: tuple[str, str]) -> None:
+        ndbm = importable_ndbm()
+        small, large = ndbm_databases
+
+        def opening(path: str) -> Callable[[], None]:
+            return lambda: ndbm.open(path, "r").close()
+
+        ratio = best_ns(opening(large)) / best_ns(opening(small))
+
+        assert ratio < 3, f"100x the keys cost x{ratio:.1f} to open"
+
+    @pytest.mark.timing
+    def test_len_counts_once_then_caches(self, ndbm_databases: tuple[str, str]) -> None:
+        ndbm = importable_ndbm()
+        with ndbm.open(ndbm_databases[1], "w") as db:
+            db[b"k1"] = b"v"
+            start = time.perf_counter_ns()
+            first = len(db)
+            counted = time.perf_counter_ns() - start
+            cached = best_ns(lambda: len(db))
+
+        assert first == 100_000
+        assert counted > 100 * cached, f"first len() {counted} ns, cached {cached} ns"
+
+    @pytest.mark.timing
+    def test_bool_counts_only_before_312(self, ndbm_databases: tuple[str, str]) -> None:
+        ndbm = importable_ndbm()
+        with ndbm.open(ndbm_databases[1], "w") as db:
+            counting = probe_after_a_write(db, len)
+            truth = probe_after_a_write(db, bool)
+
+        if sys.version_info >= (3, 12):
+            assert truth < counting / 100, f"bool() {truth} ns, len() {counting} ns"
+        else:
+            assert truth > counting / 10, f"bool() {truth} ns, len() {counting} ns"
+
+    @pytest.mark.timing
+    @pytest.mark.parametrize("probe", [len, bool], ids=["len", "bool"])
+    def test_an_emptied_file_is_still_walked(
+        self, tmp_path: pathlib.Path, probe: Callable[[Any], object]
+    ) -> None:
+        ndbm = importable_ndbm()
+
+        def emptied(keys: int) -> float:
+            with ndbm.open(str(tmp_path / f"emptied{keys}"), "n") as db:
+                for index in range(keys):
+                    db[b"k%d" % index] = b"v"
+                for key in db.keys():
+                    del db[key]
+                assert len(db) == 0
+                return probe_after_a_write(db, probe)
+
+        ratio = emptied(20_000) / emptied(0)
+
+        assert ratio > 50, f"20,000 deleted keys cost only x{ratio:.1f} per {probe.__name__}()"
+
+    @pytest.mark.timing
+    def test_membership_fetches_the_value(self, tmp_path: pathlib.Path) -> None:
+        ndbm = importable_ndbm()
+        path = str(tmp_path / "values")
+        with ndbm.open(path, "n") as db:
+            db[b"big"] = b"x" * BIG
+            db[b"small"] = b"x"
+        with ndbm.open(path, "r") as db:
+            assert b"big" in db and b"small" in db
+            ratio = best_ns(lambda: b"big" in db) / best_ns(lambda: b"small" in db)
+
+        assert ratio > 50, f"a {BIG}-byte value cost only x{ratio:.1f} to test for"
+
+    @pytest.mark.timing
+    @pytest.mark.skipif(sys.version_info < (3, 13), reason="ndbm.clear() is 3.13+")
+    def test_clear_is_quadratic(self, tmp_path: pathlib.Path) -> None:
+        ndbm = importable_ndbm()
+
+        def clearing(keys: int) -> float:
+            path = str(tmp_path / f"clear{keys}")
+            with ndbm.open(path, "n") as db:
+                for index in range(keys):
+                    db[b"k%d" % index] = b"v"
+            with ndbm.open(path, "w") as db:
+                start = time.perf_counter_ns()
+                db.clear()
+                elapsed = time.perf_counter_ns() - start
+                assert len(db) == 0
+            return elapsed
+
+        ratio = clearing(4_000) / clearing(500)
+
+        assert ratio > 20, f"8x the keys cost only x{ratio:.1f} to clear"
+
+    def test_it_lists_keys_but_does_not_iterate(self, tmp_path: pathlib.Path) -> None:
         ndbm = importable_ndbm()
         with ndbm.open(str(tmp_path / "ndbm"), "c") as db:
             db[b"a"] = b"1"
@@ -414,14 +634,34 @@ class TestBackendsDiffer:
                 iter(db)
             assert not hasattr(db, "items") and not hasattr(db, "values")
 
-    def test_dumb_iterates_and_its_items_is_a_list(self, tmp_path: pathlib.Path) -> None:
-        with dbm.dumb.open(str(tmp_path / "dumb"), "c") as db:
-            db[b"a"] = b"1"
-            db[b"b"] = b"2"
-            assert sorted(db) == [b"a", b"b"]
-            items = db.items()
-            assert isinstance(items, list)
-            assert sorted(items) == [(b"a", b"1"), (b"b", b"2")]
+
+class RecordingIO:
+    """Stands in for `dbm.dumb`'s `_io`, recording each file it opens."""
+
+    def __init__(self) -> None:
+        self.opened: list[tuple[str, str]] = []
+
+    def open(self, file: Any, mode: str = "r", *args: Any, **kwargs: Any) -> Any:
+        self.opened.append((os.fsdecode(file).rsplit(".", 1)[-1], mode))
+        return io.open(file, mode, *args, **kwargs)  # noqa: UP020 - mirrors _io.open
+
+    def take(self) -> list[tuple[str, str]]:
+        opened, self.opened = self.opened, []
+        return opened
+
+
+@pytest.fixture
+def recorded(monkeypatch: pytest.MonkeyPatch) -> RecordingIO:
+    """Record every file `dbm.dumb` opens, through the module and the class."""
+    recorder = RecordingIO()
+    monkeypatch.setattr(dbm.dumb, "_io", recorder)
+    monkeypatch.setattr(dbm.dumb._Database, "_io", recorder)  # noqa: SLF001
+    return recorder
+
+
+class TestDumb:
+    """`dbm.dumb`: an in-memory index read at open, rewritten on delete and
+    sync, and appended to on store."""
 
     @staticmethod
     def _dumb(path: pathlib.Path, keys: int) -> str:
@@ -435,12 +675,15 @@ class TestBackendsDiffer:
         large = self._dumb(tmp_path / "large", 20_000)
         dbm.dumb.open(small, "r").close()
 
-        def opening(path: str) -> Callable[[], None]:
-            return lambda: dbm.dumb.open(path, "r").close()
+        def opening(path: str, flag: str = "r") -> Callable[[], None]:
+            return lambda: dbm.dumb.open(path, flag).close()
 
         small_peak, large_peak = peak_bytes(opening(small)), peak_bytes(opening(large))
+        reading = peak_bytes(opening(large, "w"))
+        discarding = peak_bytes(opening(large, "n"))
 
         assert large_peak > 5 * small_peak, f"100x the keys: {small_peak} B, {large_peak} B"
+        assert discarding * 5 < reading, f"'n' peaked at {discarding} B, 'w' at {reading} B"
 
     @pytest.mark.timing
     def test_a_delete_rewrites_the_index(self, tmp_path: pathlib.Path) -> None:
@@ -465,10 +708,100 @@ class TestBackendsDiffer:
 
         assert ratio > 5, f"100x the keys cost only x{ratio:.1f} per delete"
 
+    def test_the_files_each_operation_opens(
+        self, tmp_path: pathlib.Path, recorded: RecordingIO
+    ) -> None:
+        db = dbm.dumb.open(self._dumb(tmp_path / "files", 10), "w")
+        try:
+            recorded.take()
+            assert b"k1" in db and len(db) == 10 and bool(db)
+            assert recorded.take() == []
+
+            assert db[b"k1"] == b"v"
+            assert recorded.take() == [("dat", "rb")]
+
+            db[b"new"] = b"v"
+            assert recorded.take() == [("dat", "rb+"), ("dir", "a")]
+
+            db[b"k1"] = b"w"
+            assert recorded.take() == [("dat", "rb+")]
+
+            db.sync()
+            assert recorded.take() == [("dir", "w")]
+
+            del db[b"new"]
+            assert recorded.take() == [("dir", "w")]
+
+            assert sorted(db.values()) == [b"v"] * 9 + [b"w"]
+            assert recorded.take() == [("dat", "rb")] * 10
+        finally:
+            db.close()
+
+    def test_sync_with_nothing_written_opens_nothing(
+        self, tmp_path: pathlib.Path, recorded: RecordingIO
+    ) -> None:
+        db = dbm.dumb.open(self._dumb(tmp_path / "clean", 10), "w")
+        recorded.take()
+        db.sync()
+        assert recorded.take() == []
+        db[b"k1"] = b"w"
+        recorded.take()
+        db.close()
+        assert recorded.take() == [("dir", "w")]
+
+    def test_clear_rewrites_the_rest_of_the_index_per_key(
+        self, tmp_path: pathlib.Path, recorded: RecordingIO
+    ) -> None:
+        db: Any = dbm.dumb.open(self._dumb(tmp_path / "clear", 50), "w")
+        recorded.take()
+        written: list[int] = []
+        commit = db._commit  # noqa: SLF001
+
+        def recording_commit() -> None:
+            written.append(len(db._index))  # noqa: SLF001
+            commit()
+
+        db._commit = recording_commit  # noqa: SLF001
+        try:
+            db.clear()
+        finally:
+            del db._commit  # noqa: SLF001
+            db.close()
+
+        assert len(written) == 50
+        assert sum(written) == 50 * 49 // 2
+        assert recorded.take().count(("dat", "rb")) == 50
+
+    def test_abandoned_blocks_are_not_reused(self, tmp_path: pathlib.Path) -> None:
+        path = tmp_path / "blocks"
+        data = tmp_path / "blocks.dat"
+        with dbm.dumb.open(str(path), "n") as db:
+            db[b"a"] = b"x"
+            one_block = data.stat().st_size
+            db[b"a"] = b"x" * 2_000
+            grown = data.stat().st_size
+            db[b"a"] = b"y" * 1_000
+            assert data.stat().st_size == grown
+            db[b"b"] = b"x"
+            assert data.stat().st_size > grown
+
+        assert grown > one_block
+
+    def test_it_iterates_and_its_items_is_a_list(self, tmp_path: pathlib.Path) -> None:
+        with dbm.dumb.open(str(tmp_path / "dumb"), "c") as db:
+            db[b"a"] = b"1"
+            db[b"b"] = b"2"
+            assert sorted(db) == [b"a", b"b"]
+            items = db.items()
+            assert isinstance(items, list)
+            assert sorted(items) == [(b"a", b"1"), (b"b", b"2")]
+            assert not isinstance(db.values(), list)
+
 
 class TestVersionNotes:
     """Python 3.13+: `dbm.sqlite3` is added and is `dbm.open()`'s first choice
-    for a new database, and `dbm.ndbm` databases gain `clear()`."""
+    for a new database, and `dbm.ndbm` databases gain `clear()`. The 3.12
+    `bool()` boundary is `TestNdbm.test_bool_counts_only_before_312`."""
 
     def test_the_sqlite_backend_exists_from_313(self) -> None:
         assert (importlib.util.find_spec("dbm.sqlite3") is not None) == HAS_SQLITE_BACKEND
