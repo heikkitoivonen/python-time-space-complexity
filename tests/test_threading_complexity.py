@@ -1,120 +1,127 @@
 """Tests for docs/stdlib/threading.md.
 
-Lib/threading.py builds everything but the lock on ``_thread``'s lock and
-the deque. Thread.__init__ stores its arguments, creates an Event and adds
-itself to a WeakSet; ``start()`` puts the object in ``_limbo``, spawns the
-OS thread and blocks on that Event until the new thread has stored its
-ident and moved itself to ``_active``; ``join()`` waits on the thread's
-handle (``_tstate_lock`` up to 3.12, a ``_ThreadHandle`` from 3.13), and up
-to 3.12 a finished thread's handle is already None, so a timeout passed to
-such a join is never validated. Condition.__init__ copies the lock's
-``acquire``, ``release`` and, from 3.14, ``locked`` onto the instance, and
-keeps a deque of one private lock per waiter: ``wait()`` appends a lock,
-releases the condition's lock and acquires the waiter lock, and on a timeout
-calls ``deque.remove`` on it, which scans from the front; ``notify(n)``
-releases and removes the first n locks, each at index 0; ``notify_all()``
-is ``notify(len(waiters))``. Semaphore, Event and Barrier are a counter, a
-flag and a state machine around a Condition: a semaphore ``release(n)`` is
-``notify(n)``, ``Event.set()`` and the last party's ``Barrier.wait()``,
-``reset()`` and ``abort()`` are ``notify_all()``, and every timed wait on
-them is ``Condition.wait(timeout)``. ``local`` is Modules/_threadmodule.c:
-attribute access looks the thread's dict up by the thread state's key,
-creating it on the first access from that thread and, for a subclass,
-calling ``__init__`` again with the arguments the object was built with.
-``settrace()`` stores a module global that ``_bootstrap_inner`` hands to
-``sys.settrace`` in each new thread; ``settrace_all_threads()`` (3.12+) also
-calls ``sys._settraceallthreads``, which walks every thread state under the
-runtime lock; ``setprofile`` is the same with ``sys.setprofile``.
-``enumerate()`` builds a list from two dicts and ``active_count()`` adds
-their lengths. ``_thread.stack_size(size=0)`` sets the size for later
-threads and returns the previous one, so a bare ``stack_size()`` is a reset
-to the platform default, not a read.
+The page prices each call on top of the time it spends blocked, so the tests
+assert what a call does rather than how long it takes: which waiters a wake
+releases, where a timed-out waiter is removed from its queue, whether a call
+returns at once, and what it allocates. Waiter queues are observed directly
+by replacing a Condition's deque with one that records the index of every
+removal, which settles the O(n) and O(q) terms with no stopwatch.
 
-Observation settles every row that has something to observe:
+Measurement scope:
 
-* an unstarted Thread has no ident, is not alive and is absent from
+* An unstarted Thread has no ident, is not alive and is absent from
   ``enumerate()``; ``start()`` returns with the ident set to what the new
   thread sees from ``get_ident()``; the target runs once, in that thread,
   with its args and kwargs, where a direct ``run()`` runs it in the caller
-  and a Thread without a target runs nothing; ``join()`` on a finished
+  and a Thread without a target runs nothing. ``join()`` on a finished
   thread returns in under 2.5 seconds with a five-second timeout, and on a
-  blocked one returns after its 50 ms timeout with the thread still alive;
-  timeout measurements allow 5 ms of native-clock rounding;
-* each of the eight deprecated aliases emits exactly one DeprecationWarning
-  per call, and on 3.14 so does an argument to ``RLock()``;
-* a cancelled 10-second Timer is joined within two seconds and never calls
+  blocked one returns after its 50 ms timeout with the thread still alive.
+  Timeout measurements allow 5 ms of native-clock rounding.
+* Each of the eight deprecated aliases emits exactly one DeprecationWarning
+  per call, and from 3.14 so does an argument to ``RLock()``.
+  ``settrace_all_threads`` and ``setprofile_all_threads`` exist exactly from
+  3.12, and ``RLock().locked`` and ``Condition().locked`` exactly from 3.14.
+* A cancelled 10-second Timer is joined within two seconds and never calls
   its function; a 50 ms one calls it once, after at least 45 ms; a cancel
-  that arrives while the function is running does not stop it;
-* a free Lock is taken by a non-blocking acquire, a held one refuses it and
-  gives up a 50 ms timed acquire after at least 45 ms; a free lock accepts
+  that arrives while the function is running does not stop it.
+* A free Lock is taken by a non-blocking acquire; a held one refuses it and
+  gives up a 50 ms timed acquire after at least 45 ms. A free lock accepts
   TIMEOUT_MAX as a timeout, and TIMEOUT_MAX + 1 raises OverflowError from
-  Lock, RLock, Event, Semaphore, Barrier and a ``join()`` on a live thread
-  alike; releasing an unheld lock raises RuntimeError; an RLock held three
-  times by its owner refuses another thread until the third release;
-* a Condition's ``acquire``, ``release`` and (3.14) ``locked`` are the
-  wrapped lock's; a waiting thread leaves that lock free; ``notify(2)`` on
-  six waiters wakes the two that arrived first and leaves four queued; a
-  wait that times out behind 20 waiters is removed from index 20 of the
-  deque, through ``Condition.wait``, ``Event.wait`` and
-  ``Semaphore.acquire`` alike. A semaphore may repeat its condition wait
-  before its deadline clock expires; a controlled clock forces two waits,
-  both removed at index 20, leaving the original 20 waiters queued.
-  Each ``notify_all`` removal is from index 0; ``wait_for`` calls its
-  predicate once when it is already true and once more per wakeup;
+  RLock, Event, Semaphore and Barrier alike, and from a ``join()`` on a live
+  thread on Linux and macOS.
+  Releasing an unheld lock raises RuntimeError; a ``with`` block whose body
+  raises leaves the lock free; an RLock held three times by its owner
+  refuses another thread until the third release.
+* Event, Semaphore, BoundedSemaphore and Barrier each hold a Condition. A
+  Condition's ``acquire``, ``release`` and (3.14) ``locked`` act on the
+  wrapped lock, and a waiting thread leaves that lock free. ``notify(2)`` on
+  six waiters wakes the two that arrived first and leaves four queued; after
+  ``notify_all()`` on three waiters none returns while the notifier still
+  holds the lock. A wait that times out behind 20 waiters is removed from
+  index 20 of the deque, through ``Condition.wait``, ``Event.wait``,
+  ``Semaphore.acquire`` and ``Barrier.wait`` alike. A semaphore may repeat
+  its condition wait before its deadline clock expires; a controlled clock
+  forces two waits, both removed at index 20, leaving the original 20
+  waiters queued. Each ``notify_all`` removal is from index 0. ``wait_for``
+  calls its predicate once when it is already true and once more per wakeup.
+* A thread blocked in ``Event.wait(0.2)`` uses under 50 ms of its own CPU
+  time (``time.thread_time``), where a thread spinning on ``is_set()``
+  reaches 0.1 s of its own CPU time.
 * Semaphore(2) grants two non-blocking acquires and refuses the third;
   ``release(2)`` on six waiters wakes exactly two; BoundedSemaphore raises
-  ValueError on the release that would exceed its initial value;
+  ValueError on the release that would exceed its initial value.
 * ``Event.wait()`` on a set event returns True in under 2.5 seconds with a
   five-second timeout, on a cleared one returns False after its 50 ms
-  timeout, and ``set()`` wakes all five waiters;
-* two of three barrier parties wait without returning, the third's arrival
+  timeout, and ``set()`` wakes all five waiters.
+* Two of three barrier parties wait without returning; the third's arrival
   returns the indices 0, 1 and 2 across the three and runs the action once,
-  and the barrier serves a second cycle; ``abort()`` and ``reset()`` each
-  raise BrokenBarrierError in both waiters still filling it, ``abort()``
-  leaves the barrier broken and ``reset()`` does not; a 50 ms ``wait()``
+  and the barrier serves a second cycle. ``abort()`` and ``reset()`` each
+  raise BrokenBarrierError in both waiters still filling it; ``abort()``
+  leaves the barrier broken and ``reset()`` does not. A 50 ms ``wait()``
   timeout that expires raises BrokenBarrierError and leaves the barrier
   broken for the next caller; an ``abort()`` issued while a party is inside
-  the action returns only once the action has;
-* a ``local`` subclass's ``__init__`` runs once at construction and once
+  the action returns only once the action has.
+* A ``local`` subclass's ``__init__`` runs once at construction and once
   more in each of three threads on their first attribute access, with the
   original argument, and a value assigned in one thread is not seen in
-  another;
-* with five threads blocked, ``active_count()`` equals ``len(enumerate())``
+  another.
+* With five threads blocked, ``active_count()`` equals ``len(enumerate())``
   and both grew by five; ``current_thread()`` is ``main_thread()`` on the
   main thread and the Thread object inside a worker; ``get_ident()`` and
-  ``get_native_id()`` match the main thread's attributes; one
+  ``get_native_id()`` match the main thread's attributes. One
   ``enumerate()`` call allocates at least 8 bytes more per extra thread
-  between 50 and 500 blocked threads where ``active_count()`` allocates
-  the same at both, to within 64 bytes;
+  between 50 and 500 blocked threads, where ``active_count()`` allocates the
+  same at both to within 64 bytes.
 * ``settrace()`` and ``setprofile()`` leave a running thread's hook
-  untouched where the ``_all_threads`` forms install it there, a thread
-  started afterwards sees the hook, and the getters return what was stored;
-* ``stack_size(1 << 20)`` returns the previous size, ``stack_size(1000)``
+  untouched where the ``_all_threads`` forms install it there; a thread
+  started afterwards sees the hook, and the getters return what was stored.
+* ``stack_size(1 << 20)`` returns the previous size, ``stack_size(28 KiB)``
   raises ValueError and leaves the 1 MiB in place, and a bare
-  ``stack_size()`` returns that 1 MiB and resets the size to 0;
-* a replacement ``excepthook`` is called once for a thread that raises, with
+  ``stack_size()`` returns that 1 MiB and resets the size to 0.
+* A replacement ``excepthook`` is called once for a thread that raises, with
   a four-field record whose ``thread`` is that Thread; the default hook
-  prints one line per frame, 45 more for a 50-frame traceback than for a
-  5-frame one.
+  prints at least 45 more lines for a 50-frame traceback than for a 5-frame
+  one.
+* Every fenced Python block runs in its own subprocess and must exit cleanly
+  with nothing on stderr, and a mutated assertion in one of them is asserted
+  to fail.
 
-Not settled by running code: t, w and s themselves - a thread's start
-latency, how long a wait blocks and the stack an OS thread reserves are the
-scheduler's and the platform's, so the tests assert the documented floors
-(a timeout is honoured, a finished thread is joined at once) rather than
-any duration; the free-threaded build, which the pinned interpreter is not;
-``current_thread()`` from a thread that ``threading`` did not start, which
-returns a dummy object and needs a foreign thread to reach; and the cost of
-printing one traceback frame, message or chained exception, which is the
-traceback module's. Not varied: lock contention between more than two
-threads, ``Thread`` subclasses that override ``run()``, threads arriving at
-a barrier while it drains, daemon threads at interpreter shutdown, and the
-registry's history - ``enumerate()`` walks the ``_active`` dict's table,
-which after a burst of threads keeps their vacated slots until the next
-thread starts and the dict rebuilds, so T counts live threads only.
+Not settled here:
+
+* u, w and s themselves: a thread's start-up latency, how long a wait blocks
+  and the stack an OS thread reserves are the scheduler's and the
+  platform's, so the tests assert the documented floors (a timeout is
+  honoured, a finished thread is joined at once) rather than any duration.
+  The platform minimum stack size above 32 KiB is the C library's
+  (``PTHREAD_STACK_MIN``); only a size below 32 KiB is asserted to raise.
+* That the default build runs bytecode in one thread at a time and the
+  free-threaded build does not: the pinned interpreter is the default
+  build, and a parallel speed-up is a timing claim about the machine. The
+  O(T) bound of ``settrace_all_threads()`` is read from Python/sysmodule.c,
+  which walks every thread state.
+* ``current_thread()`` from a thread that ``threading`` did not start, which
+  returns a dummy object and needs a foreign thread to reach, and the cost
+  of printing one traceback frame, which is the traceback module's.
+* Not varied: lock contention between more than two threads, ``Thread``
+  subclasses that override ``run()``, threads arriving at a barrier while it
+  drains, daemon threads at interpreter shutdown, and the registry's
+  history. ``enumerate()`` walks the ``_active`` dict's entries, and a dict
+  keeps a deleted entry's slot until an insertion finds the table full and
+  resizes it, so after a burst of threads a call also walks the burst's
+  vacated slots, and starting one more thread does not compact them
+  (Objects/dictobject.c). T counts live threads only.
+* API coverage is the page-scoped audit's, which reports no missing names.
+  Its unclassified runtime names are left off the page on purpose:
+  ``WeakSet`` and its methods (an import, not API), the ``Lock`` aliases
+  ``acquire_lock``, ``release_lock`` and ``locked_lock`` (undocumented C
+  spellings of the documented methods) and the struct-sequence fields of
+  ``ExceptHookArgs``, which the record's row covers.
 
 Every helper thread here is a daemon, so a failing assertion that leaves one
 blocked cannot hang the interpreter at exit.
 """
+
+from __future__ import annotations
 
 import functools
 import pathlib
@@ -133,93 +140,12 @@ from typing import Any, cast
 import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "threading.md"
-EXPECTED_BLOCKS = 5
+EXPECTED_BLOCKS = 7
 WAIT = 5.0
 SHORT = 0.05
 # Native waits (notably Windows' millisecond waits) and perf_counter use
 # different clock resolutions. A 5 ms allowance still excludes immediate return.
 SHORT_MIN = SHORT * 0.9
-
-CLASSES: dict[str, type] = {
-    "Thread": threading.Thread,
-    "Timer": threading.Timer,
-    "Lock": type(threading.Lock()),
-    "RLock": type(threading.RLock()),
-    "Condition": threading.Condition,
-    "Semaphore": threading.Semaphore,
-    "BoundedSemaphore": threading.BoundedSemaphore,
-    "Event": threading.Event,
-    "Barrier": threading.Barrier,
-    "local": threading.local,
-}
-# Classes whose __init__ installs public methods on the instance, and how to
-# build one so those names count as members too.
-INSTANCES: dict[str, Callable[[], object]] = {"Condition": threading.Condition}
-# Module attributes that are imports rather than API: ``functools`` leaks on
-# 3.10 to 3.12, ``warnings`` on 3.13 and WeakSet on every supported version.
-LEAKED_IMPORTS = {"WeakSet", "functools", "warnings"}
-# C-level spellings of the lock methods that the Python documentation omits.
-UNDOCUMENTED_LOCK_ALIASES = {"acquire_lock", "release_lock", "locked_lock"}
-VERSION_GATED_NAMES = {
-    "settrace_all_threads": "Python 3.12+",
-    "setprofile_all_threads": "Python 3.12+",
-}
-VERSION_GATED_METHODS = {
-    ("RLock", "locked"): "Python 3.14+",
-    ("Condition", "locked"): "Python 3.14+",
-}
-
-
-def _table_rows() -> list[str]:
-    text = PAGE.read_text(encoding="utf-8")
-    start = text.index("| Operation | Time | Space | Notes |")
-    end = text.index("\n## ", start)
-    return [line for line in text[start:end].splitlines() if line.startswith("| `")]
-
-
-def _documented() -> tuple[set[str], set[tuple[str, str]]]:
-    """Module-level names and (class, member) pairs the table names.
-
-    A backticked span is split on ``/``; a segment after the first inherits
-    the class of the segment before it, so ``Thread.name/ident`` names two
-    attributes of Thread and ``Lock()`` / ``RLock()`` two module names.
-    """
-    names: set[str] = set()
-    members: set[tuple[str, str]] = set()
-    for row in _table_rows():
-        operation = row.split("|")[1]
-        for span in re.findall(r"`([^`]+)`", operation):
-            owner: str | None = None
-            for segment in span.split("/"):
-                segment = segment.strip().removesuffix("()").strip()
-                if " " in segment:
-                    segment = segment.split(" ", 1)[0]
-                if "." in segment:
-                    class_name, member = segment.split(".", 1)
-                    owner = class_name
-                    names.add(class_name)
-                    members.add((class_name, member))
-                elif owner is not None:
-                    members.add((owner, segment))
-                else:
-                    names.add(segment)
-    return names, members
-
-
-def _public_members(owner: str) -> set[str]:
-    """Public names defined on the class itself, plus any its __init__ installs."""
-    members = {name for name in vars(CLASSES[owner]) if not name.startswith("_")}
-    if owner in INSTANCES:
-        members |= {name for name in vars(INSTANCES[owner]()) if not name.startswith("_")}
-    if owner == "Lock":
-        members -= UNDOCUMENTED_LOCK_ALIASES
-    return members
-
-
-def _has_member(owner: str, member: str) -> bool:
-    if hasattr(CLASSES[owner], member):
-        return True
-    return owner in INSTANCES and hasattr(INSTANCES[owner](), member)
 
 
 def wait_until(predicate: Callable[[], bool], timeout: float = WAIT) -> bool:
@@ -273,81 +199,13 @@ def gate() -> Iterator[threading.Event]:
     event.set()
 
 
-class TestEveryPublicNameIsDocumented:
-    """The table has to name every public attribute of `threading` and of its classes."""
+class TestThreadsStartAndJoin:
+    """`Thread()` is O(1) and inert, `start()` returns with the thread running,
+    `run()` calls the target once, and `join()` costs only the wait.
 
-    def test_no_module_name_is_missing_from_the_table(self) -> None:
-        public = {name for name in dir(threading) if not name.startswith("_")}
-
-        missing = sorted(public - _documented()[0] - LEAKED_IMPORTS)
-
-        assert not missing, f"{len(missing)} public names absent from the table: {missing}"
-
-    def test_no_public_member_is_missing_from_the_table(self) -> None:
-        """A method defined on a subclass needs its own row; inherited ones are the base's."""
-        members = _documented()[1]
-        missing: list[str] = []
-        for owner in CLASSES:
-            documented = {
-                member for documented_owner, member in members if documented_owner == owner
-            }
-            missing.extend(
-                f"{owner}.{name}" for name in sorted(_public_members(owner) - documented)
-            )
-
-        assert not missing, f"{len(missing)} members absent from the table: {missing}"
-
-    def test_the_table_names_nothing_that_does_not_exist(self) -> None:
-        """The other direction, so a typo cannot pass as coverage."""
-        names, members = _documented()
-        public = {name for name in dir(threading) if not name.startswith("_")}
-
-        unknown_names = sorted(names - public - set(VERSION_GATED_NAMES))
-        unknown_members = sorted(
-            f"{owner}.{member}"
-            for owner, member in members
-            if owner not in CLASSES
-            or (not _has_member(owner, member) and (owner, member) not in VERSION_GATED_METHODS)
-        )
-
-        assert not unknown_names, f"the table names attributes threading lacks: {unknown_names}"
-        assert not unknown_members, f"the table names members that do not exist: {unknown_members}"
-
-    def test_the_version_gated_rows_say_so(self) -> None:
-        rows = _table_rows()
-        for name, marker in VERSION_GATED_NAMES.items():
-            owning = [row for row in rows if f"`{name}()`" in row]
-            assert len(owning) == 1, f"expected one row naming {name}, found {len(owning)}"
-            assert marker in owning[0], f"the {name} row should say {marker}: {owning[0]}"
-        for (owner, member), marker in VERSION_GATED_METHODS.items():
-            owning = [row for row in rows if f"`{owner}.{member}()`" in row]
-            assert len(owning) == 1
-            assert marker in owning[0], f"the {owner}.{member} row should say {marker}"
-
-    def test_the_coverage_check_would_notice_a_gap(self) -> None:
-        """A coverage test that cannot fail proves nothing about coverage."""
-        names, members = _documented()
-
-        assert {"Thread", "Lock", "local", "enumerate", "TIMEOUT_MAX"} <= names
-        assert {
-            ("Thread", "start"),
-            ("Thread", "native_id"),
-            ("Thread", "setDaemon"),
-            ("Condition", "wait_for"),
-            ("Condition", "acquire"),
-            ("Barrier", "n_waiting"),
-            ("BoundedSemaphore", "release"),
-        } <= members
-        public = {name for name in dir(threading) if not name.startswith("_")}
-        assert public - LEAKED_IMPORTS - (names - {"Barrier"}) == {"Barrier"}
-        assert _public_members("Barrier") - {
-            member for owner, member in members - {("Barrier", "abort")} if owner == "Barrier"
-        } == {"abort"}
-        assert "acquire" in _public_members("Condition")
-
-
-class TestThreadRows:
-    """Thread(), start(), run(), join(), is_alive() and the attributes."""
+    Each row is settled by observation: idents, registry membership and which
+    thread ran the target separate a started thread from a built one.
+    """
 
     def test_a_thread_object_is_inert_until_started(self) -> None:
         calls: list[int] = []
@@ -404,7 +262,7 @@ class TestThreadRows:
 
         threading.Thread().run()
 
-    def test_join_is_immediate_on_a_finished_thread_and_bounded_by_its_timeout(
+    def test_join_is_immediate_on_a_finished_thread_and_waits_out_its_timeout(
         self, gate: threading.Event
     ) -> None:
         finished = spawn(lambda: None)
@@ -433,6 +291,14 @@ class TestThreadRows:
         thread.name = "renamed"
         thread.daemon = False
         assert (thread.name, thread.daemon) == ("renamed", False)
+
+
+class TestDeprecatedAndVersionGatedNames:
+    """The deprecated-alias rows and the Python 3.12+ and 3.14+ markers.
+
+    Each alias is asserted to warn exactly once per call, and each gated name
+    to exist exactly from the version its row names.
+    """
 
     @pytest.mark.parametrize(
         "call",
@@ -464,13 +330,33 @@ class TestThreadRows:
 
         assert [w.category for w in caught] == [DeprecationWarning]
 
-    @pytest.mark.skipif(sys.version_info < (3, 14), reason="deprecated from 3.14")
+    @pytest.mark.skipif(sys.version_info < (3, 14), reason="version: deprecated from 3.14")
     def test_arguments_to_rlock_warn_from_3_14(self) -> None:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             cast("Any", threading.RLock)(1)
 
         assert [w.category for w in caught] == [DeprecationWarning]
+
+    def test_the_all_threads_hooks_exist_from_3_12(self) -> None:
+        expected = sys.version_info >= (3, 12)
+
+        assert hasattr(threading, "settrace_all_threads") is expected
+        assert hasattr(threading, "setprofile_all_threads") is expected
+
+    def test_rlock_and_condition_locked_exist_from_3_14(self) -> None:
+        expected = sys.version_info >= (3, 14)
+
+        assert hasattr(threading.RLock(), "locked") is expected
+        assert hasattr(threading.Condition(), "locked") is expected
+
+
+class TestTimerCancels:
+    """`Timer.run()` is O(w + f) and `Timer.cancel()` ends a waiting timer at once.
+
+    A 10-second timer joined within two seconds after a cancel separates an
+    interrupted wait from one that runs out its interval.
+    """
 
     def test_timer_cancel_ends_a_waiting_timer_at_once(self) -> None:
         calls: list[float] = []
@@ -524,10 +410,12 @@ def _notify_all_alias() -> None:
         condition.notifyAll()
 
 
-class TestLockRows:
-    """Lock and RLock acquire, release and locked, and TIMEOUT_MAX."""
+class TestLocksWaitOnlyWhenHeld:
+    """Lock and RLock `acquire()` are O(w): immediate when free or, for an RLock,
+    for its owner; `release()` is O(1); TIMEOUT_MAX bounds every blocking wait.
+    """
 
-    def test_acquire_is_immediate_when_free_and_bounded_by_its_timeout_when_held(self) -> None:
+    def test_acquire_is_immediate_when_free_and_waits_out_its_timeout_when_held(self) -> None:
         lock = threading.Lock()
 
         assert lock.acquire(blocking=False) is True
@@ -556,6 +444,14 @@ class TestLockRows:
         assert lock.locked()
         lock.release()
 
+    def test_a_with_block_releases_the_lock_when_its_body_raises(self) -> None:
+        lock = threading.Lock()
+
+        with pytest.raises(ValueError), lock:
+            raise ValueError("in the body")
+
+        assert not lock.locked()
+
     def test_rlock_owner_reenters_and_others_wait_for_every_release(self) -> None:
         rlock = threading.RLock()
         for _ in range(3):
@@ -579,7 +475,7 @@ class TestLockRows:
         rlock.release()
         assert other_can_take_it() is True
 
-    @pytest.mark.skipif(sys.version_info < (3, 14), reason="RLock.locked() is 3.14+")
+    @pytest.mark.skipif(sys.version_info < (3, 14), reason="version: RLock.locked() is 3.14+")
     def test_rlock_locked_exists_from_3_14(self) -> None:
         rlock = threading.RLock()
         locked = cast("Any", rlock).locked
@@ -603,23 +499,31 @@ class TestLockRows:
             lambda gate: threading.Event().wait(threading.TIMEOUT_MAX + 1),
             lambda gate: threading.Semaphore(0).acquire(timeout=threading.TIMEOUT_MAX + 1),
             lambda gate: threading.Barrier(2).wait(threading.TIMEOUT_MAX + 1),
-            pytest.param(
-                lambda gate: spawn(gate.wait).join(threading.TIMEOUT_MAX + 1),
-                marks=pytest.mark.skipif(
-                    sys.platform == "win32",
-                    reason="Windows join() waits instead of rejecting the timeout",
-                ),
-            ),
         ],
-        ids=["RLock", "Event", "Semaphore", "Barrier", "join"],
+        ids=["RLock", "Event", "Semaphore", "Barrier"],
     )
     def test_every_blocking_wait_rejects_a_timeout_above_timeout_max(
         self, wait: Callable[[threading.Event], object], gate: threading.Event
     ) -> None:
-        """The join case uses a live thread: up to 3.12 a finished thread's
-        handle is gone and a timeout given to its join() is never looked at."""
         with pytest.raises(OverflowError):
             wait(gate)
+
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="platform: Windows join() waits instead of rejecting the timeout",
+    )
+    def test_join_on_a_live_thread_rejects_a_timeout_above_timeout_max(
+        self, gate: threading.Event
+    ) -> None:
+        """A live thread: up to 3.12 a finished thread's handle is gone and a
+        timeout given to its join() is never looked at."""
+        thread = spawn(gate.wait)
+        try:
+            with pytest.raises(OverflowError):
+                thread.join(threading.TIMEOUT_MAX + 1)
+        finally:
+            gate.set()
+            join_all([thread])
 
 
 class RecordingDeque(deque[Any]):
@@ -668,8 +572,24 @@ def start_waiters(
     return threads
 
 
-class TestConditionRows:
-    """acquire(), release(), locked(), wait(), wait_for(), notify() and notify_all()."""
+class TestConditionQueuesItsWaiters:
+    """`notify(n)` is O(n) and wakes the n oldest, `notify_all()` is O(q), and a
+    wait whose timeout expires pays O(q) to leave the queue.
+
+    A RecordingDeque in place of the Condition's waiter queue records the index
+    of every removal: index 0 for a wake, the waiter's own position for a
+    timeout. That separates a front removal from a scan with no timing.
+    """
+
+    @pytest.mark.parametrize(
+        "build",
+        [threading.Event, threading.Semaphore, threading.BoundedSemaphore, threading.Barrier],
+        ids=["Event", "Semaphore", "BoundedSemaphore", "Barrier"],
+    )
+    def test_the_other_primitives_are_built_on_a_condition(self, build: Callable[..., Any]) -> None:
+        primitive = build(2) if build is threading.Barrier else build()
+
+        assert isinstance(condition_of(primitive), threading.Condition)
 
     def test_acquire_release_and_locked_are_the_wrapped_locks(self) -> None:
         lock = threading.Lock()
@@ -716,6 +636,21 @@ class TestConditionRows:
         join_all(threads)
         assert sorted(woke) == [0, 1, 2, 3, 4, 5]
         assert len(waiters_of(condition)) == 0
+
+    def test_notify_all_wakes_waiters_that_must_each_retake_the_lock(self) -> None:
+        condition = threading.Condition()
+        woke: list[int] = []
+        threads = start_waiters(condition, 3, woke)
+        try:
+            with condition:
+                condition.notify_all()
+                assert len(waiters_of(condition)) == 0
+                assert not wait_until(lambda: bool(woke), timeout=SHORT)
+        finally:
+            with condition:
+                condition.notify_all()
+        join_all(threads)
+        assert sorted(woke) == [0, 1, 2]
 
     def test_a_timed_out_wait_is_removed_from_behind_every_earlier_waiter(self) -> None:
         condition = threading.Condition()
@@ -794,6 +729,31 @@ class TestConditionRows:
             release(primitive)
             join_all(threads)
 
+    def test_a_barrier_timeout_pays_the_same_removal_before_breaking(self) -> None:
+        """The expired party leaves from index 20; breaking then wakes the rest
+        from index 0."""
+        barrier = threading.Barrier(22)
+        queue = RecordingDeque()
+        cast("Any", condition_of(barrier))._waiters = queue
+        outcomes: list[str] = []
+
+        def wait() -> None:
+            try:
+                barrier.wait()
+            except threading.BrokenBarrierError:
+                outcomes.append("broken")
+
+        threads = [spawn(wait) for _ in range(20)]
+        try:
+            assert wait_until(lambda: len(queue) == 20)
+            with pytest.raises(threading.BrokenBarrierError):
+                barrier.wait(SHORT)
+        finally:
+            barrier.abort()
+        join_all(threads)
+        assert queue.removed_at == [20] + [0] * 20
+        assert outcomes == ["broken"] * 20
+
     def test_wait_for_calls_the_predicate_once_per_wakeup(self) -> None:
         condition = threading.Condition()
         flag = False
@@ -831,8 +791,9 @@ class TestConditionRows:
         assert len(calls) == 4
 
 
-class TestSemaphoreRows:
-    """Semaphore and BoundedSemaphore acquire and release."""
+class TestSemaphoreCountsAndWakesN:
+    """`Semaphore.acquire()` is immediate while the counter is positive and
+    `release(n)` is O(n): it wakes n waiters, not every one."""
 
     def test_acquire_is_immediate_while_the_counter_is_positive(self) -> None:
         semaphore = threading.Semaphore(2)
@@ -877,10 +838,10 @@ class TestSemaphoreRows:
         assert plain.acquire(blocking=False) is False
 
 
-class TestEventRows:
-    """set(), clear(), is_set() and wait()."""
+class TestEventWakesEveryWaiter:
+    """`Event.wait()` is immediate once set and `Event.set()` wakes all q waiters."""
 
-    def test_wait_is_immediate_once_set_and_bounded_by_its_timeout_otherwise(self) -> None:
+    def test_wait_is_immediate_once_set_and_waits_out_its_timeout_otherwise(self) -> None:
         event = threading.Event()
         event.set()
 
@@ -896,6 +857,32 @@ class TestEventRows:
         elapsed = time.perf_counter() - start
         assert elapsed >= SHORT_MIN, elapsed
 
+    def test_a_blocked_wait_uses_no_cpu_where_polling_does(self) -> None:
+        """CPU time of the waiting thread itself, so other load on the machine
+        does not count. The polling control spins until its own CPU time reaches
+        0.1 s, which shows the probe sees a spinning thread's time at all."""
+        event = threading.Event()
+        cpu: dict[str, float] = {}
+
+        def blocked() -> None:
+            start = time.thread_time()
+            event.wait(0.2)
+            cpu["blocked"] = time.thread_time() - start
+
+        def polling() -> None:
+            start = time.thread_time()
+            deadline = time.monotonic() + WAIT
+            while time.monotonic() < deadline and not event.is_set():
+                if time.thread_time() - start >= 0.1:
+                    break
+            cpu["polling"] = time.thread_time() - start
+
+        join_all([spawn(blocked)])
+        join_all([spawn(polling)])
+
+        assert cpu["blocked"] < 0.05, cpu
+        assert cpu["polling"] >= 0.1, cpu
+
     def test_set_wakes_every_waiter(self) -> None:
         event = threading.Event()
         results: list[bool] = []
@@ -908,8 +895,10 @@ class TestEventRows:
         assert results == [True] * 5
 
 
-class TestBarrierRows:
-    """wait(), reset(), abort() and the attributes."""
+class TestBarrierReleasesOnTheLastParty:
+    """`Barrier.wait()` returns when the last party arrives, which runs the action
+    once; `reset()` and `abort()` wake every waiter and wait out a running action.
+    """
 
     def test_the_last_party_releases_all_runs_the_action_once_and_the_barrier_is_reusable(
         self,
@@ -947,7 +936,9 @@ class TestBarrierRows:
         aborted: list[int] = []
         try:
             assert entered.wait(WAIT)
-            aborter = spawn(lambda: (barrier.abort(), aborted.append(1)))
+            calling = threading.Event()
+            aborter = spawn(lambda: (calling.set(), barrier.abort(), aborted.append(1)))
+            assert calling.wait(WAIT)
             assert not wait_until(lambda: bool(aborted), timeout=SHORT)
         finally:
             gate.set()
@@ -995,7 +986,7 @@ class TestBarrierRows:
         assert barrier.n_waiting == 0
 
 
-class TestLocalRow:
+class TestLocalIsPerThread:
     """One dict per thread; a subclass's __init__ runs again in each."""
 
     def test_each_thread_gets_its_own_dict_and_a_fresh_init(self, gate: threading.Event) -> None:
@@ -1048,8 +1039,9 @@ class TestLocalRow:
         assert data.value == 1
 
 
-class TestRegistryRows:
-    """current_thread(), main_thread(), active_count(), enumerate(), get_ident(), get_native_id()."""
+class TestRegistryCountsLiveThreads:
+    """`active_count()` is O(1) where `enumerate()` builds an O(T) list; the other
+    registry functions agree with them about which threads are alive."""
 
     def test_the_registry_functions_agree_about_who_is_alive(self, gate: threading.Event) -> None:
         before = threading.active_count()
@@ -1094,8 +1086,10 @@ class TestRegistryRows:
         assert abs(peaks[500][1] - peaks[50][1]) < 64, peaks
 
 
-class TestHookRows:
-    """settrace()/setprofile(), the all-threads forms, the getters and stack_size()."""
+class TestHooksAndStackSizeApplyToLaterThreads:
+    """`settrace()`/`setprofile()` reach threads started afterwards only, the
+    `_all_threads` forms running ones too, and `stack_size()` returns the
+    previous size."""
 
     @pytest.mark.parametrize(
         ("setter", "getter", "sys_setter", "sys_getter", "all_threads"),
@@ -1163,15 +1157,16 @@ class TestHookRows:
         try:
             assert threading.stack_size(1 << 20) == previous
             with pytest.raises(ValueError):
-                threading.stack_size(1000)
+                threading.stack_size(28 * 1024)
             assert threading.stack_size() == 1 << 20
             assert threading.stack_size() == 0
         finally:
             threading.stack_size(previous)
 
 
-class TestExceptHookRows:
-    """excepthook(), ExceptHookArgs and the exception aliases."""
+class TestExceptHookSeesEachUnhandledException:
+    """`excepthook()` is called once per unhandled exception with a four-field
+    `ExceptHookArgs`, and the default hook's output grows with the traceback."""
 
     def test_a_replacement_hook_is_called_once_with_a_four_field_record(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1196,7 +1191,7 @@ class TestExceptHookRows:
         assert (built.exc_type, built.thread) == (ValueError, thread)
         assert len(built) == 4
 
-    def test_the_default_hook_prints_one_entry_per_frame(
+    def test_the_default_hook_prints_at_least_a_line_per_frame(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         """pytest swaps ``threading.excepthook`` for its own during a test, so the
@@ -1268,7 +1263,7 @@ def _run(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
 
 
 class TestDocumentedExamples:
-    """Every block runs, under the interpreter running the tests."""
+    """Every block runs under the interpreter running the tests, and its asserts hold."""
 
     def test_the_page_has_the_expected_blocks(self) -> None:
         blocks = _blocks()
@@ -1289,30 +1284,11 @@ class TestDocumentedExamples:
 
     def test_the_runner_catches_a_broken_block(self, tmp_path: pathlib.Path) -> None:
         """A runner that cannot fail proves nothing about the blocks it ran."""
-        source = _block_containing("class Context(threading.local):")
-        broken = source.replace('Context("default")', "Context()", 1)
-        assert broken != source, "the mutation did not change the constructor call"
+        source = _block_containing("condition.wait_for(lambda: items)")
+        broken = source.replace("assert sorted(taken) == [0, 1, 2]", "assert taken == []", 1)
+        assert broken != source, "the mutation did not change the assertion"
 
         result = _run(broken, tmp_path)
 
         assert result.returncode != 0
-        assert "TypeError" in result.stderr
-
-    @pytest.mark.parametrize(
-        ("marker", "stdout"),
-        [
-            ("Worker running", ["Worker running"]),
-            ("Task {name}", [f"Task {i}" for i in range(5)]),
-            ("increment_safe, 10_000", ["40000"]),
-            ("slots = threading.Semaphore(2)", ["['a', 'b', 'c']"]),
-            ("class Context(threading.local):", ["default", "default"]),
-        ],
-        ids=["basic", "multiple", "locks", "coordinating", "local"],
-    )
-    def test_the_stated_output_is_what_the_block_produces(
-        self, marker: str, stdout: list[str], tmp_path: pathlib.Path
-    ) -> None:
-        result = _run(_block_containing(marker), tmp_path)
-
-        assert result.returncode == 0, result.stderr.strip()
-        assert sorted(result.stdout.splitlines()) == sorted(stdout)
+        assert "AssertionError" in result.stderr
