@@ -44,10 +44,14 @@ Measurement scope:
 * On Linux, `process_time()`, `process_time_ns()`,
   `clock_gettime(CLOCK_PROCESS_CPUTIME_ID)` and
   `get_clock_info('process_time')` are timed with 0, 49 and 499 extra idle
-  threads: the 49-thread cost exceeds the baseline and the 499-thread cost is
-  over 3x the 49-thread cost (x7 measured). `thread_time()` and `monotonic()`
-  stay under 3x their baseline at both counts. This separates a per-thread
-  sum from a constant read; it does not separate linear from quadratic.
+  threads, each less the same call on the thread clock (`thread_time()`,
+  `thread_time_ns()`, `CLOCK_THREAD_CPUTIME_ID`, `'thread_time'`). The raw
+  cost rises at each count; the excess at 49 threads exceeds the baseline's,
+  and at 499 threads is over 3x its 49-thread value (x7-x13 measured) and
+  larger than the whole thread-clock call. The thread-clock calls and
+  `monotonic()` stay within 3x of their baseline, either way, at both counts.
+  This separates a per-thread sum from a constant read; it does not separate
+  linear from quadratic.
   With an `ITIMER_PROF` of 100,000 s armed beside the 499 threads,
   `process_time()` costs under 3x its no-thread baseline, where unarmed it
   costs over 3x. Both measurements assume the test process has no process
@@ -306,6 +310,9 @@ def _thread_clock_costs() -> dict[str, float]:
         "clock_gettime": lambda: time.clock_gettime(time.CLOCK_PROCESS_CPUTIME_ID),
         "get_clock_info": lambda: time.get_clock_info("process_time"),
         "thread_time": time.thread_time,
+        "thread_time_ns": time.thread_time_ns,
+        "clock_gettime thread": lambda: time.clock_gettime(time.CLOCK_THREAD_CPUTIME_ID),
+        "get_clock_info thread": lambda: time.get_clock_info("thread_time"),
         "monotonic": time.monotonic,
     }
     for call in calls.values():
@@ -338,24 +345,41 @@ class TestProcessCpuTimeWalksEveryThread:
     `get_clock_info('process_time')` | O(t) on Linux; `thread_time()` and
     `monotonic()` | O(1).
 
-    The same process is timed with 0, 49 and 499 extra idle threads. Growing
-    cost separates the per-thread sum from a constant-time read; the controls
+    The same process is timed with 0, 49 and 499 extra idle threads. Each
+    process clock is paired with the same call on the calling thread's clock,
+    whose cost is the call's own overhead; the process clock's excess over it
+    is the per-thread sum. That excess grows x7-x13 from 49 to 499 threads
+    and is asserted to grow over 3x, and at 499 threads to exceed the whole
+    control call; a constant-time read has no excess to grow. The whole call is not compared: `get_clock_info()`'s fixed cost,
+    about 1.5us on x86-64 CI, keeps its 49-to-499 growth near x3. The controls
     read one thread's clock or a system clock and stay flat.
     """
 
-    GROWING = ("process_time", "process_time_ns", "clock_gettime", "get_clock_info")
+    GROWING = {
+        "process_time": "thread_time",
+        "process_time_ns": "thread_time_ns",
+        "clock_gettime": "clock_gettime thread",
+        "get_clock_info": "get_clock_info thread",
+    }
 
     @pytest.mark.parametrize("name", GROWING)
     def test_the_process_clock_grows_with_threads(
         self, thread_clock_costs: list[dict[str, float]], name: str
     ) -> None:
         costs = thread_clock_costs
-        alone, medium, crowded = (measurement[name] for measurement in costs)
+        control = self.GROWING[name]
+        raw = [measurement[name] for measurement in costs]
+        assert raw[0] < raw[1] < raw[2], f"{name} must cost more beside more threads: {raw}"
+        alone, medium, crowded = (measurement[name] - measurement[control] for measurement in costs)
         assert medium > alone, f"49 extra threads must add work to {name}: {costs}"
+        assert crowded > costs[-1][control], (
+            f"{name} cost only {crowded:.0f}ns more than {control} beside 499 threads"
+        )
         ratio = crowded / medium
         assert ratio > 3, (
-            f"{name} cost {alone:.0f}, {medium:.0f}, {crowded:.0f}ns with 0, 49, 499 "
-            f"extra threads; 49-to-499 growth x{ratio:.1f}; a constant read stays near x1"
+            f"{name} cost {alone:.0f}, {medium:.0f}, {crowded:.0f}ns more than {control} "
+            f"with 0, 49, 499 extra threads; 49-to-499 growth x{ratio:.1f}; "
+            "a constant read has no excess to grow"
         )
 
     def test_an_armed_process_timer_keeps_a_running_total(self) -> None:
@@ -381,7 +405,7 @@ class TestProcessCpuTimeWalksEveryThread:
             f"{THREAD_COUNTS[-1]} threads, and {armed:.0f}ns with ITIMER_PROF armed"
         )
 
-    @pytest.mark.parametrize("name", ["thread_time", "monotonic"])
+    @pytest.mark.parametrize("name", [*GROWING.values(), "monotonic"])
     def test_the_controls_do_not(
         self, thread_clock_costs: list[dict[str, float]], name: str
     ) -> None:
@@ -389,7 +413,7 @@ class TestProcessCpuTimeWalksEveryThread:
         alone = costs[0][name]
         for count, measurement in zip(THREAD_COUNTS, costs[1:], strict=True):
             ratio = measurement[name] / alone
-            assert ratio < 3, (
+            assert 1 / 3 < ratio < 3, (
                 f"{name} cost {alone:.0f}ns alone and {measurement[name]:.0f}ns beside "
                 f"{count} threads (x{ratio:.1f}); it should not depend on them"
             )

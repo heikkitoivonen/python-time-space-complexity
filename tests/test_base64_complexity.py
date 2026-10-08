@@ -20,7 +20,8 @@ Measurement scope:
 * That Base32 and the 85 family loop in Python while Base64 runs in C is
   settled by a timing test on 300,000 random bytes: each of their encoders and
   decoders costs more than 5x `b64encode()` or `b64decode()` on the same data.
-  Base16's encoder and decoder are held under 5x Base64's.
+  Base16's encoder is held under 5x Base64's, and its decoder under 5x from
+  3.14 and under 25x before, where it adds a `re.search()` validation pass.
 * `encode()` peaks under 4 KB and within 2x across 10,000 and 1,000,000 input
   bytes, and writes lines of at most 76 characters, identical to
   `encodebytes()`. `decode()` peaks under 4 KB on `encodebytes()` output of
@@ -230,14 +231,18 @@ class TestPythonLoopsAreSlowerThanBinascii:
 
     @pytest.mark.timing
     def test_base16_stays_close_to_base64(self) -> None:
+        """Before 3.14, `b16decode()` validates with `re.search()` before
+        `unhexlify()`: a second C pass, measured at x6.5-x12.3 `b64decode()`
+        on 3.10-3.13, where the Python-loop decoders measured x35 and up."""
         encoded = base64.b16encode(self.DATA)
         b64_encoded = base64.b64encode(self.DATA)
+        decode_bound = 5 if sys.version_info >= (3, 14) else 25
 
         encode_ratio = self._ns("b16encode", self.DATA) / self._ns("b64encode", self.DATA)
         decode_ratio = self._ns("b16decode", encoded) / self._ns("b64decode", b64_encoded)
 
         assert encode_ratio < 5, f"b16encode is x{encode_ratio:.1f} b64encode"
-        assert decode_ratio < 5, f"b16decode is x{decode_ratio:.1f} b64decode"
+        assert decode_ratio < decode_bound, f"b16decode is x{decode_ratio:.1f} b64decode"
 
 
 class TestInputTypes:
