@@ -13,22 +13,32 @@ is settled by identity and by counting calls into the compiler.
 
 Measurement scope:
 
-* `re.compile` over `(?:abc)` repeated 10, 100 and 1,000 times: each 10x
+* `re.compile` over `x[ab]c*` repeated 10, 100 and 1,000 times: each 10x
   step in the pattern costs between 4x and 40x, which admits linear growth
   and excludes quadratic. Two alternatives sharing a prefix of 1,000, 4,000
-  and 16,000 characters are the O(n²) case, settled by counting: the parser
+  and 16,000 characters are an O(n²) case, settled by counting: the parser
   moves the prefix out one item at a time with `del item[0]`, and those
   deletions shift exactly n(n+1) items for two alternatives sharing n
   characters, while alternatives with no common prefix shift none. Each
   shifted item is one pointer moved, so linear parsing overhead obscures the
   quadratic term in wall-clock timings: on 3.10 and 3.14 the shared prefix
   costs 1.3x to 1.8x the unshared one at 1,000 characters and 5.8x to 16.7x
-  at 32,000. The
+  at 32,000. A run of g `(?:ab)` groups, g = 1,000, 4,000 and 16,000, is the
+  other: it shifts exactly g(g-1) items through `SubPattern` slice
+  assignment, and the same run of capturing groups none. Groups nested d =
+  10 and 100 deep around L = 1,000 and 4,000 literals copy exactly
+  (d + 1)·L items, counting the parser's slice assignments and the
+  compiler's `_get_literal_prefix()` results, for non-capturing and
+  capturing groups alike, against L unnested. The u term holds the pattern
+  at five characters: `[\\u0100-\\uffff]` (u = 65,280) costs over 20x
+  `[\\u0100-\\u0101]` (u = 2), the 17x step from `[\\u0100-\\u0fff]`
+  costs between 5x and 60x, and `[\\U00010000-\\U0010ffff]` under a tenth
+  of the widest BMP range. The
   same pattern and flags compiled twice is the same object; after `purge()`
   it is not, nor with `re.DEBUG`, which prints the parse tree. Long literals, alternations of 8,000
   words, 8,000 capturing or named groups and 16,000 backreferences all
-  compiled in time linear in the pattern on 3.14; only the repeated group is
-  asserted.
+  compiled in time linear in the pattern on 3.14; only the repeated
+  `x[ab]c*` is asserted.
 * One attempt against many: `\\w+@` against 500, 2,000 and 8,000 `a`s. With
   `match()` and `fullmatch()` each 4x step costs under 8x; with `search()`
   over 8x, since every start position scans to the end. `\\b\\w+@` and
@@ -202,14 +212,15 @@ def clean_pattern_cache() -> Iterator[None]:
 
 
 class TestCompilation:
-    """`re.compile(pattern, flags=0)` | O(n) | O(n), O(n²) for alternatives
-    sharing a long common prefix; cached except with `re.DEBUG`."""
+    """`re.compile(pattern, flags=0)` | O(n + u) | O(n); O(n²) for alternatives
+    sharing a long common prefix or a long run of `(?:...)` groups, O(n·d)
+    for groups nested d deep; cached except with `re.DEBUG`."""
 
     @pytest.mark.timing
     def test_each_step_in_pattern_length_costs_a_linear_step(self) -> None:
         times = []
         for repeat in (10, 100, 1_000):
-            pattern = "(?:abc)" * repeat
+            pattern = "x[ab]c*" * repeat
             times.append(best_ns(lambda p=pattern: (re.purge(), re.compile(p)), inner=10))
         re.purge()
 
@@ -242,6 +253,87 @@ class TestCompilation:
             assert items_shifted(shared) == length * (length + 1), f"prefix of {length}"
         assert items_shifted("x" * 16_000 + "a|" + "y" * 16_000 + "b") == 0
         re.purge()
+
+    def test_a_run_of_non_capturing_groups_shifts_quadratically_many_items(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        subpattern = parser_module().SubPattern
+        assign = subpattern.__setitem__
+        shifted = [0]
+
+        def counting_assign(self: Any, index: Any, code: Any) -> None:
+            if isinstance(index, slice) and len(code) != index.stop - index.start:
+                shifted[0] += len(self.data) - index.stop
+            assign(self, index, code)
+
+        monkeypatch.setattr(subpattern, "__setitem__", counting_assign)
+
+        def items_shifted(pattern: str) -> int:
+            shifted[0] = 0
+            re.purge()
+            re.compile(pattern)
+            return shifted[0]
+
+        for groups in (1_000, 4_000, 16_000):
+            assert items_shifted("(?:ab)" * groups) == groups * (groups - 1), f"{groups} groups"
+        assert items_shifted("(ab)" * 16_000) == 0, "capturing groups are not spliced"
+        re.purge()
+
+    def test_nested_groups_copy_their_contents_once_per_level(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Parser splices plus compiler prefix items: d non-capturing levels
+        are spliced d·L items and leave one L-item prefix, and d capturing
+        levels are not spliced but each returns the prefix, (d + 1)·L."""
+        subpattern = parser_module().SubPattern
+        assign = subpattern.__setitem__
+        compiler = compiler_module()
+        prefix = compiler._get_literal_prefix
+        copied = [0]
+
+        def counting_assign(self: Any, index: Any, code: Any) -> None:
+            if isinstance(index, slice):
+                copied[0] += len(code)
+            assign(self, index, code)
+
+        def counting_prefix(pattern: Any, flags: int) -> Any:
+            result = prefix(pattern, flags)
+            copied[0] += len(result[0])
+            return result
+
+        monkeypatch.setattr(subpattern, "__setitem__", counting_assign)
+        monkeypatch.setattr(compiler, "_get_literal_prefix", counting_prefix)
+
+        def items_copied(pattern: str) -> int:
+            copied[0] = 0
+            re.purge()
+            re.compile(pattern)
+            return copied[0]
+
+        for depth in (10, 100):
+            for length in (1_000, 4_000):
+                spliced = items_copied("(?:" * depth + "a" * length + ")" * depth)
+                prefixed = items_copied("(" * depth + "a" * length + ")" * depth)
+                assert spliced == (depth + 1) * length, f"(?: depth {depth}, length {length}"
+                assert prefixed == (depth + 1) * length, f"( depth {depth}, length {length}"
+        assert items_copied("a" * 4_000) == 4_000, "unnested, the literals are copied once"
+        re.purge()
+
+    @pytest.mark.timing
+    def test_a_range_costs_the_code_points_it_spans(self) -> None:
+        """The u term: three classes of five characters each."""
+        patterns = ("[\u0100-\u0101]", "[\u0100-\u0fff]", "[\u0100-\uffff]")
+        assert {len(pattern) for pattern in patterns} == {5}
+
+        narrow, middle, wide = (
+            best_ns(lambda p=pattern: (re.purge(), re.compile(p)), inner=10) for pattern in patterns
+        )
+        astral = best_ns(lambda: (re.purge(), re.compile("[\U00010000-\U0010ffff]")), inner=10)
+        re.purge()
+
+        assert wide > 20 * narrow, f"u = 65,280 cost {wide:.0f}ns against {narrow:.0f}ns at u = 2"
+        assert 5 < wide / middle < 60, f"17x the span cost x{wide / middle:.1f}; quadratic x289"
+        assert astral * 10 < wide, f"1,048,576 code points above U+FFFF cost {astral:.0f}ns"
 
     def test_debug_bypasses_the_cache(
         self, clean_pattern_cache: None, capsys: pytest.CaptureFixture[str]

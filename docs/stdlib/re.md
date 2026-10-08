@@ -33,7 +33,7 @@ such as `(?:ab)*`, which records each iteration.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `re.compile(pattern, flags=0)` | O(n) | O(n) | O(n²) when the alternatives of a group share a long common prefix; a cache hit returns the same `Pattern` without compiling, except with `re.DEBUG` |
+| `re.compile(pattern, flags=0)` | O(n + u) | O(n) | u = the code points the pattern's character-class ranges span below U+10000: 20,992 for `[\u4e00-\u9fff]`. O(n²) when the alternatives of a group share a long common prefix, or when a long run of `(?:...)` groups sits at one level; O(n·d) when groups nest d deep, since a level can copy what it holds; see [sre_parse](sre_parse.md) and [sre_compile](sre_compile.md). A cache hit returns the same `Pattern` without compiling, except with `re.DEBUG` |
 | `Pattern.match(string[, pos[, endpos]])` | O(m) | O(c) | One attempt, at `pos` |
 | `Pattern.fullmatch(string[, pos[, endpos]])` | O(m) | O(c) | One attempt, which must end at `endpos` |
 | `Pattern.search(string[, pos[, endpos]])` | O(s) | O(c) | Retries at successive start positions until one matches |
