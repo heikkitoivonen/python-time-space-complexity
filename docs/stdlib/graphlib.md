@@ -1,441 +1,249 @@
 # graphlib Module Complexity
 
-The `graphlib` module provides a topological sort implementation for resolving dependencies between tasks, useful for build systems, task scheduling, and dependency resolution.
+The `graphlib` module topologically sorts a graph of hashable nodes: it hands out nodes in an
+order where every node comes after all of its predecessors, and detects cycles. It is pure Python,
+built on one dictionary entry per node and one successor-list entry per edge, so a sorter holds
+O(v + e) for as long as it lives.
+
+`v` is nodes and `e` is edges, counting every predecessor passed to `add()` or in the `graph`
+mapping, a repeated one included. `k` is the predecessors in one `add()` call, `r` is the nodes one
+`get_ready()` call returns, and `d` is the successor entries of the nodes passed to one `done()`
+call. Hashing and comparing a node are treated as O(1).
 
 ## Complexity Reference
 
+### TopologicalSorter
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `TopologicalSorter()` init | O(1) | O(1) | Create sorter |
-| `add(node, *predecessors)` | O(k) | O(k) | Add node with k predecessors |
-| `prepare()` | O(v + e) | O(v) | Prepare sort, v = vertices, e = edges. Up to 3.13 it may be called only once; 3.14 allows repeated calls until the first `get_ready()`. `static_order()` calls it for you on every version |
-| `get_ready()` | O(k) | O(k) | Returns all ready nodes as a tuple, k = ready count. O(1) amortized per node over the whole sort |
-| `done(node)` | O(d) | O(1) | Mark done, d = node degree |
-| `static_order()` | O(v + e) | O(v + e) | Complete topological sort |
-| `CycleError` | O(1) | O(1) | Exception raised on cycles |
+| `graphlib.TopologicalSorter(graph=None)` | O(1); O(v + e) with `graph` | O(1); O(v + e) with `graph` | `graph` maps each node to an iterable of its predecessors; each entry is one `add()` |
+| `TopologicalSorter.add(node, *predecessors)` | O(k) | O(k) | Calls for the same node add to its predecessors; raises `ValueError` after `prepare()` |
+| `TopologicalSorter.prepare()` | O(v + e) | O(v) | Finds the nodes with no predecessors and searches the whole graph for a cycle, raising `CycleError` if it finds one |
+| `TopologicalSorter.get_ready()` | O(r) | O(r) | Returns every node made ready since the last call, as a tuple; each node is returned once, so a whole sort spends O(v) here |
+| `TopologicalSorter.done(*nodes)` | O(len(nodes) + d) | O(len(nodes) + d) | Queues the successors it unblocks; over a whole sort, O(v + e) |
+| `TopologicalSorter.is_active()`, `bool(sorter)` | O(1) | O(1) | `True` while a node is ready or handed out and not yet done |
+| `TopologicalSorter.static_order()` | O(v + e) | O(v) | A generator: calls `prepare()` on the first `next()`, then hands out one ready group at a time |
 
-## Basic Topological Sort
+### CycleError
 
-### Simple Dependency Order
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `graphlib.CycleError` | O(1) | O(1) | A `ValueError` subclass raised by `prepare()`; `args[1]` is one cycle, its first node repeated at the end |
 
-```python
-from graphlib import TopologicalSorter
-
-# Create sorter - O(1)
-ts = TopologicalSorter()
-
-# Add dependencies - O(k) for k predecessors
-# format: add(node, *predecessors)
-ts.add('lunch', 'cook')    # lunch depends on cook
-ts.add('cook', 'shop')     # cook depends on shop
-ts.add('shop')              # shop has no dependencies
-
-# Get nodes in dependency order - O(v + e)
-# static_order() calls prepare() itself. Do not call prepare() first: up to
-# 3.13 that raises ValueError, and 3.14 only tolerates it
-for task in ts.static_order():
-    print(task)
-
-# Output:
-# shop
-# cook
-# lunch
-```
-
-## Dynamic Topological Sort
-
-### Process While Sorting
-
-```python
-from graphlib import TopologicalSorter
-
-# Create sorter - O(1)
-ts = TopologicalSorter()
-
-# Add tasks and dependencies
-ts.add('compile', 'preprocess')
-ts.add('preprocess', 'download')
-ts.add('download')
-ts.add('test', 'compile')
-ts.add('package', 'test')
-
-# Prepare - O(v + e)
-ts.prepare()
-
-# Process nodes dynamically - O(v + e) total
-processed = []
-while ts.is_active():
-    # Get all ready nodes - O(k) for the k returned, O(1) amortized each
-    ready = ts.get_ready()  # Returns tuple of ready nodes
-    
-    if not ready:
-        break
-    
-    # Process each ready node
-    for node in ready:
-        print(f"Processing: {node}")
-        processed.append(node)
-        # Mark as done - O(d) for degree d
-        ts.done(node)
-
-print(f"Processed: {processed}")
-```
-
-## Graph Structure
-
-### Complex Dependencies
-
-```python
-from graphlib import TopologicalSorter
-
-# Build dependency graph - O(v + e)
-ts = TopologicalSorter()
-
-# Task graph with multiple dependencies
-ts.add('main.o', 'main.c', 'defs.h')
-ts.add('util.o', 'util.c', 'util.h', 'defs.h')
-ts.add('prog', 'main.o', 'util.o')
-
-# Add files with no dependencies
-for file in ['main.c', 'util.c', 'util.h', 'defs.h']:
-    ts.add(file)
-
-# Get execution order - O(v + e); static_order() prepares the sorter itself
-order = list(ts.static_order())
-print(order)
-
-# Output: source files first, then object files, then executable
-```
-
-## Static vs Dynamic Sort
+## Sorting a Graph
 
 ### Static Order
 
-```python
-from graphlib import TopologicalSorter
-
-# Static sort - simpler, complete result
-ts = TopologicalSorter()
-
-ts.add('D', 'B', 'C')
-ts.add('B', 'A')
-ts.add('C', 'A')
-ts.add('A')
-
-# Get complete order - O(v + e) returns list
-order = ts.static_order()
-print(list(order))  # ['A', 'B', 'C', 'D'] or valid permutation
-```
-
-### Dynamic Processing
+`static_order()` is the whole sort in one call: build the sorter, iterate. It is a generator, so
+calling it does nothing; the `prepare()` inside it, and any `CycleError`, arrive on the first
+`next()`.
 
 ```python
-from graphlib import TopologicalSorter
+from graphlib import CycleError, TopologicalSorter
 
-# Dynamic sort - process nodes as they become available
-ts = TopologicalSorter()
+graph = {'cook': ['shop'], 'lunch': ['cook'], 'shop': []}
+ts = TopologicalSorter(graph)  # O(v + e)
+assert list(ts.static_order()) == ['shop', 'cook', 'lunch']  # O(v + e)
 
-ts.add('compile', 'preprocess')
-ts.add('preprocess', 'download')
-ts.add('download')
-ts.add('test', 'compile')
-
-ts.prepare()
-
-# Process dynamically - each get_ready() is O(k) in what it returns
-while ts.is_active():
-    ready = ts.get_ready()  # Returns tuple of ready nodes
-    for node in ready:
-        print(f"Processing {node}")
-        # Do work...
-        ts.done(node)
-```
-
-## Error Detection
-
-### Cycle Detection
-
-```python
-from graphlib import TopologicalSorter, CycleError
-
-ts = TopologicalSorter()
-
-# Add cyclic dependencies
-ts.add('A', 'B')
-ts.add('B', 'C')
-ts.add('C', 'A')  # Creates cycle: A -> B -> C -> A
-
-# Detect cycle when preparing - O(v + e)
+cyclic = TopologicalSorter({'a': ['b'], 'b': ['a']})
+order = cyclic.static_order()  # O(1) - nothing has run yet
 try:
-    ts.prepare()
-except CycleError as e:
-    print(f"Cycle detected: {e}")
-    print(f"Nodes in cycle: {e.args[1]}")
+    next(order)  # prepare() runs here
+except CycleError as error:
+    assert error.args[1] in (['a', 'b', 'a'], ['b', 'a', 'b'])
+else:
+    raise AssertionError('a cycle was sorted')
+```
+
+### Processing Ready Groups
+
+`get_ready()` returns every node whose predecessors are all done, so each group can be worked on
+in parallel. A node handed out stays active until it is passed to `done()`: `get_ready()` then
+returns an empty tuple while `is_active()` is still `True`, which is how a worker pool waits for
+results instead of finishing early.
+
+```python
+from graphlib import TopologicalSorter
+
+ts = TopologicalSorter()
+ts.add('compile', 'preprocess', 'fetch_headers')  # O(k)
+ts.add('preprocess', 'download')
+ts.add('test', 'compile')
+ts.prepare()  # O(v + e)
+
+first = ts.get_ready()  # O(r)
+assert set(first) == {'download', 'fetch_headers'}
+assert ts.get_ready() == ()  # nothing new until something is done
+assert ts.is_active()  # O(1) - two nodes are still out
+
+ts.done(*first)  # O(len(nodes) + d)
+assert ts.get_ready() == ('preprocess',)
+
+groups = [set(first), {'preprocess'}]
+ts.done('preprocess')
+while ts.is_active():
+    group = ts.get_ready()
+    groups.append(set(group))
+    ts.done(*group)
+
+assert groups == [{'download', 'fetch_headers'}, {'preprocess'}, {'compile'}, {'test'}]
+```
+
+### Order and Duplicates
+
+Nodes in the same group carry no guaranteed order between them. Calling `add()` again for a node adds to its
+predecessors, and a predecessor named twice is two edges that `done()` releases together.
+
+```python
+from graphlib import TopologicalSorter
+
+ts = TopologicalSorter()
+ts.add('app', 'lib')
+ts.add('app', 'config', 'lib')  # union with the earlier call
+order = list(ts.static_order())
+
+assert order.index('app') == 2
+assert set(order[:2]) == {'lib', 'config'}
+```
+
+## Cycles
+
+`prepare()` searches the whole graph for a cycle before anything is handed out and reports the
+first one it finds. The sorter stays usable: `get_ready()` still returns every node the cycle does
+not block, and `is_active()` turns `False` once only blocked nodes are left.
+
+```python
+from graphlib import CycleError, TopologicalSorter
+
+ts = TopologicalSorter({'a': ['b'], 'b': ['a'], 'c': [], 'd': ['c']})
+try:
+    ts.prepare()  # O(v + e)
+except CycleError as error:
+    assert isinstance(error, ValueError)
+    cycle = error.args[1]
+    assert cycle[0] == cycle[-1] and set(cycle) == {'a', 'b'}
+else:
+    raise AssertionError('the cycle went unreported')
+
+done = []
+while ts.is_active():
+    group = ts.get_ready()
+    done.extend(group)
+    ts.done(*group)
+
+assert done == ['c', 'd']  # the cycle's nodes are never handed out
+```
+
+## Sorting the Same Graph Twice
+
+Once a sorter has handed out a node it cannot be prepared again, so one traversal uses it up, and
+nodes cannot be added once it is prepared. To sort a graph again, keep the graph and build a new
+sorter from it, which is O(v + e). Keep its predecessors in lists or other collections: an
+iterator is consumed by the first sorter built from it.
+
+```python
+from graphlib import TopologicalSorter
+
+graph = {'b': ['a'], 'c': ['b']}
+ts = TopologicalSorter(graph)
+assert list(ts.static_order()) == ['a', 'b', 'c']
+
+try:
+    list(ts.static_order())  # the sorter is spent
+except ValueError:
+    pass
+else:
+    raise AssertionError('a sorter was traversed twice')
+
+try:
+    ts.add('d', 'c')
+except ValueError as error:
+    assert 'prepare' in str(error)
+else:
+    raise AssertionError('a node was added after prepare()')
+
+again = TopologicalSorter(graph)  # O(v + e) - rebuild from the graph
+assert list(again.static_order()) == ['a', 'b', 'c']
 ```
 
 ## Common Patterns
 
-### Build System
+### Build Stages
 
-```python
-from graphlib import CycleError, TopologicalSorter
-
-class BuildSystem:
-    """Simple build system with dependency resolution"""
-    
-    def __init__(self):
-        # Keep the graph, not a sorter: a sorter cannot be traversed twice,
-        # so a stored one could serve only a single caller. (Up to 3.13 even
-        # a second prepare() raises; 3.14 allows that but still not a second
-        # traversal.)
-        self.targets = {}
-    
-    # Add build target with dependencies
-    def add_target(self, target, *dependencies):
-        """Register build target - O(k)"""
-        self.targets[target] = dependencies
-    
-    def _sorter(self):
-        """Build a fresh sorter from the graph - O(v + e)"""
-        sorter = TopologicalSorter()
-        for target, dependencies in self.targets.items():
-            sorter.add(target, *dependencies)
-        return sorter
-    
-    # Get build order
-    def get_build_order(self):
-        """Get topological order - O(v + e)"""
-        try:
-            # static_order() prepares internally - do not call prepare() too
-            return list(self._sorter().static_order())
-        except CycleError:
-            return None
-    
-    # Build targets
-    def build(self):
-        """Build all targets in order - O(v + e)"""
-        sorter = self._sorter()
-        sorter.prepare()
-
-        built = set()
-        while sorter.is_active():
-            # get_ready() returns a tuple of ready nodes
-            ready = sorter.get_ready()
-            if not ready:
-                break
-
-            for target in ready:
-                # Skip already built
-                if target in built:
-                    sorter.done(target)
-                    continue
-
-                print(f"Building {target}...")
-                # Simulate build
-                built.add(target)
-                sorter.done(target)
-
-        return built
-
-# Usage
-build = BuildSystem()
-build.add_target('main.o', 'main.c', 'defs.h')
-build.add_target('util.o', 'util.c', 'defs.h')
-build.add_target('prog', 'main.o', 'util.o')
-build.add_target('main.c')
-build.add_target('util.c')
-build.add_target('defs.h')
-
-print("Build order:", build.get_build_order())
-build.build()
-```
-
-### Task Scheduler
+Each `get_ready()` group is a stage whose members can run in parallel; the whole schedule costs
+O(v + e).
 
 ```python
 from graphlib import TopologicalSorter
-import time
 
-class TaskScheduler:
-    """Schedule tasks respecting dependencies"""
-    
-    def __init__(self):
-        self.sorter = TopologicalSorter()
-        self.tasks = {}
-    
-    # Register task with dependencies
-    def add_task(self, name, func, *dependencies):
-        """Register task - O(k)"""
-        self.sorter.add(name, *dependencies)
-        self.tasks[name] = func
-    
-    # Execute all tasks in order
-    def execute(self):
-        """Execute tasks in dependency order - O(v + e)"""
-        try:
-            self.sorter.prepare()
-        except Exception as e:
-            print(f"Dependency error: {e}")
-            return False
-        
-        executed = {}
-        start_time = time.time()
-        
-        while self.sorter.is_active():
-            # Get all ready tasks - O(k) for the k returned
-            ready = self.sorter.get_ready()
-            if not ready:
-                break
+targets = {
+    'prog': ['main.o', 'util.o'],
+    'main.o': ['main.c', 'defs.h'],
+    'util.o': ['util.c', 'defs.h'],
+}
 
-            for task_name in ready:
-                # Execute task - O(?)
-                if task_name in self.tasks:
-                    print(f"Executing {task_name}...")
-                    start = time.time()
-                    result = self.tasks[task_name]()
-                    elapsed = time.time() - start
-                    executed[task_name] = (result, elapsed)
-                    print(f"  Completed in {elapsed:.3f}s")
+ts = TopologicalSorter(targets)  # O(v + e)
+ts.prepare()  # O(v + e)
 
-                # Mark done - O(d)
-                self.sorter.done(task_name)
-        
-        total = time.time() - start_time
-        print(f"Total execution time: {total:.3f}s")
-        return executed
+stages = []
+while ts.is_active():  # O(1)
+    stage = ts.get_ready()  # O(r)
+    stages.append(set(stage))
+    ts.done(*stage)  # O(len(nodes) + d)
 
-# Usage
-scheduler = TaskScheduler()
-
-def download():
-    time.sleep(0.1)
-    return "downloaded"
-
-def process():
-    time.sleep(0.1)
-    return "processed"
-
-def upload():
-    time.sleep(0.1)
-    return "uploaded"
-
-scheduler.add_task('download', download)
-scheduler.add_task('process', process, 'download')
-scheduler.add_task('upload', upload, 'process')
-
-results = scheduler.execute()
+assert stages == [{'defs.h', 'main.c', 'util.c'}, {'main.o', 'util.o'}, {'prog'}]
 ```
 
-### Package Dependency Resolver
+### Running Ready Tasks on a Pool
 
 ```python
-from graphlib import CycleError, TopologicalSorter
-
-class DependencyResolver:
-    """Resolve package installation order"""
-    
-    def __init__(self):
-        # The graph, not a sorter - see BuildSystem above for why.
-        self.packages = {}
-    
-    # Add package with dependencies
-    def add_package(self, name, version='latest', *dependencies):
-        """Add package - O(k)"""
-        self.packages[(name, version)] = dependencies
-    
-    # Get installation order
-    def get_install_order(self):
-        """Get topological order - O(v + e)"""
-        sorter = TopologicalSorter()
-        for package, dependencies in self.packages.items():
-            sorter.add(package, *dependencies)
-        try:
-            # static_order() prepares internally
-            return list(sorter.static_order())
-        except CycleError as e:
-            # Catch CycleError specifically: a bare except here would report
-            # any mistake, including a misuse of the API, as a cycle
-            print(f"Circular dependency: {e}")
-            return None
-
-# Usage
-resolver = DependencyResolver()
-
-# Illustrative dependency graph
-resolver.add_package('application', '2.0')
-resolver.add_package('transport', '2.0', ('application', '2.0'))
-resolver.add_package('templates', '3.0', ('application', '2.0'))
-resolver.add_package('authentication', '2.0')
-resolver.add_package('command_line', '8.0', ('application', '2.0'))
-
-order = resolver.get_install_order()
-print("Install order:")
-for pkg, ver in order:
-    print(f"  {pkg} {ver}")
-```
-
-## Performance Characteristics
-
-### Time Complexity
-- **Initialization**: O(1)
-- **Adding nodes**: O(k) for k predecessors
-- **prepare()**: O(v + e) where v = vertices, e = edges
-- **Complete sort**: O(v + e)
-- **Dynamic iteration**: O(v + e) total for all operations
-
-### Space Complexity
-- **Graph storage**: O(v + e) for v nodes and e edges
-- **Cycle tracking**: O(v + e) during prepare
-
-### Scalability
-
-```python
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from graphlib import TopologicalSorter
-import time
 
-# Performance test
-def benchmark_sort_size(num_nodes):
-    ts = TopologicalSorter()
-    
-    # Create linear dependency chain
-    for i in range(1, num_nodes):
-        ts.add(i, i-1)
-    ts.add(0)
-    
-    start = time.time()
-    list(ts.static_order())  # prepares internally
-    elapsed = time.time() - start
-    
-    return elapsed
+graph = {'process': ['download'], 'upload': ['process'], 'report': ['download']}
+ts = TopologicalSorter(graph)
+ts.prepare()
 
-# Test various sizes
-for size in [100, 1000, 10000]:
-    time_taken = benchmark_sort_size(size)
-    print(f"Nodes: {size}, Time: {time_taken:.4f}s")
+finished = []
+with ThreadPoolExecutor(max_workers=2) as pool:
+    running = {}
+    while ts.is_active():
+        for node in ts.get_ready():  # O(r)
+            running[pool.submit(str.upper, node)] = node
+        completed, _ = wait(running, return_when=FIRST_COMPLETED)
+        for future in completed:
+            node = running.pop(future)
+            finished.append(future.result())
+            ts.done(node)  # unblocks its successors
+
+assert finished[0] == 'DOWNLOAD'
+assert finished.index('PROCESS') < finished.index('UPLOAD')
+assert sorted(finished) == ['DOWNLOAD', 'PROCESS', 'REPORT', 'UPLOAD']
 ```
 
-## Best Practices
+## Performance Best Practices
 
-### Do's
-- Use for dependency resolution
-- Detect cycles before processing
-- Use static_order() when you need complete result
-- Use dynamic approach for large graphs or concurrent processing
+✅ **Do**:
 
-### Avoid's
-- Don't assume order within independent nodes
-- Don't modify graph during iteration
-- Don't rely on specific order of equally-ranked nodes
+- Use `static_order()` when one sequential order is all you need
+- Use `get_ready()` and `done()` when work can run in parallel: each node is handed out and
+  released once, so the bookkeeping stays O(v + e) for the whole sort
+- Keep the graph, with its predecessors in lists, and build a new sorter to sort it again
 
-## Limitations
+❌ **Avoid**:
 
-- Only handles DAGs (Directed Acyclic Graphs)
-- No weights on edges
-- No path finding between nodes
-- Cannot represent "soft" dependencies
+- Calling `prepare()` before `static_order()`: it repeats the O(v + e) cycle search on 3.14 and
+  raises `ValueError` on earlier versions
+- Relying on the order of nodes within one ready group
+- Treating an empty `get_ready()` as the end of the sort; check `is_active()`
 
-## Related Documentation
+## Version Notes
 
-- [Collections Module](collections.md)
-- [Itertools Module](itertools.md)
-- [Heapq Module](heapq.md)
+- **Python 3.14+**: `prepare()` may be called again until a node has been handed out, each call
+  a fresh O(v + e) cycle search; earlier versions raise `ValueError` on a second call
+
+## Related Modules
+
+- **[concurrent.futures](concurrent_futures.md)** - run each ready group on a pool
+- **[collections](collections.md)** - `deque` and `defaultdict` for writing a custom graph walk
+- **[heapq](heapq.md)** - when ready nodes must come out in priority order
