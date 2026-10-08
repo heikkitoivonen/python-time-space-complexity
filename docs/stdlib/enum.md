@@ -1,132 +1,155 @@
 # enum Module Complexity
 
-The `enum` module binds symbolic names to constant values. Almost everything it does costs once,
-when the class body runs: the metaclass builds the members, indexes them by name and by value, and
-freezes the result.
+The `enum` module binds symbolic names to constant values. Most of its work happens once, when the
+class body runs: the metaclass creates every member, checks each value against the ones before it,
+and indexes the members by name and by value. After that, lookups are dictionary reads.
 
-**n** is the number of member names, including aliases. Name lookup uses a dictionary;
-value lookup uses a dictionary for hashable values and scans for unhashable values.
-Lookup bounds assume constant-cost hashing and equality and exclude custom `_missing_()` work.
-Construction bounds below cover ordinary hashable values.
-
-!!! note "Value lookup depends on hashability"
-    `Color(1)` uses the reverse value dictionary, giving expected O(1) lookup. List- and
-    dict-valued enums are supported too, but looking up an unhashable value requires up to
-    O(n) equality comparisons before a match or a call to `_missing_()`.
+`n` is the members of one enum class, aliases included, and `b` is the bits set in one flag value.
+Values are hashed and compared in O(1), and flag values are machine-word integers, so a bitwise
+operation on one is O(1). `auto()` bounds assume the values before each one ascend, as `auto()`
+alone makes them. Hooks a class overrides - `_missing_()`, `_generate_next_value_()`, a custom
+`__new__` or `__init__` - add their own cost.
 
 ## Complexity Reference
 
-### Building an enum
+### EnumType
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `class C(enum.Enum)` — the class body | O(n) | O(n) | n = members; each is instantiated and indexed by name and by value |
-| `enum.Enum(name, names)` — the functional API | O(n) | O(n) | Builds the same class at run time |
-| `enum.auto()` | O(1) | O(1) | A sentinel resolved by `_generate_next_value_` when the class is built |
-| `enum.member(obj)`, `enum.nonmember(obj)` | O(1) | O(1) | Python 3.11+; force a class-body name to be, or not be, a member |
-| `enum.property` | O(1) | O(1) | Python 3.11+; the descriptor behind `.name` and `.value`, which shadows a member of the same name |
-| `enum.EnumDict` | O(1) | O(1) | Python 3.13+; the mapping the class body is executed in |
-| `enum.EnumDict.member_names` | O(n) | O(n) | Python 3.13+; a fresh list of the namespace's member names, including aliases, on each access |
+| `class C(enum.Enum)`, running the class body | O(n²) | O(n) | Each value is checked against the values before it, and each `auto()` is handed a copy of them; O(n) on 3.11 to 3.13.0 when every value is explicit and hashable |
+| `enum.Enum(value, names, ...)`, the functional API | O(n²) | O(n) | Builds the same class; names given as a string or a list are numbered the way `auto()` numbers them |
+| `enum.EnumType`, `enum.EnumMeta` | O(n²) | O(n) | The metaclass; calling it builds a class, as above. `EnumType` is the 3.11+ name, and `EnumMeta` stays an alias |
+| `C.NAME`, `C['NAME']` | O(1) | O(1) | Name lookup; aliases resolve to their canonical member |
+| `C(value)` | O(1) expected; O(n) for an unhashable value | O(1) | Hashable values are indexed; a value with no member calls `_missing_()`, then raises `ValueError` |
+| `iter(C)`, `reversed(C)` | O(n) | O(1) | Canonical members in definition order; aliases are skipped |
+| `len(C)` | O(1) | O(1) | Canonical members only |
+| `value in C` | O(1) for a member; for a raw value, O(1) expected on 3.12 to 3.13.2 and O(n) from 3.13.3 | O(1) | A raw value raises `TypeError` before 3.12, and an unhashable one until 3.12.10; an unhashable one is O(n) wherever it is answered, and on 3.12 a hashable one with no member also scans any unhashable values |
+| `C.__members__` | O(1) | O(1) | A read-only live view of the name index, aliases included; copying it is O(n) |
+| `dir(C)` | O(n log n) | O(n) | Sorted; includes the canonical member names, not aliases |
 
-### Looking members up
-
-| Operation | Time | Space | Notes |
-|-----------|------|-------|-------|
-| `C.MEMBER` | O(1) | O(1) | An attribute lookup on the class |
-| `C['MEMBER']` | O(1) | O(1) | `_member_map_`, a dict keyed by name |
-| `C(value)` | O(1) expected for hashable values; O(n) comparisons for unhashable values | O(1) auxiliary | A failed lookup calls `_missing_()`; comparison and hook costs are additional |
-| `member.name`, `member.value` | O(1) | O(1) | Stored on the member |
-| `len(C)` | O(1) | O(1) | The canonical member list's length |
-| `iter(C)` | O(n) | O(1) | Canonical members only — aliases are skipped |
-| `C.__members__` | O(1) | O(1) auxiliary | Read-only proxy over the existing dictionary, including aliases; copying it to a dict or list costs O(n) time and space |
-| `x in C` | O(1) for a member; up to O(n) comparisons for raw values from 3.12 | O(1) auxiliary, excluding hooks | A raw value raises `TypeError` before 3.12; hashable values are accepted from 3.12, unhashable values from 3.12.10 |
-
-### Variants
+### Enum
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `enum.IntEnum`, `enum.StrEnum` | O(1) | O(1) | Members are `int`s and `str`s, so they compare and format as one; `StrEnum` is 3.11+ |
-| `enum.ReprEnum` | O(1) | O(1) | Python 3.11+; the base that keeps the mixed-in type's `__str__` and `__format__` |
-| `enum.Flag`, `enum.IntFlag` | O(1) | O(1) | Members are powers of two, so `\|` and `&` are single integer operations |
-| Iterating or `len()` on a combined flag | O(b) | O(1) | b = bits set; Python 3.11+, where a combination became sized and iterable |
-| `enum.EnumMeta`, `enum.EnumType` | O(n) | O(n) | The metaclass that does the building; `EnumType` is the 3.11+ name for the same object |
+| `enum.Enum`, `member.name`, `member.value` | O(1) | O(1) | Stored on the member |
+| `Enum._name_`, `Enum._value_` | O(1) | O(1) | The attributes behind `name` and `value`; a custom `__new__` sets `_value_` |
+| `enum.auto()` | O(1) | O(1) | A placeholder; its value is generated while the class body runs, at the cost in the first row |
+| `Enum._generate_next_value_(name, start, count, last_values)` | O(n) | O(n) | Called once per `auto()` with a fresh list of the values so far |
+| `Enum._missing_(value)` | O(1) | O(1) | Called when `C(value)` finds no member; the default returns `None` |
+| `Enum._ignore_` | O(i) | O(i) | i = names listed; they are dropped from the class body |
+| `Enum._order_` | O(n²) | O(n) | Checked once, when the class is built: each name is looked for in the list of canonical member names; O(n) on 3.10 |
+| `Enum._add_alias_(name)`, `Enum._add_value_alias_(value)` | O(1) expected; O(n) for an unhashable value | O(1) | Python 3.13+; add a name or a value that leads to an existing member |
+| `enum.member(obj)`, `enum.nonmember(obj)` | O(1) | O(1) | Python 3.11+; mark a class-body name as a member or not |
+| `enum.property` | O(1) | O(1) | Python 3.11+; the descriptor behind `name` and `value`, so a member may have either name |
 
-### Validation and helpers
+### EnumDict
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `enum.unique(cls)` | O(n) | O(a) | a = aliases found; raises `ValueError` if there are any |
-| `enum.verify(*checks)` | O(n) | O(n) | Python 3.11+; a class decorator running the `EnumCheck` constraints |
-| `enum.EnumCheck` — `enum.UNIQUE`, `enum.CONTINUOUS`, `enum.NAMED_FLAGS` | O(1) | O(1) | Python 3.11+; the constraints `verify()` applies |
-| `enum.FlagBoundary` — `enum.STRICT`, `enum.CONFORM`, `enum.EJECT`, `enum.KEEP` | O(1) | O(1) | Python 3.11+; what a flag does with bits no member claims |
-| `enum.global_enum(cls)` | O(n) | O(n) | Python 3.11+; exports members into the defining module and changes their string representations |
-| `enum.global_str(member)` | O(1) for a named member | O(1) auxiliary for a named member | Python 3.11+; returns the stored name; unnamed members instead incur value-formatting costs |
-| `enum.show_flag_values(value)` | O(b·w) bit work | O(b·w) bits | Python 3.11+; returns b powers of two in ascending order; w = positive input's bit length; zero takes O(1) |
-| `enum.bin(num, max_bits=None)` | O(w) formatting plus integer exponentiation | O(w) | Python 3.11+; w = output width including padding; also computes `2 ** num.bit_length()` |
-| `enum.global_enum_repr(self)`, `enum.global_flag_repr(self)` | O(1) | O(1) | Python 3.11+; the `repr` that names the module rather than the class |
+| `enum.EnumDict` | O(1) | O(1) | Python 3.13+; the namespace the class body runs in |
+| `EnumDict.member_names` | O(n) | O(n) | Python 3.13+; a fresh list on every access, aliases included |
+| `EnumDict.update(members, **more_members)` | O(k) | O(k) | Python 3.13+; k = items given, assigned one at a time, an `auto()` among them priced as in the class body |
+
+### IntEnum, StrEnum and ReprEnum
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `enum.IntEnum`, `enum.StrEnum` | O(1) | O(1) | Members are `int`s and `str`s, so they compare, hash and format as one; `StrEnum` is 3.11+ |
+| `enum.ReprEnum` | O(1) | O(1) | Python 3.11+; keeps the mixed-in type's `str()` and `format()` |
+
+### Flag
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `enum.Flag`, `enum.IntFlag` | O(1) | O(1) | Members are bits or named combinations of them; other combinations are made on demand |
+| `a \| b`, `a & b`, `a ^ b` | O(1) expected; O(n) the first time a value is made, O(n log n) on 3.10 | O(1); O(n) the first time | A new combination is built once and cached on the class for as long as the class lives |
+| `~flag` | O(n); O(n²) on 3.10 | O(n) | Python 3.11+ caches the result on the operand, so a repeat is O(1); 3.10 recomputes it on every call |
+| `member in flag` | O(1) | O(1) | A bitwise test |
+| `iter(flag)` | O(b) | O(1) | Python 3.11+; the members whose bits are set. A class whose members are defined out of value order sorts them first: O(b log b) time, O(b) space |
+| `len(flag)`, `bool(flag)` | O(1) | O(1) | `len()` is 3.11+ and counts the bits set |
+| `Flag._numeric_repr_` | O(1) | O(1) | Python 3.11+; formats the bits no member names |
+| `enum.FlagBoundary`, `enum.STRICT`, `enum.CONFORM`, `enum.EJECT`, `enum.KEEP` | O(1) | O(1) | Python 3.11+; what a flag does with bits no member claims |
+| `enum.show_flag_values(value)` | O(b) | O(b) | Python 3.11+; the powers of two in `value`, ascending |
+| `enum.bin(num, max_bits=None)` | O(w) | O(w) | Python 3.11+; w = digits in the result, at least `max_bits`; the leading digit is the sign |
+
+### Validation and global helpers
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `enum.unique(cls)` | O(n) | O(a) | a = aliases found; raises `ValueError` naming them |
+| `enum.verify(*checks)` | O(n + r) | O(n + r) | Python 3.11+; r = the span from the smallest value to the largest, which `CONTINUOUS` walks on an `Enum`; `UNIQUE` and `NAMED_FLAGS` are O(n) |
+| `enum.EnumCheck`, `enum.UNIQUE`, `enum.CONTINUOUS`, `enum.NAMED_FLAGS` | O(1) | O(1) | Python 3.11+; the checks `verify()` applies |
+| `enum.global_enum(cls, update_str=False)` | O(n) | O(n) | Python 3.11+; copies every member, aliases included, into the defining module |
+| `enum.global_str(self)`, `enum.global_enum_repr(self)` | O(1) | O(1) | Python 3.11+; the `str()` and `repr()` that `global_enum()` installs |
+| `enum.global_flag_repr(self)` | O(b) | O(b) | Python 3.11+; module-qualifies each name in a combination's name |
 | `enum.pickle_by_global_name(self, proto)`, `enum.pickle_by_enum_name(self, proto)` | O(1) | O(1) | Python 3.11+; `__reduce_ex__` implementations |
 
-## Enum Basics
+## Defining Enums
 
 ### Creating an Enum
+
+The class body is where the cost is. Each value is checked against the values before it, and each
+`auto()` is handed a copy of them, so build an enum once, at module level, and look members up
+afterwards.
+
+```python
+from enum import Enum, auto
+
+class Color(Enum):  # O(n²) once, when the class body runs
+    RED = auto()
+    GREEN = auto()
+    BLUE = auto()
+
+assert [c.value for c in Color] == [1, 2, 3]  # O(n) - auto() counts from 1
+assert Color.RED.name == 'RED'                # O(1)
+assert str(Color.RED) == 'Color.RED'
+```
+
+### The Functional API
+
+`Enum(name, names)` builds the same class the `class` statement would, at the same cost.
 
 ```python
 from enum import Enum
 
-# The class body runs once - O(n) in members
-class Color(Enum):
-    RED = 1
-    GREEN = 2
-    BLUE = 3
+Color = Enum('Color', 'RED GREEN BLUE')  # O(n²) - numbered like auto()
+assert Color.RED.value == 1
+assert len(Color) == 3                   # O(1)
 
-assert Color.RED.name == 'RED'    # O(1)
-assert Color.RED.value == 1       # O(1)
-assert str(Color.RED) == 'Color.RED'
+# A mapping gives explicit values
+Status = Enum('Status', {'OK': 200, 'MISSING': 404})
+assert Status(404) is Status.MISSING     # O(1) expected
 ```
 
-### Name and Value Lookup
+## Looking Members Up
+
+### By Name and by Value
+
+Names and hashable values are both indexed. An unhashable value cannot be, so looking one up
+compares it with the member values one at a time.
 
 ```python
 from enum import Enum
 
 class Status(Enum):
     PENDING = 'pending'
-    ACTIVE = 'active'
     DONE = 'done'
 
-assert Status.ACTIVE is Status['ACTIVE']    # O(1) - by name
-assert Status.ACTIVE is Status('active')    # O(1) expected - hashable value
+assert Status['DONE'] is Status.DONE  # O(1) - by name
+assert Status('done') is Status.DONE  # O(1) expected - hashable value
 
 Lists = Enum('Lists', {'FIRST': [1], 'SECOND': [2]})
-assert Lists([2]) is Lists.SECOND           # O(n) comparisons - unhashable value
+assert Lists([2]) is Lists.SECOND     # O(n) - unhashable value
 
-# A value with no member raises, having consulted the map and then _missing_
 try:
-    Status('missing')
+    Status('missing')                 # O(1), then _missing_()
 except ValueError as error:
     assert 'is not a valid Status' in str(error)
+else:
+    raise AssertionError('a value with no member was found')
 ```
 
-### Members Are Singletons
-
-There is exactly one object per member, so `is` is the right comparison and identity checks cost
-nothing.
-
-```python
-from enum import Enum
-
-class Color(Enum):
-    RED = 1
-
-assert Color(1) is Color.RED
-assert Color(1) is Color['RED']
-assert Color.RED == Color.RED and Color.RED is Color.RED
-
-# An Enum member is not its value
-assert Color.RED != 1
-```
-
-### Iteration Skips Aliases
+### Aliases
 
 A second name for the same value is an alias. It is reachable by name and appears in
 `__members__`, but iteration and `len()` see only the canonical members.
@@ -136,17 +159,20 @@ from enum import Enum
 
 class Color(Enum):
     RED = 1
-    CRIMSON = 1   # an alias for RED
+    CRIMSON = 1  # an alias for RED
     GREEN = 2
 
 assert Color.CRIMSON is Color.RED
-
-assert [c.name for c in Color] == ['RED', 'GREEN']   # O(n), aliases skipped
-assert len(Color) == 2                                # O(1)
-assert list(Color.__members__) == ['RED', 'CRIMSON', 'GREEN']  # aliases included
+assert [c.name for c in Color] == ['RED', 'GREEN']  # O(n), aliases skipped
+assert len(Color) == 2                              # O(1)
+assert list(Color.__members__) == ['RED', 'CRIMSON', 'GREEN']  # O(n) to list the view
 ```
 
 ## Membership
+
+A member is found in its class in O(1). A raw value is a different question: before 3.12 it raises
+`TypeError`, and from 3.13.3 it may be answered by scanning the member values. `C(value)` reaches
+the value index on every version, so it is the constant-time test for a hashable value.
 
 ```python
 import sys
@@ -154,44 +180,35 @@ from enum import Enum
 
 class Color(Enum):
     RED = 1
+    GREEN = 2
 
-assert Color.RED in Color   # O(1) on every version
+assert Color.RED in Color  # O(1) - a member
 
-# For a plain value the answer changed in 3.12
+def has_value(cls, value):
+    try:
+        cls(value)         # O(1) expected - the value index
+    except ValueError:
+        return False
+    return True
+
+assert has_value(Color, 2)
+assert not has_value(Color, 99)
+
 if sys.version_info >= (3, 12):
-    assert (1 in Color) is True
-    assert (99 in Color) is False
+    assert 2 in Color      # O(n) from 3.13.4 - a raw value
+    assert 99 not in Color
 ```
 
-!!! warning "`value in EnumClass` was not always a question you could ask"
-    On 3.10 and 3.11 testing a non-member raises `TypeError` (with a `DeprecationWarning` saying
-    the behaviour will change). Python 3.12.0–3.12.9 answers for a hashable value but still raises
-    `TypeError: unhashable type` for a list- or dict-valued member; Python 3.12.10 and later
-    compare unhashable values too. For hashable values, use `value in EnumClass._value2member_map_`
-    to support the older versions, or catch the `TypeError`.
-
-## Integer and String Enums
-
-`IntEnum` and `StrEnum` members *are* `int`s and `str`s, so they interoperate with code that has
-never heard of the enum — at the cost of comparing equal to a bare value.
-
-```python
-from enum import IntEnum
-
-class Priority(IntEnum):
-    LOW = 1
-    HIGH = 3
-
-assert Priority.HIGH > Priority.LOW    # O(1) - an int comparison
-assert Priority.HIGH == 3              # unlike a plain Enum
-assert Priority.HIGH + 1 == 4
-assert sorted(Priority) == [Priority.LOW, Priority.HIGH]
-```
+!!! warning "`value in C` depends on the version"
+    On 3.10 and 3.11 a raw value raises `TypeError`, with a `DeprecationWarning` announcing the
+    change. On 3.12.0 to 3.12.9 a hashable value is answered and an unhashable one still raises
+    `TypeError`; 3.12.10 and 3.13 answer both.
 
 ## Flags
 
-`Flag` members are powers of two, so combining and testing them are single integer operations. A
-combination is iterable and sized from Python 3.11.
+Combining flags is integer arithmetic, but the result is a member too. The first time a value is
+made it is built and cached on the class, so the same combination is the same object afterwards,
+and every distinct value made stays cached for as long as the class lives.
 
 ```python
 import sys
@@ -202,121 +219,115 @@ class Permission(Flag):
     WRITE = auto()
     EXECUTE = auto()
 
-combined = Permission.READ | Permission.WRITE   # O(1)
+combined = Permission.READ | Permission.WRITE         # O(n) once, then O(1)
+assert combined is Permission.READ | Permission.WRITE  # one object per value
 
-assert Permission.READ in combined              # O(1) - a bitwise test
+assert Permission.READ in combined                    # O(1) - a bitwise test
 assert Permission.EXECUTE not in combined
-assert combined & Permission.READ == Permission.READ
-
-# A combination is looked up by value like any other member
-assert Permission(combined.value) is combined
+assert (combined & Permission.READ) is Permission.READ
 
 if sys.version_info >= (3, 11):
-    assert len(combined) == 2                        # O(b) in bits set
-    assert {p.name for p in combined} == {'READ', 'WRITE'}
+    assert len(combined) == 2                                # O(1)
+    assert [p.name for p in combined] == ['READ', 'WRITE']  # O(b)
 ```
 
 ## Validation
 
-`unique()` walks the members once and refuses aliases. `verify()` (3.11+) generalizes that to the
-other constraints.
+`unique()` walks the members once and refuses aliases. `verify()` (3.11+) generalises it; its
+`CONTINUOUS` check walks every integer between the smallest and largest value, so it suits values
+that are close together.
 
 ```python
 import sys
 from enum import Enum, unique
 
-# unique() rejects an alias - O(n)
 try:
-    @unique
+    @unique  # O(n)
     class Duplicated(Enum):
         A = 1
         B = 1
 except ValueError as error:
     assert 'duplicate values' in str(error)
+else:
+    raise AssertionError('an alias passed unique()')
 
 if sys.version_info >= (3, 11):
     from enum import CONTINUOUS, verify
 
-    # CONTINUOUS refuses a gap in the values - O(n)
     try:
-        @verify(CONTINUOUS)
+        @verify(CONTINUOUS)  # O(n + r), r = largest value - smallest
         class Gapped(Enum):
             A = 1
             C = 3
     except ValueError as error:
-        assert 'invalid enum' in str(error) or 'are missing' in str(error)
+        assert 'missing values 2' in str(error)
+    else:
+        raise AssertionError('a gap passed verify(CONTINUOUS)')
 ```
 
-## The Functional API
+## Integer and String Enums
 
-`Enum(name, names)` builds the same class the `class` statement would, at the same O(n) — just
-later.
+`IntEnum` and `StrEnum` members *are* `int`s and `str`s, so they work with code that has never
+heard of the enum, at the price of comparing equal to a bare value.
 
 ```python
-from enum import Enum
+import sys
+from enum import Enum, IntEnum
 
-Color = Enum('Color', ['RED', 'GREEN', 'BLUE'])   # O(n)
+class Priority(IntEnum):
+    LOW = 1
+    HIGH = 3
 
-assert Color.RED.value == 1        # auto-numbered from 1
-assert len(Color) == 3
-assert Color(1) is Color.RED       # O(1) expected - hashable value
+assert Priority.HIGH > Priority.LOW  # O(1) - an int comparison
+assert Priority.HIGH == 3
+assert sorted(Priority) == [Priority.LOW, Priority.HIGH]
 
-# A mapping gives explicit values
-Status = Enum('Status', {'OK': 200, 'MISSING': 404})
-assert Status(404) is Status.MISSING   # O(1)
+class Plain(Enum):
+    HIGH = 3
+
+assert Plain.HIGH != 3               # a plain member is not its value
+
+if sys.version_info >= (3, 11):
+    from enum import StrEnum
+
+    class Mode(StrEnum):
+        READ = 'r'
+
+    assert Mode.READ == 'r' and f'{Mode.READ}' == 'r'
 ```
 
-## Methods on an Enum
+## Performance Best Practices
 
-Methods and non-member attributes live on the class, not among the members, so adding them does
-not change any bound.
+✅ **Do**:
 
-```python
-from enum import Enum
+- Define enums once, at module level, so the O(n²) class body runs once
+- Test whether a hashable value has a member with `C(value)` and `ValueError`; it is an index
+  lookup on every version
+- Compare members with `is`; there is exactly one object per member, and per flag value
 
-class Planet(Enum):
-    MERCURY = (3.303e23, 2.4397e6)
-    EARTH = (5.976e24, 6.37814e6)
+❌ **Avoid**:
 
-    def __init__(self, mass, radius):
-        self.mass = mass
-        self.radius = radius
-
-    @property
-    def surface_gravity(self):
-        return 6.67300E-11 * self.mass / (self.radius * self.radius)
-
-assert len(Planet) == 2                     # the property is not a member
-assert round(Planet.EARTH.surface_gravity, 2) == 9.80
-```
+- Building an enum inside a function that runs often
+- Iterating to find a member by value - O(n), where `C(value)` is O(1)
+- Unhashable member values: every lookup by value compares them one at a time
+- `verify(CONTINUOUS)` on values far apart; it walks the whole span between them
+- Making flags from arbitrary integers - each distinct value is cached on the class for good
 
 ## Version Notes
 
 - **Python 3.11+**: `StrEnum`, `ReprEnum`, `EnumType`, `verify` with `EnumCheck`, `FlagBoundary`,
-  `member`/`nonmember`, `enum.property`, `show_flag_values`, `enum.bin`, the `global_*` and
-  `pickle_by_*` helpers; a combined `Flag` became sized and iterable
-- **Python 3.12+**: `value in EnumClass` answers `True`/`False` for hashable values;
-  unhashable values are supported from 3.12.10
-- **Python 3.13+**: `EnumDict`, the class-body mapping, became public
+  `member`/`nonmember`, `enum.property`, `show_flag_values`, `enum.bin`, and the `global_*` and
+  `pickle_by_*` helpers; a combined `Flag` became sized and iterable, and `~flag` is cached.
+  Building indexes explicit hashable values, O(n) where 3.10 is O(n²)
+- **Python 3.12+**: `value in C` answers for a raw hashable value instead of raising `TypeError`;
+  unhashable values are answered from 3.12.10
+- **Python 3.13+**: `EnumDict`, `_add_alias_()` and `_add_value_alias_()`
+- **Python 3.13.1+**: Building checks each value against a list of the values before it, O(n²)
+- **Python 3.13.3+**: `value in C` with a raw value scans the member values, O(n); on 3.13.3 only
+  a value with no member is scanned
 
-## Related Documentation
+## Related Modules
 
-- **[dataclasses](dataclasses.md)** - the other decorator that builds methods at import
-- **[typing](typing.md)** - `Literal` as the alternative when you want no runtime object at all
+- **[dataclasses](dataclasses.md)** - another class whose behaviour is built from its body at definition time
+- **[typing](typing.md)** - `Literal` when the names need no runtime object at all
 - **[collections](collections.md)** - `namedtuple` for a fixed record rather than a fixed set
-
-## Best Practices
-
-✅ **Do**:
-
-- Use `C(value)` for value lookup; hashable values use the reverse dictionary
-- Compare members with `is`; there is exactly one object per member
-- Use `IntEnum` or `StrEnum` only where the value has to cross an API that wants a plain int or str
-- Reach for `unique()` when the values come from somewhere you do not control
-
-❌ **Avoid**:
-
-- Building an enum inside a function that runs often — the class body is the O(n) part
-- Iterating to find a member by value
-- Assuming `__members__` and iteration agree; aliases appear in one and not the other
-- `value in EnumClass` if you still support 3.10 or 3.11

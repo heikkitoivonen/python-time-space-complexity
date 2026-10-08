@@ -1,31 +1,97 @@
-"""Evidence for docs/stdlib/enum.md.
+"""Tests for docs/stdlib/enum.md.
 
-Hashable integer lookup is measured across 10 and 1,000 members and between
-first and last members. Unhashable list/dict values count comparisons at
-10 and 100 members with constant-size values. Proxy allocations vary member
-count, and a live backing-map mutation distinguishes a view from a copy.
-Named global_str results use identity at both enum widths; global_enum exports
-are checked in an isolated module. show_flag_values varies set-bit count and
-integer width independently, checking output allocation in both dimensions.
-The bit-work upper bound follows released CPython 3.14 Lib/enum.py's repeated
-integer operations; no timing exponent is inferred from output allocation.
-The bin helper checks padded output length, signs, and allocation growth. Its
-integer exponentiation cost is left separate, as seen in released CPython
-3.11 and 3.14 Lib/enum.py; output allocation alone does not bound that work.
-EnumDict.member_names checks fresh snapshots including alias names, counts
-iteration at 0, 10 and 1,000 names, and measures list storage at 100 and 10,000
-names. Released CPython 3.13 and 3.14 Lib/enum.py builds a list from the backing
-name dictionary. The counting probe substitutes that dictionary; snapshot and
-storage tests use ordinary namespaces. Custom class-building hooks are not varied.
+The page prices an enum as one expensive build followed by cheap reads: the
+class body checks every value against the ones before it, and lookups by name
+and by hashable value are dictionary reads. Nearly every row is settled by
+counting: member values are an `int` or `list` subclass whose `__eq__` counts
+calls, so a dictionary probe shows up as at most one comparison and a scan as
+one per member, with no tolerance. Views and caches are settled by identity.
 
-Coverage includes enum.__all__ and the documented non-exported APIs listed at
-https://docs.python.org/3/library/enum.html#module-contents.
-All ten code blocks execute in subprocesses. Version gates cover membership,
-flag iteration, and later APIs. Construction timings cover hashable integers.
-Custom _missing_, hashing, equality and value formatting can execute arbitrary
-code and are excluded from the simple lookup/helper bounds. Tests do not vary
-custom class-building hooks, nested enum values or FlagBoundary policies.
+Measurement scope:
+
+* Building: an `Enum` of 100 and of 400 counting-`int` values makes exactly
+  n(n - 1)/2 comparisons on 3.10 and from 3.13.1, and none on 3.11 to 3.13.0.
+  The same sizes with counting-`list` values make exactly n(n - 1)/2 on every
+  version. A class built through `__prepare__` with 50 `auto()` members hands
+  `_generate_next_value_` 50 distinct lists of 0 to 49 values, 1,225 in all;
+  the functional API with a list of 50 names does the same. An `_order_` of
+  100 and of 400 counting-`str` names makes at least n(n + 1)/2 comparisons
+  from 3.11 and at most 2n on 3.10.
+* `C(value)` makes at most one comparison for a hashable value at 10 and
+  1,000 members, first member or last. An unhashable value at 10 and 100
+  members makes index + 1 comparisons to find a member and between n and 2n
+  to miss. `C['NAME']` with a counting `str` key makes at most one comparison
+  at 10 and 1,000 members.
+* `value in C` with a raw counting `int`: before 3.12 it raises `TypeError`
+  under a `DeprecationWarning`; on 3.12.x it makes at most one comparison;
+  from 3.13.4 it makes exactly n comparisons at 10 and 100 members, hit or
+  miss. `C(value)` stays at one comparison at the same sizes on every version.
+  An unhashable raw value raises `TypeError` on 3.12.0 to 3.12.9 and is
+  answered from 3.12.10. In an enum of 10 counting-`int` and 30
+  counting-`list` values, a plain `int` miss makes 30 comparisons on 3.12, none
+  on 3.13.0 to 3.13.2, and 40 from 3.13.4.
+* `C.__members__` is a `MappingProxyType` that sees a key added to the
+  backing map after it was taken, so it is a view, not a copy. `len(C)` and
+  name lookup are timed at 10 and 1,000 members (under 3x); iteration yields
+  the canonical members only, `reversed()` yields them backwards, and
+  `dir()` is sorted and lists a canonical name but not its alias.
+* Flags: `a | b` returns the same object twice, and the class's value map
+  grows by one for a new combination and not for a repeat; 1,000 distinct
+  `IntFlag` values grow it by at least 1,000. On 3.11+ `~flag` is stored on
+  the operand, `len(flag)` answers with the class's member iterator replaced
+  by one that raises, and iteration yields the b members set, in definition
+  order for a class defined out of value order. `~flag` of a value holding
+  every member, at 20 and 60 single-bit members with a counting `__eq__`,
+  makes exactly n(n - 1)/2 comparisons on each of two calls on 3.10, and
+  none from 3.11.
+* `verify(CONTINUOUS)` on a two-member `Enum` valued 0 and r: the traced peak
+  grows more than 5x from r = 100,000 to r = 1,000,000. It runs serially, so
+  xdist's I/O thread cannot add to the peak.
+* `EnumDict.member_names` is a fresh list on each access, including aliases;
+  a counting backing dictionary is visited once per name at 0, 10 and 1,000
+  names. `EnumDict.update()` resolves `auto()` and aliases as the class body
+  does. `_add_value_alias_()` makes at most one comparison for a hashable
+  value and n for an unhashable one, at 10 and 100 members.
+* `show_flag_values()`, `global_flag_repr()`, `enum.bin()` and `unique()` are
+  asserted by what they return or raise: b powers of two, a combination's
+  2 and 16 names each module-qualified and a named combination kept whole,
+  `max_bits` digits after the sign, every alias named.
+* Every fenced Python block runs in its own subprocess, and a mutated
+  assertion in one of them is asserted to fail.
+
+Not settled here:
+
+* The O(n) cost of making a new flag combination for the first time is read
+  from Lib/enum.py: `_decompose()` walks the canonical members on 3.10, and
+  from 3.11 `Flag._missing_()` walks the bits set plus, when the value covers
+  a multi-bit alias, every member. Only the caching is observed.
+* `~flag`'s first call is priced from the same source; its cache is observed.
+* The default `_generate_next_value_()` sorts the values it is handed from
+  3.11 and walks back from the last one on 3.10; that the sort is linear
+  when they ascend is Timsort's, not measured here.
+* On 3.10 a first-time combination sorts the members it contains
+  (`_decompose()`), and from 3.11 iterating a flag defined out of value order
+  sorts the members set (`_iter_member_by_def_()`); both log factors are read
+  from Lib/enum.py, and only the iteration order is observed.
+* `dir(C)` is O(n log n) because `dir()` sorts; only that every member name is
+  in it is asserted.
+* `verify(UNIQUE)` and `verify(NAMED_FLAGS)` being O(n) is read from
+  Lib/enum.py; `NAMED_FLAGS` scans the canonical members, which machine-word
+  flag values bound. Neither is varied in n.
+* The cost model takes flag values to be machine-word integers; wide
+  `IntFlag` values make each bitwise operation O(w) and are not varied.
+* Custom `_missing_()`, `__new__`, `__init__`, `__hash__` and `__eq__` costs
+  are outside the bounds and are not varied beyond the counting values above.
+* `value in C` on 3.13.3, which scans only for a value with no member, is
+  read from that release's Lib/enum.py; no 3.13.3 interpreter is run.
+* The audit lists `EnumDict.update`, the `global_*` helpers and the
+  `pickle_by_*` helpers under needs-classification, as names found in
+  `__all__` or at run time but not in the official inventory; each has a row.
+  `enum.property.member` is listed there too and has none: it is an
+  undocumented attribute the module sets on its own descriptors.
 """
+
+from __future__ import annotations
 
 import enum
 import pathlib
@@ -36,58 +102,20 @@ import textwrap
 import time
 import tracemalloc
 import types
-import warnings
 from collections.abc import Callable
-from enum import Enum, Flag, IntEnum, auto, unique
+from enum import Enum, Flag, IntFlag, auto, unique
 from typing import Any
 
 import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "enum.md"
+EXPECTED_BLOCKS = 8
 
-EXPECTED_BLOCKS = 10
-
-# Documented, but absent from the older interpreters. Each row must say so.
-ADDED_AFTER_310 = dict.fromkeys(
-    [
-        "CONFORM",
-        "CONTINUOUS",
-        "EJECT",
-        "EnumCheck",
-        "EnumType",
-        "FlagBoundary",
-        "KEEP",
-        "NAMED_FLAGS",
-        "ReprEnum",
-        "STRICT",
-        "StrEnum",
-        "UNIQUE",
-        "global_enum",
-        "global_enum_repr",
-        "global_flag_repr",
-        "global_str",
-        "member",
-        "nonmember",
-        "pickle_by_enum_name",
-        "pickle_by_global_name",
-        "property",
-        "verify",
-        "show_flag_values",
-        "bin",
-    ],
-    "3.11",
-) | {"EnumDict": "3.13"}
+# The module as Any, so 3.11+ names type-check against pyright's 3.10 floor.
+ENUM: Any = enum
 
 
-# Public in the official module reference, but absent from enum.__all__.
-DOCUMENTED_NON_EXPORTS = {"show_flag_values", "bin"}
-
-
-def _public_names() -> set[str]:
-    return set(enum.__all__) | {name for name in DOCUMENTED_NON_EXPORTS if hasattr(enum, name)}
-
-
-def best_ns(func: Callable[[], Any], repeats: int = 9, inner: int = 1) -> float:
+def best_ns(func: Callable[[], Any], repeats: int = 7, inner: int = 1) -> float:
     """Fastest of `repeats` runs, in nanoseconds per call."""
     best: float | None = None
     for _ in range(repeats):
@@ -100,77 +128,478 @@ def best_ns(func: Callable[[], Any], repeats: int = 9, inner: int = 1) -> float:
     return best
 
 
+def peak_bytes(func: Callable[[], Any]) -> int:
+    """Peak traced allocation while func runs."""
+    tracemalloc.start()
+    try:
+        func()
+        return tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+
+
+class Counter:
+    """How many times a counting value's `__eq__` has run."""
+
+    calls = 0
+
+
+class CountingInt(int):
+    __hash__ = int.__hash__
+
+    def __eq__(self, other: object) -> bool:
+        Counter.calls += 1
+        return int.__eq__(self, other)
+
+
+class CountingList(list[int]):
+    def __eq__(self, other: object) -> bool:
+        Counter.calls += 1
+        return list.__eq__(self, other)
+
+
+class CountingStr(str):
+    __hash__ = str.__hash__
+
+    def __eq__(self, other: object) -> bool:
+        Counter.calls += 1
+        return str.__eq__(self, other)
+
+
+def counted(func: Callable[[], Any]) -> int:
+    """Comparisons the counting values make while func runs."""
+    Counter.calls = 0
+    func()
+    return Counter.calls
+
+
 def numbered(size: int, label: str = "E") -> Any:
     """An Enum of `size` members, valued 0 through size - 1."""
     return Enum(f"{label}{size}", {f"M{index}": index for index in range(size)})
 
 
-def _documented_names() -> set[str]:
-    """Every `enum.<name>` the Complexity Reference tables mention."""
-    text = PAGE.read_text(encoding="utf-8")
-    start = text.index("## Complexity Reference")
-    end = text.index("\n## Enum Basics", start)
-    return set(re.findall(r"enum\.([A-Za-z_][A-Za-z0-9_]*)", text[start:end]))
+def counting_ints(size: int) -> Any:
+    return Enum(f"I{size}", {f"M{index}": CountingInt(index) for index in range(size)})
 
 
-class TestEveryPublicNameIsDocumented:
-    """The tables cover exports plus documented public helpers outside __all__.
+def counting_lists(size: int) -> Any:
+    return Enum(f"L{size}", {f"M{index}": CountingList([index]) for index in range(size)})
 
-    enum went from 7 names to 30 across the supported range, so most of the
-    table is version-gated and the interpreter decides how much is live.
+
+QUADRATIC_BUILD = sys.version_info < (3, 11) or sys.version_info >= (3, 13, 1)
+
+
+class TestBuildingChecksEachValueAgainstTheEarlierOnes:
+    """`class C(enum.Enum)` and the functional API | O(n²) | O(n).
+
+    Each value is checked against the ones before it: by a list scan on 3.10
+    and from 3.13.1, by the value dictionary on 3.11 to 3.13.0, and by a scan
+    on every version when the value is unhashable. Counting comparisons
+    separates n²/2 from n with no tolerance.
     """
 
-    def test_no_exported_name_is_missing_from_the_tables(self) -> None:
-        missing = sorted(_public_names() - _documented_names())
+    @pytest.mark.parametrize("size", [100, 400])
+    def test_hashable_values(self, size: int) -> None:
+        comparisons = counted(lambda: counting_ints(size))
 
-        assert not missing, f"{len(missing)} exported names absent from the tables: {missing}"
+        if QUADRATIC_BUILD:
+            assert comparisons == size * (size - 1) // 2
+        else:
+            assert comparisons == 0
 
-    def test_the_tables_name_nothing_that_does_not_exist(self) -> None:
-        """The other direction, so a typo cannot pass as coverage."""
-        unknown = sorted(_documented_names() - _public_names() - set(ADDED_AFTER_310))
+    @pytest.mark.parametrize("size", [100, 400])
+    def test_unhashable_values_on_every_version(self, size: int) -> None:
+        assert counted(lambda: counting_lists(size)) == size * (size - 1) // 2
 
-        assert not unknown, f"the tables name attributes enum does not have: {unknown}"
+    def test_each_auto_is_handed_a_fresh_copy_of_the_values_before_it(self) -> None:
+        handed: list[list[Any]] = []
 
-    def test_every_later_addition_carries_its_version(self) -> None:
-        rows = [
-            line for line in PAGE.read_text(encoding="utf-8").splitlines() if line.startswith("|")
-        ]
+        class Recording(Enum):
+            @staticmethod
+            def _generate_next_value_(
+                name: str, start: int, count: int, last_values: list[Any]
+            ) -> Any:
+                handed.append(last_values)
+                return count
 
-        for name, version in sorted(ADDED_AFTER_310.items()):
-            owning = [row for row in rows if f"enum.{name}" in row]
-            assert len(owning) >= 1, f"no row names {name}"
-            assert any(version in row for row in owning), (
-                f"the {name} row should say {version}+: {owning[0]}"
-            )
+        meta: Any = type(Recording)
+        namespace = meta.__prepare__("Auto", (Recording,))
+        for index in range(50):
+            namespace[f"M{index}"] = auto()
+        built = meta("Auto", (Recording,), namespace)
 
-    def test_the_additions_list_matches_this_interpreter(self) -> None:
-        current = sys.version_info[:2]
-        for name, version in ADDED_AFTER_310.items():
-            introduced = tuple(int(part) for part in version.split("."))
-            if current >= introduced:
-                assert hasattr(enum, name), f"{name} should exist on {current}"
-            else:
-                assert not hasattr(enum, name), f"{name} should not exist on {current}"
+        assert [len(values) for values in handed] == list(range(50))
+        assert len({id(values) for values in handed}) == 50
+        assert [member.value for member in built] == list(range(50))
 
-    def test_the_module_has_not_grown_names_this_suite_has_not_seen(self) -> None:
-        assert 7 <= len(enum.__all__) <= 33, (
-            f"enum exports {len(enum.__all__)} names; re-run the coverage audit"
+    def test_the_functional_api_numbers_names_the_same_way(self) -> None:
+        handed: list[list[Any]] = []
+
+        class Recording(Enum):
+            @staticmethod
+            def _generate_next_value_(
+                name: str, start: int, count: int, last_values: list[Any]
+            ) -> Any:
+                handed.append(last_values)
+                return count
+
+        built: Any = Recording("Names", [f"M{index}" for index in range(50)])
+
+        assert [len(values) for values in handed] == list(range(50))
+        assert len({id(values) for values in handed}) == 50
+        assert len(built) == 50
+
+    def test_the_default_counts_up_from_one(self) -> None:
+        assert [member.value for member in Enum("Color", "RED GREEN BLUE")] == [1, 2, 3]
+
+    @pytest.mark.parametrize("size", [100, 400])
+    def test_order_looks_each_name_up_in_the_member_list(self, size: int) -> None:
+        meta: Any = type(Enum)
+        namespace = meta.__prepare__("Ordered", (Enum,))
+        namespace["_order_"] = [CountingStr(f"M{index}") for index in range(size)]
+        for index in range(size):
+            namespace[f"M{index}"] = index
+
+        comparisons = counted(lambda: meta("Ordered", (Enum,), namespace))
+
+        if sys.version_info >= (3, 11):
+            assert comparisons >= size * (size + 1) // 2
+        else:
+            assert comparisons <= 2 * size
+
+    @pytest.mark.skipif(sys.version_info < (3, 11), reason="EnumType is the 3.11+ name")
+    def test_enum_meta_is_the_same_metaclass(self) -> None:
+        assert ENUM.EnumType is enum.EnumMeta is type(Enum)
+
+
+class TestLookingMembersUp:
+    """`C.NAME`, `C['NAME']` | O(1); `C(value)` | O(1) expected, O(n) unhashable."""
+
+    @pytest.mark.parametrize("size", [10, 1_000])
+    def test_a_hashable_value_is_one_probe_first_or_last(self, size: int) -> None:
+        cls = counting_ints(size)
+
+        for index in (0, size - 1):
+            found: list[Any] = []
+            assert counted(lambda i=index, f=found: f.append(cls(CountingInt(i)))) <= 1
+            assert found[0] is cls[f"M{index}"]
+
+    @pytest.mark.parametrize("size", [10, 1_000])
+    def test_a_name_is_one_probe(self, size: int) -> None:
+        cls = counting_ints(size)
+
+        assert counted(lambda: cls[CountingStr(f"M{size - 1}")]) <= 1
+        assert cls[f"M{size - 1}"] is getattr(cls, f"M{size - 1}")
+
+    @pytest.mark.parametrize("kind", [list, dict])
+    @pytest.mark.parametrize("size", [10, 100])
+    def test_an_unhashable_value_is_compared_with_each_member(self, kind: type, size: int) -> None:
+        class Value(kind):
+            def __eq__(self, other: object) -> bool:
+                Counter.calls += 1
+                return super().__eq__(other)
+
+        def value(index: int) -> Any:
+            return Value([index] if kind is list else {"v": index})
+
+        cls: Any = Enum("Values", {f"M{i}": value(i) for i in range(size)})
+        for index in (0, size - 1):
+            found: list[Any] = []
+            assert counted(lambda i=index, f=found: f.append(cls(value(i)))) == index + 1
+            assert found[0] is cls[f"M{index}"]
+
+        def miss() -> None:
+            with pytest.raises(ValueError, match="is not a valid"):
+                cls(value(-1))
+
+        assert size <= counted(miss) <= 2 * size
+
+    def test_a_value_with_no_member_calls_missing_then_raises(self) -> None:
+        asked: list[Any] = []
+
+        class Color(Enum):
+            RED = 1
+
+            @classmethod
+            def _missing_(cls, value: object) -> Any:
+                asked.append(value)
+                return None
+
+        with pytest.raises(ValueError, match="is not a valid"):
+            Color(2)
+        assert asked == [2]
+        assert Enum._missing_(2) is None
+
+    @pytest.mark.timing
+    def test_a_hundred_times_the_members_costs_the_same_by_name(self) -> None:
+        small, large = numbered(10, "SN"), numbered(1_000, "LN")
+
+        small_ns = best_ns(lambda: small["M5"], inner=200)
+        large_ns = best_ns(lambda: large["M5"], inner=200)
+
+        ratio = large_ns / small_ns
+        assert ratio < 3, f"100x the members cost x{ratio:.2f} ({small_ns:.0f}ns, {large_ns:.0f}ns)"
+
+
+class TestIterationAndLength:
+    """`iter(C)`, `reversed(C)` | O(n); `len(C)` | O(1); aliases are skipped."""
+
+    class Color(Enum):
+        RED = 1
+        CRIMSON = 1
+        GREEN = 2
+
+    def test_iteration_skips_aliases(self) -> None:
+        assert [member.name for member in self.Color] == ["RED", "GREEN"]
+        assert [member.name for member in reversed(self.Color)] == ["GREEN", "RED"]
+        assert len(self.Color) == 2
+
+    def test_an_alias_resolves_to_its_canonical_member(self) -> None:
+        assert self.Color.CRIMSON is self.Color.RED
+        assert self.Color["CRIMSON"] is self.Color.RED
+
+    def test_dir_lists_the_canonical_names_sorted(self) -> None:
+        cls = numbered(100, "D")
+
+        listing = dir(cls)
+        assert {f"M{index}" for index in range(100)} <= set(listing)
+        assert listing == sorted(listing)
+        assert "RED" in dir(self.Color) and "CRIMSON" not in dir(self.Color)
+
+    @pytest.mark.timing
+    def test_len_does_not_move_with_the_member_count(self) -> None:
+        small, large = numbered(10, "SL"), numbered(1_000, "LL")
+
+        small_ns = best_ns(lambda: len(small), inner=200)
+        large_ns = best_ns(lambda: len(large), inner=200)
+
+        ratio = large_ns / small_ns
+        assert ratio < 3, f"100x the members cost x{ratio:.2f} ({small_ns:.0f}ns, {large_ns:.0f}ns)"
+
+
+class TestMembersIsALiveView:
+    """`C.__members__` | O(1) | O(1): a read-only view, aliases included."""
+
+    def test_it_sees_a_key_added_after_it_was_taken(self) -> None:
+        cls = numbered(10, "V")
+        proxy = cls.__members__
+
+        assert isinstance(proxy, types.MappingProxyType)
+        with pytest.raises(TypeError):
+            proxy["EXTRA"] = cls.M0  # type: ignore[index]
+        cls._member_map_["EXTRA"] = cls.M0
+        assert proxy["EXTRA"] is cls.M0
+
+    def test_it_includes_aliases(self) -> None:
+        cls: Any = Enum("Aliased", [("RED", 1), ("CRIMSON", 1), ("GREEN", 2)])
+
+        assert list(cls.__members__) == ["RED", "CRIMSON", "GREEN"]
+
+
+class TestMembership:
+    """`value in C` | O(1) for a member; O(n) for a raw value.
+
+    A raw value raises `TypeError` before 3.12. From 3.13.4 it is compared
+    with each member value; `C(value)` remains one probe on every version.
+    """
+
+    class Color(Enum):
+        RED = 1
+
+    def test_a_member_is_in_its_own_enum(self) -> None:
+        cls = counting_ints(100)
+
+        assert counted(lambda: cls.M99 in cls) == 0
+        assert self.Color.RED in self.Color
+
+    @pytest.mark.skipif(sys.version_info >= (3, 12), reason="answers from 3.12")
+    def test_a_raw_value_raises_before_312(self) -> None:
+        with pytest.warns(DeprecationWarning), pytest.raises(TypeError):
+            _ = 1 in self.Color
+
+    @pytest.mark.skipif(sys.version_info < (3, 12), reason="raises before 3.12")
+    @pytest.mark.parametrize("size", [10, 100])
+    def test_a_raw_value_is_answered_from_312(self, size: int) -> None:
+        cls = counting_ints(size)
+        answers: list[bool] = []
+
+        hit = counted(lambda: answers.append(CountingInt(size - 1) in cls))
+        miss = counted(lambda: answers.append(CountingInt(-5) in cls))
+
+        assert answers == [True, False]
+        if sys.version_info >= (3, 13, 4):
+            assert hit == miss == size
+        elif sys.version_info < (3, 13):
+            assert hit <= 1 and miss <= 1
+
+    @pytest.mark.skipif(sys.version_info < (3, 12), reason="raises before 3.12")
+    def test_a_hashable_miss_in_a_mixed_enum(self) -> None:
+        cls: Any = Enum(
+            "Mixed",
+            [(f"H{i}", CountingInt(i)) for i in range(10)]
+            + [(f"U{i}", CountingList([i])) for i in range(30)],
         )
 
-    def test_the_coverage_check_would_notice_a_gap(self) -> None:
-        """A coverage test that cannot fail proves nothing about coverage."""
-        documented = _documented_names()
+        answers: list[bool] = []
+        comparisons = counted(lambda: answers.append(-5 in cls))
 
-        assert {"Enum", "Flag", "IntEnum", "auto", "unique"} <= documented
-        thinned = documented - {"IntFlag"}
-        assert _public_names() - thinned == {"IntFlag"}, (
-            "dropping one row from the extracted set should surface it as missing"
-        )
+        assert answers == [False]
+
+        if sys.version_info < (3, 13):
+            assert comparisons == 30
+        elif sys.version_info < (3, 13, 3):
+            assert comparisons == 0
+        elif sys.version_info >= (3, 13, 4):
+            assert comparisons == 40
+
+    @pytest.mark.parametrize("size", [10, 100])
+    def test_calling_the_class_stays_one_probe(self, size: int) -> None:
+        cls = counting_ints(size)
+
+        assert counted(lambda: cls(CountingInt(size - 1))) <= 1
+
+        def miss() -> None:
+            with pytest.raises(ValueError):
+                cls(CountingInt(-5))
+
+        assert counted(miss) == 0
+
+    @pytest.mark.skipif(
+        not (3, 12) <= sys.version_info < (3, 12, 10), reason="3.12.0 to 3.12.9 only"
+    )
+    def test_an_unhashable_raw_value_raises_before_31210(self) -> None:
+        cls: Any = Enum("Lists", {"A": [1]})
+
+        with pytest.raises(TypeError, match="unhashable"):
+            _ = [1] in cls
+
+    @pytest.mark.skipif(sys.version_info < (3, 12, 10), reason="answers from 3.12.10")
+    def test_an_unhashable_raw_value_is_answered_from_31210(self) -> None:
+        cls: Any = Enum("Lists", {"A": [1], "B": [2]})
+
+        assert [2] in cls
+        assert [3] not in cls
 
 
-@pytest.mark.skipif(sys.version_info < (3, 13), reason="EnumDict is public from 3.13")
-class TestEnumDictMemberNames:
-    def test_each_access_returns_an_independent_snapshot(self) -> None:
+class TestFlags:
+    """Flag operators are O(1) once a value has been made; each value is cached."""
+
+    class Permission(Flag):
+        READ = auto()
+        WRITE = auto()
+        EXECUTE = auto()
+
+    def test_the_values_are_single_bits(self) -> None:
+        assert [member.value for member in self.Permission] == [1, 2, 4]
+
+    def test_a_combination_is_made_once_and_cached(self) -> None:
+        cls: Any = Flag("Cached", "A B C")
+        before = len(cls._value2member_map_)
+
+        first = cls.A | cls.B
+        after_first = len(cls._value2member_map_)
+        assert (cls.A | cls.B) is first
+        assert cls(3) is first
+        assert after_first == before + 1
+        assert len(cls._value2member_map_) == after_first
+
+    def test_every_distinct_value_made_stays_cached(self) -> None:
+        class Wide(IntFlag):
+            A = 1
+            B = 2
+
+        cached: Any = Wide
+        before = len(cached._value2member_map_)
+        for index in range(1_000):
+            Wide((1 << 20) | index)
+
+        assert len(cached._value2member_map_) - before >= 1_000
+
+    def test_membership_and_masking(self) -> None:
+        combined = self.Permission.READ | self.Permission.WRITE
+
+        assert self.Permission.READ in combined
+        assert self.Permission.EXECUTE not in combined
+        assert (combined & self.Permission.READ) is self.Permission.READ
+        assert bool(combined) and not bool(self.Permission(0))
+
+    @pytest.mark.skipif(sys.version_info < (3, 11), reason="sized and iterable from 3.11")
+    def test_iteration_yields_the_bits_set(self) -> None:
+        combined: Any = self.Permission.READ | self.Permission.EXECUTE
+
+        assert [member.name for member in combined] == ["READ", "EXECUTE"]
+
+    @pytest.mark.skipif(sys.version_info < (3, 11), reason="sized and iterable from 3.11")
+    def test_len_counts_bits_without_iterating(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        cls: Any = Flag("Sized", "A B C D")
+        combined = cls.A | cls.C | cls.D
+
+        def refuse(value: int) -> Any:
+            raise AssertionError("len() iterated the members")
+
+        monkeypatch.setattr(cls, "_iter_member_", refuse)
+        assert len(combined) == 3
+
+    @pytest.mark.skipif(sys.version_info >= (3, 11), reason="sized and iterable from 3.11")
+    def test_a_combination_has_no_length_before_311(self) -> None:
+        combined: Any = self.Permission.READ | self.Permission.WRITE
+
+        with pytest.raises(TypeError):
+            len(combined)
+
+    @pytest.mark.skipif(sys.version_info < (3, 11), reason="sized and iterable from 3.11")
+    def test_members_defined_out_of_order_iterate_in_definition_order(self) -> None:
+        class Backwards(Flag):
+            B = 2
+            A = 1
+
+        combined: Any = Backwards.A | Backwards.B
+        assert [member.name for member in combined] == ["B", "A"]
+
+    @pytest.mark.parametrize("size", [20, 60])
+    def test_inversion_compares_members_pairwise_on_every_call_on_310(self, size: int) -> None:
+        class Base(Flag):
+            def __eq__(self, other: object) -> bool:
+                Counter.calls += 1
+                return self is other
+
+            __hash__ = Flag.__hash__
+
+        cls: Any = Base(f"Wide{size}", [(f"M{i}", 1 << i) for i in range(size)])
+        full = cls((1 << size) - 1)
+
+        first, second = counted(lambda: ~full), counted(lambda: ~full)
+
+        if sys.version_info >= (3, 11):
+            assert first == second == 0
+        else:
+            assert first == second == size * (size - 1) // 2
+
+    @pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
+    def test_numeric_repr_formats_unnamed_bits(self) -> None:
+        class Kept(IntFlag):
+            A = 1
+
+        assert ENUM.Flag._numeric_repr_ is repr
+        assert Kept._numeric_repr_ is not None
+        assert repr(Kept(9)).endswith("A|8: 9>")
+
+    @pytest.mark.skipif(sys.version_info < (3, 11), reason="cached from 3.11")
+    def test_inversion_is_stored_on_the_operand(self) -> None:
+        cls: Any = Flag("Inverted", "A B C")
+
+        inverted = ~cls.A
+        assert inverted is cls.B | cls.C
+        assert cls.A._inverted_ is inverted
+        assert ~cls.A is inverted
+
+
+class TestEnumDict:
+    """`EnumDict` (3.13+): the class-body namespace."""
+
+    pytestmark = pytest.mark.skipif(sys.version_info < (3, 13), reason="public from 3.13")
+
+    def test_member_names_is_a_fresh_snapshot_including_aliases(self) -> None:
         namespace: Any = Enum.__prepare__("Colors", (Enum,))
         namespace["RED"] = 1
         namespace["CRIMSON"] = 1
@@ -178,18 +607,13 @@ class TestEnumDictMemberNames:
 
         names = namespace.member_names
         other = namespace.member_names
-        assert isinstance(names, list)
         assert names == other == ["RED", "CRIMSON"]
         assert names is not other
-
         names.clear()
         assert namespace.member_names == ["RED", "CRIMSON"]
-        namespace["BLUE"] = 2
-        assert other == ["RED", "CRIMSON"]
-        assert namespace.member_names == ["RED", "CRIMSON", "BLUE"]
 
     @pytest.mark.parametrize("count", [0, 10, 1_000])
-    def test_access_visits_each_member_name_once(self, count: int) -> None:
+    def test_member_names_visits_each_name_once(self, count: int) -> None:
         visits = 0
 
         class CountingNames(dict[str, None]):
@@ -208,315 +632,201 @@ class TestEnumDictMemberNames:
         assert namespace.member_names == expected
         assert visits == count
 
-    def test_result_storage_grows_with_member_count(self) -> None:
-        sizes = []
-        for count in (100, 10_000):
-            namespace: Any = Enum.__prepare__("Names", (Enum,))
-            for index in range(count):
-                namespace[f"M{index}"] = index
-            names = namespace.member_names
-            assert isinstance(names, list)
-            assert len(names) == count
-            sizes.append(sys.getsizeof(names))
+    def test_update_assigns_as_the_class_body_does(self) -> None:
+        namespace: Any = Enum.__prepare__("Updated", (Enum,))
+        namespace.update({"A": auto(), "B": auto()}, C=1)
 
-        assert 50 < sizes[1] / sizes[0] < 150, sizes
+        assert namespace.member_names == ["A", "B", "C"]
+        built: Any = type(Enum)("Updated", (Enum,), namespace)
+        assert [member.value for member in built] == [1, 2]
+        assert built.C is built.A
+        assert isinstance(namespace, ENUM.EnumDict)
 
 
-class TestLookupByValueIsADict:
-    """Hashable integer `C(value)` | O(1) expected | O(1).
+@pytest.mark.skipif(sys.version_info < (3, 13), reason="added in 3.13")
+class TestAddingAliases:
+    """`_add_alias_()`, `_add_value_alias_()` | O(1) expected; O(n) unhashable."""
 
-    Two directions are measured: across enum sizes, and within one enum between
-    the first member declared and the last. A linear search would fail both.
-    """
+    def test_add_alias_makes_a_name_lead_to_the_member(self) -> None:
+        cls: Any = numbered(10, "A")
 
-    def test_the_map_is_what_answers(self) -> None:
-        colors = numbered(10)
+        cls.M3._add_alias_("THREE")
+        assert cls.THREE is cls.M3
+        assert cls["THREE"] is cls.M3
 
-        assert hasattr(colors, "_value2member_map_")
-        assert colors(5) is colors["M5"]
-        assert colors(5).value == 5
+    @pytest.mark.parametrize("size", [10, 100])
+    def test_a_hashable_value_alias_is_one_probe(self, size: int) -> None:
+        cls = counting_ints(size)
 
-    def test_a_value_with_no_member_raises(self) -> None:
-        colors = numbered(10)
+        assert counted(lambda: cls.M0._add_value_alias_(CountingInt(-1))) <= 1
+        assert cls(-1) is cls.M0
 
-        with pytest.raises(ValueError, match="is not a valid"):
-            colors(999)
+    @pytest.mark.parametrize("size", [10, 100])
+    def test_an_unhashable_value_alias_scans_the_members(self, size: int) -> None:
+        cls = counting_lists(size)
 
-    @pytest.mark.timing
-    def test_a_hundred_times_the_members_costs_the_same(self) -> None:
-        small, large = numbered(10, "S"), numbered(1_000, "L")
-
-        small_ns = best_ns(lambda: small(5), inner=50)
-        large_ns = best_ns(lambda: large(5), inner=50)
-
-        ratio = large_ns / small_ns
-        assert ratio < 3, (
-            f"100x the members cost x{ratio:.2f} ({small_ns:.0f}ns to {large_ns:.0f}ns); "
-            "a linear search would give about x100"
-        )
-
-    @pytest.mark.timing
-    def test_the_last_member_costs_what_the_first_does(self) -> None:
-        large = numbered(1_000, "P")
-
-        first_ns = best_ns(lambda: large(0), inner=50)
-        last_ns = best_ns(lambda: large(999), inner=50)
-
-        ratio = last_ns / first_ns
-        assert ratio < 3, (
-            f"the last member cost x{ratio:.2f} the first "
-            f"({first_ns:.0f}ns to {last_ns:.0f}ns); a scan would find the first at once"
-        )
+        assert counted(lambda: cls.M0._add_value_alias_(CountingList([-1]))) == size
+        assert cls(CountingList([-1])) is cls.M0
 
 
-class TestLookupByNameIsADictToo:
-    """`C['NAME']` and `C.NAME` | O(1) | O(1)."""
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
+class TestClassBodyHelpers:
+    """`member()`, `nonmember()`, `enum.property`, `_ignore_` and `_order_`."""
 
-    def test_both_forms_reach_the_same_member(self) -> None:
-        colors = numbered(10)
+    def test_member_and_nonmember(self) -> None:
+        class Marked(Enum):
+            A = 1
+            HELPER = ENUM.nonmember(2)
+            FUNC = ENUM.member(len)
 
-        assert colors["M3"] is colors.M3
+        assert [member.name for member in Marked] == ["A", "FUNC"]
+        assert Marked.HELPER == 2
 
-    def test_an_unknown_name_raises_keyerror(self) -> None:
-        colors = numbered(10)
+    def test_enum_property_lets_a_member_be_called_value(self) -> None:
+        cls: Any = Enum("Odd", [("name", 1), ("value", 2)])
+        assert cls.value.value == 2 and cls.value.name == "value"
+        assert isinstance(vars(Enum)["value"], ENUM.property)
 
-        with pytest.raises(KeyError):
-            colors["NOPE"]
+    def test_ignore_and_order(self) -> None:
+        class Ordered(Enum):
+            _ignore_ = ["TEMP"]
+            _order_ = "A B"
+            TEMP = 0
+            A = 1
+            B = 2
 
-    @pytest.mark.timing
-    def test_a_hundred_times_the_members_costs_the_same(self) -> None:
-        small, large = numbered(10, "SN"), numbered(1_000, "LN")
+        assert [member.name for member in Ordered] == ["A", "B"]
 
-        small_ns = best_ns(lambda: small["M5"], inner=50)
-        large_ns = best_ns(lambda: large["M5"], inner=50)
+        with pytest.raises(TypeError, match="member order does not match"):
 
-        ratio = large_ns / small_ns
-        assert ratio < 3, (
-            f"100x the members cost x{ratio:.2f} ({small_ns:.0f}ns to {large_ns:.0f}ns)"
-        )
-
-
-class TestIterationIsTheLinearOne:
-    """`iter(C)` | O(n) | O(1), while `len(C)` stays O(1)."""
-
-    def test_len_is_the_member_count(self) -> None:
-        assert len(numbered(10)) == 10
-        assert len(numbered(1_000, "Z")) == 1_000
-
-    @pytest.mark.timing
-    def test_len_does_not_move_with_the_member_count(self) -> None:
-        small, large = numbered(10, "SL"), numbered(1_000, "LL")
-
-        small_ns = best_ns(lambda: len(small), inner=100)
-        large_ns = best_ns(lambda: len(large), inner=100)
-
-        assert large_ns / small_ns < 3, f"{small_ns:.0f}ns to {large_ns:.0f}ns"
-
-    @pytest.mark.timing
-    def test_iteration_does(self) -> None:
-        small, large = numbered(10, "SI"), numbered(1_000, "LI")
-
-        small_ns = best_ns(lambda: list(small), inner=3)
-        large_ns = best_ns(lambda: list(large), inner=3)
-
-        ratio = large_ns / small_ns
-        assert ratio > 10, (
-            f"100x the members cost x{ratio:.2f} to iterate ({small_ns:.0f}ns to {large_ns:.0f}ns)"
-        )
-
-
-class TestMembersAreSingletons:
-    """One object per member, so `is` is the right comparison."""
-
-    class Color(Enum):
-        RED = 1
-        GREEN = 2
-
-    def test_every_route_reaches_the_same_object(self) -> None:
-        assert self.Color(1) is self.Color.RED
-        assert self.Color["RED"] is self.Color.RED
-
-    def test_a_member_is_not_its_value(self) -> None:
-        assert self.Color.RED != 1
-        assert self.Color.RED.value == 1
-
-    def test_an_int_enum_member_is(self) -> None:
-        class Priority(IntEnum):
-            LOW = 1
-            HIGH = 3
-
-        assert Priority.HIGH == 3
-        assert Priority.HIGH > Priority.LOW
-        assert Priority.HIGH + 1 == 4
-        assert sorted(Priority) == [Priority.LOW, Priority.HIGH]
-
-
-class TestAliases:
-    """A second name for one value is an alias: reachable, but not iterated."""
-
-    class Color(Enum):
-        RED = 1
-        CRIMSON = 1
-        GREEN = 2
-
-    def test_the_alias_resolves_to_the_canonical_member(self) -> None:
-        assert self.Color.CRIMSON is self.Color.RED
-
-    def test_iteration_and_len_skip_it(self) -> None:
-        assert [member.name for member in self.Color] == ["RED", "GREEN"]
-        assert len(self.Color) == 2
-
-    def test_members_includes_it(self) -> None:
-        assert list(self.Color.__members__) == ["RED", "CRIMSON", "GREEN"]
-
-    def test_unique_refuses_one(self) -> None:
-        with pytest.raises(ValueError, match="duplicate values"):
-
-            @unique
-            class Duplicated(Enum):
+            class Misordered(Enum):
+                _order_ = "B A"
                 A = 1
-                B = 1
+                B = 2
 
 
-class TestMembership:
-    """`x in C`: a member always works; a bare value changed in 3.12."""
-
-    class Color(Enum):
-        RED = 1
-
-    def test_a_member_is_in_its_own_enum(self) -> None:
-        assert self.Color.RED in self.Color
-
-    @pytest.mark.skipif(sys.version_info >= (3, 12), reason="answers from 3.12")
-    def test_a_bare_value_raises_before_312(self) -> None:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            with pytest.raises(TypeError):
-                # The membership test itself is what raises here.
-                assert 1 in self.Color
-
-    @pytest.mark.skipif(sys.version_info < (3, 12), reason="raises before 3.12")
-    def test_a_bare_value_answers_from_312(self) -> None:
-        assert (1 in self.Color) is True
-        assert (99 in self.Color) is False
-
-    def test_the_value_map_answers_on_every_version(self) -> None:
-        """The workaround the page gives for 3.10 and 3.11."""
-        assert 1 in self.Color._value2member_map_  # noqa: SLF001
-        assert 99 not in self.Color._value2member_map_  # noqa: SLF001
-
-
-class TestFlags:
-    """`Flag` members are powers of two, so combining is one int operation."""
-
-    class Permission(Flag):
-        READ = auto()
-        WRITE = auto()
-        EXECUTE = auto()
-
-    def test_the_values_are_powers_of_two(self) -> None:
-        assert [member.value for member in self.Permission] == [1, 2, 4]
-
-    def test_combining_and_testing(self) -> None:
-        combined = self.Permission.READ | self.Permission.WRITE
-
-        assert self.Permission.READ in combined
-        assert self.Permission.EXECUTE not in combined
-        assert combined & self.Permission.READ == self.Permission.READ
-
-    def test_a_combination_is_looked_up_by_value_like_any_member(self) -> None:
-        combined = self.Permission.READ | self.Permission.WRITE
-
-        assert self.Permission(combined.value) is combined
-
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="sized and iterable from 3.11")
-    def test_a_combination_is_sized_and_iterable_from_311(self) -> None:
-        combined = self.Permission.READ | self.Permission.WRITE
-
-        assert len(combined) == 2  # pyright: ignore
-        assert {member.name for member in combined} == {"READ", "WRITE"}  # pyright: ignore
-
-    @pytest.mark.skipif(sys.version_info >= (3, 11), reason="the change lands in 3.11")
-    def test_a_combination_has_no_length_before_311(self) -> None:
-        combined = self.Permission.READ | self.Permission.WRITE
-
-        with pytest.raises(TypeError):
-            # Deliberately the unsupported call: that is the claim under test.
-            len(combined)  # pyright: ignore
-
-
-class TestBuildingCostsItsMembers:
-    """The class body is the O(n) part; the functional API is the same work."""
-
-    def test_the_functional_api_builds_the_same_thing(self) -> None:
-        colors = Enum("Color", ["RED", "GREEN", "BLUE"])
-
-        assert colors.RED.value == 1
-        assert len(colors) == 3
-        assert colors(1) is colors.RED
-
-    def test_a_mapping_gives_explicit_values(self) -> None:
-        status = Enum("Status", {"OK": 200, "MISSING": 404})
-
-        assert status(404) is status.MISSING
-
-    def test_methods_and_properties_are_not_members(self) -> None:
-        class Planet(Enum):
-            MERCURY = (3.303e23, 2.4397e6)
-            EARTH = (5.976e24, 6.37814e6)
-
-            def __init__(self, mass: float, radius: float) -> None:
-                self.mass = mass
-                self.radius = radius
-
-            @property
-            def surface_gravity(self) -> float:
-                return 6.67300e-11 * self.mass / (self.radius * self.radius)
-
-        assert len(Planet) == 2
-        assert round(Planet.EARTH.surface_gravity, 2) == 9.80
-
-    @pytest.mark.timing
-    def test_building_grows_with_the_member_count(self) -> None:
-        small = {f"M{index}": index for index in range(10)}
-        large = {f"M{index}": index for index in range(1_000)}
-
-        small_ns = best_ns(lambda: Enum("S", small), inner=1, repeats=5)
-        large_ns = best_ns(lambda: Enum("L", large), inner=1, repeats=5)
-
-        ratio = large_ns / small_ns
-        assert ratio > 10, (
-            f"100x the members cost x{ratio:.2f} to build ({small_ns:.0f}ns to {large_ns:.0f}ns)"
-        )
-
-
-@pytest.mark.skipif(not hasattr(enum, "verify"), reason="verify is 3.11+")
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
 class TestVerify:
-    """`verify()` | O(n) | O(n): the constraints applied once, at class build."""
+    """`verify(*checks)` | O(n + r) | O(n + r); `CONTINUOUS` walks the span."""
 
     def test_continuous_refuses_a_gap(self) -> None:
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="missing values 2"):
 
-            @enum.verify(enum.CONTINUOUS)  # type: ignore[attr-defined]
+            @ENUM.verify(ENUM.CONTINUOUS)
             class Gapped(Enum):
                 A = 1
                 C = 3
 
-    def test_unique_refuses_an_alias(self) -> None:
-        with pytest.raises(ValueError):
+    def test_unique_and_named_flags(self) -> None:
+        with pytest.raises(ValueError, match="aliases found"):
 
-            @enum.verify(enum.UNIQUE)  # type: ignore[attr-defined]
+            @ENUM.verify(ENUM.UNIQUE)
             class Duplicated(Enum):
                 A = 1
                 B = 1
 
+        with pytest.raises(ValueError, match="is missing"):
+
+            @ENUM.verify(ENUM.NAMED_FLAGS)
+            class Unnamed(Flag):
+                A = 1
+                AB = 3
+
     def test_a_well_formed_enum_passes(self) -> None:
-        @enum.verify(enum.CONTINUOUS, enum.UNIQUE)  # type: ignore[attr-defined]
+        @ENUM.verify(ENUM.CONTINUOUS, ENUM.UNIQUE)
         class Fine(Enum):
             A = 1
             B = 2
 
         assert len(Fine) == 2
+
+    @pytest.mark.serial
+    def test_continuous_space_follows_the_span_not_the_members(self) -> None:
+        peaks = []
+        for span in (100_000, 1_000_000):
+            cls: Any = Enum(f"Span{span}", {"LOW": 0, "HIGH": span})
+            check = ENUM.verify(ENUM.CONTINUOUS)
+
+            def run(cls: Any = cls, check: Any = check) -> None:
+                with pytest.raises(ValueError, match="missing values"):
+                    check(cls)
+
+            peaks.append(peak_bytes(run))
+
+        assert peaks[1] > peaks[0] * 5, peaks
+
+
+class TestUnique:
+    """`unique(cls)` | O(n) | O(a): every alias is named in the error."""
+
+    def test_each_alias_is_named(self) -> None:
+        cls: Any = Enum("Twice", [("A", 1), ("B", 1), ("C", 2), ("D", 2), ("E", 3)])
+
+        with pytest.raises(ValueError, match="duplicate values") as raised:
+            unique(cls)
+        assert "B -> A" in str(raised.value) and "D -> C" in str(raised.value)
+        assert unique(numbered(10, "U")) is not None
+
+
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
+class TestGlobalHelpers:
+    @pytest.mark.parametrize("count", [10, 100])
+    def test_global_enum_exports_every_member(
+        self, count: int, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        module = types.ModuleType("_enum_helper_test")
+        monkeypatch.setitem(sys.modules, module.__name__, module)
+        cls: Any = Enum("Exported", {f"M{i}": i for i in range(count)}, module=module.__name__)
+
+        assert ENUM.global_enum(cls) is cls
+        assert all(vars(module)[name] is member for name, member in cls.__members__.items())
+        assert str(cls.M0) == "M0"
+        assert repr(cls.M0) == "_enum_helper_test.M0"
+
+    def test_global_str_returns_the_stored_name(self) -> None:
+        member = numbered(10, "G").M9
+
+        assert ENUM.global_str(member) is member.name
+        assert ENUM.global_enum_repr(member).endswith(".M9")
+
+    @pytest.mark.parametrize("bits", [2, 16])
+    def test_global_flag_repr_qualifies_each_name(self, bits: int) -> None:
+        cls: Any = Flag("Bits", [f"B{i}" for i in range(bits)])
+        module = cls.__module__.split(".")[-1]
+
+        expected = "|".join(f"{module}.B{i}" for i in range(bits))
+        assert ENUM.global_flag_repr(cls(2**bits - 1)) == expected
+
+    def test_global_flag_repr_keeps_a_named_combination_whole(self) -> None:
+        cls: Any = Flag("Named", [("A", 1), ("B", 2), ("AB", 3)])
+        module = cls.__module__.split(".")[-1]
+
+        assert ENUM.global_flag_repr(cls.AB) == f"{module}.AB"
+
+    def test_pickle_helpers_reduce_to_a_name(self) -> None:
+        member = numbered(10, "Pk").M2
+
+        assert ENUM.pickle_by_enum_name(member, 2)[1] == (type(member), "M2")
+        assert ENUM.pickle_by_global_name(member, 2) == "M2"
+
+
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
+class TestBitHelpers:
+    @pytest.mark.parametrize("bits", [1, 8, 32])
+    def test_show_flag_values_returns_the_bits_set(self, bits: int) -> None:
+        value = sum(1 << (2 * index) for index in range(bits))
+
+        assert ENUM.show_flag_values(value) == [1 << (2 * index) for index in range(bits)]
+        assert ENUM.show_flag_values(0) == []
+
+    @pytest.mark.parametrize("width", [8, 100, 1_000])
+    def test_bin_pads_to_max_bits(self, width: int) -> None:
+        result = ENUM.bin(10, width)
+
+        assert result.startswith("0b0 ")
+        assert len(result) == width + 4
+        assert int(result[4:], 2) == 10
+        assert ENUM.bin(-11) == "0b1 0101"
 
 
 def _blocks() -> list[tuple[int, str]]:
@@ -536,11 +846,11 @@ def _blocks() -> list[tuple[int, str]]:
     return found
 
 
-def _run(source: str, cwd: Any) -> subprocess.CompletedProcess[str]:
-    script = cwd / "_block.py"
+def _run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
+    script = cwd / "block.py"
     script.write_text(source, encoding="utf-8")
     return subprocess.run(
-        [sys.executable, script.name],
+        [sys.executable, str(script)],
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -551,206 +861,30 @@ def _run(source: str, cwd: Any) -> subprocess.CompletedProcess[str]:
 
 
 class TestDocumentedExamples:
-    """Every block runs, on every supported version - which is the point, since
-    three of them branch on the interpreter."""
+    """Each block runs in its own subprocess and asserts its own result; four
+    of them branch on the interpreter version."""
 
     def test_the_page_has_the_expected_blocks(self) -> None:
-        blocks = _blocks()
+        assert len(_blocks()) == EXPECTED_BLOCKS
 
-        assert len(blocks) == EXPECTED_BLOCKS, (
-            f"expected {EXPECTED_BLOCKS} python blocks, found {len(blocks)}"
-        )
-
-    def test_every_block_runs(self, tmp_path: Any) -> None:
+    def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
         ran = 0
-
         for line, source in _blocks():
             ran += 1
             workdir = tmp_path / f"block{line}"
             workdir.mkdir()
-            result = _run(source, workdir)
+            result = _run_block(source, workdir)
             if result.returncode != 0:
-                failures.append(f"{PAGE.name}:{line} raised: {result.stderr.strip()[-400:]}")
+                failures.append(f"{PAGE.name}:{line}\n{result.stderr.strip()}")
 
-        assert not failures, "\n".join(failures)
         assert ran == EXPECTED_BLOCKS
+        assert not failures, "\n\n".join(failures)
 
-    def test_the_runner_catches_a_broken_block(self, tmp_path: Any) -> None:
-        """A runner that cannot fail proves nothing about the blocks it ran."""
-        original = _blocks()[0][1]
-        broken = original.replace("from enum import", "from enum import Missing,", 1)
-        assert broken != original, "the mutation did not reach an import"
+    def test_the_runner_notices_a_broken_assertion(self, tmp_path: pathlib.Path) -> None:
+        target = "assert len(Color) == 2"
+        line, source = next((n, s) for n, s in _blocks() if target in s)
+        mutated = source.replace(target, "assert len(Color) == 3", 1)
 
-        result = _run(broken, tmp_path)
-
-        assert result.returncode != 0
-        assert "ImportError" in result.stderr
-
-
-class TestUnhashableLookup:
-    """List/dict lookup scans 10 or 100 constant-size values.
-
-    Released CPython 3.12.0–3.12.9 Lib/enum.py hashes raw containment
-    candidates directly; 3.12.10 delegates to value lookup and accepts
-    unhashable candidates. Earlier minor versions reject raw values.
-    """
-
-    @pytest.mark.parametrize("kind", [list, dict])
-    @pytest.mark.parametrize("count", [10, 100])
-    def test_lookup_scans_values(self, kind: type, count: int) -> None:
-        comparisons = 0
-
-        class Value(kind):
-            def __eq__(self, other: object) -> bool:
-                nonlocal comparisons
-                comparisons += 1
-                return super().__eq__(other)
-
-        def value(index: int) -> Any:
-            return Value([index] if kind is list else {"v": index})
-
-        cls: Any = Enum("Values", {f"M{i}": value(i) for i in range(count)})
-        assert not cls._value2member_map_
-        for index in (0, count - 1):
-            comparisons = 0
-            assert cls(value(index)) is cls[f"M{index}"]
-            assert comparisons == index + 1
-        comparisons = 0
-        with pytest.raises(ValueError):
-            cls(value(-1))
-        assert count <= comparisons <= 2 * count
-        if sys.version_info >= (3, 12, 10):
-            comparisons = 0
-            assert value(count - 1) in cls
-            assert count <= comparisons <= 2 * count
-            comparisons = 0
-            assert value(-1) not in cls
-            assert count <= comparisons <= 2 * count
-        else:
-            with pytest.raises(TypeError):
-                assert value(count - 1) in cls
-
-    @pytest.mark.skipif(sys.version_info < (3, 12), reason="value containment is 3.12+")
-    @pytest.mark.parametrize("count", [10, 100])
-    def test_raw_hashable_containment_can_scan(self, count: int) -> None:
-        comparisons = 0
-
-        class Value(int):
-            __hash__ = int.__hash__
-
-            def __eq__(self, other: object) -> bool:
-                nonlocal comparisons
-                comparisons += 1
-                return int.__eq__(self, other)
-
-        cls: Any = Enum("Values", {f"M{i}": Value(i) for i in range(count)})
-        comparisons = 0
-        assert Value(-1) not in cls
-        assert comparisons <= 2 * count
-        if sys.version_info >= (3, 14):
-            assert comparisons == count
-
-
-class TestMembersProxy:
-    def test_proxy_is_live_and_read_only(self) -> None:
-        cls = numbered(10)
-        proxy = cls.__members__
-        assert isinstance(proxy, types.MappingProxyType)
-        with pytest.raises(TypeError):
-            proxy["EXTRA"] = cls.M0  # type: ignore[index]
-        cls._member_map_["EXTRA"] = cls.M0
-        assert proxy["EXTRA"] is cls.M0
-
-    def test_view_allocation_stays_small_while_copy_grows(self) -> None:
-        peaks, copies = [], []
-        for count in (100, 1_000):
-            cls = numbered(count)
-            tracemalloc.start()
-            try:
-                proxy = cls.__members__
-                peaks.append(tracemalloc.get_traced_memory()[1])
-            finally:
-                tracemalloc.stop()
-            tracemalloc.start()
-            try:
-                copied = dict(proxy)
-                copies.append(tracemalloc.get_traced_memory()[0])
-            finally:
-                tracemalloc.stop()
-            assert len(proxy) == count
-            assert copied == proxy
-        assert max(peaks) < copies[0] // 4, (peaks, copies)
-        assert copies[1] > copies[0] * 5, copies
-
-
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="helpers are 3.11+")
-class TestPublicHelpers:
-    @pytest.mark.parametrize("count", [10, 1_000])
-    def test_global_str_returns_the_stored_name(self, count: int) -> None:
-        cls = numbered(count)
-        member = cls[f"M{count - 1}"]
-        assert enum.global_str(member) is member.name  # type: ignore[attr-defined]
-
-    def test_global_str_formats_unnamed_values(self) -> None:
-        flags = Flag("Bits", {"A": 1})
-        assert flags(0).name is None
-        assert enum.global_str(flags(0)) == "Bits(0)"  # type: ignore[attr-defined]
-
-    @pytest.mark.parametrize("count", [10, 100])
-    def test_global_enum_exports_members(self, count: int, monkeypatch: pytest.MonkeyPatch) -> None:
-        module = types.ModuleType("_enum_helper_test")
-        monkeypatch.setitem(sys.modules, module.__name__, module)
-        cls: Any = Enum("Exported", {f"M{i}": i for i in range(count)}, module=module.__name__)
-        assert enum.global_enum(cls) is cls  # type: ignore[attr-defined]
-        assert all(vars(module)[name] is member for name, member in cls.__members__.items())
-        assert str(cls.M0) == "M0"
-        assert repr(cls.M0) == "_enum_helper_test.M0"
-
-    def test_non_exported_helpers_are_in_the_coverage_inventory(self) -> None:
-        assert DOCUMENTED_NON_EXPORTS <= _public_names()
-        for name in DOCUMENTED_NON_EXPORTS:
-            thinned = _documented_names() - {name}
-            assert _public_names() - thinned == {name}
-
-    @pytest.mark.parametrize("dimension", ["bits", "width"])
-    def test_show_flag_values_output_scales_in_both_dimensions(self, dimension: str) -> None:
-        retained = []
-        sizes = ((8, 4096), (128, 4096)) if dimension == "bits" else ((16, 256), (16, 8192))
-        for count, width in sizes:
-            expected = [1 << index for index in range(width - count, width)]
-            value = sum(expected)
-            tracemalloc.start()
-            try:
-                result = enum.show_flag_values(value)  # type: ignore[attr-defined]
-                retained.append(tracemalloc.get_traced_memory()[0])
-            finally:
-                tracemalloc.stop()
-            assert result == expected
-            assert len(result) == count
-            assert value.bit_length() == width
-        assert retained[1] > retained[0] * 5, retained
-
-    def test_show_flag_values_accepts_flags_and_zero(self) -> None:
-        flags = Flag("Bits", {"A": 1, "B": 4})
-        assert enum.show_flag_values(flags.A | flags.B) == [1, 4]  # type: ignore[attr-defined]
-        assert enum.show_flag_values(0) == []  # type: ignore[attr-defined]
-        with pytest.raises(ValueError):
-            enum.show_flag_values(-1)  # type: ignore[attr-defined]
-
-    @pytest.mark.parametrize("padding", [False, True])
-    def test_bin_output_scales_with_width(self, padding: bool) -> None:
-        retained = []
-        for width in (100, 10_000):
-            value = 10 if padding else (1 << (width - 1))
-            tracemalloc.start()
-            try:
-                result = enum.bin(value, width if padding else None)  # type: ignore[attr-defined]
-                retained.append(tracemalloc.get_traced_memory()[0])
-            finally:
-                tracemalloc.stop()
-            assert result.startswith("0b0 ")
-            assert len(result) == width + 4
-            assert int(result[4:], 2) == value
-        assert retained[1] > retained[0] * 20, retained
-        assert enum.bin(-11) == "0b1 0101"  # type: ignore[attr-defined]
+        assert mutated != source, f"the mutation matched nothing in {PAGE.name}:{line}"
+        assert _run_block(mutated, tmp_path).returncode != 0
