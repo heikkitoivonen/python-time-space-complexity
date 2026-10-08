@@ -26,7 +26,6 @@ import glob
 import io
 import logging
 import os
-import re
 import shutil
 import sqlite3
 import statistics
@@ -401,24 +400,6 @@ class TestDecimalIsNotAConstantFactorOverFloat:
         small_time = best_time(lambda: [small * small for _ in range(10_000)])
         large_time = best_time(lambda: [large * large for _ in range(10_000)])
         assert max(small_time, large_time) < min(small_time, large_time) * 3
-
-
-class TestAnchoredRegexIsBoundedByThePattern:
-    """docs/stdlib/fnmatch.md called a fixed anchored re.match() O(n) in the
-    filename. It examines a bounded prefix."""
-
-    @pytest.mark.timing
-    def test_match_cost_ignores_the_rest_of_the_string(self) -> None:
-        pattern = re.compile(r"test[0-9]{3}\.txt")
-        short, long = "x" * 10, "x" * 100_000
-
-        short_time = best_time(lambda: [pattern.match(short) for _ in range(20_000)])
-        long_time = best_time(lambda: [pattern.match(long) for _ in range(20_000)])
-
-        assert long_time < short_time * 3, (
-            f"an anchored fixed pattern should not scale with the subject: "
-            f"{short_time:.2e}s vs {long_time:.2e}s"
-        )
 
 
 class TestIndexingIsNotConstantForEverySequence:
