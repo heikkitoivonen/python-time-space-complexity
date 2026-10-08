@@ -91,6 +91,14 @@ allocates per variable even when the caller keeps nothing: 1,084 B against
 25,084 B for 3,000 more variables. Constructing the view itself really is
 O(1) - 40 B either side of those 3,000 additions.
 
+On Linux os.times() is timed beside 0, 49 and 499 extra idle threads: the
+49-thread cost exceeds the baseline and the 499-thread cost is over 3x the
+49-thread cost (x7 measured), while os.getpid() stays under 3x its baseline.
+That separates the kernel's per-thread sum from a constant read, not linear
+from quadratic; the O(t) upper bound is read from Linux v6.12
+kernel/sched/cputime.c's thread_group_cputime(), which adds each thread's
+times once. macOS and Windows are not timed.
+
 Code blocks: seven on the page, all of them run and all of them must exit
 zero. Every path they touch is relative, so the runner's temporary working
 directory is enough to make them real.
@@ -158,6 +166,7 @@ import struct
 import subprocess
 import sys
 import textwrap
+import threading
 import time
 import timeit
 import tracemalloc
@@ -2530,6 +2539,46 @@ class TestProcessAndEnvironment:
         assert entries == ["/one", "/two", "/three"], "one entry per separator"
         assert os.get_exec_path({"PATH": ""}) == [""]
         assert isinstance(os.get_exec_path(), list)
+
+
+@pytest.mark.timing
+@pytest.mark.skipif(
+    sys.platform != "linux", reason="platform: Linux's times() sums every thread's CPU time"
+)
+class TestTimesSumsEveryThread:
+    """`os.times()` | O(t), t = threads in the process.
+
+    Timed beside 0, 49 and 499 extra idle threads: growing cost separates the
+    kernel's per-thread sum from a constant read, and `os.getpid()` beside
+    the same threads is the control that stays flat.
+    """
+
+    def test_times_grows_with_threads_and_getpid_does_not(self) -> None:
+        def cost(call: Callable[[], Any]) -> float:
+            call()
+            return min(timeit.repeat(call, number=200, repeat=7))
+
+        costs = [(cost(os.times), cost(os.getpid))]
+        for count in (49, 499):
+            stop = threading.Event()
+            threads = [threading.Thread(target=stop.wait) for _ in range(count)]
+            try:
+                for thread in threads:
+                    thread.start()
+                costs.append((cost(os.times), cost(os.getpid)))
+            finally:
+                stop.set()
+                for thread in threads:
+                    if thread.is_alive():
+                        thread.join()
+
+        (alone, pid_alone), (medium, _), (crowded, pid_crowded) = costs
+        assert medium > alone, f"49 extra threads must add work: {costs}"
+        assert crowded > medium * 3, (
+            f"os.times() cost {alone:.2e}, {medium:.2e}, {crowded:.2e}s per 200 calls "
+            "with 0, 49, 499 extra threads; a constant read stays near x1"
+        )
+        assert pid_crowded < pid_alone * 3, f"getpid() should not depend on threads: {costs}"
 
 
 class TestExitStatusMacros:

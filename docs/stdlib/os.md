@@ -237,7 +237,7 @@ stack until its descendants are done, which puts depth back into the peak.
 | `os.nice(increment)` | O(1) | O(1) | |
 | `os.getpriority(which, who)` | O(1) | O(1) | |
 | `os.setpriority(which, who, priority)` | O(1) | O(1) | |
-| `os.times()` | O(1) | O(1) | |
+| `os.times()` | O(t) | O(1) | t = threads in the process; Linux sums the CPU time of every thread on each call |
 | `os.getloadavg()` | O(1) | O(1) | |
 | `os.uname()` | O(1) | O(1) | |
 | `os.cpu_count()` | O(1) | O(1) | Machine-wide count |

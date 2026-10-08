@@ -6,8 +6,10 @@ call into the operating system, and a conversion fills or reads one fixed-size r
 
 `f` is the characters in a format string and `n` is the characters in the string `strptime()`
 parses. Every other operation takes a fixed-size input - a clock id, a timestamp, or a
-`struct_time` - and is O(1). The C library's own work is priced O(1) too: reading a clock, and
-consulting the timezone rules that `localtime()`, `mktime()` and `tzset()` rely on.
+`struct_time` - and is O(1), with one exception: on Linux, reading the process's CPU time sums
+the CPU time of all `t` threads in the process. The C library's own work is priced O(1)
+otherwise: reading any other clock, and consulting the timezone rules that `localtime()`,
+`mktime()` and `tzset()` rely on.
 
 ## Complexity Reference
 
@@ -18,15 +20,15 @@ consulting the timezone rules that `localtime()`, `mktime()` and `tzset()` rely 
 | `time.time()`, `time.time_ns()` | O(1) | O(1) | Seconds since the epoch; the system clock can be set back, so two readings can go backwards. The `_ns` form returns an int and keeps the nanoseconds a float rounds away |
 | `time.monotonic()`, `time.monotonic_ns()` | O(1) | O(1) | Never goes backwards; the clock for timeouts and durations |
 | `time.perf_counter()`, `time.perf_counter_ns()` | O(1) | O(1) | The highest-resolution clock for short durations; counts time spent in `sleep()` |
-| `time.process_time()`, `time.process_time_ns()` | O(1) | O(1) | CPU time of the whole process; time spent in `sleep()` does not count |
+| `time.process_time()`, `time.process_time_ns()` | O(t) | O(1) | CPU time of the whole process; time spent in `sleep()` does not count. Linux sums the CPU time of all t threads, unless a process-wide CPU timer such as `setitimer(ITIMER_PROF, ...)` is armed |
 | `time.thread_time()`, `time.thread_time_ns()` | O(1) | O(1) | CPU time of the calling thread only; availability is platform-dependent |
-| `time.get_clock_info(name)` | O(1) | O(1) | A namespace of `implementation`, `monotonic`, `adjustable` and `resolution` |
+| `time.get_clock_info(name)` | O(1); O(t) for `'process_time'` on Linux | O(1) | A namespace of `implementation`, `monotonic`, `adjustable` and `resolution` |
 
 ### POSIX clocks
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `time.clock_gettime(clk_id)`, `time.clock_gettime_ns(clk_id)` | O(1) | O(1) | Unix only; reads the clock a `CLOCK_*` id names |
+| `time.clock_gettime(clk_id)`, `time.clock_gettime_ns(clk_id)` | O(1); O(t) for `CLOCK_PROCESS_CPUTIME_ID` on Linux | O(1) | Unix only; reads the clock a `CLOCK_*` id names |
 | `time.clock_settime(clk_id, t)`, `time.clock_settime_ns(clk_id, t)` | O(1) | O(1) | Unix only, and needs privileges |
 | `time.clock_getres(clk_id)` | O(1) | O(1) | Unix only; the clock's resolution, not the cost of reading it |
 | `time.pthread_getcpuclockid(thread_id)` | O(1) | O(1) | Unix only; the id of a thread's CPU-time clock, for `clock_gettime()` |
@@ -98,7 +100,7 @@ to them. `perf_counter()` counts wall-clock time, sleep included.
 ```python
 import time
 
-cpu_before = time.process_time()  # O(1)
+cpu_before = time.process_time()  # O(t) on Linux - sums every thread
 wall_before = time.perf_counter()  # O(1)
 time.sleep(0.05)  # O(1) - the thread waits, it does not work
 cpu_spent = time.process_time() - cpu_before

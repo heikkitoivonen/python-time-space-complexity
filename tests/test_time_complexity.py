@@ -6,7 +6,9 @@ There is no size to vary, so those rows are settled by observation - return
 types, field counts, monotonicity, which clocks advance while a thread sleeps.
 Only `strftime()` and `strptime()` take an input that grows, and those are
 settled by timing at three sizes spanning two orders of magnitude, with the
-format cache observed directly in the private `_strptime` module.
+format cache observed directly in the private `_strptime` module. The process
+CPU-time clock is the one read whose cost grows on Linux, with the threads in
+the process, and is timed against their number.
 
 Measurement scope:
 
@@ -39,6 +41,17 @@ Measurement scope:
   is charged under 50 ms of `thread_time()` and `process_time()` advances by
   at least 0.2 s, so the first counts only its own thread and the second the
   whole process.
+* On Linux, `process_time()`, `process_time_ns()`,
+  `clock_gettime(CLOCK_PROCESS_CPUTIME_ID)` and
+  `get_clock_info('process_time')` are timed with 0, 49 and 499 extra idle
+  threads: the 49-thread cost exceeds the baseline and the 499-thread cost is
+  over 3x the 49-thread cost (x7 measured). `thread_time()` and `monotonic()`
+  stay under 3x their baseline at both counts. This separates a per-thread
+  sum from a constant read; it does not separate linear from quadratic.
+  With an `ITIMER_PROF` of 100,000 s armed beside the 499 threads,
+  `process_time()` costs under 3x its no-thread baseline, where unarmed it
+  costs over 3x. Both measurements assume the test process has no process
+  CPU timer armed beforehand, as a profiler would.
 * Each `_ns` clock is asserted to return an int, and a float timestamp's
   spacing, `math.ulp(time.time())`, to exceed one nanosecond, which holds for
   any timestamp after 1970-04. That the int carries the clock's nanoseconds
@@ -66,6 +79,10 @@ Not settled here:
   clock change rest on the official documentation.
 * Clock resolution and `sleep()`'s oversleep belong to the platform and its
   scheduler; the tests assert only the documented floor of `sleep()`.
+* The O(t) upper bound for the process CPU-time clock is read from Linux
+  v6.12 kernel/sched/cputime.c's `thread_group_cputime()`, which adds each
+  thread's times once. macOS and Windows are not timed, so the page states
+  the thread sum for Linux only.
 * `tzset()`, `localtime()` and `mktime()` consult the C library's timezone
   rules, whose cost is libc's and is priced O(1) by the page's cost model.
 * Windows lacks every name the page marks Unix only. That is guarded on
@@ -92,6 +109,7 @@ import math
 import os
 import pathlib
 import re
+import signal
 import subprocess
 import sys
 import textwrap
@@ -200,7 +218,8 @@ class TestPlatformRows:
 
 
 class TestClocks:
-    """The clock rows: O(1) reads, each with a float and an int form."""
+    """The clock rows: each has a float and an int form, and reports its
+    metadata. Their cost is not measured here."""
 
     @pytest.mark.parametrize("name", NAMED_CLOCKS)
     def test_each_clock_has_a_float_and_an_int_form(self, name: ClockName) -> None:
@@ -263,6 +282,117 @@ class TestCpuClocks:
 
         assert thread_spent < 0.05, f"the waiting thread was charged {thread_spent:.3f}s"
         assert process_spent >= 0.2, f"the process was charged only {process_spent:.3f}s"
+
+
+def idle_threads(count: int) -> tuple[threading.Event, list[threading.Thread]]:
+    stop = threading.Event()
+    threads = [threading.Thread(target=stop.wait) for _ in range(count)]
+    try:
+        for thread in threads:
+            thread.start()
+    except BaseException:
+        stop.set()
+        raise
+    return stop, threads
+
+
+THREAD_COUNTS = (49, 499)
+
+
+def _thread_clock_costs() -> dict[str, float]:
+    calls: dict[str, Callable[[], Any]] = {
+        "process_time": time.process_time,
+        "process_time_ns": time.process_time_ns,
+        "clock_gettime": lambda: time.clock_gettime(time.CLOCK_PROCESS_CPUTIME_ID),
+        "get_clock_info": lambda: time.get_clock_info("process_time"),
+        "thread_time": time.thread_time,
+        "monotonic": time.monotonic,
+    }
+    for call in calls.values():
+        call()
+    return {name: best_ns(call, inner=200) for name, call in calls.items()}
+
+
+@pytest.fixture(scope="module")
+def thread_clock_costs() -> list[dict[str, float]]:
+    """Clock costs with 0 extra idle threads, then each of THREAD_COUNTS."""
+    measurements = [_thread_clock_costs()]
+    for count in THREAD_COUNTS:
+        stop, threads = idle_threads(count)
+        try:
+            measurements.append(_thread_clock_costs())
+        finally:
+            stop.set()
+            for thread in threads:
+                thread.join()
+    return measurements
+
+
+@pytest.mark.timing
+@pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="platform: Linux's kernel sums every thread for the process CPU-time clock",
+)
+class TestProcessCpuTimeWalksEveryThread:
+    """`process_time()` | O(t); `clock_gettime(CLOCK_PROCESS_CPUTIME_ID)` and
+    `get_clock_info('process_time')` | O(t) on Linux; `thread_time()` and
+    `monotonic()` | O(1).
+
+    The same process is timed with 0, 49 and 499 extra idle threads. Growing
+    cost separates the per-thread sum from a constant-time read; the controls
+    read one thread's clock or a system clock and stay flat.
+    """
+
+    GROWING = ("process_time", "process_time_ns", "clock_gettime", "get_clock_info")
+
+    @pytest.mark.parametrize("name", GROWING)
+    def test_the_process_clock_grows_with_threads(
+        self, thread_clock_costs: list[dict[str, float]], name: str
+    ) -> None:
+        costs = thread_clock_costs
+        alone, medium, crowded = (measurement[name] for measurement in costs)
+        assert medium > alone, f"49 extra threads must add work to {name}: {costs}"
+        ratio = crowded / medium
+        assert ratio > 3, (
+            f"{name} cost {alone:.0f}, {medium:.0f}, {crowded:.0f}ns with 0, 49, 499 "
+            f"extra threads; 49-to-499 growth x{ratio:.1f}; a constant read stays near x1"
+        )
+
+    def test_an_armed_process_timer_keeps_a_running_total(self) -> None:
+        """While a process-wide CPU timer is armed, the kernel keeps the
+        process's total itself and the read stops walking the threads."""
+        alone = best_ns(time.process_time, inner=200)
+        stop, threads = idle_threads(THREAD_COUNTS[-1])
+        try:
+            walking = best_ns(time.process_time, inner=200)
+            previous = signal.setitimer(signal.ITIMER_PROF, 100_000)
+            try:
+                armed = best_ns(time.process_time, inner=200)
+            finally:
+                signal.setitimer(signal.ITIMER_PROF, *previous)
+        finally:
+            stop.set()
+            for thread in threads:
+                thread.join()
+
+        assert walking > alone * 3, f"no timer: {alone:.0f} vs {walking:.0f}ns"
+        assert armed < alone * 3, (
+            f"process_time() cost {alone:.0f}ns alone, {walking:.0f}ns beside "
+            f"{THREAD_COUNTS[-1]} threads, and {armed:.0f}ns with ITIMER_PROF armed"
+        )
+
+    @pytest.mark.parametrize("name", ["thread_time", "monotonic"])
+    def test_the_controls_do_not(
+        self, thread_clock_costs: list[dict[str, float]], name: str
+    ) -> None:
+        costs = thread_clock_costs
+        alone = costs[0][name]
+        for count, measurement in zip(THREAD_COUNTS, costs[1:], strict=True):
+            ratio = measurement[name] / alone
+            assert ratio < 3, (
+                f"{name} cost {alone:.0f}ns alone and {measurement[name]:.0f}ns beside "
+                f"{count} threads (x{ratio:.1f}); it should not depend on them"
+            )
 
 
 class TestSleepBlocksWithoutWorking:
