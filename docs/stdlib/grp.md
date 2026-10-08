@@ -47,8 +47,10 @@ assert root == (root.gr_name, root.gr_passwd, root.gr_gid, root.gr_mem)
 same = grp.getgrnam(root.gr_name)  # O(m) - another query
 assert same == root and same is not root  # a fresh entry, not a cached one
 
+taken = {entry.gr_gid for entry in grp.getgrall()}  # O(g + t)
+unlisted = next(gid for gid in range(1_999_999_999, 0, -1) if gid not in taken)
 try:
-    grp.getgrgid(1_999_999_999)
+    grp.getgrgid(unlisted)  # missing wherever every group is enumerated, as in a local file
 except KeyError as error:
     assert 'gid not found' in str(error)
 else:
@@ -98,12 +100,15 @@ groups = os.getgrouplist(user.pw_name, user.pw_gid)  # the backend answers
 assert user.pw_gid in groups
 
 # The group passed in is always in the result, listed anywhere or not
-assert 1_999_999_999 in os.getgrouplist(user.pw_name, 1_999_999_999)
+groups = grp.getgrall()  # O(g + t)
+taken = {g.gr_gid for g in groups}
+unlisted = next(gid for gid in range(1_999_999_999, 0, -1) if gid not in taken)
+assert unlisted in os.getgrouplist(user.pw_name, unlisted)
 
 # The scan pays for every group and every member name, and sees only
 # the memberships written into the group records themselves
-listed = [g.gr_gid for g in grp.getgrall() if user.pw_name in g.gr_mem]  # O(g + t)
-assert 1_999_999_999 not in listed
+listed = [g.gr_gid for g in groups if user.pw_name in g.gr_mem]  # O(g + t)
+assert unlisted not in listed
 ```
 
 ## Performance Best Practices
