@@ -1,414 +1,375 @@
 # random Module Complexity
 
-The `random` module provides pseudo-random number generation for various probability distributions.
+The `random` module draws pseudo-random numbers from a Mersenne Twister written in C, and builds
+integers, sequence operations and distributions in Python on top of it. The module-level functions
+are bound methods of one hidden `random.Random` instance, so each also exists as a `Random` method
+at the same cost, and the generator's whole state is a fixed 624 words whatever it has produced.
+
+`n` is the length of the population passed in, `k` the number of values drawn or returned, `w`
+the bit width of the widest integer an operation handles - its operands as well as its result -
+`b` a byte count, `s` the size of a seed - its length for a str, bytes or bytearray, its bit width
+for an int - and `a` the characters in the command-line arguments.
+Costs are counted in generator draws and element accesses, and indexing a sequence is priced at
+O(1). A sequence index fits a word, because `len()` has to return one; an integer passed as a
+bound has no such limit, so the rows that take one carry `w`. "Expected" marks a rejection loop:
+the number of draws is not bounded, but its mean is a small constant.
 
 ## Complexity Reference
 
-Throughout, `n` is the size of the population passed in, `k` the number of
-values drawn, `w` the bit width of the widest integer an operation handles -
-its operands as well as its result - and `s` the size of a seed. Costs are
-counted in generator draws and element accesses, with an index taken as one
-word: a sequence bounds its index with `len()`. An integer passed as a *bound*
-has no such limit, so the rows that take one carry `w`. "Expected" marks a
-rejection loop: the number of draws is not bounded, but its mean is a small
-constant.
+### Integers and bytes
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `random.random()` | O(1) | O(1) | Uniform [0.0, 1.0) |
-| `random.getrandbits(w)` / `Random.getrandbits(w)` | O(w) | O(w) | Returns a w-bit integer |
-| `random.randbytes(count)` | O(count) | O(count) | One `getrandbits(8 * count)` |
-| `random.randrange([start,] stop)` | O(w) expected | O(w) | One word for ordinary bounds. `stop` is excluded |
-| `random.randrange(start, stop, step)` | O(w) expected, plus one [`//`](../builtins/int.md) and one [`*`](../builtins/int.md) on w-bit operands | O(w) | Superlinear in w once those operands are big integers |
-| `random.randint(a, b)` | O(w) expected | O(w) | Uniform integer, both ends included |
-| `random.choice(seq)` | O(1) expected | O(1) | One index lookup, so O(1) only where indexing is |
-| `random.choices(seq, k=k)` | O(k) | O(k) | With replacement; the population is not copied |
-| `random.choices(seq, weights, k=k)` | O(n + k log n) | O(n + k) | Accumulates the weights once, then bisects per draw |
-| `random.choices(seq, cum_weights=c, k=k)` | O(k log n) | O(k) | Skips the accumulation; pass this to reuse one set of weights across calls |
-| `random.sample(seq, k)` | O(k) to O(n) | O(k) to O(n) | Tracks the k drawn indices, or copies the population when that copy is smaller than the index set; `seq` must be a sequence, not a set or dict |
-| `random.sample(seq, k, counts=c)` | O(n + k log n) | O(n + k) | Accumulates the counts, then bisects each selection |
-| `random.shuffle(list)` | O(n) | O(1) | In-place Fisher-Yates shuffle |
-| `random.uniform(a, b)` | O(1) | O(1) | Uniform float |
+| `random.random()`, `Random.random()` | O(1) | O(1) | Uniform float in [0.0, 1.0) |
+| `random.getrandbits(w)`, `Random.getrandbits(w)` | O(w) | O(w) | Returns a non-negative int of at most w bits |
+| `random.randbytes(b)`, `Random.randbytes(b)` | O(b) | O(b) | One `getrandbits(8 * b)` |
+| `random.randrange(stop)`, `random.randrange(start, stop)` | O(w) expected | O(w) | `stop` is excluded |
+| `random.randrange(start, stop, step)` | O(w) expected, plus one [`//`](../builtins/int.md) and one `*` on w-bit operands | O(w) | Can be superlinear in w when the step is itself a big integer |
+| `random.randint(a, b)` | O(w) expected | O(w) | Both ends included |
+
+### Sequences
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `random.choice(seq)` | O(1) expected | O(1) | One index lookup |
+| `random.choices(population, k=k)` | O(k) | O(k) | With replacement; the population is indexed, never copied |
+| `random.choices(population, weights, k=k)` | O(n + k log n) | O(n + k) | Accumulates the weights on every call, then bisects once per draw |
+| `random.choices(population, cum_weights=c, k=k)` | O(k log n) | O(k) | Skips the accumulation, so prepared cumulative weights can be reused across calls |
+| `random.sample(population, k)` | O(k) expected | O(k) | Independent of n. `population` must be a sequence; 3.10 still accepts a set, copying it in O(n) |
+| `random.sample(population, k, counts=c)` | O(n + k log n) expected | O(n + k) | Accumulates the counts, samples k positions, then bisects each one |
+| `random.shuffle(x)` | O(n) expected | O(1) | In place |
+
+### Distributions
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `random.uniform(a, b)` | O(1) | O(1) | One draw |
 | `random.triangular(low, high, mode)` | O(1) | O(1) | One draw |
-| `random.gauss(mu, sigma)` | O(1) | O(1) | Generates values in pairs and caches the spare |
-| `random.normalvariate(mu, sigma)` | O(1) expected | O(1) | Rejection loop, and no cached spare |
-| `random.lognormvariate(mu, sigma)` | O(1) expected | O(1) | `exp()` of a `normalvariate()` |
 | `random.expovariate(lambd)` | O(1) | O(1) | One draw |
 | `random.paretovariate(alpha)` | O(1) | O(1) | One draw |
 | `random.weibullvariate(alpha, beta)` | O(1) | O(1) | One draw |
+| `random.gauss(mu, sigma)` | O(1) | O(1) | Makes two values from two draws and keeps the second in the generator for the next call |
+| `random.normalvariate(mu, sigma)` | O(1) expected | O(1) | Rejection loop; keeps nothing between calls |
+| `random.lognormvariate(mu, sigma)` | O(1) expected | O(1) | `exp()` of a `normalvariate()` |
 | `random.gammavariate(alpha, beta)` | O(1) expected | O(1) | Rejection loop |
-| `random.betavariate(alpha, beta)` | O(1) expected | O(1) | Two `gammavariate()` calls |
+| `random.betavariate(alpha, beta)` | O(1) expected | O(1) | Up to two `gammavariate()` calls |
 | `random.vonmisesvariate(mu, kappa)` | O(1) expected | O(1) | Rejection loop |
-| `random.binomialvariate(n, p)` | O(1) expected | O(1) | Python 3.12+ |
-| `random.seed(a)` | O(s) | O(s) | A str or bytes seed is hashed with the whole input kept, so both terms follow its length |
-| `random.getstate()` / `random.setstate(state)` | O(1) | O(1) | The Mersenne Twister state is a fixed 625 words |
-| `random.Random(a)` | O(s) | O(s) | An independent stream; seeded as above |
-| `random.SystemRandom()` | O(1) | O(1) | Draws from `os.urandom()`; cannot be seeded and keeps no state |
+| `random.binomialvariate(n=1, p=0.5)` | O(1) expected | O(1) | Python 3.12+; however many trials are asked for |
 
-## Basic Random Number Generation
+### Seeding and state
 
-### Uniform Distribution
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `random.seed(a=None, version=2)`, `Random.seed(a=None, version=2)` | O(s) | O(s) | With the default `version=2`, a str, bytes or bytearray seed costs its length in both time and space |
+| `random.getstate()`, `Random.getstate()` | O(1) | O(1) | A tuple holding the 624-word Twister state plus a position, and the `gauss()` spare |
+| `random.setstate(state)`, `Random.setstate(state)` | O(1) | O(1) | Restores exactly what `getstate()` captured |
+
+### Random
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `random.Random(x=None)` | O(s) | O(s) | An independent generator, seeded as `seed()` is. Every function above is also a method of it, at the same cost |
+
+### SystemRandom
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `random.SystemRandom()` | O(1) | O(1) | Draws from `os.urandom()`, so there is no generator state to seed or save. Every `Random` method is available, at the same number of draws |
+| `SystemRandom.random()` | O(1) | O(1) | One `os.urandom()` call per value |
+| `SystemRandom.getrandbits(w)` | O(w) | O(w) | One `os.urandom()` call for the bytes holding w bits |
+| `SystemRandom.randbytes(b)` | O(b) | O(b) | One `os.urandom(b)` call |
+| `SystemRandom.seed(a=None)` | O(1) | O(1) | Does nothing |
+| `SystemRandom.getstate()`, `SystemRandom.setstate(state)` | O(1) | O(1) | Raise `NotImplementedError`: there is no state to save |
+
+### Command line
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `random.main(arg_list=None)` | O(a) | O(a) | Python 3.13+, `python -m random`: parses the arguments, then makes one `choice()`, `randint()` or `uniform()`, or returns the help text when given none |
+
+## Integers and Bit Width
+
+`randrange()` and `randint()` draw as many bits as the span of the range needs, and retry when
+the draw falls outside it, which happens at most half the time. The width that matters is the
+widest integer you pass: nothing bounds it, so `randrange(2**2048)` draws and returns integers of
+about 2,048 bits, and a two-element range based at `2**4096` still adds its offset to a 4,097-bit
+`start`. The sequence functions never reach such widths, because a sequence index fits a word.
 
 ```python
 import random
 
-# Random float [0.0, 1.0) - O(1)
-x = random.random()  # ~0.37
+key = random.randrange(2**2048)  # O(w) expected
+assert 0 <= key < 2**2048
 
-# Random integer [a, b] inclusive - O(1) expected
-n = random.randint(1, 10)  # Between 1 and 10
+bits = random.getrandbits(64)  # O(w)
+assert bits.bit_length() <= 64
 
-# Random float in range - O(1)
-y = random.uniform(0, 100)  # Between 0 and 100
+blob = random.randbytes(16)  # O(b)
+assert len(blob) == 16
+
+# A two-element range is still O(w) when start is wide
+start = 2**4096
+assert random.randrange(start, start + 2) in (start, start + 1)  # O(w) expected
+
+assert random.randint(1, 6) in range(1, 7)  # both ends included
+assert random.randrange(0, 100, 5) % 5 == 0  # one // and one * on top
 ```
 
-### Seeding for Reproducibility
+## Choosing from Sequences
+
+### Single and Repeated Choices
+
+`choice()` and the unweighted `choices()` index the population once per value. A `range` is a
+sequence too, so choosing from a huge one costs no more than choosing from a short list.
 
 ```python
 import random
 
-# Set seed for reproducible results - O(1) for an int seed
-random.seed(42)
+colors = ['red', 'green', 'blue']
+assert random.choice(colors) in colors  # O(1) expected
+assert random.choice(range(10**12)) < 10**12  # the range is never built
 
-# Same seed produces same sequence
-x1 = random.random()  # Always same value with seed(42)
-y1 = random.randint(1, 100)
-
-random.seed(42)
-x2 = random.random()  # Same as x1
-y2 = random.randint(1, 100)  # Same as y1
-
-# Useful for testing: reproducible randomness
+draws = random.choices(colors, k=5)  # O(k), with replacement
+assert len(draws) == 5 and set(draws) <= set(colors)
 ```
 
-## Sequence Operations
+### Weighted Choices
 
-### Random Selection
+`weights=` is accumulated into a fresh list on every call, which is the O(n) term; each draw is
+then a bisection. When the same weights serve many calls, accumulate them once and pass
+`cum_weights=` instead.
 
 ```python
 import random
+from itertools import accumulate
 
-# Choose one random element - O(1) expected
-lst = [10, 20, 30, 40, 50]
-item = random.choice(lst)  # One of the elements
+items = ['a', 'b', 'c', 'd']
+weights = [5, 1, 1, 1]
 
-# Works with strings
-char = random.choice("hello")  # 'h', 'e', 'l', 'l', or 'o'
+picks = random.choices(items, weights=weights, k=100)  # O(n + k log n)
+assert len(picks) == 100
 
-# Get one random element from range - O(1) expected
-num = random.choice(range(1000000))  # O(1) expected even for huge range!
+cumulative = list(accumulate(weights))  # O(n), once
+assert cumulative == [5, 6, 7, 8]
+for _ in range(10):
+    batch = random.choices(items, cum_weights=cumulative, k=10)  # O(k log n) each
+    assert set(batch) <= set(items)
 ```
 
-### Multiple Random Selections
+### Sampling Without Replacement
+
+`sample()` is O(k) however long the population is. It remembers the indices it has drawn in a
+set, or, when the population is no bigger than that set would be, copies it into a list and
+draws from that; either way the work and memory follow k. Pass a `range` to sample from a span
+of integers far larger than k without building it. A dict is not a sequence and is rejected, and so, from
+Python 3.11, is a set: convert one first with `list()` or `sorted()`.
 
 ```python
 import random
 
-# Multiple selections WITH replacement - O(k)
-lst = [1, 2, 3, 4, 5]
-selections = random.choices(lst, k=3)  # [5, 2, 5] - O(3)
+winners = random.sample(range(10**9), 5)  # O(k) expected; the range is not built
+assert len(set(winners)) == 5
 
-# Weighted selection - O(n + k log n)
-colors = ['red', 'blue', 'green']
-weights = [0.5, 0.3, 0.2]
-draws = random.choices(colors, weights=weights, k=100)  # O(n + k log n)
+deck = list(range(52))
+hand = random.sample(deck, 5)  # O(k) expected
+assert len(set(hand)) == 5 and deck == list(range(52))
 
-# Without replacement (sample) - O(k) to O(n)
-unique = random.sample(lst, k=3)  # [3, 1, 4] - no duplicates
+try:
+    random.sample({'a': 1, 'b': 2}, 1)
+except TypeError as error:
+    assert 'sequence' in str(error)
+else:
+    raise AssertionError('sample() accepted a dict')
+
+assert len(random.sample(list({1, 2, 3}), 2)) == 2  # O(n) to convert
+
+# counts= repeats each element without building the repeated list
+balls = random.sample(['red', 'blue'], counts=[4, 2], k=5)  # O(n + k log n) expected
+assert balls.count('blue') <= 2
 ```
 
 ### Shuffling
 
+`shuffle()` swaps in place, drawing about once per element, in O(1) extra space. For a shuffled
+copy that leaves the original alone, `sample(x, len(x))` costs the same time plus an O(n) list.
+
 ```python
 import random
 
-# In-place shuffle - O(n)
-lst = [1, 2, 3, 4, 5]
-random.shuffle(lst)  # Modifies list in place - O(5)
-# lst might be [3, 1, 5, 2, 4]
+cards = list(range(10))
+random.shuffle(cards)  # O(n) expected, O(1) space
+assert sorted(cards) == list(range(10))
 
-# Shuffle large list - O(n)
-big_list = list(range(1000000))
-random.shuffle(big_list)  # O(1000000)
-
-# Get shuffled copy - O(n) space
 original = [1, 2, 3, 4, 5]
-shuffled = random.sample(original, k=len(original))  # [4, 1, 3, 5, 2]
-# Original unchanged - O(5) space
+copy = random.sample(original, k=len(original))  # O(n) expected, O(n) space
+assert sorted(copy) == original and original == [1, 2, 3, 4, 5]
 ```
 
-## Common Probability Distributions
+## Distributions
 
-### Gaussian (Normal) Distribution
+Every distribution is O(1) per value. The closed-form ones take exactly one draw. The others run
+a rejection loop whose mean number of draws stays a small constant over the whole parameter
+range. `gauss()` makes values in pairs and keeps the spare in the generator, which is why it is
+not safe to share between threads without a lock; `normalvariate()` keeps nothing.
 
 ```python
 import random
 
-# Normal distribution - O(1)
-mu = 0      # Mean
-sigma = 1   # Standard deviation
+rng = random.Random(7)
 
-# Single value - O(1)
-x = random.gauss(mu, sigma)  # Typically near 0
+assert 0.0 <= rng.random() < 1.0  # O(1)
+assert 2.0 <= rng.uniform(2.0, 5.0) <= 5.0  # O(1), one draw
+assert rng.expovariate(1 / 1000) >= 0.0  # O(1), mean 1000
 
-# Generate samples - O(n)
-samples = [random.gauss(100, 15) for _ in range(1000)]  # O(1000)
+samples = [rng.normalvariate(100, 15) for _ in range(1000)]  # O(1) expected each
+assert 80 < sum(samples) / len(samples) < 120
+
+assert 0.0 <= rng.betavariate(2, 5) <= 1.0  # O(1) expected
+assert rng.gammavariate(2, 2) > 0.0  # O(1) expected
+
+if hasattr(rng, 'binomialvariate'):  # Python 3.12+
+    assert 0 <= rng.binomialvariate(10**9, 0.5) <= 10**9  # O(1) expected
+
+rng.gauss(0.0, 1.0)  # O(1): two values made, one kept
+assert rng.getstate()[2] is not None  # the spare
 ```
 
-### Beta Distribution
+## Seeding and State
+
+### Reproducible Sequences
+
+Seeding costs the size of the seed: a str or bytes seed costs its length, and an int its bit
+width. The state `getstate()` returns is the same size whatever the seed was.
 
 ```python
 import random
 
-# Beta distribution - O(1) expected, via two gammavariate() calls
-x = random.betavariate(2, 5)
+random.seed(42)  # O(s)
+first = [random.random(), random.randint(1, 100)]
+random.seed(42)
+assert [random.random(), random.randint(1, 100)] == first
 
-# Multiple samples - O(n)
-samples = [random.betavariate(2, 5) for _ in range(1000)]  # O(1000)
+random.seed('a long string seed')  # O(s), s = length of the string
+state = random.getstate()  # O(1)
+assert len(state[1]) == 625  # the Twister's 624 words plus its position
+
+x = random.random()
+random.setstate(state)  # O(1)
+assert random.random() == x
 ```
 
-### Other Distributions
+### Independent Streams
 
-```python
-import random
-
-# Exponential distribution - O(1)
-x = random.expovariate(1/1000)  # Mean 1000
-
-# Gamma distribution - O(1) expected, from a rejection loop
-y = random.gammavariate(2, 2)
-
-# Generate many samples - O(n)
-samples = [random.gammavariate(2, 2) for _ in range(10000)]  # O(10000)
-```
-
-## Common Patterns
-
-### Random Sampling from Large Datasets
-
-```python
-import random
-
-# Algorithm: Reservoir sampling - O(n) time, O(k) space
-def reservoir_sample(iterable, k):
-    """Sample k items from iterable without loading all in memory"""
-    reservoir = []
-    for i, item in enumerate(iterable):
-        if i < k:
-            reservoir.append(item)
-        else:
-            j = random.randint(0, i)  # O(1) expected per item
-            if j < k:
-                reservoir[j] = item
-    return reservoir
-
-# Usage - O(n) for iteration, O(1) expected per random operation
-large_iter = range(1000000)
-sample = reservoir_sample(large_iter, 100)  # O(1000000)
-```
-
-### Randomized Algorithms
-
-```python
-import random
-
-# Randomized quicksort pivot selection - O(1) expected
-def random_partition(arr, low, high):
-    pivot_idx = random.randint(low, high)  # O(1) expected
-    # ... partition logic
-
-# Shuffle-sort (bogosort) - expected O(n * n!) time: n! shuffles of O(n) each
-def shuffle_sort(arr):
-    while not is_sorted(arr):
-        random.shuffle(arr)  # O(n) per iteration
-    return arr
-```
-
-### Monte Carlo Simulations
-
-```python
-import random
-
-# Estimate Pi using random points - O(n) iterations
-def estimate_pi(num_samples):
-    inside_circle = 0
-    for _ in range(num_samples):
-        x = random.random()  # O(1)
-        y = random.random()  # O(1)
-        if x*x + y*y <= 1:
-            inside_circle += 1
-    return 4 * inside_circle / num_samples
-
-# Estimate Pi
-pi_estimate = estimate_pi(100000)  # O(100000)
-```
-
-## Random Walks
-
-### 1D Random Walk
-
-```python
-import random
-
-def random_walk(steps):
-    """Perform a random walk"""
-    position = 0
-    for _ in range(steps):
-        step = random.choice([-1, 1])  # O(1) expected
-        position += step
-    return position
-
-# Simulate random walk - O(n)
-final_position = random_walk(1000)  # O(1000)
-```
-
-### 2D Random Walk
-
-```python
-import random
-
-def random_walk_2d(steps):
-    """2D random walk"""
-    x, y = 0, 0
-    for _ in range(steps):
-        direction = random.choice([(0,1), (0,-1), (1,0), (-1,0)])
-        x += direction[0]
-        y += direction[1]
-    return x, y
-
-# Simulate 2D random walk - O(n)
-final_pos = random_walk_2d(10000)  # O(10000)
-```
-
-## Performance Optimization
-
-### Weighted Random Selection
-
-```python
-import random
-from bisect import bisect
-
-# Simple weighted choice with normalization - O(n)
-def weighted_choice(choices, weights):
-    total = sum(weights)
-    r = random.uniform(0, total)
-    upto = 0
-    for choice, weight in zip(choices, weights):
-        if upto + weight >= r:
-            return choice
-        upto += weight
-    return choices[-1]
-
-# O(n) where n = number of choices
-# Better: use random.choices() when you want multiple draws
-items = ['a', 'b', 'c']
-weights = [0.5, 0.3, 0.2]
-result = random.choices(items, weights=weights, k=1)[0]  # O(n)
-```
-
-## State Management
-
-### Multiple Random Streams
-
-```python
-import random
-
-# Create independent random states - O(1) for an int seed
-rng1 = random.Random(42)
-rng2 = random.Random(43)
-
-# Each has its own state - O(1)
-x1 = rng1.random()  # Independent
-x2 = rng2.random()  # Independent
-
-# Useful for parallel processing
-# Each thread gets its own RNG with different seed
-```
-
-### Getstate and Setstate
-
-```python
-import random
-
-# Capture random state - O(1)
-state = random.getstate()
-
-# Generate some random numbers
-x1 = random.random()
-y1 = random.randint(1, 100)
-
-# Restore state - O(1)
-random.setstate(state)
-
-# Get same random numbers
-x2 = random.random()  # Same as x1
-y2 = random.randint(1, 100)  # Same as y1
-```
-
-## Comparison with Alternatives
-
-```python
-import random
-import secrets
-
-# Cryptographically secure random (secure but slow) - O(1)
-token = secrets.token_hex(16)  # For passwords/tokens
-
-# For simulation/general use (fast)
-value = random.random()  # O(1) - standard
-```
-
-## Thread Safety
+Each `Random` instance has its own state, so a seeded instance per thread or per task gives each
+one a reproducible sequence of its own. The module functions share a single hidden instance:
+`random()` is one step in C and safe to call from several threads, but no thread then sees a
+sequence of its own. `SystemRandom` reads `os.urandom()` on every draw and has no generator
+state to seed or save; use it, or [`secrets`](secrets.md), where values must be unpredictable.
 
 ```python
 import random
 import threading
 
-# random() is a single C step, so the module-level RNG is safe to call from
-# multiple threads -- but it shares state, so no thread gets its own sequence.
-# gauss() is the exception: it caches a spare value between calls, and two
-# threads can be handed the same one. Give each thread its own Random instance.
+results = {}
 
 def worker(seed):
-    rng = random.Random(seed)  # O(1) - thread-safe
-    value = rng.random()  # O(1)
-    print(value)
+    rng = random.Random(seed)  # O(s), one per thread
+    results[seed] = [rng.random() for _ in range(3)]
 
-# Create threads with separate RNGs
-threads = [
-    threading.Thread(target=worker, args=(i,))
-    for i in range(10)
-]
+threads = [threading.Thread(target=worker, args=(seed,)) for seed in range(4)]
+for thread in threads:
+    thread.start()
+for thread in threads:
+    thread.join()
+
+expected = random.Random(2)
+assert results[2] == [expected.random() for _ in range(3)]  # reproducible per thread
+assert results[0] != results[1]
+
+secure = random.SystemRandom()  # O(1)
+assert 0.0 <= secure.random() < 1.0  # one os.urandom() call
+try:
+    secure.getstate()
+except NotImplementedError:
+    pass
+else:
+    raise AssertionError('SystemRandom has no state to return')
 ```
+
+## Common Patterns
+
+### Reservoir Sampling
+
+`sample()` needs a sequence. To pick k items from a stream of unknown length without holding it,
+keep a k-item reservoir and draw once per later item.
+
+```python
+import random
+
+def reservoir_sample(iterable, k, rng=random):
+    reservoir = []
+    for index, item in enumerate(iterable):
+        if index < k:
+            reservoir.append(item)
+        else:
+            slot = rng.randrange(index + 1)  # O(1) expected
+            if slot < k:
+                reservoir[slot] = item
+    return reservoir
+
+picked = reservoir_sample(iter(range(100_000)), 10)  # O(n) expected time, O(k) space
+assert len(picked) == 10 and len(set(picked)) == 10
+```
+
+### Monte Carlo Estimation
+
+```python
+import math
+import random
+
+def estimate_pi(samples, rng):
+    inside = 0
+    for _ in range(samples):  # O(samples)
+        x, y = rng.random(), rng.random()  # O(1) each
+        if x * x + y * y <= 1.0:
+            inside += 1
+    return 4 * inside / samples
+
+assert abs(estimate_pi(100_000, random.Random(1)) - math.pi) < 0.05
+```
+
+## Performance Best Practices
+
+✅ **Do**:
+
+- Pass `cum_weights=` when the same weights serve many `choices()` calls, so the O(n)
+  accumulation happens once
+- Pass a `range` rather than a list of integers to `choice()` or `sample()`: they cost the same
+  on either, and the list costs O(n) to build
+- Give each thread or task its own seeded `random.Random()` for a reproducible stream
+- Use `secrets` or `SystemRandom` where values must be unpredictable
+
+❌ **Avoid**:
+
+- `random.choices(population, weights)[0]` in a loop over the same weights - each call
+  re-accumulates all n of them
+- Converting a large set to a list just to draw a few items repeatedly - convert once and keep it
+- Sharing `gauss()` between threads without a lock - two callers can be handed the same spare
+- Seeding from a large string or bytes object in a hot path - the cost follows its length
+- The module functions for security tokens - the Mersenne Twister is predictable from its output
 
 ## Version Notes
 
-- **Python 2.x and 3.x**: Core functions available in all versions
 - **Python 3.6+**: `random.choices()` added
 - **Python 3.9+**: `random.randbytes()` added, and `random.sample()` gained `counts`
 - **Python 3.11+**: `random.sample()` rejects a set; convert it to a sequence first
 - **Python 3.12+**: `random.binomialvariate()` added
-- **Different versions**: Some algorithms (e.g., `randrange`) have changed for quality, so sequences may differ
+- **Python 3.13+**: `python -m random` command line, through `random.main()`
 
 ## Related Modules
 
-- **[secrets](secrets.md)** - Cryptographically secure random numbers
-- **[statistics](statistics.md)** - Statistical functions
-
-## Best Practices
-
-✅ **Do**:
-
-- Use `random.seed()` for reproducible randomness in tests
-- Use `random.choices()` for weighted selection
-- Use each thread's own `random.Random()` instance
-- Use `secrets` for cryptographic randomness
-- Cache seed for reproducibility
-
-❌ **Avoid**:
-
-- Assuming `random()` is cryptographically secure (use `secrets` instead)
-- Sharing RNG between threads (create separate instances)
-- Re-seeding frequently (defeats reproducibility)
-- Shuffling huge lists if you can iterate instead
-- Forgetting that `shuffle()` is O(n) (can be slow for large lists)
+- **[secrets](secrets.md)** - `SystemRandom` behind token helpers, for values that must be
+  unpredictable
+- **[statistics](statistics.md)** - summarising the values drawn here
+- **[bisect](bisect.md)** - the O(log n) search `choices()` runs per weighted draw
+- **[itertools](itertools.md)** - `accumulate()` to prepare `cum_weights=` once
