@@ -388,9 +388,10 @@ Things worth knowing before you rely on a test:
   contrasts two spellings, add a per-file ignore with the reason and assert the
   two forms are actually different objects.
 
-Test files: `tests/test_<module>_complexity.py` for a module's table,
-`tests/test_builtin_claims.py` and `tests/test_stdlib_claims.py` for kind A,
-`tests/test_complexity_caveats.py` for claims that were wrong once already.
+Test files: `tests/test_<module>_complexity.py` for a stdlib module's table
+and its kind-A claims, `tests/test_builtin_claims.py` for kind-A claims on
+builtin pages, `tests/test_complexity_caveats.py` for claims that were wrong
+once already.
 
 ### Fixing Issues
 1. Identify the problem

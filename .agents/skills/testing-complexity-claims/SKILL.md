@@ -137,9 +137,10 @@ by x8 deep against bushy; a one-character CSV row costs 923x more against a
 10,000-field header than a 10-field one. Each of those gaps is a size variable
 the row was missing.
 
-Place broadly shared prose-claim tests in `tests/test_builtin_claims.py` or
-`tests/test_stdlib_claims.py`, organized by page/module. If the module already
-has a cohesive test file, keep its claims there.
+Place a stdlib page's prose-claim tests in its `tests/test_<module>_complexity.py`,
+creating the file if it does not exist. Prose claims on builtin pages go in
+`tests/test_builtin_claims.py`, organized by page, unless the builtin already
+has a cohesive test file.
 
 ### B. Restatement of the page's table
 

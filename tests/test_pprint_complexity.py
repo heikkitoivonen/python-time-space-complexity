@@ -56,7 +56,9 @@ Measurement scope:
 Not settled here:
 
 * `PrettyPrinter()` is O(1) by source: the constructor validates and stores
-  its arguments (Lib/pprint.py, 3.10 to 3.14) and formats nothing.
+  its arguments (Lib/pprint.py, 3.10 to 3.14) and formats nothing. The
+  timing above compares it with formatting at one size; it does not vary
+  the arguments.
 * That each sort is O(k log k) is `sorted()`'s bound; the tests count how many
   sorts happen, not the comparisons within one.
 * Width, indent, `compact` and `underscore_numbers` are held at their defaults
@@ -436,6 +438,17 @@ class TestPrettyPrinter:
         assert compact.count("\n") == 2
         assert pprint.PrettyPrinter(underscore_numbers=True).pformat(10**9) == "1_000_000_000"
         assert pprint.PrettyPrinter(indent=4, width=5).pformat([1, 2]) == "[   1,\n    2]"
+
+    @pytest.mark.timing
+    def test_constructing_a_printer_is_trivial(self) -> None:
+        printer = best_ns(lambda: pprint.PrettyPrinter(indent=4, width=100))
+        data = {f"k{i}": i for i in range(2_000)}
+        formatting = best_ns(lambda: pprint.pformat(data))
+
+        assert printer * 100 < formatting, (
+            f"the constructor stores settings, it does no formatting: "
+            f"construct={printer:.0f}ns format={formatting:.0f}ns"
+        )
 
 
 def _blocks() -> list[tuple[int, str]]:

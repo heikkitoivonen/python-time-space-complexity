@@ -32,8 +32,12 @@ Measurement scope:
   transaction and `COMMIT` inside one. Setting `isolation_level = None`, and
   `autocommit = True` on 3.12+, closes an open transaction with a traced
   `COMMIT`. `executescript()` issues `COMMIT` for an open transaction before
-  its own statement. The durability cost of a commit is measured in
-  tests/test_stdlib_claims.py on a file database.
+  its own statement. 100 inserts into a file database under tmp_path, with
+  the default journal mode and synchronous setting, cost more than 10x with
+  a commit per row as with one commit for the batch (about 400x measured at
+  300 rows). WAL and `synchronous=OFF` are not measured, and the ratio
+  assumes tmp_path is disk-backed: on a memory-backed filesystem a sync
+  costs next to nothing.
 * Fetching: a fixed `SELECT x FROM t WHERE x = 0` fetch runs more than 50x the
   VM steps at 10,000 rows as at 100, for every fetch form and for a fixed-SQL
   script. One-column TEXT and BLOB rows of 1,000 and 1,000,000 bytes retain
@@ -570,6 +574,31 @@ class TestTransactions:
         assert rows.execute("SELECT count(*) FROM t WHERE id = 99998").fetchone() == (0,)
 
         assert rows.execute("SELECT 1").fetchone() == (1,)
+
+    @pytest.mark.timing
+    def test_one_commit_beats_one_commit_per_row(self, tmp_path: pathlib.Path) -> None:
+        def run(commit_each: bool, attempt: int) -> float:
+            path = tmp_path / f"{commit_each}-{attempt}.db"
+            connection = sqlite3.connect(path)
+            connection.execute("CREATE TABLE t (a)")
+            connection.commit()
+            start = time.perf_counter()
+            for value in range(100):
+                connection.execute("INSERT INTO t VALUES (?)", (value,))
+                if commit_each:
+                    connection.commit()
+            connection.commit()
+            elapsed = time.perf_counter() - start
+            connection.close()
+            return elapsed
+
+        batched = min(run(False, attempt) for attempt in range(3))
+        per_row = min(run(True, attempt) for attempt in range(3))
+
+        assert per_row > batched * 10, (
+            f"a commit per row should wait for the disk 100 times: "
+            f"batched={batched:.2e}s per_row={per_row:.2e}s"
+        )
 
 
 class TestConnectionShortcuts:

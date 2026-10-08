@@ -16,6 +16,8 @@ Measurement scope:
   peak more than 10x above 20,000 flat ones, which is the d term.
   `ParseFile()` over 200,000 elements peaks under 100 KB. A parser given
   `isfinal=True` raises `ExpatError` ("parsing finished") on the next call.
+* `StartElementHandler` fires for each element in document order, and one
+  `Parse()` of 20,000 empty elements takes more than 5x one of 1,000.
 * `StartElementHandler` receives a new dict per element, a flat list with
   `ordered_attributes`, and no DTD default with `specified_attributes`.
   `CharacterDataHandler` receives five pieces for one run split at newlines
@@ -61,8 +63,7 @@ Measurement scope:
 
 Not settled here:
 
-* `Parse()`'s amortized O(c) time is Expat's single pass, measured in
-  tests/test_stdlib_claims.py (`TestPyexpatStreams`) for element count only;
+* `Parse()`'s amortized O(c) time is measured for element count only;
   documents of long text or many attributes are not varied, and internal
   entity expansion is priced by definition. The billion-laughs and
   allocation-tracker limits are Expat's and vary with the linked version.
@@ -193,6 +194,31 @@ class TestParseHoldsThePieceAndTheOpenElements:
         with pytest.raises(pyexpat.ExpatError) as caught:
             parser.Parse("<r/>", True)
         assert errors.messages[caught.value.code] == "parsing finished"
+
+
+class TestHandlersFireInDocumentOrder:
+    """A handler is called once per element in document order, and one
+    `Parse()` takes time that grows with the element count."""
+
+    def test_handlers_fire_in_document_order(self) -> None:
+        seen: list[str] = []
+        parser = pyexpat.ParserCreate()
+        parser.StartElementHandler = lambda name, attrs: seen.append(name)
+        parser.Parse("<root><a/><b/></root>", True)
+
+        assert seen == ["root", "a", "b"]
+
+    @pytest.mark.timing
+    def test_parsing_scales_with_the_input(self) -> None:
+        def parse(count: int) -> None:
+            parser = pyexpat.ParserCreate()
+            parser.StartElementHandler = lambda name, attrs: None
+            parser.Parse("<root>" + "<i/>" * count + "</root>", True)
+
+        small = best_ns(lambda: parse(1_000))
+        large = best_ns(lambda: parse(20_000))
+
+        assert large > small * 5, f"O(n) in input size: {small:.0f}ns vs {large:.0f}ns"
 
 
 class TestHandlerArguments:

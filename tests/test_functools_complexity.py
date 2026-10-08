@@ -71,8 +71,8 @@ Measurement scope:
 * `cmp_to_key`: wrapping an element calls the comparison zero times, one
   comparison of two wrapped elements calls it exactly once; ten elements
   produce more comparisons than elements, where `key=` runs exactly once per
-  element (tests/test_stdlib_claims.py holds the 200-element
-  version). `total_ordering` is counted at one call for `<`, `<=` and `>=`
+  element, and 200 shuffled elements produce more than 600 comparisons
+  against exactly 200 `key=` calls. `total_ordering` is counted at one call for `<`, `<=` and `>=`
   when `__lt__` settles them, two for `>` when it does not, and `ValueError`
   without a root.
 * `singledispatch`: `_find_impl` is counted at one call for three dispatches
@@ -138,6 +138,7 @@ import gc
 import math
 import operator
 import pathlib
+import random
 import re
 import subprocess
 import sys
@@ -1226,6 +1227,28 @@ class TestCmpToKeyAndTotalOrdering:
         assert sorted(data, key=key) == list(range(10))
         assert len(comparisons) > len(data)
         assert len(key_calls) == len(data)
+
+    def test_200_elements_take_over_600_comparisons_and_200_key_calls(self) -> None:
+        data = list(range(200))
+        random.Random(0).shuffle(data)
+        comparisons = {"n": 0}
+        key_calls = {"n": 0}
+
+        def compare(left: int, right: int) -> int:
+            comparisons["n"] += 1
+            return (left > right) - (left < right)
+
+        def key(value: int) -> int:
+            key_calls["n"] += 1
+            return value
+
+        sorted(data, key=cmp_to_key(compare))
+        sorted(data, key=key)
+
+        assert key_calls["n"] == 200, "key= is called exactly once per element"
+        assert comparisons["n"] > 200 * 3, (
+            f"compare() runs per comparison: {comparisons['n']} calls for n=200"
+        )
 
     @staticmethod
     def _counted_class() -> tuple[type, list[str]]:

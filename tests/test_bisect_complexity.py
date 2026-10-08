@@ -44,6 +44,8 @@ Measurement scope:
   an equal run and by where an equal-keyed record lands.
 * Unsorted input returns a position without raising; on [3, 1, 4, 1, 5]
   inserting 2 there leaves the list unsorted.
+* Building a 50,000-item key list costs more than 100x the one search it
+  precedes, the fastest of three runs against the fastest of seven.
 * Every fenced Python block runs in its own subprocess, and a mutated
   assertion in one of them is asserted to fail.
 
@@ -436,6 +438,26 @@ class TestUnsortedInput:
         result = unsorted[:position] + [2] + unsorted[position:]
 
         assert result != sorted(result)
+
+
+class TestRebuildingKeysDwarfsTheSearch:
+    """Building a key list for a single search is O(n) for an O(log n)
+    answer: at 50,000 items the list comprehension is asserted over 100x the
+    search it precedes."""
+
+    @pytest.mark.timing
+    def test_building_the_keys_dwarfs_the_search(self) -> None:
+        size = 50_000
+        data = [(str(i), i) for i in range(size)]
+        keys = [item[1] for item in data]
+
+        rebuild = best_ns(lambda: [item[1] for item in data], repeats=3)
+        search = best_ns(lambda: bisect.bisect_left(keys, size // 2))
+
+        assert rebuild > search * 100, (
+            f"the O(n) rebuild dwarfs the O(log n) search it precedes: "
+            f"rebuild={rebuild:.0f}ns search={search:.0f}ns"
+        )
 
 
 def _blocks() -> list[tuple[int, str]]:
