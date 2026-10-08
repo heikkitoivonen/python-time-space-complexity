@@ -7,9 +7,10 @@ implementations are tested on every platform: the real module, and
 in for `posix`, so that every `from posix import ...` fails and every Python
 fallback is bound - on Windows that is simply what `posixpath` is. Most rows
 are settled by observation: identity, and call counters on the `os` functions
-posixpath and genericpath look up at call time. Timing tests settle the O(L)
-rows, the quadratic string work in `realpath()`, `expandvars()` on either
-side of its fix, and `join()` of bytes.
+posixpath and genericpath look up at call time. The growing prefixes passed
+to `os.lstat()` settle the quadratic string work in `realpath()`. Timing
+tests settle the O(L) rows, `expandvars()` on either side of its fix, and
+`join()` of bytes.
 
 Measurement scope:
 
@@ -62,10 +63,12 @@ Measurement scope:
   `strict=ALLOW_MISSING` returns a path with a missing tail and raises
   `NotADirectoryError` for a component below a regular file.
 * `realpath()` string work: with `os.lstat` replaced by a stub reporting a
-  directory, 10x the components (100, 1,000 and 10,000 of 256 characters
-  each) costs over 30x per step, where linear predicts 10x and quadratic
-  100x. Component width is held fixed; symlinks and filesystem costs are
-  excluded from this measurement.
+  directory, paths of k = 100, 1,000 and 10,000 components of 256 characters
+  produce prefixes of exactly 257, 514, ..., 257k characters. Their total
+  is 257k(k + 1)/2: quadratic text built for filesystem queries, observed
+  without timing. Lib/posixpath.py builds each prefix by concatenating str
+  objects.
+  Component width is held fixed; symlinks and filesystem costs are excluded.
 * `realpath()` space: a chain of 160 symlinks in a directory four
   150-character names below the temporary directory (under macOS's
   1,024-byte PATH_MAX) peaks at over 2.5x the traced allocation of a chain
@@ -565,23 +568,24 @@ class TestRealpathStringWork:
     """Each component builds the resolved path so far as a new string, so a
     path of very many components is quadratic in its string work."""
 
-    @pytest.mark.timing
-    def test_ten_times_the_components_costs_far_more_than_ten_times(
+    def test_resolving_components_builds_quadratic_prefix_text(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         directory = os.stat_result((stat.S_IFDIR | 0o755,) + (0,) * 9)
-        monkeypatch.setattr(os, "lstat", lambda path: directory)
-        durations = []
-        for components in (100, 1_000, 10_000):
-            path = "/" + "/".join(["x" * 256] * components)
-            assert posixpath.realpath(path) == path  # warm before measuring
-            durations.append(best_ns(lambda path=path: posixpath.realpath(path)))
+        prefix_lengths: list[int] = []
 
-        ratios = [later / earlier for earlier, later in zip(durations, durations[1:], strict=False)]
-        assert all(ratio > 30 for ratio in ratios), (
-            f"10x components cost {[f'x{r:.1f}' for r in ratios]} ({durations} ns); "
-            "linear gives x10, quadratic x100"
-        )
+        def lstat(path: str) -> os.stat_result:
+            prefix_lengths.append(len(path))
+            return directory
+
+        monkeypatch.setattr(os, "lstat", lstat)
+        for components in (100, 1_000, 10_000):
+            prefix_lengths.clear()
+            path = "/" + "/".join(["x" * 256] * components)
+            assert posixpath.realpath(path) == path
+
+            assert prefix_lengths == list(range(257, 257 * (components + 1), 257))
+            assert sum(prefix_lengths) == 257 * components * (components + 1) // 2
 
 
 @POSIX

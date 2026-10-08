@@ -17,7 +17,10 @@ Measurement scope:
   for one with no line breaks, and the whole upload is in the part's file;
   on 3.12.15 both peaks are under 150 KB. Building a
   multipart form of 1,000, 4,000 and 16,000 one-character fields costs under
-  8x per 4x step, in a timing test, against 16x for a quadratic.
+  8x per 4x step, in a timing test, against 16x for a quadratic. Timing
+  samples collect existing garbage before the clock starts and disable
+  cyclic collection during the call, so a full collection of the test
+  process's heap is outside the measurement; the collector state is restored.
 * Construction reads the whole stream: the stream is at its end afterwards.
   `FieldStorage` parses a POST's query string with its body, URL-encoded or
   multipart, and `parse()` with a URL-encoded body.
@@ -107,13 +110,20 @@ REMOVED = sys.version_info >= (3, 13)
 
 
 def best_ns(func: Callable[[], Any], repeats: int = 5) -> float:
-    """Fastest of `repeats` runs, in nanoseconds."""
+    """Fastest of `repeats` runs, in nanoseconds, excluding cyclic collection."""
     best: float | None = None
-    for _ in range(repeats):
-        start = time.perf_counter_ns()
-        func()
-        elapsed = float(time.perf_counter_ns() - start)
-        best = elapsed if best is None else min(best, elapsed)
+    was_enabled = gc.isenabled()
+    gc.disable()
+    try:
+        for _ in range(repeats):
+            gc.collect()
+            start = time.perf_counter_ns()
+            func()
+            elapsed = float(time.perf_counter_ns() - start)
+            best = elapsed if best is None else min(best, elapsed)
+    finally:
+        if was_enabled:
+            gc.enable()
     assert best is not None
     return best
 
