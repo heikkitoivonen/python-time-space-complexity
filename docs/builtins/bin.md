@@ -1,23 +1,27 @@
 # bin() Function Complexity
 
 The `bin()` function returns the binary representation of an integer.
+It writes one character per binary digit, so its time and the size of the
+string it returns are both linear in the integer's number of binary digits.
+
+`n` is the integer's absolute value and `b` is the number of binary digits in
+the result: `n.bit_length()`, about log₂ n, or 1 for zero.
 
 ## Complexity Analysis
 
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
-| Convert integer | O(log n) | O(log n) | n = integer value; log n = number of bits |
+| Convert integer | O(log n) | O(log n) | O(b): one character per binary digit |
 | Negative integer | O(log n) | O(log n) | Adds '-0b' prefix |
-| Large integer | O(b) | O(b) | b = number of bits = log₂(n) |
-
-*Note: The complexity is O(log n) where n is the numeric value, which equals the number of bits needed to represent the number.*
+| Large integer | O(b) | O(b) | Not limited by `sys.set_int_max_str_digits()`, which exempts power-of-two bases |
+| Object with `__index__` | `__index__` + O(b) | `__index__` + O(b) | Any other non-int, such as a float, raises `TypeError` |
 
 ## Basic Usage
 
 ### Decimal to Binary
 
 ```python
-# O(log n) - where n = integer value
+# O(log n)
 bin(0)      # '0b0'
 bin(1)      # '0b1'
 bin(2)      # '0b10'
@@ -44,7 +48,7 @@ bin(2**32)    # '0b100000000000000000000000000000000'
 
 # Arbitrary precision
 big = 2**100
-bin(big)  # O(100) - 100+ binary digits
+bin(big)  # O(b) - b = 101 binary digits
 ```
 
 ## Complexity Details
@@ -55,14 +59,12 @@ Conversion time grows with the number of bits:
 
 ```python
 # Small number - few bits
-bin(3)      # '0b11' - 2 bits, O(log 3) = O(2)
+bin(3)      # '0b11' - b = 2
 
 # Large number - many bits
-bin(2**64 - 1)  # 64 bits
-                # O(log(2**64)) = O(64)
+bin(2**64 - 1)  # b = 64
 
-# Relationship: binary digits = log₂(n)
-import math
+# Relationship: binary digits = bit_length()
 value = 255
 digits = len(bin(value)) - 2  # Subtract '0b'
 assert digits == value.bit_length()
@@ -90,34 +92,34 @@ print(has_bit_set(value, 1))  # True (bit 1)
 
 ```python
 # O(log n) - show results clearly
-a = 0b1100
-b = 0b1010
+x = 0b1100
+y = 0b1010
 
-print(f"a = {bin(a)}")           # a = 0b1100
-print(f"b = {bin(b)}")           # b = 0b1010
-print(f"a & b = {bin(a & b)}")   # a & b = 0b1000
-print(f"a | b = {bin(a | b)}")   # a | b = 0b1110
-print(f"a ^ b = {bin(a ^ b)}")   # a ^ b = 0b0110
-print(f"~a = {bin(~a)}")         # ~a = -0b1101
+print(f"x = {bin(x)}")           # x = 0b1100
+print(f"y = {bin(y)}")           # y = 0b1010
+print(f"x & y = {bin(x & y)}")   # x & y = 0b1000
+print(f"x | y = {bin(x | y)}")   # x | y = 0b1110
+print(f"x ^ y = {bin(x ^ y)}")   # x ^ y = 0b110
+print(f"~x = {bin(~x)}")         # ~x = -0b1101
 ```
 
 ### Binary String to Integer
 
 ```python
-# O(log n) - parse binary string
+# Linear in the string's length - parse binary string
 binary_str = "0b1010"
-value = int(binary_str, 2)  # O(log n)
+value = int(binary_str, 2)  # O(len(binary_str))
 assert value == 10
 
 # Without prefix
-value = int("1010", 2)  # Also O(log n)
+value = int("1010", 2)  # Also linear in the length
 assert value == 10
 ```
 
 ## Bit Manipulation Operations
 
 ```python
-# All O(1) in Python (fixed size, usually)
+# bin() shows the result of each bitwise operator
 x = 0b1100  # 12
 y = 0b1010  # 10
 
@@ -151,28 +153,28 @@ print(bin(result))  # '0b110'
 ### Batch Conversion
 
 ```python
-# O(n * log m) - n numbers, each ~m value
+# O(k * b) - k numbers of up to b bits each
 numbers = list(range(100))
 binary_values = [bin(n) for n in numbers]
-# O(100 * log 100)
+# k = 100, b = 7
 
 # vs direct method
 binary_values = [f"{n:b}" for n in numbers]
-# Similar, might be slightly faster with format
+# Same digits, without the '0b' prefix
 ```
 
 ### Counting Set Bits
 
 ```python
-# O(log n) - using bin()
+# O(b) - builds a string of b + 2 or more characters, then scans it
 def count_bits_bin(value):
     return bin(value).count('1')
 
-# Better - O(1) with bit_count()
+# Better - also O(b), but builds no string
 def count_bits_optimal(value):
-    return value.bit_count()  # Python 3.10+
+    return value.bit_count()
 
-# Both give same result, bit_count() is faster
+# Both give the same result
 assert count_bits_bin(0b101010) == count_bits_optimal(0b101010)
 ```
 
@@ -246,7 +248,12 @@ print(bin(my_set))  # '0b100000'
 - Using `bin()` for very frequent operations (cache result)
 - Assuming binary operations are faster than regular ops
 - Building binary from decimal without understanding conversion
-- Forgetting the '0b' prefix when parsing with `int()`
+- Parsing `bin()` output with plain `int(s)`, which rejects the '0b' prefix; use `int(s, 2)` or `int(s, 0)`
+
+## Version Notes
+
+- **Python 3.10+**: Added `int.bit_count()` for bit counting
+- **All Python 3**: `bin(x)` returns a string with a '0b' prefix, '-0b' for a negative number, and accepts any object with `__index__`
 
 ## Related Functions
 
@@ -255,10 +262,3 @@ print(bin(my_set))  # '0b100000'
 - **[int().bit_length()](int.md)** - Number of bits needed
 - **[int().bit_count()](int.md)** - Count set bits (Python 3.10+)
 - **[format()](format.md)** - Format with specifications
-
-## Version Notes
-
-- **Python 2.x**: Works with int and long
-- **Python 3.x**: Works with arbitrary precision integers
-- **Python 3.10+**: Added `int.bit_count()` for bit counting
-- **All versions**: Returns string with '0b' prefix

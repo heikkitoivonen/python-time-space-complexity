@@ -1,28 +1,30 @@
 ---
-source_sha: 1603bba545d860caf2e3fa43aa74bee5a44ca2d8e4a601ff3b157835354865ba
+source_sha: f16060676aa9f2d794dfc1aee469b127e4b49ebc0c00e56f8cec60ab0149c663
 translated: machine
 ---
 
 # bin() 函数的复杂度
 
 `bin()` 函数返回整数的二进制表示形式。
+它为每个二进制位写出一个字符，因此其耗时和所返回字符串的大小都与该整数的位数成线性关系。
+
+`n` 是该整数的绝对值，`b` 是结果中的二进制位数：即 `n.bit_length()`，约为 log₂ n；对零而言为 1。
 
 ## 复杂度分析
 
 | 情况 | 时间 | 空间 | 备注 |
 |------|------|-------|-------|
-| 转换整数 | O(log n) | O(log n) | n = 整数值；log n = 位数 |
+| 转换整数 | O(log n) | O(log n) | O(b)：每个二进制位一个字符 |
 | 负整数 | O(log n) | O(log n) | 添加 '-0b' 前缀 |
-| 大整数 | O(b) | O(b) | b = 位数 = log₂(n) |
-
-*注：复杂度为 O(log n)，其中 n 是数值大小，它等于表示该数所需的位数。*
+| 大整数 | O(b) | O(b) | 不受 `sys.set_int_max_str_digits()` 限制，该限制不适用于 2 的幂次进制 |
+| 带 `__index__` 的对象 | `__index__` + O(b) | `__index__` + O(b) | 其他非整数（如浮点数）会引发 `TypeError` |
 
 ## 基本用法
 
 ### 十进制转二进制
 
 ```python
-# O(log n) - where n = integer value
+# O(log n)
 bin(0)      # '0b0'
 bin(1)      # '0b1'
 bin(2)      # '0b10'
@@ -49,7 +51,7 @@ bin(2**32)    # '0b100000000000000000000000000000000'
 
 # Arbitrary precision
 big = 2**100
-bin(big)  # O(100) - 100+ binary digits
+bin(big)  # O(b) - b = 101 binary digits
 ```
 
 ## 复杂度细节
@@ -60,14 +62,12 @@ bin(big)  # O(100) - 100+ binary digits
 
 ```python
 # Small number - few bits
-bin(3)      # '0b11' - 2 bits, O(log 3) = O(2)
+bin(3)      # '0b11' - b = 2
 
 # Large number - many bits
-bin(2**64 - 1)  # 64 bits
-                # O(log(2**64)) = O(64)
+bin(2**64 - 1)  # b = 64
 
-# Relationship: binary digits = log₂(n)
-import math
+# Relationship: binary digits = bit_length()
 value = 255
 digits = len(bin(value)) - 2  # Subtract '0b'
 assert digits == value.bit_length()
@@ -95,34 +95,34 @@ print(has_bit_set(value, 1))  # True (bit 1)
 
 ```python
 # O(log n) - show results clearly
-a = 0b1100
-b = 0b1010
+x = 0b1100
+y = 0b1010
 
-print(f"a = {bin(a)}")           # a = 0b1100
-print(f"b = {bin(b)}")           # b = 0b1010
-print(f"a & b = {bin(a & b)}")   # a & b = 0b1000
-print(f"a | b = {bin(a | b)}")   # a | b = 0b1110
-print(f"a ^ b = {bin(a ^ b)}")   # a ^ b = 0b0110
-print(f"~a = {bin(~a)}")         # ~a = -0b1101
+print(f"x = {bin(x)}")           # x = 0b1100
+print(f"y = {bin(y)}")           # y = 0b1010
+print(f"x & y = {bin(x & y)}")   # x & y = 0b1000
+print(f"x | y = {bin(x | y)}")   # x | y = 0b1110
+print(f"x ^ y = {bin(x ^ y)}")   # x ^ y = 0b110
+print(f"~x = {bin(~x)}")         # ~x = -0b1101
 ```
 
 ### 二进制字符串转整数
 
 ```python
-# O(log n) - parse binary string
+# Linear in the string's length - parse binary string
 binary_str = "0b1010"
-value = int(binary_str, 2)  # O(log n)
+value = int(binary_str, 2)  # O(len(binary_str))
 assert value == 10
 
 # Without prefix
-value = int("1010", 2)  # Also O(log n)
+value = int("1010", 2)  # Also linear in the length
 assert value == 10
 ```
 
 ## 位操作运算
 
 ```python
-# All O(1) in Python (fixed size, usually)
+# bin() shows the result of each bitwise operator
 x = 0b1100  # 12
 y = 0b1010  # 10
 
@@ -156,28 +156,28 @@ print(bin(result))  # '0b110'
 ### 批量转换
 
 ```python
-# O(n * log m) - n numbers, each ~m value
+# O(k * b) - k numbers of up to b bits each
 numbers = list(range(100))
 binary_values = [bin(n) for n in numbers]
-# O(100 * log 100)
+# k = 100, b = 7
 
 # vs direct method
 binary_values = [f"{n:b}" for n in numbers]
-# Similar, might be slightly faster with format
+# Same digits, without the '0b' prefix
 ```
 
 ### 统计置位数
 
 ```python
-# O(log n) - using bin()
+# O(b) - builds a string of b + 2 or more characters, then scans it
 def count_bits_bin(value):
     return bin(value).count('1')
 
-# Better - O(1) with bit_count()
+# Better - also O(b), but builds no string
 def count_bits_optimal(value):
-    return value.bit_count()  # Python 3.10+
+    return value.bit_count()
 
-# Both give same result, bit_count() is faster
+# Both give the same result
 assert count_bits_bin(0b101010) == count_bits_optimal(0b101010)
 ```
 
@@ -251,7 +251,12 @@ print(bin(my_set))  # '0b100000'
 - 极高频操作中使用 `bin()`（应缓存结果）
 - 想当然地认为二进制操作比普通操作更快
 - 不理解转换原理就用十进制拼二进制
-- 用 `int()` 解析时忘记 '0b' 前缀
+- 用普通的 `int(s)` 解析 `bin()` 的输出，它不接受 '0b' 前缀；应使用 `int(s, 2)` 或 `int(s, 0)`
+
+## 版本说明
+
+- **Python 3.10+**：新增 `int.bit_count()` 用于位计数
+- **所有 Python 3 版本**：`bin(x)` 返回带 '0b' 前缀的字符串，负数则为 '-0b'，并接受任何带 `__index__` 的对象
 
 ## 相关函数
 
@@ -260,10 +265,3 @@ print(bin(my_set))  # '0b100000'
 - **[int().bit_length()](int.md)** - 所需的位数
 - **[int().bit_count()](int.md)** - 统计置位数（Python 3.10+）
 - **[format()](format.md)** - 按规格格式化
-
-## 版本说明
-
-- **Python 2.x**：适用于 int 和 long
-- **Python 3.x**：适用于任意精度整数
-- **Python 3.10+**：新增 `int.bit_count()` 用于位计数
-- **所有版本**：返回带 '0b' 前缀的字符串
