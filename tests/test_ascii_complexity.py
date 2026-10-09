@@ -28,7 +28,7 @@ quadratic one x10,000. Not varied: the mix of escape widths within one string,
 and container nesting depth, whose cost is repr()'s and belongs to the
 container's page.
 
-The fixed 4/6/10 escape widths are pinned in tests/test_builtin_claims.py.
+The fixed 4/6/10 escape widths are read back off ascii() per escape form.
 """
 
 import pathlib
@@ -105,6 +105,35 @@ class TestStrings:
         text = "".join(map(chr, range(0, 0x110000, 97)))
 
         assert ascii(text).isascii()
+
+
+class TestEscapeWidths:
+    """Unicode string row and Escape Sequences: an escaped character expands to a fixed width -
+    4 for \\xHH, 6 for \\uHHHH, 10 for \\UHHHHHHHH - so ascii() grows its
+    output by a constant per escaped character, not a variable one.
+
+    Widths are read back off ascii() rather than written out as literals."""
+
+    @staticmethod
+    def escape(char: str) -> str:
+        """Return the escape ascii() produces for char, without the quotes."""
+        return ascii(char)[1:-1]
+
+    def test_latin1_escape_is_four_characters(self) -> None:
+        assert self.escape("\xe9") == "\\xe9"
+        assert len(self.escape("\xe9")) == 4
+
+    def test_basic_plane_escape_is_six_characters(self) -> None:
+        assert self.escape("\u0101") == "\\u0101"
+        assert len(self.escape("\u0101")) == 6
+
+    def test_astral_escape_is_ten_characters(self) -> None:
+        assert self.escape("\U0001f600") == "\\U0001f600"
+        assert len(self.escape("\U0001f600")) == 10
+
+    def test_output_length_is_the_escape_width_times_the_repeat(self) -> None:
+        # The two quotes are the only part that does not repeat.
+        assert len(ascii("\xe9" * 100)) == 100 * 4 + 2
 
 
 class TestContainers:

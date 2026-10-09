@@ -16,8 +16,9 @@ Every claim on the page is settled by counting, not timing:
   exhausted next()) on an empty iterable;
 * a counting `__bool__` records one truth test per item looked at;
 * the rest of a shared iterator is still there after any() returns;
-* the page's short-circuit examples are checked by call counts: the generator
-  stops at the first truthy item, a list comprehension makes every call;
+* the page's short-circuit and validation examples are checked by call
+  counts: the generator stops at the first truthy item, a list comprehension
+  makes every call;
 * the examples' stated positions - 102 items of range(10**9), 10**5 + 2 of
   range(10**6) - are read back off the iterator.
 
@@ -227,6 +228,49 @@ class TestShortCircuitExamples:
         called.clear()
         assert any([f() for f in checks]) is True  # noqa: C419 - the eager list is the subject
         assert called == ["expensive1", "expensive2", "expensive3"]
+
+
+class TestValidationExample:
+    """Validation with Early Exit: has_invalid_item() checks k items, k = the
+    position of the first item that fails, or all n items when none does.
+    Counted by predicate calls, so no timing tolerance is involved.
+
+    The predicate here is isinstance, whose own cost is not varied."""
+
+    @staticmethod
+    def scan(items: list[object]) -> tuple[bool, int]:
+        """Return has_invalid_item(items) and how many items it looked at."""
+        checked = 0
+
+        def not_an_int(item: object) -> bool:
+            nonlocal checked
+            checked += 1
+            return not isinstance(item, int)
+
+        return any(not_an_int(item) for item in items), checked
+
+    def test_stops_at_the_first_non_int(self) -> None:
+        found, checked = self.scan([1, 2, "three", 4, 5])
+        assert found is True
+        assert checked == 3  # k, the position of "three", not the 5 items
+
+    def test_checks_every_item_when_all_are_ints(self) -> None:
+        found, checked = self.scan([1, 2, 3, 4, 5])
+        assert found is False
+        assert checked == 5
+
+    def test_a_list_comprehension_gives_up_the_early_exit(self) -> None:
+        checked = 0
+
+        def not_an_int(item: object) -> bool:
+            nonlocal checked
+            checked += 1
+            return not isinstance(item, int)
+
+        items = [1, 2, "three", 4, 5]
+        # The eager list is the point: it runs the predicate before any() sees it.
+        assert any([not_an_int(item) for item in items]) is True  # noqa: C419
+        assert checked == 5
 
 
 class TestStatedExampleValues:
