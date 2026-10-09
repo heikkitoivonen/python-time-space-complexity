@@ -1,630 +1,251 @@
 # delattr() Function Complexity
 
-The `delattr()` function removes a named attribute from an object. It's the programmatic way to delete object attributes dynamically.
+The `delattr()` function removes a named attribute from an object. `delattr(obj, "name")` is
+exactly `del obj.name`: both call `type(obj).__delattr__`, so a property deleter, a descriptor's
+`__delete__` or a class's own `__delattr__` runs in the same way.
 
-## Complexity Analysis
+`d` is the classes in `type(obj).__mro__`, `s` is the subclasses of a class, direct and indirect,
+and `k` is the cost of a user-defined `__delattr__` or `__delete__`. Attribute names are treated
+as hashing and comparing in O(1). The bounds assume cached type lookups; a type
+attribute cache miss adds O(d).
+
+## Complexity Reference
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| Attribute lookup | O(1) avg | O(1) | Find in instance dict |
-| Delete from dict | O(1) avg | O(1) | Hash table deletion |
-| Property deleter call | O(k) | O(1) | k = deleter method complexity |
-| __delattr__ call | O(k) | O(1) | k = custom implementation complexity |
-| Total operation | O(1) avg | O(1) | Hash table deletion for simple attrs |
+| `delattr(obj, name)`, instance attribute | O(1) avg | O(1) | Deletes from the instance's `__dict__` once no data descriptor on the class claims the name |
+| `delattr(obj, name)`, `__slots__` attribute | O(1) | O(1) | Clears the slot |
+| `delattr(obj, name)`, property or descriptor | O(k) | O(k) | Runs the deleter or `__delete__`, not the dict deletion |
+| `delattr(obj, name)`, custom `__delattr__` | O(k) | O(k) | Runs the class's `__delattr__` |
+| `delattr(cls, name)`, class attribute | O(s) | O(1) | Invalidates the attribute cache of the class and of each subclass whose cache is still valid |
+| `delattr(module, name)` | O(1) avg | O(1) | Deletes from the module's `__dict__` |
+| Missing attribute | O(1) avg | O(1) | Raises `AttributeError` |
 
-*Note: Deletion from instance `__dict__` is O(1) average case. Custom `__delattr__` or property deleters may have different complexity.*
+## Instance Attributes
 
-## Basic Usage
-
-### Delete Attribute by Name
-
-```python
-# O(1) - direct attribute deletion
-class MyClass:
-    attr = 42
-
-obj = MyClass()
-
-# Direct deletion - O(1)
-del obj.attr
-
-# Using delattr - O(1)
-delattr(obj, 'attr')
-
-# Both equivalent, delattr is programmatic
-```
-
-### Remove Dynamic Attributes
+Deleting an attribute that lives in the instance's `__dict__` is one hash-table deletion. A class
+attribute is not on the instance, so deleting it through the instance raises:
 
 ```python
-# O(1) - delete programmatically created attributes
 class Config:
-    pass
+    default = 42
 
 config = Config()
+config.host = "localhost"
+config.port = 8000
 
-# Create attributes - O(1)
-setattr(config, 'host', 'localhost')
-setattr(config, 'port', 8000)
+delattr(config, "host")  # O(1) avg
+del config.port  # O(1) avg - the same operation
+assert vars(config) == {}
 
-# Delete attributes - O(1) each
-delattr(config, 'host')  # O(1)
-delattr(config, 'port')  # O(1)
-
-# Check deletion
 try:
-    print(config.host)  # AttributeError - attribute deleted
+    delattr(config, "default")  # lives on the class, not the instance
+except AttributeError as e:
+    assert "default" in str(e)
+else:
+    raise AssertionError("expected AttributeError")
+assert config.default == 42
+```
+
+### `__slots__`
+
+A slot is cleared in place. Deleting a slot that holds no value raises `AttributeError`:
+
+```python
+class Point:
+    __slots__ = ("x", "y")
+
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+p = Point(1, 2)
+delattr(p, "x")  # O(1)
+assert not hasattr(p, "x")
+
+try:
+    delattr(p, "x")
 except AttributeError:
-    print("Attribute deleted successfully")
-```
-
-### Cleanup Pattern
-
-```python
-# O(n) - delete multiple attributes
-class Resource:
-    def __init__(self):
-        self.file_handle = "file"
-        self.connection = "db"
-        self.buffer = []
-    
-    def cleanup(self):
-        """Release resources - O(n)"""
-        attrs_to_remove = ['file_handle', 'connection', 'buffer']
-        
-        for attr in attrs_to_remove:  # O(n)
-            try:
-                delattr(self, attr)  # O(1)
-            except AttributeError:
-                pass  # Already deleted
-
-resource = Resource()
-resource.cleanup()  # O(n)
-```
-
-## Complexity Details
-
-### Direct Deletion from Instance Dictionary
-
-```python
-# O(1) - hash table deletion
-class Simple:
     pass
-
-obj = Simple()
-
-# Add attribute
-obj.x = 1  # O(1) - insert into __dict__
-
-# Delete attribute - O(1)
-delattr(obj, 'x')  # Removes from obj.__dict__
-
-# Python's deletion:
-# 1. Get instance.__dict__ (O(1))
-# 2. Delete key-value pair (O(1) average)
-# Total: O(1)
+else:
+    raise AssertionError("expected AttributeError")
 ```
 
-### Property Deleter Protocol
+## Properties, Descriptors and `__delattr__`
+
+A data descriptor on the class takes priority over the instance's `__dict__`, so `delattr()` costs
+whatever its deleter costs. A property without a deleter raises `AttributeError`:
 
 ```python
-# O(1) - calls property deleter if exists
-class WithProperty:
+class Cached:
     def __init__(self):
-        self._value = 0
-    
+        self._value = 1
+        self.log = []
+
     @property
     def value(self):
         return self._value
-    
-    @value.setter
-    def value(self, val):
-        self._value = val
-    
+
     @value.deleter
     def value(self):
-        print("Deleting value property")
+        self.log.append("deleted")
         del self._value
 
-obj = WithProperty()
-obj.value = 42
+obj = Cached()
+delattr(obj, "value")  # O(k) - runs the deleter
+assert obj.log == ["deleted"]
+assert not hasattr(obj, "_value")
 
-# O(1) - calls value.deleter
-delattr(obj, 'value')  # Prints "Deleting value property"
+
+class ReadOnly:
+    @property
+    def value(self):
+        return 1
+
+try:
+    delattr(ReadOnly(), "value")
+except AttributeError:
+    pass
+else:
+    raise AssertionError("expected AttributeError")
 ```
 
-### Custom __delattr__
+A class that defines `__delattr__` sees every deletion, whether written as `del` or `delattr()`:
 
 ```python
-# O(1) - calls custom implementation
-class TrackedDeletions:
+class Tracked:
     def __init__(self):
-        self._deleted = []
-    
+        object.__setattr__(self, "deleted", [])
+
     def __delattr__(self, name):
-        """Track deletions - O(1)"""
-        deleted = super().__getattribute__('_deleted')
-        deleted.append(name)
-        
+        self.deleted.append(name)
         super().__delattr__(name)
 
-obj = TrackedDeletions()
+obj = Tracked()
 obj.x = 1
 obj.y = 2
-
-# O(1) - calls __delattr__
-delattr(obj, 'x')  # Tracked in _deleted
-delattr(obj, 'y')  # Tracked in _deleted
-
-print(obj._deleted)  # ['x', 'y']
+delattr(obj, "x")  # O(k) - calls Tracked.__delattr__
+del obj.y
+assert obj.deleted == ["x", "y"]
 ```
 
-## Performance Patterns
+## Deleting Class Attributes
 
-### Deletion vs Setting to None
-
-```python
-# Option 1: Delete - O(1)
-obj.attr = 42
-delattr(obj, 'attr')  # O(1) - completely removes
-
-# Option 2: Set to None - O(1)
-obj.attr = 42
-obj.attr = None  # O(1) - keeps attribute, changes value
-
-# Both are O(1), but have different semantics
-# Delete if you want to remove the attribute
-# Set None if you want to indicate "no value"
-
-# Check existence
-if hasattr(obj, 'attr'):  # O(1)
-    print("Has attribute")
-
-# Check for None
-if obj.attr is not None:  # O(1)
-    print("Has non-empty value")
-```
-
-### Batch Deletion
+Python caches attribute lookups per class. Deleting (or setting) an attribute on a class
+invalidates that cache for the class and its subclasses, so the cost grows with the size of the
+class hierarchy below it. Change class attributes at setup time, not in a hot loop:
 
 ```python
-# O(n) - delete multiple attributes
-class Cleanup:
+class Base:
+    flag = True
+
+class Child(Base):
     pass
 
-obj = Cleanup()
-
-# Create attributes - O(n)
-for i in range(1000):
-    setattr(obj, f'attr{i}', i)
-
-# Inefficient deletion
-for i in range(1000):  # O(n)
-    delattr(obj, f'attr{i}')  # O(1) per call
-
-# Better - clear __dict__
-obj.__dict__.clear()  # O(n) - single bulk operation
-
-# Or replace with new object
-obj = Cleanup()  # Start fresh
+assert Child().flag
+delattr(Base, "flag")  # O(s) - s = subclasses of Base
+assert not hasattr(Child(), "flag")
 ```
 
-## Common Use Cases
+## Deleting Many Attributes
 
-### Cleanup After Use
-
-```python
-# O(1) - clean up temporary attributes
-class TemporaryData:
-    def process(self):
-        # Create temporary
-        self.temp_buffer = []  # O(1)
-        self.temp_state = {}   # O(1)
-        
-        # ... do work ...
-        
-        # Cleanup - O(2)
-        delattr(self, 'temp_buffer')  # O(1)
-        delattr(self, 'temp_state')   # O(1)
-
-data = TemporaryData()
-data.process()
-```
-
-### Removing Sensitive Data
+For ordinary instance attributes each `delattr()` call is O(1), so deleting `n` of them is O(n).
+To drop everything in the instance `__dict__`, `vars(obj).clear()` does it in one call without
+naming the attributes; it bypasses any `__delattr__` the class defines and leaves `__slots__`
+values alone:
 
 ```python
-# O(n) - clean up sensitive attributes
-class SecureData:
-    def __init__(self):
-        self.public_id = 12345
-        self.password = "secret123"
-        self.api_key = "key_xyz"
-    
-    def sanitize(self):
-        """Remove sensitive data - O(n)"""
-        sensitive = ['password', 'api_key', 'token', 'secret']
-        
-        for attr in sensitive:  # O(n)
-            if hasattr(self, attr):  # O(1)
-                delattr(self, attr)  # O(1)
-
-data = SecureData()
-data.sanitize()  # O(n)
-
-print(data.public_id)  # OK
-try:
-    print(data.password)  # AttributeError
-except AttributeError:
-    print("Password removed")
-```
-
-### Lazy Attribute Loading
-
-```python
-# O(1) - delete cached values to reload
-class LazyLoader:
-    def __init__(self, path):
-        self.path = path
-        self._data = None
-    
-    @property
-    def data(self):
-        """Load on demand - O(1) or O(load time)"""
-        if not hasattr(self, '_loaded_data'):
-            self._loaded_data = self._load()  # O(load time)
-        return self._loaded_data
-    
-    def reload(self):
-        """Force reload - O(1)"""
-        if hasattr(self, '_loaded_data'):
-            delattr(self, '_loaded_data')  # O(1) - invalidate cache
-
-loader = LazyLoader('data.json')
-val1 = loader.data  # O(load time) - loads from file
-val2 = loader.data  # O(1) - returns cached
-
-loader.reload()  # O(1) - invalidates cache
-val3 = loader.data  # O(load time) - reloads
-```
-
-### Cache Invalidation
-
-```python
-# O(n) - invalidate cached properties
-class CachedComputation:
-    def __init__(self):
-        self._cache = {}
-    
-    def _compute_expensive(self):
-        return sum(range(1000000))
-    
-    @property
-    def result(self):
-        """Get cached result - O(1) or O(compute)"""
-        if 'result' not in self._cache:
-            self._cache['result'] = self._compute_expensive()
-        return self._cache['result']
-    
-    def invalidate_cache(self):
-        """Clear all cached values - O(n)"""
-        keys_to_delete = list(self._cache.keys())
-        
-        for key in keys_to_delete:  # O(n)
-            del self._cache[key]  # O(1)
-        
-        # Or simpler:
-        self._cache.clear()  # O(n) - single call
-
-compute = CachedComputation()
-val1 = compute.result  # O(compute time) - calculates
-val2 = compute.result  # O(1) - cached
-
-compute.invalidate_cache()  # O(n)
-val3 = compute.result  # O(compute time) - recalculates
-```
-
-### Object Reset
-
-```python
-# O(n) - reset object state
-class StatefulObject:
-    def __init__(self):
-        self.state = {}
-        self.history = []
-    
-    def update(self, **kwargs):
-        """Update state - O(n)"""
-        self.state.update(kwargs)  # O(n)
-        self.history.append(kwargs)  # O(1)
-    
-    def reset(self):
-        """Reset to initial state - O(n)"""
-        # Delete all state attributes
-        for key in list(self.state.keys()):  # O(n)
-            del self.state[key]  # O(1)
-        
-        # Or simpler:
-        self.state.clear()  # O(n)
-        self.history.clear()  # O(n)
-
-obj = StatefulObject()
-obj.update(x=1, y=2)  # O(2)
-obj.update(x=10)      # O(1)
-
-obj.reset()  # O(n) - clears everything
-```
-
-## Advanced Usage
-
-### Property Deletion Hooks
-
-```python
-# O(1) - cleanup on deletion
-class ManagedResource:
-    def __init__(self, resource):
-        self._resource = resource
-        self._cleanup_funcs = []
-    
-    def on_delete(self, func):
-        """Register cleanup function - O(1)"""
-        self._cleanup_funcs.append(func)  # O(1)
-    
-    def __del__(self):
-        """Cleanup on garbage collection - O(n)"""
-        for func in self._cleanup_funcs:  # O(n)
-            func(self._resource)  # O(1)
-
-class Resource:
-    def __init__(self, name):
-        self.name = name
-    
-    def close(self):
-        print(f"Closing {self.name}")
-
-# Usage
-resource = Resource("database")
-managed = ManagedResource(resource)
-
-# O(1) - register cleanup
-managed.on_delete(lambda r: r.close())
-
-# When deleted, O(n) cleanup occurs
-del managed  # Prints "Closing database"
-```
-
-## Practical Examples
-
-### Temporary Attribute Management
-
-```python
-# O(1) - manage temporary attributes
-class TemporaryAttributes:
-    def __init__(self):
-        self.persistent = "keep me"
-    
-    def with_temp(self, name, value):
-        """Context manager for temp attributes"""
-        setattr(self, name, value)  # O(1)
-        try:
-            yield self
-        finally:
-            delattr(self, name)  # O(1) - cleanup
-
-obj = TemporaryAttributes()
-
-# O(1) - create and delete
-with obj.with_temp('temp', 'value'):
-    print(obj.temp)  # Accessible inside context
-
-try:
-    print(obj.temp)  # AttributeError - outside context
-except AttributeError:
-    print("Temp attribute cleaned up")
-```
-
-### Attribute Filtering
-
-```python
-# O(n) - remove unwanted attributes
-def remove_attributes(obj, patterns):
-    """Remove attributes matching patterns - O(n)"""
-    to_remove = []
-    
-    for attr in dir(obj):  # O(n log n)
-        for pattern in patterns:  # O(m) - m = patterns
-            if pattern in attr:  # O(1)
-                to_remove.append(attr)
-                break
-    
-    for attr in to_remove:  # O(k) - k = matched
-        try:
-            delattr(obj, attr)  # O(1)
-        except:
-            pass  # Can't delete some attributes
-
-class Data:
-    public_data = 1
-    _private_data = 2
-    __dunder__ = 3
-
-obj = Data()
-
-# O(n * m) - remove private attributes
-remove_attributes(obj, ['_'])
-
-print(hasattr(obj, '_private_data'))  # False
-print(hasattr(obj, 'public_data'))    # True
-```
-
-### Object Serialization Cleanup
-
-```python
-# O(n) - remove unserializable attributes
-import json
-
-def prepare_for_serialization(obj):
-    """Remove non-serializable attributes - O(n)"""
-    non_serializable = ['_file_handle', '_connection', '_socket']
-    
-    for attr in non_serializable:  # O(n)
-        if hasattr(obj, attr):  # O(1)
-            delattr(obj, attr)  # O(1)
-    
-    return obj
-
-class Data:
-    def __init__(self):
-        self.name = "Alice"
-        self._file_handle = "file object"
-        self.age = 30
-        self._connection = "db connection"
-
-data = Data()
-prepare_for_serialization(data)
-
-# Now serializable
-json_str = json.dumps(data.__dict__)
-```
-
-## Edge Cases
-
-### Deleting Non-Existent Attributes
-
-```python
-# O(1) - raises error on missing attribute
-class Simple:
+class State:
     pass
 
-obj = Simple()
+state = State()
+for i in range(100):
+    setattr(state, f"attr{i}", i)
 
-# Raises AttributeError
-try:
-    delattr(obj, 'missing')  # O(1) but raises
-except AttributeError:
-    print("Attribute doesn't exist")
+for i in range(50):
+    delattr(state, f"attr{i}")  # O(1) each, O(n) in total
+assert len(vars(state)) == 50
 
-# Better - check first
-if hasattr(obj, 'attr'):  # O(1)
-    delattr(obj, 'attr')  # O(1)
+vars(state).clear()  # O(n)
+assert vars(state) == {}
 ```
 
-### Deleting Class vs Instance Attributes
+## Common Patterns
+
+### Invalidating a Cached Value
+
+Deleting a cached attribute makes the next access recompute it. `functools.cached_property`
+stores its value in the instance `__dict__`, so `delattr()` is the way to reset it:
 
 ```python
-# O(1) - different for class vs instance
-class MyClass:
-    class_attr = 42
+from functools import cached_property
 
-obj = MyClass()
+class Report:
+    def __init__(self, rows):
+        self.rows = rows
+        self.computed = 0
 
-# Delete class attribute
-delattr(MyClass, 'class_attr')  # O(1)
+    @cached_property
+    def total(self):
+        self.computed += 1
+        return sum(self.rows)
 
-# Can't delete instance attribute that doesn't exist
-obj.instance_attr = 100  # O(1)
-delattr(obj, 'instance_attr')  # O(1) - succeeds
+report = Report([1, 2, 3])
+assert report.total == 6
+report.rows.append(4)
+assert report.total == 6  # cached
 
-# Instance deletion doesn't affect class
-delattr(obj, 'class_attr')  # AttributeError - not on instance
+delattr(report, "total")  # O(1) avg - drops the cached value
+assert report.total == 10
+assert report.computed == 2
 ```
 
-### Descriptors with Deleter
+### Removing Optional Attributes
+
+`delattr()` raises on a missing name. Catching the exception keeps it to one call per name;
+checking with `hasattr()` first adds a full attribute read to each one:
 
 ```python
-# O(1) - descriptor protocol
-class Descriptor:
-    def __set_name__(self, owner, name):
-        self.name = f'_{name}'
-    
-    def __get__(self, obj, objtype=None):
-        return getattr(obj, self.name, None)
-    
-    def __set__(self, obj, value):
-        setattr(obj, self.name, value)
-    
-    def __delete__(self, obj):
-        print(f"Deleting {self.name}")
-        delattr(obj, self.name)
+class Session:
+    def __init__(self):
+        self.user = "alice"
+        self.token = "abc"
 
-class MyClass:
-    prop = Descriptor()
-
-obj = MyClass()
-obj.prop = 42
-
-# O(1) - calls Descriptor.__delete__
-del obj.prop  # Prints "Deleting _prop"
-```
-
-## Performance Considerations
-
-### Deletion vs Clear
-
-```python
-# Individual deletions - O(n)
-for i in range(1000):
-    if hasattr(obj, f'attr{i}'):  # O(1)
-        delattr(obj, f'attr{i}')  # O(1)
-# Total: O(1000)
-
-# Bulk clear - O(n)
-obj.__dict__.clear()  # Single operation, faster
-
-# Clear is 5-10% faster for large objects
-```
-
-### Avoiding Attribution Errors
-
-```python
-# Safe deletion pattern - O(n) safe
-def safe_delete_attrs(obj, attrs):
-    """Delete attributes safely - O(n)"""
-    for attr in attrs:  # O(n)
+def drop(obj, names):
+    for name in names:  # O(n)
         try:
-            delattr(obj, attr)  # O(1)
+            delattr(obj, name)  # O(1) avg
         except AttributeError:
-            pass  # Ignore missing attributes
+            pass
 
-# Better - check first
-def safe_delete_checked(obj, attrs):
-    """Delete with existence check - O(n)"""
-    for attr in attrs:  # O(n)
-        if hasattr(obj, attr):  # O(1)
-            delattr(obj, attr)  # O(1)
-
-# The try/except version is marginally faster
-# The checked version is clearer
+session = Session()
+drop(session, ["token", "password"])
+assert vars(session) == {"user": "alice"}
 ```
 
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use `delattr()` to completely remove attributes
-- Check with `hasattr()` before deleting
-- Use in cleanup routines and context managers
-- Clean up sensitive data before object disposal
-- Use try/except for graceful failure handling
+- Use `delattr()` when the attribute name is only known at run time; write `del obj.name`
+  otherwise
+- Use `vars(obj).clear()` to empty the instance `__dict__` at once
+- Delete a `cached_property` value to force it to be recomputed
 
 ❌ **Avoid**:
 
-- Deleting attributes that don't exist (check first)
-- Deleting in __del__ unless necessary (GC may fail)
-- Assuming deletion affects class-level attributes
-- Frequent deletion/creation cycles (use None instead)
-- Deleting within property setters (causes confusion)
-
-## Related Functions
-
-- **[getattr()](getattr.md)** - Get attribute value
-- **[setattr()](setattr.md)** - Set attribute value
-- **[hasattr()](hasattr.md)** - Check attribute existence
-- **[dir()](dir.md)** - List attributes
-- **[vars()](vars.md)** - Get __dict__
+- Deleting or setting class attributes in a hot loop: each change is O(s) in the subclasses
+- Expecting `delattr()` on an instance to remove a class attribute
+- Assuming `delattr()` is O(1) when the class defines `__delattr__` or the name is a property
 
 ## Version Notes
 
-- **Python 2.x**: `delattr()` available, basic functionality
-- **Python 3.x**: Same behavior, optimized in CPython
-- **All versions**: Returns None, respects descriptor protocol
+- **All Python 3**: `delattr(obj, name)` is equivalent to `del obj.name`; `name` must be a string
+
+## Related Functions
+
+- **[getattr()](getattr.md)** - Read an attribute by name
+- **[setattr()](setattr.md)** - Set an attribute by name
+- **[hasattr()](hasattr.md)** - Check whether an attribute exists
+- **[vars()](vars.md)** - The instance `__dict__`, for bulk changes
+- **[property()](property.md)** - Deleters run by `delattr()`
