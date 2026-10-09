@@ -1,5 +1,5 @@
 ---
-source_sha: f43a3c356e0b5645490dd53b3efe750efbf79e9473b364846d26d9a6cc5665a3
+source_sha: e9a9393fc22b2d42d44cf4fbcedc3f5b2e4a8282edfa53dc730c7b3c1a5062df
 translated: machine
 ---
 
@@ -111,7 +111,7 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 | [`vars()`](vars.md) | O(1) | O(1) | `__dict__` への参照を返し、コピーはしない |
 | [`super()`](super.md) | O(d) | O(d) | MRO をたどるが、MRO はキャッシュされている |
 | [`property()`](property.md) | O(1) | O(1) | デスクリプタの生成とアクセス |
-| [`classmethod()`](classmethod.md) | O(1) | O(1) | デスクリプタの生成、探索は O(d) |
+| [`classmethod()`](classmethod.md) | O(1) | O(1) | デスクリプタの生成、キャッシュ済みの探索は O(1)、ミス時は O(d) |
 | [`staticmethod()`](staticmethod.md) | O(1) | O(1) | デスクリプタの生成、探索は O(d) |
 
 ### 型のコンストラクタ

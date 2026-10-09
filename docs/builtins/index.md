@@ -110,7 +110,7 @@ under Notes is what you pay to consume it.
 | [`vars()`](vars.md) | O(1) | O(1) | Returns the `__dict__` reference, no copy |
 | [`super()`](super.md) | O(d) | O(d) | Walks the MRO, which is cached |
 | [`property()`](property.md) | O(1) | O(1) | Descriptor creation and access |
-| [`classmethod()`](classmethod.md) | O(1) | O(1) | Descriptor creation; lookup is O(d) |
+| [`classmethod()`](classmethod.md) | O(1) | O(1) | Descriptor creation; a cached lookup is O(1), a miss O(d) |
 | [`staticmethod()`](staticmethod.md) | O(1) | O(1) | Descriptor creation; lookup is O(d) |
 
 ### Type Constructors

@@ -1,5 +1,5 @@
 ---
-source_sha: f43a3c356e0b5645490dd53b3efe750efbf79e9473b364846d26d9a6cc5665a3
+source_sha: e9a9393fc22b2d42d44cf4fbcedc3f5b2e4a8282edfa53dc730c7b3c1a5062df
 translated: machine
 ---
 
@@ -112,7 +112,7 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 | [`vars()`](vars.md) | O(1) | O(1) | 返回 `__dict__` 的引用，不复制 |
 | [`super()`](super.md) | O(d) | O(d) | 沿 MRO 查找，MRO 有缓存 |
 | [`property()`](property.md) | O(1) | O(1) | 描述符的创建与访问 |
-| [`classmethod()`](classmethod.md) | O(1) | O(1) | 创建描述符；查找为 O(d) |
+| [`classmethod()`](classmethod.md) | O(1) | O(1) | 创建描述符；缓存命中时查找为 O(1)，未命中时为 O(d) |
 | [`staticmethod()`](staticmethod.md) | O(1) | O(1) | 创建描述符；查找为 O(d) |
 
 ### 类型构造器

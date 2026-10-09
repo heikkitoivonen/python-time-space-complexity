@@ -1,328 +1,185 @@
 # classmethod() Decorator Complexity
 
-The `classmethod()` decorator modifies a function to receive the class as its first argument instead of an instance. It's used for factory methods and alternative constructors.
+The `classmethod()` decorator wraps a function so that it receives the class as its first
+argument instead of an instance. Applying it builds one small descriptor when the class body
+runs; each later access that reaches it, through the class or an instance, binds the function
+to the class.
 
-## Complexity Analysis
+`d` is the number of classes in the class's MRO, `len(cls.__mro__)`. The bounds exclude the
+method body, which costs what it does.
+
+## Complexity Reference
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| Create descriptor | O(1) | O(1) | Decorator application |
-| Call class method | O(1) | O(1) | Access method on class |
-| Call on instance | O(1) | O(1) | Access method on instance |
-| MRO lookup | O(d) | O(1) | d = inheritance depth |
-| Total operation | O(d) | O(1) | Lookup may traverse MRO |
+| `classmethod(func)`, `@classmethod` | O(1) | O(1) | Once, when the class body runs |
+| `Cls.method`, `obj.method` | O(1) | O(1) | Builds a new bound method on each access, with the class as `__self__` |
+| `Cls.method(...)` | O(1) | O(1) | Plus the method body; the class is passed as the first argument |
+| Looking up an inherited classmethod | O(1) | O(1) | The type attribute cache answers repeated lookups at any depth |
+| First lookup after the class or a base changes | O(d) | O(d) | Walks the MRO, then the result is cached again |
+| Lookup on a class modified and read over and over (3.13+) | O(d) | O(1) | The class stops being cached; see [Class State and the Attribute Cache](#class-state-and-the-attribute-cache) |
 
 ## Basic Usage
 
-### Define Class Method
+### Define a Class Method
 
 ```python
-# O(1) - decorate method
-class MyClass:
-    count = 0
-    
+class Counter:
+    created = 0
+
     @classmethod
     def create(cls):
-        """Factory method - O(1)"""
-        cls.count += 1
+        cls.created += 1  # O(1) - modifies the class
         return cls()
 
-# O(1) - call class method
-obj1 = MyClass.create()
-obj2 = MyClass.create()
-
-print(MyClass.count)  # 2
+first = Counter.create()  # O(1)
+second = Counter.create()
+assert Counter.created == 2
+assert isinstance(first, Counter)
 ```
 
-### Access Class Attributes
+### Alternative Constructors
 
 ```python
-# O(1) - class methods can access class state
-class Config:
-    default_timeout = 30
-    
-    @classmethod
-    def get_timeout(cls):
-        """Get class attribute - O(1)"""
-        return cls.default_timeout
-    
-    @classmethod
-    def set_timeout(cls, timeout):
-        """Set class attribute - O(1)"""
-        cls.default_timeout = timeout
-
-# O(1) - access class methods
-timeout = Config.get_timeout()  # 30
-
-Config.set_timeout(60)
-new_timeout = Config.get_timeout()  # 60
-```
-
-### Alternative Constructor
-
-```python
-# O(1) - use as alternative constructor
 class Point:
     def __init__(self, x, y):
         self.x = x
         self.y = y
-    
+
     @classmethod
     def from_tuple(cls, point_tuple):
-        """Create from tuple - O(1)"""
         x, y = point_tuple
-        return cls(x, y)
-    
+        return cls(x, y)  # O(1)
+
     @classmethod
     def from_string(cls, point_str):
-        """Create from string - O(1)"""
-        x, y = map(float, point_str.split(','))
+        x, y = map(float, point_str.split(","))  # O(len(point_str))
         return cls(x, y)
 
-# O(1) - create via different constructors
 p1 = Point.from_tuple((1, 2))
 p2 = Point.from_string("3.5,4.5")
-
-print(p1.x, p1.y)  # 1 2
-print(p2.x, p2.y)  # 3.5 4.5
+assert (p1.x, p1.y) == (1, 2)
+assert (p2.x, p2.y) == (3.5, 4.5)
 ```
 
-## Complexity Details
+## Binding the Class
 
-### Descriptor Protocol
-
-```python
-# O(1) - classmethod uses descriptor protocol
-class WithClassMethod:
-    @classmethod
-    def method(cls):
-        return cls.__name__
-
-# When accessing:
-# 1. Lookup 'method' in class dict - O(1)
-# 2. Found descriptor (classmethod object)
-# 3. Call descriptor.__get__() - O(1)
-# 4. Returns bound method with cls
-
-result = WithClassMethod.method()  # O(1)
-```
-
-### Inheritance and MRO
+The class stores the `classmethod` object itself. Reading the attribute calls its `__get__()`,
+which builds a bound method whose `__self__` is the class - also when the attribute is read
+through an instance, whose only contribution is its type. An instance attribute of the same
+name shadows the classmethod, because it is a non-data descriptor.
 
 ```python
-# O(d) - MRO traversal for inherited class methods
-class Parent:
-    @classmethod
-    def identify(cls):
-        """Return class name - O(1)"""
-        return cls.__name__
-
-class Child(Parent):
-    pass
-
-# O(d) - lookup in Parent via MRO
-name = Child.identify()  # 'Child' - MRO traversal
-```
-
-### Instance vs Class Access
-
-```python
-# O(1) - both access same method
 class Example:
     @classmethod
     def info(cls):
         return f"I am {cls.__name__}"
 
+descriptor = Example.__dict__["info"]
+assert type(descriptor) is classmethod
+
+bound = Example.info  # O(1) - a new bound method
+assert bound.__self__ is Example
+assert Example.info is not Example.info  # a fresh object on each access
+assert Example.info == Example.info  # but equal ones
+
 obj = Example()
-
-# O(1) - access from class
-from_class = Example.info()  # "I am Example"
-
-# O(1) - access from instance (converts to class)
-from_instance = obj.info()  # "I am Example"
-
-# Both work, classmethod automatically passes cls
+assert obj.info.__self__ is Example  # the instance is not passed
+assert obj.info() == Example.info() == "I am Example"
 ```
 
-## Performance Patterns
+## Inheritance and the MRO
 
-### vs Static Method
+An inherited classmethod receives the class it was looked up on, so a factory written once
+builds instances of every subclass. Finding the method on a deep subclass walks the MRO only
+when the type attribute cache misses; repeated lookups cost the same at any depth.
 
 ```python
-# classmethod - O(1) + class access
-class WithClassMethod:
-    value = 42
-    
+class Base:
     @classmethod
-    def get_value(cls):
-        return cls.value  # O(1)
+    def create(cls):
+        return cls()
 
-# staticmethod - O(1), no class access
-class WithStaticMethod:
-    value = 42
-    
+class Child(Base):
+    pass
+
+obj = Child.create()  # O(d) the first time, then O(1) while cached
+assert type(obj) is Child
+
+# A staticmethod receives no class, so this factory names one
+class HardcodedBase:
     @staticmethod
-    def get_value():
-        # Cannot access cls, no class binding
-        return WithStaticMethod.value  # O(1) hardcoded
+    def create():
+        return HardcodedBase()
 
-# Both O(1), classmethod is more flexible
-```
-
-### vs Regular Method
-
-```python
-# classmethod - O(1), no instance needed
-class A:
-    @classmethod
-    def class_op(cls):
-        return cls.__name__  # O(1)
-    
-    def instance_op(self):
-        return self.__class__.__name__  # O(1)
-
-# classmethod - no instance required
-result1 = A.class_op()  # O(1) - works on class directly
-
-# instance method - needs instance
-obj = A()  # O(1) - create instance
-result2 = obj.instance_op()  # O(1) - call on instance
-```
-
-## Common Use Cases
-
-### Factory Methods
-
-```python
-# O(1) - implement factory pattern
-class Rectangle:
-    def __init__(self, width, height):
-        self.width = width
-        self.height = height
-    
-    @classmethod
-    def square(cls, side):
-        """Create square - O(1)"""
-        return cls(side, side)
-
-# O(1) - use factory
-rect = Rectangle(5, 10)
-square = Rectangle.square(5)
-
-print(square.width, square.height)  # 5 5
-```
-
-### Alternate Constructors
-
-```python
-# O(1) - multiple ways to construct
-class Date:
-    def __init__(self, year, month, day):
-        self.year = year
-        self.month = month
-        self.day = day
-    
-    @classmethod
-    def today(cls):
-        """Create from today's date - O(1) + time lookup"""
-        import datetime
-        today = datetime.date.today()
-        return cls(today.year, today.month, today.day)
-    
-    @classmethod
-    def from_timestamp(cls, timestamp):
-        """Create from timestamp - O(1) + conversion"""
-        import datetime
-        dt = datetime.datetime.fromtimestamp(timestamp)
-        return cls(dt.year, dt.month, dt.day)
-
-# O(1) - use different constructors
-d1 = Date.today()
-d2 = Date.from_timestamp(0)
-
-print(d1.year, d1.month, d1.day)
-```
-
-### Tracking Subclasses
-
-```python
-# O(1) - track all subclass instances
-class Registry:
-    subclasses = {}
-    
-    def __init_subclass__(cls, **kwargs):
-        """Called when subclass is created - O(1)"""
-        super().__init_subclass__(**kwargs)
-        Registry.subclasses[cls.__name__] = cls
-    
-    @classmethod
-    def get_subclass(cls, name):
-        """Lookup subclass - O(1)"""
-        return cls.subclasses.get(name)
-
-class DatabaseHandler(Registry):
+class HardcodedChild(HardcodedBase):
     pass
 
-class FileHandler(Registry):
-    pass
-
-# O(1) - look up registered subclass
-handler = Registry.get_subclass('DatabaseHandler')
-print(handler.__name__)  # DatabaseHandler
+assert type(HardcodedChild.create()) is HardcodedBase
 ```
 
-### Class-Level Configuration
+## Class State and the Attribute Cache
+
+Assigning a class attribute - `cls.created += 1` in a classmethod - modifies the class, so the
+next lookup of an attribute found through the MRO of it or its subclasses misses the cache and
+walks the MRO. On Python 3.13+ a class that is modified and then read over and over - a counter
+bumped by every call - stops being cached at all, and from then on every lookup on it is O(d). Keep state that changes on every call in a mutable object the class
+holds: changing that object does not modify the class.
 
 ```python
-# O(1) - manage class-level state
-class Logger:
-    level = 'INFO'
-    
-    @classmethod
-    def set_level(cls, level):
-        """Set log level - O(1)"""
-        cls.level = level
-    
-    @classmethod
-    def get_level(cls):
-        """Get log level - O(1)"""
-        return cls.level
-    
-    def log(self, message):
-        """Instance method using class state - O(1)"""
-        if self.__class__.level == 'DEBUG':
-            print(f"DEBUG: {message}")
-        else:
-            print(f"INFO: {message}")
+import itertools
 
-# O(1) - configure class
-Logger.set_level('DEBUG')
+class Order:
+    _ids = itertools.count(1)  # the counter changes, the class does not
 
-logger = Logger()
-logger.log("test")  # Uses class-level DEBUG setting
+    def __init__(self, order_id):
+        self.order_id = order_id
+
+    @classmethod
+    def create(cls):
+        return cls(next(cls._ids))  # O(1) - no class attribute is assigned
+
+first = Order.create()
+second = Order.create()
+assert (first.order_id, second.order_id) == (1, 2)
 ```
 
-## Advanced Usage
+## classmethod vs staticmethod
 
-### Class Registry Pattern
+Both are found by the same attribute lookup. A `staticmethod` returns the plain function, so
+reading it builds nothing; a `classmethod` binds the class on every access.
 
 ```python
-# O(1) - maintain registry of subclasses
+class Both:
+    @classmethod
+    def from_class(cls):
+        return cls
+
+    @staticmethod
+    def plain():
+        return "no binding"
+
+assert Both.plain is Both.plain  # O(1) - the function itself
+assert Both.from_class is not Both.from_class  # O(1) - a new bound method each time
+assert Both.from_class() is Both
+```
+
+## Common Patterns
+
+### Plugin Registry
+
+```python
 class Plugin:
     plugins = {}
-    
+
     def __init_subclass__(cls, **kwargs):
-        """Register subclass - O(1)"""
         super().__init_subclass__(**kwargs)
-        Plugin.plugins[cls.__name__] = cls
-    
+        Plugin.plugins[cls.__name__] = cls  # O(1) - once per subclass definition
+
     @classmethod
     def create(cls, plugin_name):
-        """Factory to create plugins - O(1)"""
-        plugin_class = cls.plugins.get(plugin_name)
-        if plugin_class:
-            return plugin_class()
-        return None
+        plugin_class = cls.plugins.get(plugin_name)  # O(1) average
+        return plugin_class() if plugin_class else None
 
 class AudioPlugin(Plugin):
     def play(self):
@@ -332,291 +189,58 @@ class VideoPlugin(Plugin):
     def play(self):
         return "Playing video"
 
-# O(1) - create by name
-audio = Plugin.create('AudioPlugin')
-video = Plugin.create('VideoPlugin')
-
-print(audio.play())  # Playing audio
-print(video.play())  # Playing video
+assert Plugin.create("AudioPlugin").play() == "Playing audio"
+assert Plugin.create("VideoPlugin").play() == "Playing video"
+assert Plugin.create("Missing") is None
 ```
 
-### Type Conversion Methods
+### Conversion Constructors
 
 ```python
-# O(1) - class methods for conversion
 class Vector:
     def __init__(self, x, y):
         self.x = x
         self.y = y
-    
+
     @classmethod
     def from_list(cls, lst):
-        """Create from list - O(1)"""
-        return cls(lst[0], lst[1])
-    
+        return cls(lst[0], lst[1])  # O(1)
+
     @classmethod
     def from_dict(cls, d):
-        """Create from dict - O(1)"""
-        return cls(d['x'], d['y'])
-    
+        return cls(d["x"], d["y"])  # O(1) average
+
     def to_list(self):
-        """Convert to list - O(1)"""
         return [self.x, self.y]
 
-# O(1) - conversions
-v1 = Vector.from_list([1, 2])
-v2 = Vector.from_dict({'x': 3, 'y': 4})
-
-print(v1.to_list())  # [1, 2]
+assert Vector.from_list([1, 2]).to_list() == [1, 2]
+assert Vector.from_dict({"x": 3, "y": 4}).to_list() == [3, 4]
 ```
 
-### Inheritance with Classmethods
-
-```python
-# O(d) - subclass-aware class methods
-class Base:
-    @classmethod
-    def create(cls):
-        """Create instance of cls (not hardcoded Base)"""
-        return cls()
-
-class Child(Base):
-    def describe(self):
-        return "I am Child"
-
-# O(d) - creates Child, not Base
-obj = Child.create()
-print(obj.describe())  # I am Child
-
-# vs without classmethod - would create Base
-class WrongBase:
-    @staticmethod
-    def create():
-        return WrongBase()  # Always creates WrongBase!
-
-class WrongChild(WrongBase):
-    pass
-
-obj = WrongChild.create()  # Creates WrongBase, not WrongChild
-print(type(obj).__name__)  # WrongBase
-```
-
-## Practical Examples
-
-### Date/Time Constructors
-
-```python
-# O(1) - convenient date/time creation
-class Timestamp:
-    def __init__(self, value):
-        self.value = value
-    
-    @classmethod
-    def now(cls):
-        """Current time - O(1)"""
-        import time
-        return cls(time.time())
-    
-    @classmethod
-    def from_seconds(cls, seconds):
-        """From seconds since epoch - O(1)"""
-        return cls(seconds)
-    
-    @classmethod
-    def from_string(cls, date_str):
-        """Parse string - O(n) for parsing"""
-        import datetime
-        dt = datetime.datetime.fromisoformat(date_str)
-        return cls(dt.timestamp())
-
-# O(1) - create different ways
-ts1 = Timestamp.now()
-ts2 = Timestamp.from_seconds(0)
-ts3 = Timestamp.from_string("2024-01-01T00:00:00")
-```
-
-### Color Factory
-
-```python
-# O(1) - factory for color objects
-class Color:
-    def __init__(self, r, g, b):
-        self.r = r
-        self.g = g
-        self.b = b
-    
-    @classmethod
-    def red(cls):
-        return cls(255, 0, 0)
-    
-    @classmethod
-    def green(cls):
-        return cls(0, 255, 0)
-    
-    @classmethod
-    def blue(cls):
-        return cls(0, 0, 255)
-    
-    @classmethod
-    def from_hex(cls, hex_str):
-        """Parse hex color - O(1)"""
-        r = int(hex_str[1:3], 16)
-        g = int(hex_str[3:5], 16)
-        b = int(hex_str[5:7], 16)
-        return cls(r, g, b)
-
-# O(1) - use factory methods
-red = Color.red()
-blue = Color.from_hex("#0000FF")
-```
-
-### Configuration Profiles
-
-```python
-# O(1) - predefined configurations
-class DatabaseConfig:
-    host = "localhost"
-    port = 5432
-    
-    @classmethod
-    def development(cls):
-        """Dev configuration - O(1)"""
-        config = cls()
-        config.host = "localhost"
-        config.port = 5432
-        return config
-    
-    @classmethod
-    def production(cls):
-        """Prod configuration - O(1)"""
-        config = cls()
-        config.host = "prod.example.com"
-        config.port = 5432
-        return config
-
-# O(1) - create profiles
-dev_config = DatabaseConfig.development()
-prod_config = DatabaseConfig.production()
-```
-
-## Edge Cases
-
-### Calling on Instance
-
-```python
-# O(1) - can call class method on instance
-class Example:
-    name = "Example"
-    
-    @classmethod
-    def get_name(cls):
-        return cls.name
-
-obj = Example()
-
-# Both work - both pass class, not instance
-class_name = Example.get_name()     # O(1) - pass Example
-instance_name = obj.get_name()      # O(1) - pass Example (obj's class)
-
-print(class_name)      # Example
-print(instance_name)   # Example
-```
-
-### Inheritance Override
-
-```python
-# O(d) - subclass can override class method
-class Parent:
-    @classmethod
-    def factory(cls):
-        return f"Parent: {cls.__name__}"
-
-class Child(Parent):
-    @classmethod
-    def factory(cls):
-        return f"Child: {cls.__name__}"
-
-# O(d) - correct method called based on class
-print(Parent.factory())  # Parent: Parent
-print(Child.factory())   # Child: Child
-```
-
-### First Argument Name
-
-```python
-# O(1) - cls name is conventional but flexible
-class Flexible:
-    @classmethod
-    def method(klass):  # Can use any name
-        return klass.__name__
-    
-    @classmethod
-    def another(cls):   # Convention is 'cls'
-        return cls.__name__
-
-# Both work - first argument is always the class
-print(Flexible.method())    # Flexible
-print(Flexible.another())   # Flexible
-```
-
-## Performance Considerations
-
-### Classmethod vs Hardcoded Class
-
-```python
-# Flexible with classmethod - O(d)
-class Flexible:
-    @classmethod
-    def create(cls):
-        return cls()
-
-# Less flexible - O(1)
-class Hardcoded:
-    @staticmethod
-    def create():
-        return Hardcoded()
-
-# For inheritance, classmethod is essential:
-class Parent:
-    @classmethod
-    def from_classmethod(cls):
-        return cls()  # Creates correct subclass
-
-class Child(Parent):
-    pass
-
-# classmethod creates Child
-obj1 = Child.from_classmethod()  # Works correctly
-```
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use for alternative constructors and factories
-- Use for class-level state management
-- Use for registry/plugin patterns
-- Use when subclasses need custom behavior
-- Document what the classmethod does clearly
+- Use a classmethod for alternative constructors, so subclasses get instances of themselves
+- Keep per-call state, such as an ID counter, in a mutable object the class holds
+- Use `staticmethod` when the function needs neither the class nor an instance - reading it builds no bound method
 
 ❌ **Avoid**:
 
-- Using classmethod when staticmethod suffices
-- Modifying class state without clear intent
-- Complex logic in classmethods (keep simple)
-- Forgetting classmethod is called on class, not instance
-- Hardcoding class names when cls can be used
-
-## Related Functions
-
-- **[staticmethod()](staticmethod.md)** - Decorator for static methods
-- **[property()](property.md)** - Decorator for properties
-- **[type()](type_func.md)** - Get object type
-- **[super()](super.md)** - Call parent class method
-- **[isinstance()](isinstance.md)** - Check instance type
+- Assigning a class attribute on every call in a hot path - each assignment costs the class and its subclasses their cached lookups, and on 3.13+ can stop the class being cached at all
+- Hardcoding the class name in a factory, which builds the base class for every subclass
+- Wrapping `property` in `classmethod` - it computes a value on 3.10 to 3.12 only
 
 ## Version Notes
 
-- **Python 2.x**: `@classmethod` available, same behavior
-- **Python 3.x**: Same behavior, optimized in CPython
-- **All versions**: First parameter is the class, not instance
+- **Python 3.13+**: `classmethod` no longer wraps other descriptors: `@classmethod` over `@property` gives a bound method, not the property's value. The chaining was deprecated in 3.11
+- **Python 3.13+**: A class modified and read over and over stops using the type attribute cache, and lookups on it are O(d)
+- **Python 3.10+**: A `classmethod` copies `__name__`, `__qualname__`, `__module__` and `__doc__` from its function, and exposes the function as `__wrapped__`
+
+## Related Functions
+
+- **[staticmethod()](staticmethod.md)** - A method with no implicit first argument, returned unbound
+- **[property()](property.md)** - A computed attribute, the other common descriptor
+- **[type()](type_func.md)** - The class a classmethod receives when called through an instance
+- **[super()](super.md)** - Call the parent class's classmethod
+- **[isinstance()](isinstance.md)** - Check instance type
