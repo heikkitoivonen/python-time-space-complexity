@@ -1,5 +1,5 @@
 ---
-source_sha: ea4f8b32c47a9951d364d070e44ddc25ab93c4bb79e0e11e0590f61fa3c0e688
+source_sha: 98decccd3e9a6fd96ee9439cb758a0c2ae6ad39a0acb29d291e6ae8d31020d6c
 translated: machine
 ---
 
@@ -210,8 +210,8 @@ if pattern.match(s):  # Reuse compiled pattern
 
 ## 相关类型
 
-- **[Bytes](bytes_func.md)** - 不可变的字节序列
-- **[Bytearray](bytearray_func.md)** - 可变的字节序列
+- **[Bytes](bytes.md)** - 不可变的字节序列
+- **[Bytearray](bytearray.md)** - 可变的字节序列
 - **[正则表达式 (re)](../stdlib/re.md)** - 模式匹配
 
 ## 延伸阅读

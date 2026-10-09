@@ -1,5 +1,5 @@
 ---
-source_sha: ea4f8b32c47a9951d364d070e44ddc25ab93c4bb79e0e11e0590f61fa3c0e688
+source_sha: 98decccd3e9a6fd96ee9439cb758a0c2ae6ad39a0acb29d291e6ae8d31020d6c
 translated: machine
 ---
 
@@ -210,8 +210,8 @@ if pattern.match(s):  # Reuse compiled pattern
 
 ## 関連する型
 
-- **[バイト列](bytes_func.md)** - 不変のバイトのシーケンス
-- **[バイト配列](bytearray_func.md)** - 可変のバイトのシーケンス
+- **[バイト列](bytes.md)** - 不変のバイトのシーケンス
+- **[バイト配列](bytearray.md)** - 可変のバイトのシーケンス
 - **[正規表現 (re)](../stdlib/re.md)** - パターンマッチング
 
 ## さらに読む

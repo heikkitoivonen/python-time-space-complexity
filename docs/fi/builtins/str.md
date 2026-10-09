@@ -1,5 +1,5 @@
 ---
-source_sha: ea4f8b32c47a9951d364d070e44ddc25ab93c4bb79e0e11e0590f61fa3c0e688
+source_sha: 98decccd3e9a6fd96ee9439cb758a0c2ae6ad39a0acb29d291e6ae8d31020d6c
 translated: machine
 ---
 
@@ -210,8 +210,8 @@ if pattern.match(s):  # Reuse compiled pattern
 
 ## Liittyvät tyypit
 
-- **[Bytes](bytes_func.md)** - Muuttumaton tavujono
-- **[Bytearray](bytearray_func.md)** - Muuttuva tavujono
+- **[Bytes](bytes.md)** - Muuttumaton tavujono
+- **[Bytearray](bytearray.md)** - Muuttuva tavujono
 - **[Säännölliset lausekkeet (re)](../stdlib/re.md)** - Hahmontunnistus
 
 ## Lisälukemista

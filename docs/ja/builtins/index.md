@@ -1,5 +1,5 @@
 ---
-source_sha: 2713c3f5da5b094280f3ea748c07a29b099def57bce9ddfbffb62f2060792e8f
+source_sha: f43a3c356e0b5645490dd53b3efe750efbf79e9473b364846d26d9a6cc5665a3
 translated: machine
 ---
 
@@ -26,7 +26,8 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 - **[タプル](tuple.md)** - 不変のシーケンス
 - **[範囲](range.md)** - 遅延評価される数値シーケンス
 - **[文字列](str.md)** - テキストと文字のシーケンス
-- **[バイト列とバイト配列](bytes.md)** - バイナリデータと可変のバイト列
+- **[バイト列](bytes.md)** - 不変のバイナリデータ
+- **[バイト配列](bytearray.md)** - その場で編集する可変のバイナリデータ
 
 ### マッピング型と集合型
 
@@ -122,7 +123,7 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 | [`float()`](float_func.md) | O(1) | O(1) | 文字列からは O(n) |
 | [`complex()`](complex_func.md) | O(1) | O(1) | 文字列からは O(n) |
 | [`str()`](str_func.md) | O(1) | O(1) | コンテナと独自の `__str__()` では O(n) |
-| [`bytes()`](bytes_func.md) | O(n) | O(n) | n は元データの長さ |
+| [`bytes()`](bytes_func.md) | O(n) | O(n) | n は元データの長さ。元データの型がちょうど `bytes` なら O(1) |
 | [`bytearray()`](bytearray_func.md) | O(n) | O(n) | n は元データの長さ |
 | [`memoryview()`](memoryview_func.md) | O(1) | O(1) | バッファへのビューであり、コピーは作らない |
 | [`list()`](list_func.md) | O(n) | O(n) | n はイテラブルの長さ |

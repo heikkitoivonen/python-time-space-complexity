@@ -24,7 +24,8 @@ can find what you need at a glance.
 - **[Tuple](tuple.md)** - Immutable sequences
 - **[Range](range.md)** - Lazy numeric sequences
 - **[String](str.md)** - Text and character sequences
-- **[Bytes & Bytearray](bytes.md)** - Binary data and mutable bytes
+- **[Bytes](bytes.md)** - Immutable binary data
+- **[Bytearray](bytearray.md)** - Mutable binary data, edited in place
 
 ### Mapping & Set Types
 
@@ -121,7 +122,7 @@ under Notes is what you pay to consume it.
 | [`float()`](float_func.md) | O(1) | O(1) | O(n) from a string |
 | [`complex()`](complex_func.md) | O(1) | O(1) | O(n) from a string |
 | [`str()`](str_func.md) | O(1) | O(1) | O(n) for containers and custom `__str__()` |
-| [`bytes()`](bytes_func.md) | O(n) | O(n) | n = length of the source |
+| [`bytes()`](bytes_func.md) | O(n) | O(n) | n = length of the source; O(1) when it is an exact `bytes` |
 | [`bytearray()`](bytearray_func.md) | O(n) | O(n) | n = length of the source |
 | [`memoryview()`](memoryview_func.md) | O(1) | O(1) | A view over the buffer, never a copy |
 | [`list()`](list_func.md) | O(n) | O(n) | n = length of the iterable |

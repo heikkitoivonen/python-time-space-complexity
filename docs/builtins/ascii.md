@@ -202,4 +202,4 @@ ascii("日本語")   # "'\\u65e5\\u672c\\u8a9e'"
 - **[repr()](repr.md)** - Python representation (keeps printable non-ASCII characters)
 - **[str()](str.md)** - String representation (human-readable)
 - **[encode()](str.md)** - Encode to bytes with specific encoding
-- **[bytes()](bytes.md)** - Convert to bytes
+- **[bytes()](bytes_func.md)** - Convert to bytes

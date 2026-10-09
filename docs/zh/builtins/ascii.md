@@ -1,5 +1,5 @@
 ---
-source_sha: 0ba7a75a1afb09668076ee8085fb7274a327ff9daa713ab1dc8e5a73e47eff75
+source_sha: fbbf2ba113c9ef6235c50530fa4d018fd52f9aa28915243186037fc5ab0984f1
 translated: machine
 ---
 
@@ -205,4 +205,4 @@ ascii("日本語")   # "'\\u65e5\\u672c\\u8a9e'"
 - **[repr()](repr.md)** - Python 表示形式（保留可打印的非 ASCII 字符）
 - **[str()](str.md)** - 字符串表示形式（人类可读）
 - **[encode()](str.md)** - 按指定编码编码为字节
-- **[bytes()](bytes.md)** - 转换为字节
+- **[bytes()](bytes_func.md)** - 转换为字节

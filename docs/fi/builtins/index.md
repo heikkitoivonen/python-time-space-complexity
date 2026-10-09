@@ -1,5 +1,5 @@
 ---
-source_sha: 2713c3f5da5b094280f3ea748c07a29b099def57bce9ddfbffb62f2060792e8f
+source_sha: f43a3c356e0b5645490dd53b3efe750efbf79e9473b364846d26d9a6cc5665a3
 translated: machine
 ---
 
@@ -29,7 +29,8 @@ löydät etsimäsi yhdellä silmäyksellä.
 - **[Monikko](tuple.md)** - Muuttumattomat jonot
 - **[Lukualue](range.md)** - Laiskasti laskettavat lukujonot
 - **[Merkkijono](str.md)** - Teksti ja merkkijonot
-- **[Tavut ja tavutaulukot](bytes.md)** - Binääridata ja muuttuvat tavut
+- **[Tavut](bytes.md)** - Muuttumaton binääridata
+- **[Tavutaulukko](bytearray.md)** - Muuttuva binääridata, jota muokataan paikallaan
 
 ### Kuvaus- ja joukkotyypit
 
@@ -126,7 +127,7 @@ mainittu kustannus on se, minkä maksat iteraattorin läpikäynnistä.
 | [`float()`](float_func.md) | O(1) | O(1) | O(n) merkkijonosta |
 | [`complex()`](complex_func.md) | O(1) | O(1) | O(n) merkkijonosta |
 | [`str()`](str_func.md) | O(1) | O(1) | O(n) säilöille ja omalle `__str__()`-toteutukselle |
-| [`bytes()`](bytes_func.md) | O(n) | O(n) | n = lähteen pituus |
+| [`bytes()`](bytes_func.md) | O(n) | O(n) | n = lähteen pituus; O(1), kun lähde on tarkalleen tyyppiä `bytes` |
 | [`bytearray()`](bytearray_func.md) | O(n) | O(n) | n = lähteen pituus |
 | [`memoryview()`](memoryview_func.md) | O(1) | O(1) | Näkymä puskuriin, ei koskaan kopio |
 | [`list()`](list_func.md) | O(n) | O(n) | n = iteroitavan pituus |

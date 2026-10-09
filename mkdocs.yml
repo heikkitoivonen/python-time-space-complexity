@@ -55,9 +55,10 @@ nav:
     - Bool: builtins/bool_func.md
     - Boolean: builtins/bool.md
     - Breakpoint: builtins/breakpoint.md
-    - Bytearray: builtins/bytearray_func.md
-    - Bytes: builtins/bytes_func.md
-    - Bytes & Bytearray: builtins/bytes.md
+    - Bytearray: builtins/bytearray.md
+    - bytearray(): builtins/bytearray_func.md
+    - Bytes: builtins/bytes.md
+    - bytes(): builtins/bytes_func.md
     - Callable: builtins/callable.md
     - Chr: builtins/chr.md
     - Classmethod: builtins/classmethod.md
@@ -425,7 +426,8 @@ plugins:
             Sets: Joukot
             Tuples: Monikot
             Strings: Merkkijonot
-            Bytes & Bytearray: Tavut ja tavutaulukot
+            Bytes: Tavut
+            Bytearray: Tavutaulukko
             Range: Lukualue
             Integer: Kokonaisluku
             Float: Liukuluku
@@ -459,7 +461,8 @@ plugins:
             Sets: 集合
             Tuples: 元组
             Strings: 字符串
-            Bytes & Bytearray: 字节与字节数组
+            Bytes: 字节
+            Bytearray: 字节数组
             Range: 范围
             Integer: 整数
             Float: 浮点数
@@ -491,7 +494,8 @@ plugins:
             Sets: 集合
             Tuples: タプル
             Strings: 文字列
-            Bytes & Bytearray: バイト列とバイト配列
+            Bytes: バイト列
+            Bytearray: バイト配列
             Range: 範囲
             Integer: 整数
             Float: 浮動小数点数

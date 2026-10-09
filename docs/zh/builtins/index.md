@@ -1,5 +1,5 @@
 ---
-source_sha: 2713c3f5da5b094280f3ea748c07a29b099def57bce9ddfbffb62f2060792e8f
+source_sha: f43a3c356e0b5645490dd53b3efe750efbf79e9473b364846d26d9a6cc5665a3
 translated: machine
 ---
 
@@ -27,7 +27,8 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 - **[元组](tuple.md)** - 不可变序列
 - **[范围](range.md)** - 惰性求值的数值序列
 - **[字符串](str.md)** - 文本与字符序列
-- **[字节与字节数组](bytes.md)** - 二进制数据与可变字节
+- **[字节](bytes.md)** - 不可变的二进制数据
+- **[字节数组](bytearray.md)** - 可变的二进制数据，原地修改
 
 ### 映射与集合类型
 
@@ -123,7 +124,7 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 | [`float()`](float_func.md) | O(1) | O(1) | 从字符串转换为 O(n) |
 | [`complex()`](complex_func.md) | O(1) | O(1) | 从字符串转换为 O(n) |
 | [`str()`](str_func.md) | O(1) | O(1) | 容器与自定义 `__str__()` 为 O(n) |
-| [`bytes()`](bytes_func.md) | O(n) | O(n) | n 为来源的长度 |
+| [`bytes()`](bytes_func.md) | O(n) | O(n) | n 为来源的长度；来源的类型恰为 `bytes` 时为 O(1) |
 | [`bytearray()`](bytearray_func.md) | O(n) | O(n) | n 为来源的长度 |
 | [`memoryview()`](memoryview_func.md) | O(1) | O(1) | 缓冲区上的视图，从不复制 |
 | [`list()`](list_func.md) | O(n) | O(n) | n 为可迭代对象的长度 |
