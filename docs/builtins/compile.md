@@ -1,330 +1,264 @@
 # compile() Function Complexity
 
-The `compile()` function compiles Python source code into a code object.
+The `compile()` function turns Python source, or an `ast` tree, into a code object that `eval()`
+and `exec()` run. It tokenizes, parses, builds a symbol table and emits bytecode, and each stage
+is linear in the source. Nothing is cached: compiling the same source twice compiles it twice,
+and `eval()` or `exec()` given a string compiles it on every call.
 
-## Complexity Analysis
+`n` is the length of the source: characters in a `str`, bytes in a `bytes`. `t` is the nodes in
+an `ast` tree, counting each item of a tuple or frozenset held by an `ast.Constant`. Running the code object is not part of `compile()`; its cost is whatever the
+compiled code does.
+
+## Complexity Reference
+
+### compile()
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| Parse code | O(n) | O(n) | n = source code length |
-| Generate bytecode | O(n) | O(n) | Proportional to AST size |
-| Total | O(n) | O(n) | Parsing + bytecode generation |
+| `compile(source, filename, mode)` with a `str` or `bytes` source | O(n) | O(n) | No cache: the same source compiled again costs O(n) again. Constant folding has size limits, so a short expression such as `'a' * 10**8` is left for run time rather than built while compiling |
+| `mode='exec'`, `mode='eval'`, `mode='single'` | O(n) | O(n) | `'exec'` takes statements, `'eval'` one expression, `'single'` one interactive statement whose expression values are printed |
+| `compile(source, filename, mode, flags=ast.PyCF_ONLY_AST)` | O(n) | O(n) | Stops after parsing and returns the `ast` tree, as `ast.parse()` does |
+| `compile(tree, filename, mode)` with an `ast` tree | O(t) | O(t) | The tree is validated first; nodes built by hand need line numbers, which `ast.fix_missing_locations()` fills in |
+| `optimize=-1`, `0`, `1`, `2` | O(n) | O(n) | `-1` follows the interpreter's `-O`; `1` removes `assert` statements and makes `__debug__` false; `2` also removes docstrings |
+| `flags`, `dont_inherit` | O(n) | O(n) | Future features and `ast.PyCF_*` options. By default the caller's `from __future__` imports apply as well; `dont_inherit=True` uses `flags` alone |
+| Invalid source | O(n) | O(n) | Raises `SyntaxError` with `filename` and the line, scoping errors such as a `nonlocal` with no binding included; an undefined name is not an error until the code runs |
 
-*Note: compile() is O(n) in the length of the source code. The resulting code object can be reused with eval()/exec() to avoid re-parsing.*
+### Running the result
 
-## Basic Usage
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `eval(code)`, `exec(code)` | The code's own cost | The code's own cost | No compilation; see [eval()](eval.md) and [exec()](exec.md) |
+| `eval(string)`, `exec(string)` | O(n) + the code's cost | O(n) + the code's cost | Compiles the string on every call |
 
-### Compiling Expressions
+## Compile Once, Run Many Times
+
+`eval()` and `exec()` given a string compile it every time. Compiling it once and passing the
+code object leaves only the run. An audit hook shows each compilation as it happens.
 
 ```python
-# O(n) - compile to code object
-code = compile("2 + 3", "<string>", "eval")
-result = eval(code)  # 5
+import sys
 
-# Reuse compiled code (faster than re-parsing)
-for i in range(1000):
-    eval(code)  # No re-parsing
+compiled = []
+sys.addaudithook(lambda event, args: compiled.append(args[1]) if event == "compile" else None)
+
+x = 3
+for _ in range(100):
+    assert eval("x ** 2") == 9  # O(n) per call - compiles the string each time
+assert compiled.count("<string>") == 100
+
+code = compile("x ** 2", "<expr>", "eval")  # O(n), once
+for _ in range(100):
+    assert eval(code) == 9  # no compilation, only the expression runs
+assert compiled.count("<expr>") == 1
 ```
 
-### Compiling Statements
+## Modes
+
+The mode decides what the source may contain, not what compiling it costs. `'single'` is the
+interactive prompt's mode: an expression statement prints its value unless it is `None`.
 
 ```python
-# O(n) - parse multiple statements
-code = compile("""
-x = 10
-y = 20
-z = x + y
-""", "<string>", "exec")
+import contextlib
+import io
 
+code = compile("2 + 3", "<string>", "eval")  # O(n) - one expression
+assert eval(code) == 5
+
+code = compile("x = 10\ny = 20\nz = x + y\n", "<string>", "exec")  # O(n) - statements
 namespace = {}
 exec(code, namespace)
-print(namespace['z'])  # 30
-```
+assert namespace["z"] == 30
 
-### Single Interactive Statement
+code = compile("1 + 1", "<string>", "single")  # O(n) - one interactive statement
+output = io.StringIO()
+with contextlib.redirect_stdout(output):
+    exec(code)
+assert output.getvalue() == "2\n"
 
-```python
-# O(n) - single statement mode
-code = compile("x = 5", "<string>", "single")
-exec(code)
-# x is now 5 in current scope
-```
-
-## Complexity Details
-
-### Parsing Overhead
-
-```python
-# O(n) - where n = code length
-short_code = "x = 1"
-compile(short_code, "<string>", "exec")  # O(5)
-
-long_code = "x = " + "1 + 2 + 3 + ... + 100"
-compile(long_code, "<string>", "exec")  # O(n)
-
-# Deeply nested code - still O(n)
-nested_code = "((((1))))"
-compile(nested_code, "<string>", "exec")  # O(n)
-```
-
-### Modes
-
-```python
-# All O(n), but different requirements
-
-# "eval" - single expression only
-code = compile("x + 1", "<string>", "eval")
-
-# "exec" - multiple statements
-code = compile("x = 1\ny = 2", "<string>", "exec")
-
-# "single" - single statement or expression (interactive)
-code = compile("x = 1", "<string>", "single")
-```
-
-## Performance Patterns
-
-### Reusing Compiled Code
-
-```python
-# Without compilation - O(n) per execution
-for i in range(10000):
-    eval("x ** 2")  # Parses each time - O(10000 * n)
-
-# With compilation - O(n) once
-code = compile("x ** 2", "<string>", "eval")
-for i in range(10000):
-    eval(code)  # O(n + 10000)
-
-# Second approach is 10000x faster for repeated execution
-```
-
-### Pre-compilation Benefits
-
-```python
-import timeit
-
-expr = "sum(range(100))"
-
-# No pre-compilation
-time1 = timeit.timeit(lambda: eval(expr), number=10000)
-
-# Pre-compiled
-code = compile(expr, "<string>", "eval")
-time2 = timeit.timeit(lambda: eval(code), number=10000)
-
-# time2 is significantly faster (no parsing)
-```
-
-## Code Objects
-
-```python
-# O(n) - produces code object
-code_obj = compile("x + y", "<string>", "eval")
-
-# Properties of code object
-print(code_obj.co_names)       # Variable names: ('x', 'y')
-print(code_obj.co_consts)      # Constants: (None,)
-print(code_obj.co_code)        # Bytecode
-
-# Reusable multiple times
-result1 = eval(code_obj, {"x": 1, "y": 2})  # 3
-result2 = eval(code_obj, {"x": 5, "y": 10})  # 15
-```
-
-## Compilation with Optimization
-
-```python
-# O(n) - optimize is active in Python 3
-# optimize=-1 (inherit), 0 (no optimization), 1, or 2
-code_default = compile("x = 1", "<string>", "exec", optimize=-1)
-code_o1 = compile("assert x > 0", "<string>", "exec", optimize=1)
-code_o2 = compile("def f():\n    'doc'\n    return 1", "<string>", "exec", optimize=2)
-```
-
-## Error Handling
-
-```python
-# O(n) - syntax checking happens during compilation
 try:
-    code = compile("x = ", "<string>", "exec")  # SyntaxError
-except SyntaxError as e:
-    print(f"Syntax error: {e}")
+    compile("x = 1\ny = 2", "<string>", "single")
+except SyntaxError as error:
+    assert "multiple statements" in str(error)
+else:
+    raise AssertionError("'single' accepted two statements")
+```
 
-# vs runtime error (would happen during exec)
+## Sources and Trees
+
+A `bytes` source is decoded first, honouring a coding declaration, and costs O(n) in its bytes.
+`ast.PyCF_ONLY_AST` stops after parsing and returns the tree; a tree passed back in is compiled
+without parsing, so a program can parse once, transform the tree, and compile the result.
+
+```python
+import ast
+
+code = compile(b"# -*- coding: latin-1 -*-\nname = '\xe9'\n", "<bytes>", "exec")  # O(n)
+namespace = {}
+exec(code, namespace)
+assert namespace["name"] == "é"
+
+tree = compile("total = price * count", "<string>", "exec", flags=ast.PyCF_ONLY_AST)  # O(n)
+assert ast.dump(tree) == ast.dump(ast.parse("total = price * count"))
+
+tree.body[0].value.op = ast.Add()  # turn the product into a sum
+code = compile(tree, "<ast>", "exec")  # O(t)
+namespace = {"price": 3, "count": 4}
+exec(code, namespace)
+assert namespace["total"] == 7
+```
+
+## Optimization Levels
+
+`optimize` changes what is emitted, not the bound. Level 1 drops `assert` statements and compiles
+`__debug__` as false; level 2 also drops docstrings.
+
+```python
+source = '''
+def check(value):
+    "Return value, which must be positive."
+    assert value > 0
+    return value
+'''
+
+namespace = {}
+exec(compile(source, "<string>", "exec", optimize=0), namespace)  # O(n)
+assert namespace["check"].__doc__ == "Return value, which must be positive."
 try:
-    code = compile("undefined_function()", "<string>", "exec")
-    # Compiles fine - error at runtime
-except:
+    namespace["check"](-1)
+except AssertionError:
     pass
+else:
+    raise AssertionError("optimize=0 removed the assert")
+
+exec(compile(source, "<string>", "exec", optimize=1), namespace)  # O(n)
+assert namespace["check"](-1) == -1  # the assert is gone
+assert namespace["check"].__doc__ is not None
+
+exec(compile(source, "<string>", "exec", optimize=2), namespace)  # O(n)
+assert namespace["check"].__doc__ is None  # and so is the docstring
 ```
 
-## Practical Examples
+## Future Features
 
-### Dynamic Function Generation
+`flags` takes a feature's `compiler_flag` from the `__future__` module. Without
+`dont_inherit=True`, the features in force where `compile()` is called apply too.
 
 ```python
-# O(n) - compile and execute function definition
-func_code = """
-def fibonacci(n):
-    if n <= 1:
-        return n
-    return fibonacci(n-1) + fibonacci(n-2)
-"""
+import __future__
 
-code = compile(func_code, "<string>", "exec")
+source = "def area(width: float, height: float) -> float: return width * height"
+
+code = compile(source, "<string>", "exec", flags=__future__.annotations.compiler_flag)
 namespace = {}
 exec(code, namespace)
-
-fib = namespace['fibonacci']
-print(fib(10))  # 55
+assert namespace["area"].__annotations__ == {
+    "width": "float", "height": "float", "return": "float"
+}
 ```
 
-### Template Engine
+## Limits on Nesting
+
+Nesting depth has hard limits. More than 200 open brackets
+raises `SyntaxError`, and a block indented 100 levels deep raises `IndentationError`. A chain the
+grammar nests - `a + b + c + ...`, or an `if` with a long run of `elif` branches - deepens the tree
+by one level per link, so a chain of 100,000 links raises `RecursionError` or `MemoryError` where
+100,000 separate statements compile. Code that generates source should emit flat statements or a
+lookup table rather than one long chain.
 
 ```python
-# O(n) - compile template
-template = "Hello {{name}}, you have {{count}} messages"
+try:
+    compile("x = " + "(" * 201 + "1" + ")" * 201, "<string>", "exec")
+except SyntaxError as error:
+    assert "too many nested parentheses" in str(error)
+else:
+    raise AssertionError("201 nested brackets compiled")
 
-# Simple substitution approach
-code = compile(f'f"{template}"', "<string>", "eval")
-
-data = {"name": "Alice", "count": 5}
-# result = eval(code, data)  # Doesn't work directly with f-strings
-# Use proper template engines like Jinja2 instead
+# Flat: one statement per case
+flat = "".join(f"if a == {i}: b = {i}\n" for i in range(10_000))
+compile(flat, "<string>", "exec")  # O(n)
 ```
 
-### Configuration Script Execution
+## Errors
+
+`compile()` rejects invalid syntax, including scoping errors such as a `nonlocal` with no binding,
+but not a name that does not exist: that only fails when the code runs. A `SyntaxError` names the
+file and line it was given, which is why a meaningful `filename` helps.
 
 ```python
-# O(n) - load and execute configuration
+try:
+    compile("total = ", "settings.py", "exec")
+except SyntaxError as error:
+    assert error.filename == "settings.py"
+    assert error.lineno == 1
+else:
+    raise AssertionError("incomplete source compiled")
+
+code = compile("undefined_function()", "<string>", "exec")  # compiles
+try:
+    exec(code, {})
+except NameError as error:
+    assert "undefined_function" in str(error)
+else:
+    raise AssertionError("an undefined name ran")
+```
+
+## Common Patterns
+
+### Loading a Configuration Script
+
+```python
 config_script = """
 DEBUG = True
 DATABASE = "sqlite:///app.db"
-SECRET_KEY = "my-secret"
 ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 """
 
-code = compile(config_script, "config.py", "exec")
+code = compile(config_script, "config.py", "exec")  # O(n), once
 config = {}
 exec(code, config)
-
-debug = config['DEBUG']
-database = config['DATABASE']
+assert config["DEBUG"] is True
+assert config["ALLOWED_HOSTS"] == ["localhost", "127.0.0.1"]
 ```
 
-## Bytecode Inspection
+### Generating a Function
 
 ```python
-import dis
+func_source = """
+def fibonacci(n):
+    a, b = 0, 1
+    for _ in range(n):
+        a, b = b, a + b
+    return a
+"""
 
-# O(n) - compile and analyze
-code = compile("x = 1 + 2", "<string>", "exec")
-
-# View bytecode
-dis.dis(code)
-# Output shows:
-#   1           0 LOAD_CONST               1 (3)
-#               2 STORE_NAME               0 (x)
-#               4 LOAD_CONST               0 (None)
-#               6 RETURN_VALUE
-
-# Helps understand Python's execution
+namespace = {}
+exec(compile(func_source, "<generated>", "exec"), namespace)  # O(n), once
+fibonacci = namespace["fibonacci"]
+assert [fibonacci(i) for i in range(8)] == [0, 1, 1, 2, 3, 5, 8, 13]
 ```
 
-## Filename Parameter
-
-```python
-# O(n) - filename helps with error messages
-code = compile("invalid python", "script.py", "exec")
-# SyntaxError will show: File "script.py", line 1
-
-# Use meaningful filenames for debugging
-```
-
-## Edge Cases
-
-### Empty Code
-
-```python
-# O(1) - minimal parsing
-code = compile("", "<string>", "exec")
-exec(code)  # Does nothing
-```
-
-### Comment-only Code
-
-```python
-# O(1) - ignored
-code = compile("# This is a comment", "<string>", "exec")
-exec(code)  # No operation
-```
-
-### Mixed Whitespace
-
-```python
-# O(n) - parses normally
-code = compile("""
-
-x = 1
-
-
-y = 2
-
-""", "<string>", "exec")
-exec(code)
-```
-
-## Performance Considerations
-
-### vs Source Execution
-
-```python
-import timeit
-
-# Direct execution
-t1 = timeit.timeit("eval('2 + 3')", number=10000)
-
-# Compiled execution
-t2 = timeit.timeit("eval(code)", setup="code = compile('2 + 3', '<string>', 'eval')", number=10000)
-
-# t2 is much faster (no parsing)
-```
-
-### Memory Usage
-
-```python
-# Code objects are memory efficient
-code = compile("x + y" * 1000, "<string>", "eval")
-# Bytecode is more compact than original string
-```
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use `compile()` for code executed multiple times
-- Save compiled code in variables for reuse
-- Use meaningful filenames for debugging
-- Pre-compile hot paths in performance-critical code
+- Compile source that runs repeatedly once, and pass the code object to `eval()` or `exec()`
+- Keep the code object rather than the string; `compile()` caches nothing
+- Pass a real `filename`, so a `SyntaxError` points at the right place
+- Generate flat statements, not one long `elif` or `+` chain
 
 ❌ **Avoid**:
 
-- Compiling code that runs only once (overhead > benefit)
-- Using `compile()` as security mechanism (it's not)
-- Ignoring SyntaxErrors from user input
-- Storing compiled code of untrusted source without review
+- Calling `compile()` before a single `eval()` or `exec()` - they compile a string anyway, at the
+  same cost
+- Treating `compile()` as validation of untrusted code: it rejects only invalid syntax, and running
+  the result runs whatever the code does
+- Relying on `assert` in code compiled with `optimize=1` or more, or under `python -O`
 
 ## Related Functions
 
-- **[eval()](eval.md)** - Evaluate expressions
-- **[exec()](exec.md)** - Execute statements
-- **[ast.parse()](https://docs.python.org/3/library/ast.html)** - Parse without compilation
-- **[dis.dis()](https://docs.python.org/3/library/dis.html)** - Disassemble bytecode
-
-## Version Notes
-
-- **Python 2.x**: `compile()` accepts optional optimize flag
-- **Python 3.x**: Optimize parameter deprecated (always optimized)
-- **Python 3.8+**: Improved error messages
-- **All versions**: Returns code object, requires eval()/exec() to execute
+- **[eval()](eval.md)** - Runs an expression, compiling a string on every call
+- **[exec()](exec.md)** - Runs statements, compiling a string on every call
+- **[ast](../stdlib/ast.md)** - Parse without compiling, and transform the tree before compiling it
+- **[dis](../stdlib/dis.md)** - Disassemble the code object `compile()` returns
+- **[`__future__`](../stdlib/__future__.md)** - The feature flags `compile()` accepts
+- **[py_compile](../stdlib/py_compile.md)** - Compile a file to a `.pyc`
