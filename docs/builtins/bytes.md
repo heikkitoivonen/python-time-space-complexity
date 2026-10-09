@@ -274,3 +274,8 @@ assert bytes.fromhex(normalise(b" 0xff00 ").decode("ascii")) == b"\xff\x00"  # O
 - **[bytearray()](bytearray_func.md)** - Building a `bytearray`, the linear way to accumulate bytes
 - **[memoryview()](memoryview_func.md)** - O(1) views and slices over a `bytes` buffer
 - **[str](str.md)** - Text; `str.encode()` and `bytes.decode()` convert between the two in O(n)
+
+## Further Reading
+
+- [CPython Internals: bytes](https://zpoint.github.io/CPython-Internals/BasicObject/bytes/bytes.html){ target="_blank" rel="noopener" }:material-open-in-new: -
+  Deep dive into CPython's bytes implementation
