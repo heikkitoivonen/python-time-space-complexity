@@ -1,5 +1,5 @@
 ---
-source_sha: 6be1d1f816d9d59ca198a4db6580371a4c2b6387c719cdc4eb1619209bf68b58
+source_sha: ad95cb242f5e6951b808e6e7ab7ff7d86f11a196210e1d2e406ba286915af9cd
 translated: machine
 ---
 
@@ -11,12 +11,14 @@ translated: machine
 
 | 情况 | 时间 | 空间 | 备注 |
 |------|------|-------|-------|
-| 转换基本类型（int、str 等） | O(1) | O(1) | 直接取真值 |
-| 转换容器 | O(1) | O(1) | 通过 `__len__()` 检查是否非空 |
-| 调用 `__bool__()` | O(k) | O(1) | k = 方法的复杂度（通常为 O(1)） |
-| 调用 `__len__()` | O(1) | O(1) | 内置容器会缓存长度 |
+| 转换数字（int、float、complex） | O(1) | O(1) | 判断是否为零；不随数值大小增长 |
+| 转换内置容器（str、list、dict、set、range 等） | O(1) | O(1) | 根据已存储的长度判断是否为空；不逐个计数元素 |
+| 定义了 `__bool__()` 的类 | O(k) | O(1) | k = `__bool__()` 的开销（通常为 O(1)）；不会调用 `__len__()` |
+| 只定义了 `__len__()` 的类 | O(k) | O(1) | k = `__len__()` 的开销 |
+| 两者都未定义的类 | O(1) | O(1) | 总是 `True` |
 
-*注意：对于内置类型（list、dict、set 等），`__len__()` 是 O(1)，因为长度已被缓存。`__len__()` 实现代价高昂的自定义容器会更慢。*
+`bool()` 至多调用一次 `__bool__()` 或 `__len__()`，自定义方法本身的时间和空间开销要另外加到对应行上。
+结果是 `True` 和 `False` 这两个单例之一，因此不会为结果分配任何内存。
 
 ## 基本用法
 
@@ -95,20 +97,21 @@ bool(obj)  # True - calls __len__(), returns 5
 ### 自定义 `__bool__()` 方法
 
 ```python
-# O(m) - depends on __bool__() implementation
+# O(k) - depends on __bool__() implementation
 
 class Expensive:
     def __init__(self, data):
         self.data = data
     
     def __bool__(self):
-        # O(n) - iterates through data
+        # O(n) worst case - any() stops at the first truthy item
         return any(self.data)
 
-obj = Expensive([1, 2, 3])
-bool(obj)  # O(n) - calls __bool__
+obj = Expensive([0, 0, 0])
+bool(obj)  # False - O(n), all three items checked
 
-# Without __bool__, would use __len__() - O(1)
+# Without __bool__, __len__() decides - O(1) for a list
+# It answers a different question: non-empty, not "any item truthy"
 class Efficient:
     def __init__(self, data):
         self.data = data
@@ -117,8 +120,8 @@ class Efficient:
         # O(1) - quick
         return len(self.data)
 
-obj = Efficient([1, 2, 3])
-bool(obj)  # O(1) - calls __len__()
+obj = Efficient([0, 0, 0])
+bool(obj)  # True - O(1), calls __len__()
 ```
 
 ## 真值判断规则
@@ -137,7 +140,7 @@ bool(set())     # False (empty set)
 bool(())        # False (empty tuple)
 bool(range(0))  # False (empty range)
 
-# O(1) - all other values are truthy:
+# O(1) - these values are truthy:
 bool(True)      # True
 bool(1)         # True
 bool(-1)        # True
@@ -154,6 +157,9 @@ bool([False])   # True (non-empty!)
 
 ```python
 # O(1) - implicit bool conversion
+def process(items):
+    return len(items)
+
 items = []
 
 if items:           # O(1) - checks truthiness
@@ -226,7 +232,7 @@ if len(items) > 0:     # O(1) - explicit
 if len(items) != 0:    # O(1) - also explicit
     pass
 
-# Fastest - let Python do implicit bool
+# Idiomatic - let Python do implicit bool
 if items:              # Best
     pass
 ```
@@ -234,19 +240,20 @@ if items:              # Best
 ### 与显式比较的对比
 
 ```python
-# O(1) - bool conversion
-if bool(obj):          # O(1)
+obj = [1, 2, 3]
+
+# Truthiness - O(1) for built-in types, else __bool__() or __len__()
+if obj:
     pass
 
-# vs explicit comparison
-if obj != None:        # O(1)
+# None check - O(1) for any type, but a different question:
+# an empty list is not None
+if obj is not None:
     pass
 
-if obj is not None:    # O(1)
-    pass
-
-# vs using __len__
-if len(obj) > 0:       # O(n) for some types
+# len() - for a type with no __bool__(), the same __len__() call
+# that `if obj:` makes
+if len(obj) > 0:
     pass
 ```
 
@@ -256,14 +263,18 @@ if len(obj) > 0:       # O(n) for some types
 
 ```python
 # O(1) - check if argument provided
+default_value = 10
+
 def process(value=None):
-    if not value:      # O(1)
+    if value is None:  # O(1)
         value = default_value
     return value
 
+process(0)  # 0 - `if not value:` would replace it with 10
+
 # With optional list
 def extend_list(items=None):
-    if not items:      # O(1)
+    if items is None:  # O(1)
         items = []
     return items
 ```
@@ -289,7 +300,7 @@ def validate_data(data):
 items = [1, 2, 3, 4, 5]
 
 # Check if any item is truthy (short-circuits)
-if any(items):  # O(1) - first truthy wins
+if any(items):  # Stops at the first truthy item - here the first
     pass
 
 # Check if all items are truthy
@@ -316,7 +327,6 @@ bool(False)  # False - explicit false
 bool("")     # False - empty string
 
 # All truthy
-bool(0)      # False (exception!)
 bool([0])    # True - non-empty
 bool([None]) # True - non-empty
 bool([False])# True - non-empty
@@ -345,7 +355,7 @@ if obj is not None:  # True - object exists!
 
 ```python
 # O(1) - check for zero before division
-divisor = get_value()
+divisor = 4
 
 if divisor:  # O(1) - checks if non-zero
     result = 100 / divisor
@@ -364,7 +374,7 @@ if divisor != 0:     # O(1)
 - 使用隐式真值判断：`if items:` 而非 `if len(items) > 0:`
 - 显式检查 `is None`：`if value is None:` 而非 `if not value:`
 - 需要显式布尔值时使用 `bool()` 转换
-- 为自定义类定义 `__bool__()`（不要只定义 `__len__()`）
+- 如果类的 `__len__()` 代价高昂，为它定义 `__bool__()`，这样真值判断就不必调用 `__len__()`
 
 ❌ **避免**：
 
@@ -373,15 +383,16 @@ if divisor != 0:     # O(1)
 - 假设所有假值都是 False
 - 复杂的 `__bool__()` 实现（应保持 O(1)）
 
+## 版本说明
+
+- **Python 2.x**：使用 `__nonzero__()` 而非 `__bool__()`
+- **Python 3.x**：使用 `__bool__()` 方法
+- **Python 3.14+**：`bool(NotImplemented)` 会引发 `TypeError`；3.10 至 3.13 返回 `True` 并发出 `DeprecationWarning`
+- **所有版本**：假值保持一致（None、False、0、""、[]、{} 等）
+
 ## 相关函数
 
 - **[all()](all.md)** - 检查是否所有元素均为真值
 - **[any()](any.md)** - 检查是否存在为真值的元素
 - **[len()](len.md)** - 获取容器长度
 - **[bool 类型](bool.md)** - 布尔类型文档
-
-## 版本说明
-
-- **Python 2.x**：使用 `__nonzero__()` 而非 `__bool__()`
-- **Python 3.x**：使用 `__bool__()` 方法
-- **所有版本**：假值保持一致（None、False、0、""、[]、{} 等）

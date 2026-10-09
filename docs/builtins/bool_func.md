@@ -6,12 +6,15 @@ The `bool()` function converts an object to a boolean value using truthiness eva
 
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
-| Convert primitive (int, str, etc) | O(1) | O(1) | Direct truth value |
-| Convert container | O(1) | O(1) | Checks if non-empty via `__len__()` |
-| Call `__bool__()` | O(k) | O(1) | k = method complexity (usually O(1)) |
-| Call `__len__()` | O(1) | O(1) | Built-in containers store length |
+| Convert number (int, float, complex) | O(1) | O(1) | Zero check; does not grow with the value's size |
+| Convert built-in container (str, list, dict, set, range, etc) | O(1) | O(1) | Empty check on the stored length; items are not counted |
+| Class defining `__bool__()` | O(k) | O(1) | k = `__bool__()`'s cost (usually O(1)); `__len__()` is not called |
+| Class defining only `__len__()` | O(k) | O(1) | k = `__len__()`'s cost |
+| Class defining neither | O(1) | O(1) | Always `True` |
 
-*Note: For built-in types (list, dict, set, etc.), `__len__()` is O(1) because the length is cached. Custom containers with expensive `__len__()` implementations would be slower.*
+`bool()` makes at most one call to `__bool__()` or `__len__()`, and a custom
+method's own time and space add to the row. The result is one of the two
+singletons `True` and `False`, so nothing is allocated for it.
 
 ## Basic Usage
 
@@ -90,20 +93,21 @@ bool(obj)  # True - calls __len__(), returns 5
 ### Custom `__bool__()` Method
 
 ```python
-# O(m) - depends on __bool__() implementation
+# O(k) - depends on __bool__() implementation
 
 class Expensive:
     def __init__(self, data):
         self.data = data
     
     def __bool__(self):
-        # O(n) - iterates through data
+        # O(n) worst case - any() stops at the first truthy item
         return any(self.data)
 
-obj = Expensive([1, 2, 3])
-bool(obj)  # O(n) - calls __bool__
+obj = Expensive([0, 0, 0])
+bool(obj)  # False - O(n), all three items checked
 
-# Without __bool__, would use __len__() - O(1)
+# Without __bool__, __len__() decides - O(1) for a list
+# It answers a different question: non-empty, not "any item truthy"
 class Efficient:
     def __init__(self, data):
         self.data = data
@@ -112,8 +116,8 @@ class Efficient:
         # O(1) - quick
         return len(self.data)
 
-obj = Efficient([1, 2, 3])
-bool(obj)  # O(1) - calls __len__()
+obj = Efficient([0, 0, 0])
+bool(obj)  # True - O(1), calls __len__()
 ```
 
 ## Truthiness Rules
@@ -132,7 +136,7 @@ bool(set())     # False (empty set)
 bool(())        # False (empty tuple)
 bool(range(0))  # False (empty range)
 
-# O(1) - all other values are truthy:
+# O(1) - these values are truthy:
 bool(True)      # True
 bool(1)         # True
 bool(-1)        # True
@@ -149,6 +153,9 @@ bool([False])   # True (non-empty!)
 
 ```python
 # O(1) - implicit bool conversion
+def process(items):
+    return len(items)
+
 items = []
 
 if items:           # O(1) - checks truthiness
@@ -221,7 +228,7 @@ if len(items) > 0:     # O(1) - explicit
 if len(items) != 0:    # O(1) - also explicit
     pass
 
-# Fastest - let Python do implicit bool
+# Idiomatic - let Python do implicit bool
 if items:              # Best
     pass
 ```
@@ -229,19 +236,20 @@ if items:              # Best
 ### vs Explicit Comparisons
 
 ```python
-# O(1) - bool conversion
-if bool(obj):          # O(1)
+obj = [1, 2, 3]
+
+# Truthiness - O(1) for built-in types, else __bool__() or __len__()
+if obj:
     pass
 
-# vs explicit comparison
-if obj != None:        # O(1)
+# None check - O(1) for any type, but a different question:
+# an empty list is not None
+if obj is not None:
     pass
 
-if obj is not None:    # O(1)
-    pass
-
-# vs using __len__
-if len(obj) > 0:       # O(n) for some types
+# len() - for a type with no __bool__(), the same __len__() call
+# that `if obj:` makes
+if len(obj) > 0:
     pass
 ```
 
@@ -251,14 +259,18 @@ if len(obj) > 0:       # O(n) for some types
 
 ```python
 # O(1) - check if argument provided
+default_value = 10
+
 def process(value=None):
-    if not value:      # O(1)
+    if value is None:  # O(1)
         value = default_value
     return value
 
+process(0)  # 0 - `if not value:` would replace it with 10
+
 # With optional list
 def extend_list(items=None):
-    if not items:      # O(1)
+    if items is None:  # O(1)
         items = []
     return items
 ```
@@ -284,7 +296,7 @@ def validate_data(data):
 items = [1, 2, 3, 4, 5]
 
 # Check if any item is truthy (short-circuits)
-if any(items):  # O(1) - first truthy wins
+if any(items):  # Stops at the first truthy item - here the first
     pass
 
 # Check if all items are truthy
@@ -311,7 +323,6 @@ bool(False)  # False - explicit false
 bool("")     # False - empty string
 
 # All truthy
-bool(0)      # False (exception!)
 bool([0])    # True - non-empty
 bool([None]) # True - non-empty
 bool([False])# True - non-empty
@@ -340,7 +351,7 @@ if obj is not None:  # True - object exists!
 
 ```python
 # O(1) - check for zero before division
-divisor = get_value()
+divisor = 4
 
 if divisor:  # O(1) - checks if non-zero
     result = 100 / divisor
@@ -359,7 +370,7 @@ if divisor != 0:     # O(1)
 - Use implicit truthiness: `if items:` not `if len(items) > 0:`
 - Check `is None` explicitly: `if value is None:` not `if not value:`
 - Use `bool()` to convert to boolean explicitly when needed
-- Define `__bool__()` for custom classes (not `__len__()` alone)
+- Define `__bool__()` on a class whose `__len__()` is expensive, so truth tests skip `__len__()`
 
 ❌ **Avoid**:
 
@@ -368,15 +379,16 @@ if divisor != 0:     # O(1)
 - Assuming all falsy values are False
 - Complex `__bool__()` implementations (should be O(1))
 
+## Version Notes
+
+- **Python 2.x**: Works with `__nonzero__()` instead of `__bool__()`
+- **Python 3.x**: Uses `__bool__()` method
+- **Python 3.14+**: `bool(NotImplemented)` raises `TypeError`; 3.10 to 3.13 return `True` with a `DeprecationWarning`
+- **All versions**: Falsy values consistent (None, False, 0, "", [], {}, etc.)
+
 ## Related Functions
 
 - **[all()](all.md)** - Check if all items are truthy
 - **[any()](any.md)** - Check if any item is truthy
 - **[len()](len.md)** - Get container length
 - **[bool type](bool.md)** - Boolean type documentation
-
-## Version Notes
-
-- **Python 2.x**: Works with `__nonzero__()` instead of `__bool__()`
-- **Python 3.x**: Uses `__bool__()` method
-- **All versions**: Falsy values consistent (None, False, 0, "", [], {}, etc.)
