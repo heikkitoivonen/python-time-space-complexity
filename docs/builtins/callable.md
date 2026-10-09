@@ -1,14 +1,16 @@
 # callable() Function Complexity
 
 The `callable()` function checks whether an object is callable (can be invoked with arguments).
+It reads one slot on the object's type rather than looking up `__call__` by name, so its cost
+does not depend on the object's attributes or the depth of its class hierarchy.
 
 ## Complexity Analysis
 
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
-| Check callable status | O(1) | O(1) | Simple attribute check |
-| Object with `__call__` | O(1) | O(1) | Direct attribute lookup |
-| Built-in types | O(1) | O(1) | Constant time check |
+| Check callable status | O(1) | O(1) | Reads the call slot on `type(obj)`; no attribute lookup |
+| Object with `__call__` | O(1) | O(1) | `__call__` must be defined on the class or a base; one set on the instance is ignored |
+| Built-in types | O(1) | O(1) | Every class is callable: its metaclass fills the slot |
 
 ## Basic Usage
 
@@ -21,8 +23,8 @@ def my_function():
 
 callable(my_function)      # True
 callable(len)              # True
-callable(str.upper)        # True (bound method)
-callable(str.split)        # True (unbound method)
+callable("hi".upper)       # True (bound method)
+callable(str.split)        # True (method descriptor)
 ```
 
 ### Checking Non-Callable Objects
@@ -61,25 +63,41 @@ callable(obj)              # True (has __call__)
 
 ### How callable() Works
 
-```python
-# O(1) - checks for __call__ method in type hierarchy
-# Note: This is a simplified conceptual model; CPython has optimized checks
-def is_callable(obj):
-    return hasattr(type(obj), '__call__')
+`callable()` never looks `__call__` up by name. It reads the call slot on `type(obj)`, which
+Python fills when the class or one of its bases defines `__call__`, so `__getattr__` and
+`__getattribute__` are never called. A `__call__` set on the instance does not count, which is
+why `hasattr(obj, "__call__")` is not an equivalent:
 
-# callable() is more efficient than this Python equivalent
+```python
+class Plain:
+    pass
+
+obj = Plain()
+obj.__call__ = lambda: "instance attribute"
+assert hasattr(obj, "__call__")
+assert not callable(obj)  # O(1) - the instance attribute is ignored
+
+Plain.__call__ = lambda self: "class attribute"
+assert callable(obj)  # O(1) - the class now fills the slot
 ```
 
-### Attribute Lookup
+### A True Result Does Not Promise a Successful Call
+
+`callable()` only says the type has a call slot. The call can still fail, for example on the
+wrong arguments or when the class sets `__call__` to something that is not callable:
 
 ```python
-# O(1) - single attribute check
-# callable() essentially checks:
-# 1. obj has __call__ method
-# 2. obj is a type/class
-# 3. obj is a built-in function
+class Broken:
+    __call__ = None
 
-# All constant time operations
+assert callable(Broken())  # O(1) - the slot is filled
+
+try:
+    Broken()()
+except TypeError as e:
+    assert "not callable" in str(e)
+else:
+    raise AssertionError("expected TypeError")
 ```
 
 ## Common Patterns
@@ -121,18 +139,18 @@ except TypeError as e:
 ### Polymorphic Processing
 
 ```python
-# O(1) - per item, handle both callables and values
+# O(n) for n items, plus the cost of each call
 def process(items):
     results = []
     for item in items:
-        if callable(item):
+        if callable(item):  # O(1)
             results.append(item())  # Call it
         else:
             results.append(item)    # Use as-is
     return results
 
-values = [42, lambda: 100, "string", len]
-# results = [42, 100, "string", <function len>]
+values = [42, lambda: 100, "string", dict]
+assert process(values) == [42, 100, "string", {}]
 ```
 
 ## Callables in Python
@@ -241,7 +259,7 @@ result = add_five(10)  # 15
 ### Class Methods and Static Methods
 
 ```python
-# O(1) - decorators preserve callability
+# O(1) - each method, looked up on the class, is callable
 
 class Example:
     @classmethod
@@ -307,6 +325,9 @@ value1 = lazy_value(42)              # 42
 value2 = lazy_value(lambda: 42)      # 42 (factory called)
 
 # Useful for configuration
+def expensive_calculation():
+    return sum(range(1_000))
+
 config = {
     'static': 100,
     'dynamic': lambda: expensive_calculation()
@@ -373,7 +394,7 @@ manager.emit("click")  # Output: Event: click
 
 ## Related Functions
 
-- **[hasattr()](index.md)** - Check for attribute existence
+- **[hasattr()](hasattr.md)** - Check for attribute existence
 - **[isinstance()](isinstance.md)** - Check object type
 - **[type()](type_func.md)** - Get object type
 - **[inspect.isfunction()](https://docs.python.org/3/library/inspect.html)** - Detailed type checking
