@@ -1,5 +1,5 @@
 ---
-source_sha: 320ab71a8582ba423db896cd3827ab3721ab7052df231a69351e224a5dd031da
+source_sha: d40df4d8a0d7e4ef4fae6eb5db4f36c67ab5f79fe48c7bae1e7431f934a5e0f1
 translated: machine
 ---
 
@@ -14,6 +14,8 @@ translated: machine
 | 所有元素均为真 | O(n) | O(1) | 必须检查所有元素 |
 | 提前退出（发现假值） | O(k) | O(1) | k = 第一个假值的位置 |
 | 空可迭代对象 | O(1) | O(1) | 立即返回 True |
+
+n 和 k 按 all() 收到的元素个数计。产生这些元素的开销——迭代器自身的工作（包括它跳过的元素）以及生成器表达式的谓词——和每个元素的真值测试开销另计。
 
 ## 基本用法
 
@@ -48,6 +50,9 @@ result = all(x > 2 for x in numbers)  # False - stops at 1
 ### 短路求值
 
 ```python
+def expensive_function():
+    return sum(range(10_000)) > 0
+
 # ✅ O(1) - stops immediately at first falsy
 checks = [lambda: False, expensive_function, expensive_function]
 result = all(check() for check in checks)
@@ -59,20 +64,20 @@ result = all([False] + [expensive_function() for _ in range(1000)])
 
 # ✅ O(k) - generator stops when predicate first fails
 result = all(x < 100 for x in range(1000000))
-# Stops after checking 100 items
+# Stops after checking 101 items (0 through 100)
 ```
 
 ### 生成器效率
 
 ```python
-# O(n) - lazy evaluation with early exit
-large_list = range(10**9)
-result = all(x < 100 for x in large_list)
-# O(100) - stops after checking 100 items
+# O(k) - lazy evaluation with early exit
+large_range = range(10**7)
+result = all(x < 100 for x in large_range)
+# Stops after checking 101 items, however long the range
 
-# vs list comprehension
-result = all([x < 100 for x in range(10**9)])
-# O(10^9) - creates entire list first
+# vs list comprehension - O(n)
+result = all([x < 100 for x in large_range])
+# Builds the whole 10^7-item list first
 ```
 
 ## 常见模式
@@ -80,11 +85,10 @@ result = all([x < 100 for x in range(10**9)])
 ### 数据校验
 
 ```python
-# O(n*k) - validate all items
+# O(k) - stops at the first non-int; O(n) when every item is an int
 def validate_data(items):
     return all(isinstance(item, int) for item in items)
 
-# O(n) early exit if any item is invalid
 valid = validate_data([1, 2, 3, 4, 5])  # True
 valid = validate_data([1, 2, "three", 4, 5])  # False - stops at "three"
 ```
@@ -110,6 +114,10 @@ all(())  # True
 all(x > 0 for x in [])  # True
 
 # Useful for "default to true" logic
+def condition(x):
+    return x > 0
+
+items = []
 result = all(condition(x) for x in items)  # True if items is empty
 ```
 
@@ -166,7 +174,9 @@ all([1, "", [1, 2], {"key": "value"}])  # False - "" is falsy
 ### 与循环的比较
 
 ```python
-# all() - O(n), optimized, readable
+numbers = [1, 2, 3, 4, 5]
+
+# all() - O(n), readable
 result = all(x > 0 for x in numbers)
 
 # Manual loop - O(n) same complexity
@@ -176,7 +186,7 @@ for x in numbers:
         result = False
         break
 
-# all() is preferred - cleaner and same performance
+# all() is preferred - cleaner, same complexity
 ```
 
 ### 与 any() 的用法选择
@@ -217,10 +227,8 @@ not any(x > 0 for x in numbers)  # False
 
 - **[any()](any.md)** - 检查是否存在为真的元素
 - **[filter()](filter.md)** - 按谓词过滤元素
-- **[all() with min()](max.md)** - 组合使用操作
 
 ## 版本说明
 
 - **Python 2.x**：提供基本功能
 - **Python 3.x**：行为相同
-- **Python 3.8+**：优化可能提升性能

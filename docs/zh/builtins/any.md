@@ -1,11 +1,14 @@
 ---
-source_sha: 4986cd2cdbf0f4e76eccafca68e381976e54cac8590eba28f052b75e09ace1ad
+source_sha: 4b6b1d20baacc7ebd5dcd5e6e38e7c1696ddd9d11e137a18d4f8963f5672c4c6
 translated: machine
 ---
 
 # any() 函数的复杂度
 
 如果可迭代对象中存在任一为真的元素，`any()` 函数返回 `True`。
+
+`n` 是可迭代对象产出的元素个数，`k` 是第一个真值元素的位置。产出一个元素和判断其真值都按
+O(1) 计；对于生成器表达式，表达式本身的工作计入产出该元素的开销。
 
 ## 复杂度分析
 
@@ -49,6 +52,9 @@ result = any(x > 2 for x in numbers)  # True - stops at 3 (index 2)
 ### 短路求值
 
 ```python
+def expensive_function():
+    return False
+
 # ✅ O(1) - stops immediately at first truthy
 checks = [lambda: True, expensive_function, expensive_function]
 result = any(check() for check in checks)
@@ -60,20 +66,20 @@ result = any([True] + [expensive_function() for _ in range(1000)])
 
 # ✅ O(k) - generator stops early
 result = any(x > 100 for x in range(10**9))
-# Stops after checking 101 items
+# Stops after checking 102 items (0 through 101)
 ```
 
 ### 生成器效率
 
 ```python
 # O(k) - lazy evaluation with early exit
-large_list = range(10**9)
-result = any(x > 10**8 for x in large_list)
-# O(10^8) - stops when condition met
+numbers = range(10**6)
+result = any(x > 10**5 for x in numbers)
+# Stops after checking 10**5 + 2 items
 
 # vs list comprehension - O(n)
-result = any([x > 10**8 for x in range(10**9)])
-# O(10^9) - creates entire list first
+result = any([x > 10**5 for x in numbers])
+# Builds all 10**6 results first
 ```
 
 ## 常见模式
@@ -86,7 +92,7 @@ items = [1, 2, 3, 4, 5]
 result = any(x == 3 for x in items)  # True - stops at 3
 
 # Equivalent to:
-result = 3 in items  # O(k) - same speed, more readable
+result = 3 in items  # O(k) - same scan, more readable
 ```
 
 ### 带提前退出的校验
@@ -164,7 +170,9 @@ any([False, [], {}, "hello"])  # True - stops at "hello"
 ### 与循环的比较
 
 ```python
-# any() - O(k), optimized
+numbers = [5, 50, 500, 5000]
+
+# any() - O(k)
 result = any(x > 100 for x in numbers)
 
 # Manual loop - O(k) same complexity
@@ -174,7 +182,7 @@ for x in numbers:
         result = True
         break
 
-# any() is preferred - cleaner and equally fast
+# any() is preferred - same O(k), and shorter
 ```
 
 ### 与 in 运算符的比较
@@ -186,25 +194,36 @@ items = [1, 2, 3, 4, 5]
 # O(k) - early exit
 result = any(x == 3 for x in items)
 
-# O(k) - faster, more readable
+# O(k) - same scan, more readable
 result = 3 in items
 
 # any() is useful for complex conditions:
 result = any(x > 3 for x in items)  # Condition
-result = any(x.startswith("a") for x in items)  # Complex check
+words = ["kiwi", "apple", "plum"]
+result = any(w.startswith("a") for w in words)  # Complex check
 ```
 
 ### 与 or 运算符的比较
 
 ```python
-# Short-circuit evaluation works similarly
-result = any([condition1, condition2, condition3])
+def expensive1():
+    return True
 
-# Equivalent to:
-result = condition1 or condition2 or condition3
+def expensive2():
+    return False
 
-# But condition1, condition2, condition3 are evaluated before any()
-# With any() and generators, short-circuit happens inside:
+def expensive3():
+    return False
+
+condition1, condition2, condition3 = 0, "yes", None
+
+# Same truthiness as the or-chain below
+result = any([condition1, condition2, condition3])  # True
+
+# or returns the first truthy operand itself, not a bool
+result = condition1 or condition2 or condition3  # "yes"
+
+# A list is built before any() runs, so every call is made:
 result = any([expensive1(), expensive2(), expensive3()])  # Evaluates all
 
 # Generator version stops early:
@@ -235,6 +254,4 @@ result = any(f() for f in [expensive1, expensive2, expensive3])
 
 ## 版本说明
 
-- **Python 2.x**：提供基本功能
-- **Python 3.x**：行为相同
-- **Python 3.8+**：优化可能提升性能
+- **所有 Python 3 版本**：在第一个真值元素处停止，迭代器中其余元素保持未消费

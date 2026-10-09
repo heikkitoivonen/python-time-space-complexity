@@ -2,6 +2,11 @@
 
 The `any()` function returns `True` if any item in an iterable is truthy.
 
+`n` is the number of items the iterable yields and `k` is the position of the
+first truthy one. Producing one item and testing its truth are treated as
+O(1); with a generator expression, the expression's own work is part of
+producing the item.
+
 ## Complexity Analysis
 
 | Case | Time | Space | Notes |
@@ -44,6 +49,9 @@ result = any(x > 2 for x in numbers)  # True - stops at 3 (index 2)
 ### Short-Circuit Evaluation
 
 ```python
+def expensive_function():
+    return False
+
 # ✅ O(1) - stops immediately at first truthy
 checks = [lambda: True, expensive_function, expensive_function]
 result = any(check() for check in checks)
@@ -55,20 +63,20 @@ result = any([True] + [expensive_function() for _ in range(1000)])
 
 # ✅ O(k) - generator stops early
 result = any(x > 100 for x in range(10**9))
-# Stops after checking 101 items
+# Stops after checking 102 items (0 through 101)
 ```
 
 ### Generator Efficiency
 
 ```python
 # O(k) - lazy evaluation with early exit
-large_list = range(10**9)
-result = any(x > 10**8 for x in large_list)
-# O(10^8) - stops when condition met
+numbers = range(10**6)
+result = any(x > 10**5 for x in numbers)
+# Stops after checking 10**5 + 2 items
 
 # vs list comprehension - O(n)
-result = any([x > 10**8 for x in range(10**9)])
-# O(10^9) - creates entire list first
+result = any([x > 10**5 for x in numbers])
+# Builds all 10**6 results first
 ```
 
 ## Common Patterns
@@ -81,7 +89,7 @@ items = [1, 2, 3, 4, 5]
 result = any(x == 3 for x in items)  # True - stops at 3
 
 # Equivalent to:
-result = 3 in items  # O(k) - same speed, more readable
+result = 3 in items  # O(k) - same scan, more readable
 ```
 
 ### Validation with Early Exit
@@ -159,7 +167,9 @@ any([False, [], {}, "hello"])  # True - stops at "hello"
 ### vs Loop
 
 ```python
-# any() - O(k), optimized
+numbers = [5, 50, 500, 5000]
+
+# any() - O(k)
 result = any(x > 100 for x in numbers)
 
 # Manual loop - O(k) same complexity
@@ -169,7 +179,7 @@ for x in numbers:
         result = True
         break
 
-# any() is preferred - cleaner and equally fast
+# any() is preferred - same O(k), and shorter
 ```
 
 ### vs in Operator
@@ -181,25 +191,36 @@ items = [1, 2, 3, 4, 5]
 # O(k) - early exit
 result = any(x == 3 for x in items)
 
-# O(k) - faster, more readable
+# O(k) - same scan, more readable
 result = 3 in items
 
 # any() is useful for complex conditions:
 result = any(x > 3 for x in items)  # Condition
-result = any(x.startswith("a") for x in items)  # Complex check
+words = ["kiwi", "apple", "plum"]
+result = any(w.startswith("a") for w in words)  # Complex check
 ```
 
 ### vs "or" Operator
 
 ```python
-# Short-circuit evaluation works similarly
-result = any([condition1, condition2, condition3])
+def expensive1():
+    return True
 
-# Equivalent to:
-result = condition1 or condition2 or condition3
+def expensive2():
+    return False
 
-# But condition1, condition2, condition3 are evaluated before any()
-# With any() and generators, short-circuit happens inside:
+def expensive3():
+    return False
+
+condition1, condition2, condition3 = 0, "yes", None
+
+# Same truthiness as the or-chain below
+result = any([condition1, condition2, condition3])  # True
+
+# or returns the first truthy operand itself, not a bool
+result = condition1 or condition2 or condition3  # "yes"
+
+# A list is built before any() runs, so every call is made:
 result = any([expensive1(), expensive2(), expensive3()])  # Evaluates all
 
 # Generator version stops early:
@@ -230,6 +251,4 @@ result = any(f() for f in [expensive1, expensive2, expensive3])
 
 ## Version Notes
 
-- **Python 2.x**: Basic functionality available
-- **Python 3.x**: Same behavior
-- **Python 3.8+**: Optimizations may improve performance
+- **All Python 3**: Stops at the first truthy item and leaves the rest of an iterator unconsumed

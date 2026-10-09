@@ -1,15 +1,21 @@
 # ascii() Function Complexity
 
 The `ascii()` function returns a printable representation of an object with non-ASCII characters escaped.
+It calls `repr()` on the object, then makes one escaping pass over the result
+if it contains any non-ASCII character, so the cost is `repr()`'s plus a pass
+linear in the length of what `repr()` returned.
 
 ## Complexity Analysis
 
+For a string, `n` is its length. For any other object, `r` is the length of
+`repr(x)`.
+
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
-| ASCII string | O(n) | O(n) | n = string length |
-| Unicode string | O(n) | O(n) | Non-ASCII chars escaped |
-| Container | O(n) | O(n) | Recursively escapes contents |
-| Custom object | O(1)* | O(1)* | Depends on `__repr__` |
+| ASCII string | O(n) | O(n) | |
+| Unicode string | O(n) | O(n) | Each non-ASCII character becomes a 4-, 6- or 10-character escape |
+| Container | `repr(x)` + O(r) | `repr(x)` + O(r) | One escaping pass over the whole `repr()`, not one per element |
+| Custom object | `__repr__` + O(r) | `__repr__` + O(r) | `__repr__` is called once; only the non-ASCII characters in its result are escaped |
 
 ## Basic Usage
 
@@ -39,7 +45,7 @@ ascii("日本語")       # "'\\u65e5\\u672c\\u8a9e'"
 text = "Hello, 世界"
 ascii(text)  # "'Hello, \\u4e16\\u754c'"
 
-# Each Unicode character escaped to \uXXXX or \UXXXXXXXX
+# Each non-ASCII character becomes \xHH, \uHHHH or \UHHHHHHHH
 ```
 
 ## Complexity Details
@@ -51,26 +57,27 @@ ascii(text)  # "'Hello, \\u4e16\\u754c'"
 # Each character may expand to multiple chars
 
 # Short ASCII
-ascii("abc")  # O(3)
+ascii("abc")  # n = 3
 
 # Long ASCII
-ascii("a" * 1000)  # O(1000)
+ascii("a" * 1000)  # n = 1000
 
 # Unicode requiring escaping
-ascii("é" * 100)   # O(100) - each é becomes \xe9 (4 chars)
+ascii("é" * 100)   # n = 100 - each é becomes \xe9 (4 chars)
 ```
 
 ### Escape Sequences
 
 ```python
-# ASCII characters - no change
-# Extended ASCII (127-255) - use \xHH format (4 chars total)
+# Printable ASCII - unchanged, apart from what repr() escapes
+# (quotes, backslashes, control characters)
+# Code points 0x80-0xff - use \xHH format (4 chars total)
 ascii("\xe9")  # "'\\xe9'" - é in Latin-1
 
-# Unicode (>255) - use \uHHHH format (6 chars total)
+# Code points 0x100-0xffff - use \uHHHH format (6 chars total)
 ascii("\u0101")  # "'\\u0101'" - ā (a with macron)
 
-# High Unicode - use \UHHHHHHHH format (10 chars total)
+# Code points above 0xffff - use \UHHHHHHHH format (10 chars total)
 ascii("\U0001f600")  # "'\\U0001f600'" - 😀 emoji
 ```
 
@@ -81,17 +88,16 @@ ascii("\U0001f600")  # "'\\U0001f600'" - 😀 emoji
 ```python
 # O(n) - show hidden non-ASCII characters
 text = "Hello\nWorld\t!"
-print(ascii(text))
-# Output: 'Hello\\nWorld\\t!'
+ascii(text)  # "'Hello\\nWorld\\t!'"
 
 # vs str/repr
-print(str(text))    # Shows actual newlines/tabs
-print(repr(text))   # Shows escapes but uses non-ASCII if present
+str(text)    # The text itself, with real newlines/tabs
+repr(text)   # "'Hello\\nWorld\\t!'" - repr() escapes control characters too
 
-# ascii() always shows escapes
+# repr() keeps printable non-ASCII characters; ascii() escapes them
 text_unicode = "Héllo"
-print(repr(text_unicode))   # "'Héllo'" (shows Unicode char)
-print(ascii(text_unicode))  # "'H\\xe9llo'" (escaped)
+repr(text_unicode)   # "'Héllo'" (shows Unicode char)
+ascii(text_unicode)  # "'H\\xe9llo'" (escaped)
 ```
 
 ### Encoding for Limited Charsets
@@ -112,16 +118,14 @@ safe = make_ascii_safe(data)
 
 ```python
 # O(n) - display paths with non-ASCII names
-import os
-
 # Filename might contain Unicode
 filename = "documento_españa.txt"
-print(ascii(filename))
+ascii(filename)
 # "'documento_espa\\xf1a.txt'"
 
 # Safe for logging
 path = "/home/用户/文件.txt"
-print(ascii(path))
+ascii(path)
 # "'/home/\\u7528\\u6237/\\u6587\\u4ef6.txt'"
 ```
 
@@ -140,7 +144,7 @@ ascii_versions = [ascii(s) for s in strings]
 
 ```python
 # O(n) - entire text must be scanned
-large_text = open("file.txt", "r", encoding="utf-8").read()
+large_text = "Grüße aus 東京\n" * 10_000
 safe_version = ascii(large_text)  # O(len(large_text))
 
 # Memory: output may be larger (each non-ASCII becomes \xXX, \uXXXX, etc)
@@ -161,7 +165,8 @@ ascii("")  # "''"
 # O(n) - no escaping needed
 ascii("abc123!@#")  # "'abc123!@#'"
 
-# Output same as input (with quotes added)
+# Output is the input with quotes added, because it has no quotes,
+# backslashes or control characters for repr() to escape
 ```
 
 ### Only Non-ASCII
@@ -170,7 +175,7 @@ ascii("abc123!@#")  # "'abc123!@#'"
 # O(n) - all characters escaped
 ascii("日本語")   # "'\\u65e5\\u672c\\u8a9e'"
 
-# Output is entirely escape sequences
+# Everything between the quotes is an escape sequence
 ```
 
 ## Best Practices
@@ -178,9 +183,8 @@ ascii("日本語")   # "'\\u65e5\\u672c\\u8a9e'"
 ✅ **Do**:
 
 - Use `ascii()` for logging with non-ASCII content
-- Use `ascii()` for API responses to avoid encoding issues
 - Use `ascii()` when ASCII-only output is required
-- Use for debugging to see all whitespace and control characters
+- Use for debugging to see non-ASCII characters as well as the whitespace and control characters `repr()` already escapes
 
 ❌ **Avoid**:
 
@@ -191,13 +195,11 @@ ascii("日本語")   # "'\\u65e5\\u672c\\u8a9e'"
 
 ## Related Functions
 
-- **[repr()](repr.md)** - Python representation (keeps non-ASCII)
+- **[repr()](repr.md)** - Python representation (keeps printable non-ASCII characters)
 - **[str()](str.md)** - String representation (human-readable)
 - **[encode()](str.md)** - Encode to bytes with specific encoding
 - **[bytes()](bytes.md)** - Convert to bytes
 
 ## Version Notes
 
-- **Python 2.x**: Treats strings differently, Unicode handling varies
-- **Python 3.x**: Consistent Unicode support, uses \uXXXX format
-- **All versions**: Returns string with quotes, all non-ASCII escaped
+- **All Python 3**: `ascii(x)` is `repr(x)` with every non-ASCII character escaped as `\xHH`, `\uHHHH` or `\UHHHHHHHH`; a string argument comes back quoted, other objects in whatever form their `repr()` takes

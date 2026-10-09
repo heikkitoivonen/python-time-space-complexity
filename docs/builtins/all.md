@@ -10,6 +10,10 @@ The `all()` function returns `True` if all items in an iterable are truthy (or i
 | Early exit (falsy found) | O(k) | O(1) | k = position of first falsy item |
 | Empty iterable | O(1) | O(1) | Returns True immediately |
 
+n and k count the items all() receives. Producing them - the iterator's own
+work, including any items it skips, and a generator expression's predicate -
+and each item's truth test add their own cost on top.
+
 ## Basic Usage
 
 ### Checking All True
@@ -43,6 +47,9 @@ result = all(x > 2 for x in numbers)  # False - stops at 1
 ### Short-Circuit Evaluation
 
 ```python
+def expensive_function():
+    return sum(range(10_000)) > 0
+
 # ✅ O(1) - stops immediately at first falsy
 checks = [lambda: False, expensive_function, expensive_function]
 result = all(check() for check in checks)
@@ -54,20 +61,20 @@ result = all([False] + [expensive_function() for _ in range(1000)])
 
 # ✅ O(k) - generator stops when predicate first fails
 result = all(x < 100 for x in range(1000000))
-# Stops after checking 100 items
+# Stops after checking 101 items (0 through 100)
 ```
 
 ### Generator Efficiency
 
 ```python
-# O(n) - lazy evaluation with early exit
-large_list = range(10**9)
-result = all(x < 100 for x in large_list)
-# O(100) - stops after checking 100 items
+# O(k) - lazy evaluation with early exit
+large_range = range(10**7)
+result = all(x < 100 for x in large_range)
+# Stops after checking 101 items, however long the range
 
-# vs list comprehension
-result = all([x < 100 for x in range(10**9)])
-# O(10^9) - creates entire list first
+# vs list comprehension - O(n)
+result = all([x < 100 for x in large_range])
+# Builds the whole 10^7-item list first
 ```
 
 ## Common Patterns
@@ -75,11 +82,10 @@ result = all([x < 100 for x in range(10**9)])
 ### Validation
 
 ```python
-# O(n*k) - validate all items
+# O(k) - stops at the first non-int; O(n) when every item is an int
 def validate_data(items):
     return all(isinstance(item, int) for item in items)
 
-# O(n) early exit if any item is invalid
 valid = validate_data([1, 2, 3, 4, 5])  # True
 valid = validate_data([1, 2, "three", 4, 5])  # False - stops at "three"
 ```
@@ -105,6 +111,10 @@ all(())  # True
 all(x > 0 for x in [])  # True
 
 # Useful for "default to true" logic
+def condition(x):
+    return x > 0
+
+items = []
 result = all(condition(x) for x in items)  # True if items is empty
 ```
 
@@ -161,7 +171,9 @@ all([1, "", [1, 2], {"key": "value"}])  # False - "" is falsy
 ### vs Loop
 
 ```python
-# all() - O(n), optimized, readable
+numbers = [1, 2, 3, 4, 5]
+
+# all() - O(n), readable
 result = all(x > 0 for x in numbers)
 
 # Manual loop - O(n) same complexity
@@ -171,7 +183,7 @@ for x in numbers:
         result = False
         break
 
-# all() is preferred - cleaner and same performance
+# all() is preferred - cleaner, same complexity
 ```
 
 ### vs any() Usage
@@ -212,10 +224,8 @@ not any(x > 0 for x in numbers)  # False
 
 - **[any()](any.md)** - Check if any item is truthy
 - **[filter()](filter.md)** - Filter items based on predicate
-- **[all() with min()](max.md)** - Combining operations
 
 ## Version Notes
 
 - **Python 2.x**: Basic functionality available
 - **Python 3.x**: Same behavior
-- **Python 3.8+**: Optimizations may improve performance

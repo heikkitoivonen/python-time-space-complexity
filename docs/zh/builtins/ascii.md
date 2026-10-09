@@ -1,20 +1,24 @@
 ---
-source_sha: 566a10b86e581df5f28a1ccd48bd41752fbfcc78d082fd8181c1aab2007650d7
+source_sha: 74f480c5b351806412878d0913ebada93bb8e2cf981d2d6b15b5285028f9a8ab
 translated: machine
 ---
 
 # ascii() 函数的复杂度
 
 `ascii()` 函数返回对象的可打印表示形式，其中非 ASCII 字符会被转义。
+它先对对象调用 `repr()`，若结果中含有任何非 ASCII 字符，再对结果做一遍转义，
+因此其开销是 `repr()` 的开销，加上与 `repr()` 返回结果长度成线性关系的一遍处理。
 
 ## 复杂度分析
 
+对字符串而言，`n` 是其长度。对其他任何对象，`r` 是 `repr(x)` 的长度。
+
 | 情况 | 时间 | 空间 | 备注 |
 |------|------|-------|-------|
-| ASCII 字符串 | O(n) | O(n) | n = 字符串长度 |
-| Unicode 字符串 | O(n) | O(n) | 非 ASCII 字符被转义 |
-| 容器 | O(n) | O(n) | 递归转义其中的内容 |
-| 自定义对象 | O(1)* | O(1)* | 取决于 `__repr__` |
+| ASCII 字符串 | O(n) | O(n) | |
+| Unicode 字符串 | O(n) | O(n) | 每个非 ASCII 字符变为 4、6 或 10 个字符的转义序列 |
+| 容器 | `repr(x)` + O(r) | `repr(x)` + O(r) | 对整个 `repr()` 结果做一遍转义，而不是每个元素一遍 |
+| 自定义对象 | `__repr__` + O(r) | `__repr__` + O(r) | `__repr__` 只调用一次；只转义其结果中的非 ASCII 字符 |
 
 ## 基本用法
 
@@ -44,7 +48,7 @@ ascii("日本語")       # "'\\u65e5\\u672c\\u8a9e'"
 text = "Hello, 世界"
 ascii(text)  # "'Hello, \\u4e16\\u754c'"
 
-# Each Unicode character escaped to \uXXXX or \UXXXXXXXX
+# Each non-ASCII character becomes \xHH, \uHHHH or \UHHHHHHHH
 ```
 
 ## 复杂度细节
@@ -56,26 +60,27 @@ ascii(text)  # "'Hello, \\u4e16\\u754c'"
 # Each character may expand to multiple chars
 
 # Short ASCII
-ascii("abc")  # O(3)
+ascii("abc")  # n = 3
 
 # Long ASCII
-ascii("a" * 1000)  # O(1000)
+ascii("a" * 1000)  # n = 1000
 
 # Unicode requiring escaping
-ascii("é" * 100)   # O(100) - each é becomes \xe9 (4 chars)
+ascii("é" * 100)   # n = 100 - each é becomes \xe9 (4 chars)
 ```
 
 ### 转义序列
 
 ```python
-# ASCII characters - no change
-# Extended ASCII (127-255) - use \xHH format (4 chars total)
+# Printable ASCII - unchanged, apart from what repr() escapes
+# (quotes, backslashes, control characters)
+# Code points 0x80-0xff - use \xHH format (4 chars total)
 ascii("\xe9")  # "'\\xe9'" - é in Latin-1
 
-# Unicode (>255) - use \uHHHH format (6 chars total)
+# Code points 0x100-0xffff - use \uHHHH format (6 chars total)
 ascii("\u0101")  # "'\\u0101'" - ā (a with macron)
 
-# High Unicode - use \UHHHHHHHH format (10 chars total)
+# Code points above 0xffff - use \UHHHHHHHH format (10 chars total)
 ascii("\U0001f600")  # "'\\U0001f600'" - 😀 emoji
 ```
 
@@ -86,17 +91,16 @@ ascii("\U0001f600")  # "'\\U0001f600'" - 😀 emoji
 ```python
 # O(n) - show hidden non-ASCII characters
 text = "Hello\nWorld\t!"
-print(ascii(text))
-# Output: 'Hello\\nWorld\\t!'
+ascii(text)  # "'Hello\\nWorld\\t!'"
 
 # vs str/repr
-print(str(text))    # Shows actual newlines/tabs
-print(repr(text))   # Shows escapes but uses non-ASCII if present
+str(text)    # The text itself, with real newlines/tabs
+repr(text)   # "'Hello\\nWorld\\t!'" - repr() escapes control characters too
 
-# ascii() always shows escapes
+# repr() keeps printable non-ASCII characters; ascii() escapes them
 text_unicode = "Héllo"
-print(repr(text_unicode))   # "'Héllo'" (shows Unicode char)
-print(ascii(text_unicode))  # "'H\\xe9llo'" (escaped)
+repr(text_unicode)   # "'Héllo'" (shows Unicode char)
+ascii(text_unicode)  # "'H\\xe9llo'" (escaped)
 ```
 
 ### 为受限字符集编码
@@ -117,16 +121,14 @@ safe = make_ascii_safe(data)
 
 ```python
 # O(n) - display paths with non-ASCII names
-import os
-
 # Filename might contain Unicode
 filename = "documento_españa.txt"
-print(ascii(filename))
+ascii(filename)
 # "'documento_espa\\xf1a.txt'"
 
 # Safe for logging
 path = "/home/用户/文件.txt"
-print(ascii(path))
+ascii(path)
 # "'/home/\\u7528\\u6237/\\u6587\\u4ef6.txt'"
 ```
 
@@ -145,7 +147,7 @@ ascii_versions = [ascii(s) for s in strings]
 
 ```python
 # O(n) - entire text must be scanned
-large_text = open("file.txt", "r", encoding="utf-8").read()
+large_text = "Grüße aus 東京\n" * 10_000
 safe_version = ascii(large_text)  # O(len(large_text))
 
 # Memory: output may be larger (each non-ASCII becomes \xXX, \uXXXX, etc)
@@ -166,7 +168,8 @@ ascii("")  # "''"
 # O(n) - no escaping needed
 ascii("abc123!@#")  # "'abc123!@#'"
 
-# Output same as input (with quotes added)
+# Output is the input with quotes added, because it has no quotes,
+# backslashes or control characters for repr() to escape
 ```
 
 ### 仅含非 ASCII
@@ -175,7 +178,7 @@ ascii("abc123!@#")  # "'abc123!@#'"
 # O(n) - all characters escaped
 ascii("日本語")   # "'\\u65e5\\u672c\\u8a9e'"
 
-# Output is entirely escape sequences
+# Everything between the quotes is an escape sequence
 ```
 
 ## 最佳实践
@@ -183,9 +186,8 @@ ascii("日本語")   # "'\\u65e5\\u672c\\u8a9e'"
 ✅ **推荐**：
 
 - 日志中含非 ASCII 内容时使用 `ascii()`
-- API 响应中使用 `ascii()` 以避免编码问题
 - 需要 ASCII-only 输出时使用 `ascii()`
-- 调试时用它查看所有空白符和控制字符
+- 调试时用它查看非 ASCII 字符，以及 `repr()` 已会转义的空白符和控制字符
 
 ❌ **避免**：
 
@@ -196,13 +198,11 @@ ascii("日本語")   # "'\\u65e5\\u672c\\u8a9e'"
 
 ## 相关函数
 
-- **[repr()](repr.md)** - Python 表示形式（保留非 ASCII 字符）
+- **[repr()](repr.md)** - Python 表示形式（保留可打印的非 ASCII 字符）
 - **[str()](str.md)** - 字符串表示形式（人类可读）
 - **[encode()](str.md)** - 按指定编码编码为字节
 - **[bytes()](bytes.md)** - 转换为字节
 
 ## 版本说明
 
-- **Python 2.x**：对字符串的处理方式不同，Unicode 处理各有差异
-- **Python 3.x**：一致的 Unicode 支持，使用 \uXXXX 格式
-- **所有版本**：返回带引号的字符串，所有非 ASCII 字符均被转义
+- **所有 Python 3**：`ascii(x)` 即 `repr(x)`，其中每个非 ASCII 字符都转义为 `\xHH`、`\uHHHH` 或 `\UHHHHHHHH`；字符串参数返回时带引号，其他对象则采用其 `repr()` 的形式

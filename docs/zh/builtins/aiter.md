@@ -1,5 +1,5 @@
 ---
-source_sha: f1a1cdf5164fe4494e87ed868f67429ccba7e2c329e36cd0b820142d360f510a
+source_sha: 7da8f454e051386c9e0bd400f81f9c3024a866f5f2f27aed2ec21554da8e3a7f
 translated: machine
 ---
 
@@ -11,8 +11,8 @@ translated: machine
 
 | 操作 | 时间 | 空间 | 备注 |
 |------|------|-------|-------|
-| `aiter()` | O(1) | O(1) | 创建迭代器 |
-| `__aiter__()` | O(1) | O(1) | 在可迭代对象上调用 |
+| `aiter()` | O(1) | O(1) | 另加一次 `__aiter__()` 调用，并返回其结果；参数没有 `__aiter__()` 或结果没有 `__anext__()` 时引发 TypeError |
+| 异步生成器的 `__aiter__()` | O(1) | O(1) | 返回生成器自身 |
 
 ## 基本用法
 
@@ -26,7 +26,7 @@ async def async_generator():
         yield i
 
 async def main():
-    # Create async iterator - O(1)
+    # Get the async iterator - O(1): an async generator is its own
     async_iter = aiter(async_generator())
     
     # Iterate
@@ -48,6 +48,9 @@ class AsyncIterable:
 class AsyncIterator:
     def __init__(self):
         self.count = 0
+    
+    def __aiter__(self):
+        return self
     
     async def __anext__(self):
         if self.count >= 3:

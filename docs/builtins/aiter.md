@@ -6,8 +6,8 @@ The `aiter()` function returns an asynchronous iterator from an asynchronous ite
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `aiter()` | O(1) | O(1) | Create iterator |
-| `__aiter__()` | O(1) | O(1) | Call on iterable |
+| `aiter()` | O(1) | O(1) | Plus one `__aiter__()` call, whose result it returns; TypeError if the argument has no `__aiter__()` or the result has no `__anext__()` |
+| `__aiter__()` of an async generator | O(1) | O(1) | Returns the generator itself |
 
 ## Basic Usage
 
@@ -21,7 +21,7 @@ async def async_generator():
         yield i
 
 async def main():
-    # Create async iterator - O(1)
+    # Get the async iterator - O(1): an async generator is its own
     async_iter = aiter(async_generator())
     
     # Iterate
@@ -43,6 +43,9 @@ class AsyncIterable:
 class AsyncIterator:
     def __init__(self):
         self.count = 0
+    
+    def __aiter__(self):
+        return self
     
     async def __anext__(self):
         if self.count >= 3:
