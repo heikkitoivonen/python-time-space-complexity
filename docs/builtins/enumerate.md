@@ -1,353 +1,206 @@
 # enumerate() Function Complexity
 
-The `enumerate()` function returns an iterator that produces tuples of (index, item) from an iterable.
+The `enumerate(iterable, start=0)` function returns an iterator of `(index, item)` tuples. It
+is lazy: building it calls `iter(iterable)` and consumes nothing, and each step takes one item
+from that iterator and pairs it with a counter.
 
-## Complexity Analysis
+`n` is the number of items taken from the enumerate object. Getting each item from the
+underlying iterator is priced at O(1), as it is for lists, tuples, strings and ranges; an
+iterator that does more work per item adds that cost to every step. Each index is priced at O(1),
+which holds for a `start` that fits in a machine word.
 
-| Case | Time | Space | Notes |
-|------|------|-------|-------|
-| Creating iterator | O(1) | O(1) | Just creates iterator object |
-| Consuming iterator | O(n) | O(1) | n = items iterated; yields one at a time |
-| With custom start | O(n) | O(1) | start parameter doesn't change complexity |
+## Complexity Reference
 
-*Note: enumerate() returns an iterator that yields tuples lazily. Space is O(1) because it doesn't store all tuples in memory. Converting to list with `list(enumerate(x))` is O(n) space.*
+### enumerate
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `enumerate(iterable, start=0)` | O(1) | O(1) | Calls `iter(iterable)` once and takes no items; a non-iterable raises `TypeError` here |
+| `next()` on an enumerate object | O(1) | O(1) | Takes one item from the underlying iterator |
+| Iterating an enumerate object | O(n) | O(1) | Tuples are produced one at a time, not accumulated |
+| `list(enumerate(iterable))` | O(n) | O(n) | Holds all n tuples |
+| `enumerate[T]` | O(1) | O(1) | A generic alias for type hints |
 
 ## Basic Usage
 
 ### Simple Enumeration
 
 ```python
-# O(1) - creates iterator
 items = ['a', 'b', 'c']
-enumerated = enumerate(items)  # Iterator
 
-# O(n) - consumed when needed
-for index, item in enumerated:
-    print(index, item)
-# 0 a
-# 1 b
-# 2 c
+pairs = []
+for index, item in enumerate(items):      # O(n)
+    pairs.append((index, item))
+assert pairs == [(0, 'a'), (1, 'b'), (2, 'c')]
 
-# Convert to list - O(n) time and space
-result = list(enumerate(items))
-# [(0, 'a'), (1, 'b'), (2, 'c')]
+assert list(enumerate(items)) == [(0, 'a'), (1, 'b'), (2, 'c')]   # O(n) time and space
 ```
 
 ### Custom Start Index
 
+`start` sets the first index. It must be an int, or an object with `__index__`.
+
 ```python
-# O(1) - creates iterator
 items = ['a', 'b', 'c']
-enumerated = enumerate(items, start=1)
 
-# O(n) - consumed
-result = list(enumerated)
-# [(1, 'a'), (2, 'b'), (3, 'c')]
+assert list(enumerate(items, start=1)) == [(1, 'a'), (2, 'b'), (3, 'c')]
+assert list(enumerate(items, 10)) == [(10, 'a'), (11, 'b'), (12, 'c')]
+assert list(enumerate(items, -1)) == [(-1, 'a'), (0, 'b'), (1, 'c')]
 
-# Works with any start value
-result = list(enumerate(items, start=10))
-# [(10, 'a'), (11, 'b'), (12, 'c')]
+try:
+    enumerate(items, start=1.5)
+except TypeError as exc:
+    assert "cannot be interpreted as an integer" in str(exc)
+else:
+    raise AssertionError("a float start did not raise")
 ```
 
-## Performance Patterns
+## Lazy, Single-Pass Iteration
 
-### Lazy Evaluation
+Building an enumerate object takes no items, and a loop that stops early pays only for the
+items it took. The object is an iterator over its iterator, so it can be consumed once.
 
 ```python
-# O(1) - creates iterator, doesn't process yet
-big_list = range(10**9)
-enumerated = enumerate(big_list)
+taken = []
 
-# O(n) - only when you consume
-for i, item in enumerate(big_list):
-    print(i, item)
-    if i >= 10:
-        break  # O(10) - stops early
+def numbers():
+    for value in range(10**9):
+        taken.append(value)
+        yield value
 
-# vs list comprehension
-result = [(i, x) for i, x in enumerate(range(10**9))]  # O(10^9)!
+pairs = enumerate(numbers())      # O(1) - nothing is taken yet
+assert taken == []
+
+for index, value in pairs:        # O(k) for k items taken
+    if index == 3:
+        break
+assert taken == [0, 1, 2, 3]
+
+assert next(pairs) == (4, 4)      # O(1) - resumes where the loop stopped
 ```
 
-### Nested Enumeration
+```python
+pairs = enumerate(['a', 'b'])
+assert list(pairs) == [(0, 'a'), (1, 'b')]
+assert list(pairs) == []          # already exhausted
+
+try:
+    len(enumerate(['a', 'b']))
+except TypeError as exc:
+    assert "has no len()" in str(exc)
+else:
+    raise AssertionError("len() did not raise")
+
+try:
+    enumerate(['a', 'b'])[0]
+except TypeError as exc:
+    assert "not subscriptable" in str(exc)
+else:
+    raise AssertionError("indexing did not raise")
+```
+
+To reverse or index the pairs, build a list first, which costs O(n) time and space:
 
 ```python
-# O(n*m*k) - enumerate nested structures
-matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+pairs = list(enumerate(['a', 'b', 'c']))      # O(n)
+assert pairs[::-1] == [(2, 'c'), (1, 'b'), (0, 'a')]
+assert pairs[1] == (1, 'b')
+```
 
-# O(n*m) - enumerate rows and columns
-for i, row in enumerate(matrix):
-    for j, item in enumerate(row):
-        print(f"[{i}][{j}] = {item}")
+## enumerate() vs range(len(...))
+
+`for i in range(len(seq))` with `seq[i]` needs a sequence that supports `len()` and indexing, and
+each `seq[i]` adds the cost of indexing that sequence. On a list that is O(1), so both loops are
+O(n). On a `deque`, indexing away from the ends is O(n), which makes the loop O(n²), while
+`enumerate()` walks the deque once. `enumerate()` also works on generators, files and other
+iterables that cannot be indexed.
+
+```python
+from collections import deque
+
+d = deque(range(1000))
+
+by_index = [(i, d[i]) for i in range(len(d))]    # O(n²) - each d[i] walks the deque
+by_enumerate = list(enumerate(d))               # O(n)
+assert by_index == by_enumerate
+
+lines = iter(['first', 'second'])
+assert list(enumerate(lines, start=1)) == [(1, 'first'), (2, 'second')]
 ```
 
 ## Common Patterns
 
-### Iterating with Index
+### Finding Every Position
+
+One pass with `enumerate()` finds every match in O(n). `list.index()` returns only the first
+match, and raises `ValueError` when there is none.
 
 ```python
-# ✅ O(n) - preferred way
-items = ['a', 'b', 'c', 'd', 'e']
-for index, item in enumerate(items):
-    print(index, item)
+items = ['apple', 'banana', 'cherry', 'banana']
 
-# ❌ O(n) but less Pythonic
-for i in range(len(items)):
-    print(i, items[i])
+positions = [i for i, item in enumerate(items) if item == 'banana']   # O(n)
+assert positions == [1, 3]
 
-# ❌ O(n) with unnecessary zip
-for i, item in zip(range(len(items)), items):
-    print(i, item)
+assert items.index('banana') == 1     # O(n) - first match only
+
+try:
+    items.index('date')
+except ValueError:
+    pass
+else:
+    raise AssertionError("index() found a missing item")
 ```
 
-### Filtering with Index
+### Pairing with zip()
 
 ```python
-# O(n) - enumerate and filter
-items = ['a', 'b', 'c', 'd', 'e']
-result = [item for i, item in enumerate(items) if i % 2 == 0]
-# ['a', 'c', 'e']
-
-# Get only indices
-indices = [i for i, item in enumerate(items) if 'a' in item]
-# [0]
-```
-
-### Building New Structure
-
-```python
-# O(n) - enumerate to create dict
-items = ['apple', 'banana', 'cherry']
-item_dict = {i: item for i, item in enumerate(items)}
-# {0: 'apple', 1: 'banana', 2: 'cherry'}
-
-# With custom start
-item_dict = {i: item for i, item in enumerate(items, start=1)}
-# {1: 'apple', 2: 'banana', 3: 'cherry'}
-```
-
-## Working with Multiple Iterables
-
-### Parallel Iteration with Index
-
-```python
-# O(n) - enumerate with zip
 names = ['Alice', 'Bob', 'Charlie']
 ages = [30, 25, 35]
 
-for i, (name, age) in enumerate(zip(names, ages)):
-    print(f"{i}: {name} is {age}")
-# 0: Alice is 30
-# 1: Bob is 25
-# 2: Charlie is 35
+rows = [f"{i}: {name} is {age}" for i, (name, age) in enumerate(zip(names, ages))]   # O(n)
+assert rows == ["0: Alice is 30", "1: Bob is 25", "2: Charlie is 35"]
 ```
 
-### Nested Structures
+### Building a Lookup Table
 
 ```python
-# O(n*m*k) - multiple levels of enumeration
-data = [
-    [1, 2, 3],
-    [4, 5, 6],
-    [7, 8, 9],
-]
+items = ['apple', 'banana', 'cherry']
 
-for i, row in enumerate(data):
-    for j, item in enumerate(row):
-        print(f"[{i}][{j}] = {item}")
-```
+by_number = dict(enumerate(items, start=1))               # O(n)
+assert by_number == {1: 'apple', 2: 'banana', 3: 'cherry'}
 
-## Advanced Patterns
-
-### Enumerate with Custom Index
-
-```python
-# O(n) - enumerate with offset
-items = ['a', 'b', 'c', 'd', 'e']
-for index, item in enumerate(items, start=100):
-    print(index, item)
-# 100 a
-# 101 b
-# ... etc
-```
-
-### Finding Position
-
-```python
-# O(n) - find position of element
-items = ['apple', 'banana', 'cherry', 'date']
-target = 'cherry'
-
-for index, item in enumerate(items):
-    if item == target:
-        position = index
-        break
-# position = 2
-
-# Alternative: use index() method
-position = items.index(target)  # O(n) - same complexity
-```
-
-### Conditional Enumeration
-
-```python
-# O(n) - enumerate with filter
-items = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-
-# Only enumerate even items
-for index, item in enumerate(items):
-    if item % 2 == 0:
-        print(index, item)
-# 1 2
-# 3 4
-# ... etc
-```
-
-## Comparison with Alternatives
-
-### enumerate vs range(len(...))
-
-```python
-# ✅ enumerate - preferred, more Pythonic
-items = ['a', 'b', 'c']
-for i, item in enumerate(items):
-    print(i, item)
-
-# ❌ range(len(...)) - less readable
-for i in range(len(items)):
-    print(i, items[i])
-
-# Both O(n), enumerate is clearer
-```
-
-### enumerate vs zip with range
-
-```python
-# ✅ enumerate - simpler and faster
-items = ['a', 'b', 'c']
-for i, item in enumerate(items):
-    process(i, item)
-
-# ❌ zip with range - unnecessary overhead
-for i, item in zip(range(len(items)), items):
-    process(i, item)
-
-# Both O(n), enumerate is more efficient
-```
-
-### enumerate vs Index Method
-
-```python
-# If finding position of one element
-items = ['a', 'b', 'c', 'd', 'e']
-target = 'c'
-
-# O(n) - enumerate
-for i, item in enumerate(items):
-    if item == target:
-        print(i)
-        break
-
-# O(n) - index method
-print(items.index(target))
-
-# If finding multiple positions
-# enumerate is more efficient - single pass
-
-# If finding one - index() is clearer
+position = {item: i for i, item in enumerate(items)}      # O(n) once, then O(1) lookups
+assert position['cherry'] == 2
 ```
 
 ## Edge Cases
 
-### Empty Iterable
-
 ```python
-# O(1) - creates empty iterator
-result = list(enumerate([]))
-# []
+assert list(enumerate([])) == []
+assert list(enumerate('ab')) == [(0, 'a'), (1, 'b')]
+assert list(enumerate({'x': 1, 'y': 2})) == [(0, 'x'), (1, 'y')]   # dict keys
 
-for i, item in enumerate([]):
-    print(i, item)  # Never executes
+try:
+    enumerate(42)
+except TypeError as exc:      # raised when the object is built, not when it is iterated
+    assert "not iterable" in str(exc)
+else:
+    raise AssertionError("enumerate(42) did not raise")
 ```
 
-### Single Item
-
-```python
-# O(1) - creates iterator with one element
-result = list(enumerate(['a']))
-# [(0, 'a')]
-```
-
-### Large Start Value
-
-```python
-# O(1) - start value doesn't affect complexity
-result = list(enumerate([1, 2, 3], start=10**9))
-# [(1000000000, 1), (1000000001, 2), (1000000002, 3)]
-```
-
-### Generators
-
-```python
-# O(n) - enumerate can consume generators
-def generator():
-    yield 1
-    yield 2
-    yield 3
-
-for i, value in enumerate(generator()):
-    print(i, value)
-# 0 1
-# 1 2
-# 2 3
-```
-
-## Performance Considerations
-
-### Memory Efficiency
-
-```python
-# ✅ Iterator - memory efficient
-big_list = range(10**9)
-for i, item in enumerate(big_list):
-    if i < 10:
-        print(item)
-# Only iterates 10 items
-
-# ❌ List creation - uses memory
-indices_items = list(enumerate(range(10**9)))  # Huge memory!
-```
-
-### Speed Comparison
-
-```python
-import timeit
-
-items = list(range(1000))
-
-# Time for enumerate
-t1 = timeit.timeit(lambda: [x for i, x in enumerate(items)], number=10000)
-
-# Time for range(len(...))
-t2 = timeit.timeit(lambda: [items[i] for i in range(len(items))], number=10000)
-
-# enumerate is generally faster due to optimizations
-```
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use `enumerate()` when you need both index and item
-- Use `enumerate(iterable, start=1)` for 1-based indexing
-- Use `enumerate()` with `break` for early exit
-- Use `enumerate()` for lazy evaluation with large datasets
+- Use `enumerate()` when you need both the index and the item - one O(n) pass over any iterable
+- Use `break` to stop early - only the items taken are paid for
+- Build an `{item: index}` dict once when you look up positions of distinct, hashable items repeatedly
 
 ❌ **Avoid**:
 
-- Using `range(len(...))` when `enumerate()` is clearer
-- Using `zip(range(len(...)), iterable)` - use `enumerate()` instead
-- Forgetting that `enumerate()` returns an iterator
-- Creating intermediate lists unnecessarily
+- `range(len(seq))` with `seq[i]` on a `deque` or another sequence with costly indexing - O(n²)
+- `list(enumerate(...))` when one loop over the pairs is enough - O(n) space for nothing
+- Iterating an exhausted enumerate object again - the second pass is empty
 
 ## Related Functions
 
@@ -358,6 +211,4 @@ t2 = timeit.timeit(lambda: [items[i] for i in range(len(items))], number=10000)
 
 ## Version Notes
 
-- **Python 2.x**: `enumerate()` available, works similarly
-- **Python 3.x**: Same behavior and performance
-- **Python 3.8+**: Optimizations may improve performance but O(n) guaranteed
+- **All Python 3**: `enumerate()` is lazy and single-pass, and its bounds are the same on every supported version

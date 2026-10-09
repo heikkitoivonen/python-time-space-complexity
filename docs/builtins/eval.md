@@ -1,277 +1,189 @@
 # eval() Function Complexity
 
-The `eval()` function evaluates a Python expression from a string.
+The `eval()` function evaluates one Python expression and returns its value. Given a string, it
+compiles the string first, on every call: nothing is cached. Given a code object from
+[compile()](compile.md), it skips compilation and only runs the code.
 
-## Complexity Analysis
+`n` is the length of the source: characters in a `str`, bytes in a `bytes`. `v` is the local
+variables in the function that calls `eval()`. The expression's own cost - the calls it makes, the
+objects it builds - belongs to the expression and is added to every bound below.
+
+## Complexity Reference
+
+### eval()
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| Parse simple expression | O(n) | O(n) | n = expression length |
-| Parse complex expression | O(n) | O(n) | Includes nested calls |
-| Evaluate result | O(m) | O(m) | m = result complexity |
-| Total | O(n + m) | O(n + m) | Parse + evaluate |
+| `eval(source)` with a `str` or `bytes` source | O(n) + the expression's cost | O(n) + the expression's cost | Compiles on every call; leading spaces and tabs are skipped |
+| `eval(code)` with a code object | The expression's cost | The expression's cost | No compilation. Code compiled in `'exec'` mode runs and returns `None`; code with free variables raises `TypeError` |
+| `eval(source, globals)` | O(1) more | O(1) more | `globals` must be a `dict`; `__builtins__` is added to it if missing, and `locals` defaults to it |
+| `eval(source, globals, locals)` | O(1) more | O(1) more | `locals` may be any mapping |
+| `eval(source)` or `eval(code)` inside a function, without `globals` | O(v²) more on 3.13+, O(v) more on 3.11 and 3.12 | O(v) more | Copies the function's local variables into a dict on every call; passing `globals` skips the copy |
+| Invalid source | O(n) | O(n) | Raises `SyntaxError`, for a statement or an empty string too; an undefined name raises `NameError` only when evaluated |
 
-## Basic Usage
+## Compile Once, Evaluate Many Times
 
-### Simple Expressions
+`eval()` given a string compiles it every time. Compiling it once and passing the code object
+leaves only the evaluation. An audit hook shows each compilation as it happens.
 
 ```python
-# O(n) - parse and evaluate string expression
-eval("2 + 3")              # 5
-eval("len([1, 2, 3])")     # 3
-eval("'hello'.upper()")    # 'HELLO'
-eval("[1, 2, 3]")          # [1, 2, 3]
+import sys
+
+compiled = []
+sys.addaudithook(lambda event, args: compiled.append(args[1]) if event == "compile" else None)
+
+x = 3
+for _ in range(100):
+    assert eval("x ** 2") == 9  # O(n) per call - compiles the string each time
+assert compiled.count("<string>") == 100
+
+code = compile("x ** 2", "<expr>", "eval")  # O(n), once
+for _ in range(100):
+    assert eval(code) == 9  # no compilation, only the expression runs
+assert compiled.count("<expr>") == 1
 ```
 
-### With Variables
+## Namespaces
+
+Without arguments, `eval()` uses the caller's globals and locals. `globals` must be a real `dict`;
+if it has no `__builtins__` key, `eval()` adds one, so builtins stay reachable. `locals` may be any
+mapping, and defaults to `globals` when only `globals` is given.
 
 ```python
-# O(n) - parse + variable lookup
-x = 10
-eval("x + 5")  # 15
+import collections
 
-# With locals/globals
-y = 20
-eval("x + y", {"x": x, "y": y})  # 30
+namespace = {"x": 10, "y": 20}
+assert eval("x + y", namespace) == 30  # O(n)
+assert "__builtins__" in namespace  # added on first use
+assert eval("len('abc')", {}) == 3  # builtins are reachable from an empty dict
+
+layers = collections.ChainMap({"a": 1}, {"b": 2})
+assert eval("a + b", {}, layers) == 3  # locals may be any mapping
+
+try:
+    eval("a", layers)
+except TypeError as error:
+    assert "dict" in str(error)
+else:
+    raise AssertionError("a ChainMap was accepted as globals")
 ```
 
-### Complex Expressions
+### Inside a Function
+
+Called in a function with no namespaces, `eval()` first copies the function's local variables into
+a dict, on every call. That is O(v) on 3.11 and 3.12 and O(v²) on 3.13+. Passing a dict as
+`globals` skips the copy, which matters in a loop inside a function with many locals.
 
 ```python
-# O(n) - parsing is linear in expression length
-expr = "2 * (3 + 4) ** 2 - 5 / 2"
-result = eval(expr)  # Parsed and evaluated
+def scaled(values, factor):
+    results = []
+    for value in values:
+        results.append(eval("value * factor"))  # copies the locals, then O(n)
+    return results
 
-# List comprehension
-result = eval("[i**2 for i in range(10)]")
+assert scaled([1, 2, 3], 10) == [10, 20, 30]
+
+def scaled_with_namespace(values, factor):
+    code = compile("value * factor", "<expr>", "eval")  # O(n), once
+    namespace = {"factor": factor}
+    results = []
+    for value in values:
+        namespace["value"] = value  # O(1)
+        results.append(eval(code, namespace))  # no copy, no compilation
+    return results
+
+assert scaled_with_namespace([1, 2, 3], 10) == [10, 20, 30]
 ```
 
-## Complexity Details
+## Expressions Only
 
-### Parsing Overhead
-
-```python
-# O(n) - string length dominates
-# Short expression - fast parsing
-eval("1+2")  # O(3)
-
-# Long expression - slower parsing
-expr = "1 + 2 + 3 + ... + 100"  # O(n)
-result = eval(expr)
-
-# Deeply nested - O(n) but more overhead
-expr = "((((1))))"  # Still O(n), just more parsing steps
-```
-
-### Evaluation Overhead
+`eval()` takes one expression. A statement, or an empty string, is a `SyntaxError`; use
+[exec()](exec.md) for statements. A code object compiled in `'exec'` mode is the exception: it
+runs, and `eval()` returns `None`.
 
 ```python
-# O(1) - simple computation
-eval("1 + 2")  # Quick
+try:
+    eval("x = 5")
+except SyntaxError:
+    pass
+else:
+    raise AssertionError("eval() ran an assignment")
 
-# O(n) - computation depends on operation
-eval("[1, 2, 3, 4, 5]")  # O(n) - create list
+try:
+    eval("")
+except SyntaxError:
+    pass
+else:
+    raise AssertionError("eval() accepted an empty string")
 
-# O(n log n) - expensive operations
-eval("[*range(100)]")  # Creates list
-```
+namespace = {}
+assert eval(compile("x = 5", "<string>", "exec"), namespace) is None
+assert namespace["x"] == 5
 
-### With Variable Lookup
-
-```python
-# O(n) - parse expression + O(1) lookup
-x = 100
-eval("x")  # O(1) - just lookup
-
-# O(n) - parse + multiple lookups
-eval("x + y + z")  # Still O(n) parsing
-
-# Custom scope - O(n + m)
-# n = expression length, m = scope size
-scope = {f"var{i}": i for i in range(1000)}
-eval("var0 + var1 + var2", scope)  # O(n + 1000)
-```
-
-## Performance Patterns
-
-### Repeated Evaluation
-
-```python
-# O(n * k) - parse expression k times
-for i in range(1000):
-    result = eval("x + 1")  # Re-parses each time
-
-# Better - compile once, evaluate many times
-code = compile("x + 1", "<string>", "eval")
-for i in range(1000):
-    x = i
-    result = eval(code)  # O(k) - no re-parsing
-```
-
-### Compiled vs Dynamic
-
-```python
-# O(n) - parse each time
-for x in range(1000):
-    eval("x ** 2")  # Parses "x ** 2" each iteration
-
-# O(1) - pre-compiled
-code = compile("x ** 2", "<string>", "eval")
-for x in range(1000):
-    eval(code)  # No parsing, just evaluation
-```
-
-### Pre-compilation with compile()
-
-```python
-import time
-
-expr = "sum(range(100))"
-
-# Dynamic eval
-start = time.time()
-for _ in range(10000):
-    eval(expr)
-dynamic_time = time.time() - start
-
-# Compiled eval
-code = compile(expr, "<string>", "eval")
-start = time.time()
-for _ in range(10000):
-    eval(code)
-compiled_time = time.time() - start
-
-# compiled_time is faster (no parsing overhead)
+assert eval("  1 + 1") == 2  # leading spaces and tabs are skipped
 ```
 
 ## Safer Alternatives
 
-### ast.literal_eval()
+`eval()` runs whatever the expression does, and an empty or restricted `__builtins__` does not
+make it safe. For untrusted text that should hold a value, [`ast.literal_eval()`](../stdlib/ast.md)
+parses it in O(n) and builds only literal values; an expression such as `__import__('os')`
+raises `ValueError`.
 
 ```python
 import ast
 
-# O(n) - parse and verify it's a literal
-# Safe - only allows literals (no code execution)
-result = ast.literal_eval("[1, 2, 3]")
-result = ast.literal_eval("{'a': 1, 'b': 2}")
-result = ast.literal_eval("'string'")
+assert ast.literal_eval("[1, 2, 3]") == [1, 2, 3]  # O(n)
+assert ast.literal_eval("{'a': 1, 'b': 2}") == {"a": 1, "b": 2}
 
-# Will raise ValueError for code
 try:
-    ast.literal_eval("1 + 2")  # ValueError - not a literal
-except ValueError:
-    pass
+    ast.literal_eval("__import__('os')")
+except ValueError as error:
+    assert "malformed" in str(error)
+else:
+    raise AssertionError("literal_eval() made a call")
 ```
 
-### compile() + eval()
+## Common Patterns
+
+### Evaluating a Formula per Record
 
 ```python
-# O(n) - compile once
-code = compile("x ** 2 + y", "<string>", "eval")
+formula = compile("price * quantity * (1 - discount)", "<formula>", "eval")  # O(n), once
 
-# O(1) - fast evaluation
-x, y = 10, 5
-result = eval(code)  # 105
-
-# Multiple evaluations with same code
-for x in range(10):
-    y = x * 2
-    result = eval(code)  # Efficient
+orders = [
+    {"price": 10.0, "quantity": 3, "discount": 0.0},
+    {"price": 4.0, "quantity": 5, "discount": 0.5},
+]
+totals = [eval(formula, {"__builtins__": {}}, order) for order in orders]  # no compilation
+assert totals == [30.0, 10.0]
 ```
 
-## Edge Cases
-
-### Empty Expression
-
-```python
-# O(1) - minimal parsing
-try:
-    eval("")  # SyntaxError: unexpected EOF
-except SyntaxError:
-    pass
-```
-
-### Statement Execution (Won't Work)
-
-```python
-# eval() only handles expressions, not statements
-try:
-    eval("x = 5")  # SyntaxError - can't assign
-except SyntaxError:
-    pass
-
-# Use exec() for statements
-exec("x = 5")
-```
-
-### Scope Isolation
-
-```python
-# O(n) - with custom scope
-x = "outer"
-
-# eval() uses provided scope, not outer scope
-result = eval("x", {"x": "inner"})  # "inner"
-
-# Without explicit scope, uses current scope
-y = 10
-result = eval("y")  # Uses current y
-```
-
-## Performance Considerations
-
-### vs Direct Execution
-
-```python
-import timeit
-
-# Direct code - fastest
-timeit.timeit("1 + 2")  # ~0.01 µs
-
-# eval() - much slower
-timeit.timeit("eval('1 + 2')", setup="e = eval")  # ~1 µs (100x slower)
-
-# Difference is parsing overhead
-```
-
-### String Building Cost
-
-```python
-# O(n) - if you build expression string
-for i in range(1000):
-    expr = str(i) + " + 1"  # O(1) to build
-    result = eval(expr)     # O(1) to parse
-
-# Total O(n) - acceptable
-```
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Compile expressions once if evaluated multiple times
-- Use `ast.literal_eval()` for untrusted data
-- Use `compile()` for better performance with repeated evals
-- Restrict globals/locals when evaluating untrusted code
-- Provide clear error messages
+- Compile an expression once with `compile()` and pass the code object when it is evaluated
+  repeatedly
+- Pass a namespace dict when calling `eval()` in a loop inside a function, so the locals are not
+  copied on every call
+- Use `ast.literal_eval()` for text that should only hold a value
 
 ❌ **Avoid**:
 
-- Using `eval()` with user input (security risk)
-- Evaluating complex expressions repeatedly (compile first)
-- Using `eval()` when regular functions would work
-- Creating functions with `eval()` (use `def` or `lambda`)
-- Assuming `eval()` is safe with restricted scope (it's not)
+- Calling `eval()` on a string inside a loop - it compiles the string every time
+- Calling `eval()` on untrusted input, even with restricted `globals`
+- Building code as strings for `eval()` where a function, a `lambda` or a dict lookup would do
+
+## Version Notes
+
+- **Python 3.13+**: `globals` and `locals` can be passed as keyword arguments
+- **Python 3.13+**: Inside a function without namespaces, copying the locals costs O(v²) per call;
+  it is O(v) on 3.11 and 3.12
+- **All Python 3**: `eval()` runs arbitrary code; never pass it untrusted input
 
 ## Related Functions
 
 - **[exec()](exec.md)** - Execute Python statements
 - **[compile()](compile.md)** - Compile code objects
 - **[ast.literal_eval()](https://docs.python.org/3/library/ast.html#ast.literal_eval)** - Safe literal evaluation
-
-## Version Notes
-
-- **Python 2.x**: `eval()` behavior similar but unicode handling differs
-- **Python 3.x**: Consistent behavior, better Unicode support
-- **All versions**: Security risk with untrusted input
