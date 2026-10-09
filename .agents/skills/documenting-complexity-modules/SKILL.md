@@ -354,8 +354,8 @@ unit tests even when a generic code-block runner also executes the example.
 2. Run `make audit` to check live coverage without writing files; it fails
    unless every builtin, stdlib module and public API name is covered, and
    `make check` runs it. Coverage tests compare the current interpreter with
-   the English documentation tree; CI also checks the pinned newest supported
-   Python patch. Preserve navigation targets
+   the English documentation tree; CI runs the audit on every supported
+   version, so a name only an older version has fails there. Preserve navigation targets
    for historical modules even when the current interpreter no longer has them.
 3. Look for existing translations at the equivalent `docs/<locale>/...` path.
    If they exist, faithfully mirror the English change and run:

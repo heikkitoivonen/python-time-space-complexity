@@ -43,15 +43,6 @@ jobs:
       - name: Type check
         run: uv run pyright
 
-      - name: Check documentation coverage on newest supported Python
-        # Its own environment: `uv run --python` replaces `.venv`, which would
-        # hand the site build an interpreter no earlier step exercised.
-        env:
-          UV_PROJECT_ENVIRONMENT: .venv-newest
-        run: |
-          uv run --python 3.14.8 --frozen pytest tests/test_documentation_coverage.py
-          uv run --python 3.14.8 --frozen python scripts/audit_documentation.py --check
-
       - name: Build site
         # Not a plain `mkdocs build`: that puts every locale in one tree
         # sharing a single search index, which makes search cross-language.
@@ -110,6 +101,12 @@ jobs:
       - name: Run serial tests
         if: ${{ !cancelled() }}
         run: uv run pytest -m "serial and not timing" -n 0
+
+      # The audit inventories the running interpreter, so an API a later
+      # release removed is checked only on the lines that still have it.
+      - name: Check documentation API coverage
+        if: ${{ !cancelled() }}
+        run: uv run python scripts/audit_documentation.py --check
 
   # The same tests on the other operating systems, on the newest supported
   # line. A test with no platform guard must pass on Linux, macOS and Windows,

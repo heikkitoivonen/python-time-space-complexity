@@ -83,6 +83,18 @@ paused; removal restores the trace outside the timer before the next sample.
 Tcl's ``trace info variable`` restarts its walk of the trace list for
 every trace it reports. Trace modes and callback bodies are held fixed.
 
+On 3.12 and earlier, ``tkinter.tix`` is imported in a subprocess, since
+importing it appends ``Form`` to ``tkinter.Widget.__bases__`` for the whole
+process: the import warns DeprecationWarning, every widget class gains
+``form()``, and each ``tixCommand`` method but ``tix_configure`` is one
+``tix`` command on a recording stand-in for the interpreter.
+``tix_configure`` is the classic ``configure`` copied, read from
+Lib/tkinter/tix.py. Not settled here: everything Tix does in Tcl - the
+mega-widgets, the bitmap search, image creation, the scheme reload - because the Tix
+extension is not installed with the pinned interpreters or on CI, so
+``package require Tix`` fails; those rows follow the Tix manual's
+description of each command.
+
 Not settled by running code, because every Tk window needs a display and
 neither the pinned interpreter here nor CI has one: the widget, window
 manager, geometry manager, canvas, text, listbox, menu, image, font,
@@ -196,10 +208,20 @@ FAKE_WIDGET_PROCS = """
 
 
 def _table_rows() -> list[str]:
+    """Every row but tkinter.tix's.
+
+    Importing tix here would add its Form class to every widget in this process,
+    and the module does not exist from 3.13. test_tix_python_side checks the
+    import's side effects and the tixCommand methods in a subprocess; the tix
+    names themselves are left to the shared API audit.
+    """
     text = PAGE.read_text(encoding="utf-8")
     start = text.index("## Complexity Reference")
     end = text.index("## Callbacks Are Not Free", start)
-    return [line for line in text[start:end].splitlines() if line.startswith("| `")]
+    tix = text.index("### tkinter.tix", start)
+    tix_end = text.index("\n### ", tix)
+    text = text[start:tix] + text[tix_end:end]
+    return [line for line in text.splitlines() if line.startswith("| `")]
 
 
 def _parse(span: str) -> tuple[str, str, str | None]:
@@ -787,6 +809,42 @@ class TestSmallRows:
         assert converted is values
         empty = "" if sys.version_info >= (3, 14) else ()
         assert converted == {"a": [1, 2], "b": "text", "c": empty}
+
+    @pytest.mark.skipif(sys.version_info >= (3, 13), reason="tkinter.tix removed in 3.13")
+    def test_tix_python_side(self) -> None:
+        """Run apart: importing tix adds Form to every widget class in the process."""
+        code = textwrap.dedent(
+            """
+            import tkinter, warnings
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                from tkinter import tix
+            print(any(w.category is DeprecationWarning for w in caught))
+            print(tix.Form in tkinter.Widget.__bases__, tkinter.Button.form is tix.Form.config)
+            calls = []
+            class FakeTk:
+                def call(self, *args):
+                    calls.append(args)
+            command = tix.tixCommand()
+            command.tk = FakeTk()
+            command.tix_cget("fontset")
+            command.tix_option_get("bg")
+            command.tix_addbitmapdir("/bitmaps")
+            command.tix_filedialog()
+            command.tix_getbitmap("folder")
+            command.tix_getimage("folder")
+            command.tix_resetoptions("Gray", "12Point")
+            print([args[:2] for args in calls])
+            """
+        )
+        result = subprocess.run([PY, "-c", code], capture_output=True, text=True, check=True)
+
+        warned, mixed, calls = result.stdout.splitlines()
+        assert warned == "True"
+        assert mixed == "True True"
+        names = ["cget", "option", "addbitmapdir", "filedialog"]
+        names += ["getbitmap", "getimage", "resetoptions"]
+        assert calls == repr([("tix", name) for name in names])
 
 
 @pytest.mark.timing

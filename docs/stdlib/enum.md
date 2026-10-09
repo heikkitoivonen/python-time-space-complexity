@@ -78,7 +78,7 @@ alone makes them. Hooks a class overrides - `_missing_()`, `_generate_next_value
 |-----------|------|-------|-------|
 | `enum.unique(cls)` | O(n) | O(a) | a = aliases found; raises `ValueError` naming them |
 | `enum.verify(*checks)` | O(n + r) | O(n + r) | Python 3.11+; r = the span from the smallest value to the largest, which `CONTINUOUS` walks on an `Enum`; `UNIQUE` and `NAMED_FLAGS` are O(n) |
-| `enum.EnumCheck`, `enum.UNIQUE`, `enum.CONTINUOUS`, `enum.NAMED_FLAGS` | O(1) | O(1) | Python 3.11+; the checks `verify()` applies |
+| `enum.EnumCheck`, `EnumCheck.UNIQUE`, `EnumCheck.CONTINUOUS`, `EnumCheck.NAMED_FLAGS`, `enum.UNIQUE`, `enum.CONTINUOUS`, `enum.NAMED_FLAGS` | O(1) | O(1) | Python 3.11+; the checks `verify()` applies |
 | `enum.global_enum(cls, update_str=False)` | O(n) | O(n) | Python 3.11+; copies every member, aliases included, into the defining module |
 | `enum.global_str(self)`, `enum.global_enum_repr(self)` | O(1) | O(1) | Python 3.11+; the `str()` and `repr()` that `global_enum()` installs |
 | `enum.global_flag_repr(self)` | O(b) | O(b) | Python 3.11+; module-qualifies each name in a combination's name |

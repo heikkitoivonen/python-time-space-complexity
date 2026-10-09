@@ -306,6 +306,22 @@ Widget options reach Tk through one routine that rebuilds the argument tuple onc
 | `font.nametofont(name, root)` | O(fonts) | O(fonts) | Wraps an existing named font without copying it, after checking the name against every named font |
 | `del` a font | O(1) | O(1) | Deletes the named font if this object created it; Tk keeps the font alive while widgets still use it, the name is just gone for new ones |
 
+### tkinter.tix
+
+Python 3.12 and earlier; removed in 3.13. Importing `tkinter.tix` warns `DeprecationWarning`, and every widget needs the Tix Tcl extension, which most Tk installations no longer ship; without it `tix.Tk()` raises TclError.
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `tix.Tk(screenName, baseName, className)` | O(F + f) | O(F) | `Tk()`, then `package require Tix` |
+| `tix.Balloon()` / `tix.ButtonBox()` / `tix.CheckList()` / `tix.ComboBox()` / `tix.Control()` / `tix.DirList()` / `tix.DirSelectBox()` / `tix.DirSelectDialog()` / `tix.DirTree()` / `tix.ExFileSelectBox()` / `tix.FileEntry()` / `tix.FileSelectBox()` / `tix.HList()` / `tix.InputOnly()` / `tix.LabelEntry()` / `tix.ListNoteBook()` / `tix.Meter()` / `tix.NoteBook()` / `tix.PopupMenu()` / `tix.Select()` / `tix.StdButtonBox()` / `tix.TList()` / `tix.Tree()` | O(k² + t·f) | O(k) | One Tix mega-widget, as the classic widget constructor, plus a Python wrapper for each of its fixed component subwidgets |
+| `tix.Form` | O(k²) | O(k) | The `tixForm` geometry manager; importing `tkinter.tix` adds it to every `tkinter` widget as `form()` |
+| `tix.tixCommand` | O(1) | O(1) | The mixin behind `tix.Tk`'s `tix_*` methods |
+| `tixCommand.tix_cget(option)` / `tixCommand.tix_option_get(name)` / `tixCommand.tix_addbitmapdir(directory)` / `tixCommand.tix_filedialog(dlgclass)` | O(1) | O(1) | One `tix` command each; `tix_filedialog()` returns the one file dialog Tix shares across the application |
+| `tixCommand.tix_configure(cnf, **k)` | O(k²) | O(k) | The query with no arguments returns every option, O(o) |
+| `tixCommand.tix_getbitmap(name)` | O(m) | O(1) | Searches the m directories on the bitmap path, which `tix_addbitmapdir()` extends |
+| `tixCommand.tix_getimage(name)` | O(m + P) | O(P) | The same search, then creates a new image from the file it finds |
+| `tixCommand.tix_resetoptions(newScheme, newFontSet, newScmPrio)` | O(F) | O(F) | Reloads the option database from the named scheme and font set; only widgets created afterwards see it |
+
 ### Dialogs
 
 | Operation | Time | Space | Notes |

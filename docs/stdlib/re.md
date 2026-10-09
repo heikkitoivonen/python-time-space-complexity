@@ -78,7 +78,7 @@ such as `(?:ab)*`, which records each iteration.
 | `re.RegexFlag` | O(1) | O(1) | The `enum.IntFlag` the constants belong to |
 | `re.Pattern`, `re.Match` | O(1) | O(1) | The types `compile()` and the matching methods return |
 | `re.error`, `re.PatternError` | O(1) | O(1) | Raised by `compile()` for an invalid pattern; `PatternError` is the Python 3.13+ name, `error` an alias |
-| `PatternError.msg`, `PatternError.pattern`, `PatternError.pos`, `PatternError.lineno`, `PatternError.colno` | O(1) | O(1) | Filled in when the error is raised |
+| `PatternError.msg`, `PatternError.pattern`, `PatternError.pos`, `PatternError.lineno`, `PatternError.colno` | O(1) | O(1) | Filled in when the error is raised; before 3.13 the class is `error`, as `error.msg`, `error.pattern`, `error.pos`, `error.lineno` and `error.colno` |
 
 ## Matching Costs
 

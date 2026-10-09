@@ -81,8 +81,8 @@ runs it.
 
 When adding a page, follow the documentation style below and add its path to
 `mkdocs.yml` navigation. Run `make check` before submitting. Live tests name any
-missing builtin or standard-library module, and CI also runs coverage tests on
-the pinned newest supported Python patch. Page coverage does not establish
+missing builtin or standard-library module, and CI runs the coverage tests and
+the audit on every supported Python version. Page coverage does not establish
 complete API coverage or prove complexity claims; those need focused tests.
 
 Keep historical pages for removed modules and EOL Python versions. Navigation

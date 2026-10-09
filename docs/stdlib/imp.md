@@ -29,7 +29,8 @@ not counted below. Space is auxiliary memory, excluding the module created.
 | `get_suffixes()` | O(s) | O(s) | Builds a fresh list on every call |
 | `cache_from_source(path)` / `source_from_cache(path)` | O(L) | O(L) | String work only; the files need not exist |
 | `lock_held()` / `acquire_lock()` / `release_lock()` | O(1) | O(1) | The global import lock; `acquire_lock()` blocks while another thread holds it |
-| `NullImporter(path)` | O(1) | O(1) | One `isdir` check; its `find_module()` always returns `None` |
+| `NullImporter(path)` | O(1) | O(1) | One `isdir` check |
+| `NullImporter.find_module(fullname)` | O(1) | O(1) | Always returns `None` |
 | `SEARCH_ERROR`, `PY_SOURCE`, `PY_COMPILED`, `C_EXTENSION`, `PY_RESOURCE`, `PKG_DIRECTORY`, `C_BUILTIN`, `PY_FROZEN`, `PY_CODERESOURCE`, `IMP_HOOK` | O(1) | O(1) | Module type codes 0 to 9 |
 
 !!! warning "Removed in Python 3.12"

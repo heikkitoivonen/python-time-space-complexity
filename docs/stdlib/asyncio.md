@@ -28,7 +28,8 @@ items in a queue; b = bytes read or written; d = the longest separator
 `readuntil` is given; j = how many it is given; c = frames one task's stack
 exposes; f = frames and awaited tasks in a captured call graph; e = entries in
 one `writelines` iterable; a = addresses a host name resolved to; v = argument
-and environment bytes handed to a child process.
+and environment bytes handed to a child process; h = child processes a child
+watcher holds a handler for.
 
 Bounds marked "+ round trip" do local work in the stated bound and then wait
 for a peer, the operating system, or the clock. The wait is not priced.
@@ -53,6 +54,10 @@ for a peer, the operating system, or the clock. The wait is not priced.
 | `asyncio.set_event_loop(loop)` | O(1) | O(1) | Stores the loop for this thread |
 | `asyncio.get_event_loop_policy()` | O(1) | O(1) | Deprecated in Python 3.14, for removal in 3.16 |
 | `asyncio.set_event_loop_policy(policy)` | O(1) | O(1) | Deprecated in Python 3.14, for removal in 3.16 |
+| `asyncio.AbstractEventLoopPolicy`, `asyncio.DefaultEventLoopPolicy` | O(1) | O(1) | The policy interface and the platform's policy, which stores one loop per thread; deprecated in Python 3.14, for removal in 3.16 |
+| `AbstractEventLoopPolicy.get_event_loop()`, `AbstractEventLoopPolicy.set_event_loop(loop)`, `AbstractEventLoopPolicy.new_event_loop()` | O(1) | O(1) | What `asyncio.get_event_loop()` outside a running loop, `set_event_loop()` and `new_event_loop()` delegate to |
+| `AbstractEventLoopPolicy.get_child_watcher()` | O(1) | O(1) | Python 3.13 and earlier; the child watcher under Subprocesses, created on first use |
+| `AbstractEventLoopPolicy.set_child_watcher(watcher)` | O(h) | O(1) | Python 3.13 and earlier; closes the watcher it replaces |
 | `asyncio.EventLoop` | O(1) | O(1) | Python 3.13+; the platform's loop class, `SelectorEventLoop` on Unix |
 | `asyncio.AbstractEventLoop` | - | - | The interface the loop classes implement; defines no bounds of its own |
 
@@ -312,6 +317,14 @@ constant-time wait is not.
 | `Process.wait()` | O(1) + the child | O(1) | Waits for exit. Deadlocks if the child fills a pipe nobody is draining |
 | `Process.communicate(input=None)` | O(b) | O(b) | Writes `input`, drains both output pipes concurrently, and returns them whole |
 | `Process.send_signal(sig)`, `Process.terminate()`, `Process.kill()` | O(1) | O(1) | One signal to the child |
+| `asyncio.AbstractChildWatcher`, `asyncio.ThreadedChildWatcher`, `asyncio.PidfdChildWatcher`, `asyncio.SafeChildWatcher`, `asyncio.FastChildWatcher`, `asyncio.MultiLoopChildWatcher` | O(1) | O(1) | Unix, Python 3.13 and earlier, deprecated from 3.12: how the loop learns a subprocess exited. The default is `ThreadedChildWatcher`, or from 3.12 `PidfdChildWatcher` where the kernel supports pidfds |
+| `asyncio.get_child_watcher()` | O(1) | O(1) | Python 3.13 and earlier; the policy's watcher |
+| `asyncio.set_child_watcher(watcher)` | O(h) | O(1) | Python 3.13 and earlier; the policy closes the watcher it replaces |
+| `AbstractChildWatcher.add_child_handler(pid, callback, *args)` | O(1) | O(1) | `ThreadedChildWatcher` starts one thread per child, blocked in `waitpid()`; `PidfdChildWatcher` registers the child's pidfd with the loop; `SafeChildWatcher` and `MultiLoopChildWatcher` store the callback and poll that one pid |
+| A child exiting | O(h) | O(h) | `SafeChildWatcher` and `MultiLoopChildWatcher` poll every registered child on each SIGCHLD, so h children exiting cost O(h²) between them; `FastChildWatcher` reaps with `waitpid(-1)` at O(1) per exited child, including children it did not start; the other two wait on that child alone, O(1) |
+| `AbstractChildWatcher.attach_loop(loop)` | O(h) | O(h) | `SafeChildWatcher` and `FastChildWatcher` move the SIGCHLD handler to the loop and poll as on a signal; `MultiLoopChildWatcher` installs its handler once; `ThreadedChildWatcher` does nothing, nor does `PidfdChildWatcher` from 3.12, while on 3.11 it unregisters and closes its h pidfds |
+| `AbstractChildWatcher.remove_child_handler(pid)`, `AbstractChildWatcher.is_active()` | O(1) | O(1) | |
+| `AbstractChildWatcher.close()` | O(h) | O(1) | `SafeChildWatcher`, `FastChildWatcher` and `MultiLoopChildWatcher` clear their handlers, and on 3.11 `PidfdChildWatcher` closes its pidfds; `ThreadedChildWatcher` does nothing |
 
 ### Transports
 

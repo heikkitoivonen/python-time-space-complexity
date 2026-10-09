@@ -69,6 +69,21 @@ Measurement scope:
   supported version: through 3.13 a finished task stays in it while anything
   references it, and 3.14 drops it on completion. Both halves are asserted, so
   the version that changes is the one that fails.
+* The child watcher rows run on 3.13 and earlier, with `os.waitpid`
+  replaced so no process is spawned. `SafeChildWatcher` and
+  `MultiLoopChildWatcher` poll one pid per `add_child_handler()` and every
+  registered pid per signal, 10 and 100 of them exactly; `FastChildWatcher`
+  polls nothing on registration, makes one `waitpid(-1)` call with 100
+  handlers and none exited, and one per exited child plus one when three
+  of its own and one unregistered child have exited, keeping the stranger
+  as a zombie. `ThreadedChildWatcher` starts five threads for five
+  children. The default policy creates its watcher once, Threaded on 3.11
+  and Threaded or Pidfd from 3.12 depending on the kernel, and returns the
+  one `set_child_watcher()` installed, after closing the one it replaced. `FastChildWatcher.attach_loop()`
+  polls once, as a signal does. `PidfdChildWatcher`'s selector
+  registration, the other watchers' `attach_loop()` and every `close()`
+  are read from Lib/asyncio/unix_events.py, including 3.11's pidfd
+  watcher, which closes its pidfds in both.
 * Dimensions these tests do *not* vary: the separator length and tuple size in
   the `readuntil` timing test, which uses a single one-byte separator; the
   number of done callbacks on a cancelled future; the transport behind
@@ -110,6 +125,7 @@ import heapq
 import inspect
 import pathlib
 import re
+import signal
 import subprocess
 import sys
 import textwrap
@@ -1203,6 +1219,140 @@ class TestEagerTasks:
         subclassed, order = asyncio.run(main())
         assert subclassed is True
         assert order == ["body", "after"]
+
+
+@pytest.mark.skipif(sys.version_info >= (3, 14), reason="child watchers removed in 3.14")
+@pytest.mark.skipif(sys.platform == "win32", reason="child watchers wait on Unix SIGCHLD")
+class TestChildWatchers:
+    """The child watcher rows, with `os.waitpid` replaced so no process is spawned."""
+
+    @pytest.fixture
+    def waitpid(self, monkeypatch: pytest.MonkeyPatch) -> list[int]:
+        """Every pid polled; a pid of -1 reaps the queued exits, then reports none left."""
+        unix_events: Any = __import__("asyncio.unix_events").unix_events
+        polled: list[int] = []
+        self.exited: list[int] = []
+
+        def fake(pid: int, options: int) -> tuple[int, int]:
+            polled.append(pid)
+            if pid == -1 and self.exited:
+                return self.exited.pop(), 0
+            return 0, 0
+
+        monkeypatch.setattr(unix_events.os, "waitpid", fake)
+        return polled
+
+    @staticmethod
+    def watcher(name: str) -> Any:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            return api(name)()
+
+    @pytest.mark.parametrize("name", ["SafeChildWatcher", "MultiLoopChildWatcher"])
+    def test_a_signal_polls_every_registered_child(self, name: str, waitpid: list[int]) -> None:
+        watcher = self.watcher(name)
+
+        async def main() -> None:
+            for children in (10, 100):
+                waitpid.clear()
+                for pid in range(1_000, 1_000 + children):
+                    watcher.add_child_handler(pid, lambda *_: None)
+                expected = list(range(1_000, 1_000 + children))
+                assert waitpid == expected, "each handler polls only its own pid"
+                waitpid.clear()
+                internal(watcher, "_do_waitpid_all")()
+                assert sorted(waitpid) == list(range(1_000, 1_000 + children))
+                for pid in range(1_000, 1_000 + children):
+                    assert watcher.remove_child_handler(pid)
+
+        asyncio.run(main())
+
+    def test_fast_watcher_reaps_with_waitpid_minus_one(self, waitpid: list[int]) -> None:
+        watcher = self.watcher("FastChildWatcher")
+        loop = asyncio.new_event_loop()
+        # Attaching installs a SIGCHLD handler and a wakeup fd; removal resets
+        # both to defaults, so the process's own are put back afterwards.
+        sigchld = signal.getsignal(signal.SIGCHLD)
+        wakeup_fd = signal.set_wakeup_fd(-1)
+        signal.set_wakeup_fd(wakeup_fd)
+        try:
+            watcher.attach_loop(loop)
+            assert waitpid == [-1], "attaching polls as a signal does"
+            waitpid.clear()
+            with watcher:
+                for pid in range(1_000, 1_100):
+                    watcher.add_child_handler(pid, lambda *_: None)
+                assert waitpid == [], "registering polls nothing"
+                internal(watcher, "_do_waitpid_all")()
+                assert waitpid == [-1], "100 handlers, none exited: one call"
+                waitpid.clear()
+                reaped: list[int] = []
+                for pid in (1_000, 1_001, 1_002):
+                    watcher.remove_child_handler(pid)
+                    watcher.add_child_handler(pid, lambda pid, code: reaped.append(pid))
+                self.exited.extend([5, 1_002, 1_001, 1_000])
+                internal(watcher, "_do_waitpid_all")()
+                assert waitpid == [-1] * 5, "one call per exited child, and one that finds none"
+                assert reaped == [1_000, 1_001, 1_002]
+                assert 5 in internal(watcher, "_zombies"), "a child it did not start is reaped too"
+                for pid in range(1_003, 1_100):
+                    watcher.remove_child_handler(pid)
+        finally:
+            watcher.close()
+            loop.close()
+            signal.signal(signal.SIGCHLD, sigchld)
+            signal.set_wakeup_fd(wakeup_fd)
+
+    def test_threaded_watcher_starts_a_thread_per_child(
+        self, waitpid: list[int], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        unix_events: Any = __import__("asyncio.unix_events").unix_events
+        started: list[str] = []
+
+        class CountingThread(threading.Thread):
+            def start(self) -> None:
+                started.append(self.name)
+                super().start()
+
+        monkeypatch.setattr(unix_events.threading, "Thread", CountingThread)
+        self.exited.clear()
+        monkeypatch.setattr(unix_events.os, "waitpid", lambda pid, options: (pid, 0))
+        watcher = self.watcher("ThreadedChildWatcher")
+
+        async def main() -> list[int]:
+            loop = asyncio.get_running_loop()
+            done: list[int] = []
+            finished = loop.create_future()
+
+            def callback(pid: int, code: int) -> None:
+                done.append(pid)
+                if len(done) == 5 and not finished.done():
+                    finished.set_result(None)
+
+            for pid in range(1_000, 1_005):
+                watcher.add_child_handler(pid, callback)
+            await asyncio.wait_for(finished, 30)
+            return done
+
+        assert sorted(asyncio.run(main())) == list(range(1_000, 1_005))
+        assert len(started) == 5
+        assert all(name.startswith("asyncio-waitpid-") for name in started)
+
+    def test_policy_creates_its_watcher_once(self) -> None:
+        policy: Any = api("DefaultEventLoopPolicy")()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            first = policy.get_child_watcher()
+            assert policy.get_child_watcher() is first
+            assert type(first).__name__ in ("ThreadedChildWatcher", "PidfdChildWatcher")
+            if sys.version_info < (3, 12):
+                assert type(first).__name__ == "ThreadedChildWatcher"
+            closed: list[object] = []
+            first.close = lambda: closed.append(first)
+            replacement = api("SafeChildWatcher")()
+            policy.set_child_watcher(replacement)
+            assert policy.get_child_watcher() is replacement
+            assert closed == [first], "replacing a watcher closes the old one"
 
 
 class TestCancellationIsARequest:

@@ -236,8 +236,9 @@ Coverage tests compare the current interpreter's builtins and standard library
 with the current English documentation tree. `make audit` prints a readable
 report without writing files, and fails unless builtins, stdlib modules and the
 public API are all at 100%. `make check` runs it. Keep every navigation target,
-including pages for removed modules and EOL Python versions. CI also checks
-coverage on the pinned newest supported Python patch.
+including pages for removed modules and EOL Python versions. CI runs the audit
+on Linux on every supported Python version: an API a later release removed is
+checked only on the versions that still have it.
 
 Only single-underscore modules such as `_thread` and `python -m` entry points
 (`json.__main__`) are outside the audit. `__future__`, `pydoc_data`, the

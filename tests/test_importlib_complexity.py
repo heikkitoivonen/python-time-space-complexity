@@ -146,7 +146,9 @@ Measurement scope:
   120x in a timing test and `metadata.json` between 200x and 5,000x, which
   separates the linear scan from the quadratic one and that from a cubic.
 * Version boundaries are asserted by presence: `find_loader()`,
-  `abc.Finder` and the `util` decorators exist below 3.12,
+  `abc.Finder`, the `util` decorators, `PathFinder.find_module()`,
+  `FileFinder.find_loader()`, `PathEntryFinder.find_module()` and
+  `Loader.module_repr()` exist below 3.12,
   `resources.abc` and `NamespaceLoader`, `abc.Traversable` below
   3.14, `Distribution.origin` and `AppleFrameworkLoader` from 3.13,
   `_incompatible_extension_module_restrictions` from 3.12, `entry_points()`
@@ -158,6 +160,15 @@ Measurement scope:
   functional API in 3.13 and raise `TypeError` before, and
   `DEBUG_BYTECODE_SUFFIXES` and `SourceLoader.path_mtime()` warn from
   3.14.
+* On 3.11, over one directory on the path: `FileFinder.find_loader()`
+  calls `FileFinder.find_spec` once per search and returns
+  `(loader, [])` for a module, `(None, [portion])` for a namespace
+  directory and `(None, [])` on a miss; `PathEntryFinder.find_module()`
+  and `PathFinder.find_module()` each call it once and return the loader.
+  The wrappers' search costs are `find_spec()`'s, measured above.
+  `Loader.module_repr()` raises
+  `NotImplementedError` and `repr()` of a module whose loader inherits it
+  is the module type's own.
 * Every fenced Python block runs in its own subprocess and working
   directory, and a mutated assertion in one of them is asserted to fail.
 
@@ -1940,6 +1951,10 @@ class TestVersionBoundaries:
         assert hasattr(importlib.util, "module_for_loader") is before
         assert hasattr(importlib.abc.MetaPathFinder, "find_module") is before
         assert hasattr(importlib.abc.PathEntryFinder, "find_loader") is before
+        assert hasattr(importlib.abc.PathEntryFinder, "find_module") is before
+        assert hasattr(importlib.abc.Loader, "module_repr") is before
+        assert hasattr(importlib.machinery.PathFinder, "find_module") is before
+        assert hasattr(FileFinder, "find_loader") is before
         assert hasattr(importlib.util, "_incompatible_extension_module_restrictions") is not before
         if not before:
             util: Any = importlib.util
@@ -1947,6 +1962,53 @@ class TestVersionBoundaries:
             assert restriction.override == -1
             with pytest.raises(RuntimeError):
                 restriction.__enter__()
+
+    @pytest.mark.skipif(sys.version_info >= (3, 12), reason="removed in 3.12")
+    def test_311_wrappers_delegate_to_find_spec(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (tmp_path / "wrapped311.py").write_text("")
+        (tmp_path / "portion311").mkdir()
+        details = (SourceFileLoader, [".py"])
+        calls: list[str] = []
+        original = FileFinder.find_spec
+
+        def counting(self: FileFinder, fullname: str, target: Any = None) -> Any:
+            calls.append(fullname)
+            return original(self, fullname, target)
+
+        monkeypatch.setattr(FileFinder, "find_spec", counting)
+        finder: Any = FileFinder(str(tmp_path), details)
+        path_finder: Any = importlib.machinery.PathFinder
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            loader, portions = finder.find_loader("wrapped311")
+            assert isinstance(loader, SourceFileLoader) and portions == []
+            assert finder.find_loader("portion311") == (None, [str(tmp_path / "portion311")])
+            assert finder.find_loader("absent311") == (None, [])
+            assert calls == ["wrapped311", "portion311", "absent311"]
+
+            calls.clear()
+            entry_finder: Any = importlib.abc.PathEntryFinder
+            assert isinstance(entry_finder.find_module(finder, "wrapped311"), SourceFileLoader)
+            assert calls == ["wrapped311"]
+
+            calls.clear()
+            monkeypatch.setattr(sys, "path_hooks", [FileFinder.path_hook(details)])
+            monkeypatch.setattr(sys, "path_importer_cache", {})
+            found = path_finder.find_module("wrapped311", [str(tmp_path)])
+            assert isinstance(found, SourceFileLoader)
+            assert calls == ["wrapped311"]
+
+            class Plain(importlib.abc.Loader):
+                pass
+
+            module = types.ModuleType("plain311")
+            loader: Any = Plain()
+            with pytest.raises(NotImplementedError):
+                loader.module_repr(module)
+            module.__loader__ = loader
+            assert repr(module) == f"<module 'plain311' ({loader!r})>"
 
     def test_names_added_in_311_and_313_and_removed_in_314(self) -> None:
         assert importlib.util.find_spec("importlib.resources.abc") is not None
