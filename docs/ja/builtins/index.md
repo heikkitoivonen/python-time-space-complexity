@@ -1,5 +1,5 @@
 ---
-source_sha: e9a9393fc22b2d42d44cf4fbcedc3f5b2e4a8282edfa53dc730c7b3c1a5062df
+source_sha: 8e07af8827b8e86ae179772d25d167205aad2599d6674a810c0b88cb20293804
 translated: machine
 ---
 
@@ -107,7 +107,7 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 | [`setattr()`](setattr.md) | O(1) | O(1) | ハッシュテーブルへの挿入 |
 | [`hasattr()`](hasattr.md) | O(d) | O(1) | `getattr()` と同じ探索で、例外を捕捉する |
 | [`delattr()`](delattr.md) | O(1) | O(1) | ハッシュテーブルからの削除 |
-| [`dir()`](dir.md) | O(n log n) | O(n) | 結果のソートが支配的 |
+| [`dir()`](dir.md) | O(k + p + n log n) | O(n) | クラスの辞書をマージしてから名前をソート |
 | [`vars()`](vars.md) | O(1) | O(1) | `__dict__` への参照を返し、コピーはしない |
 | [`super()`](super.md) | O(d) | O(d) | MRO をたどるが、MRO はキャッシュされている |
 | [`property()`](property.md) | O(1) | O(1) | デスクリプタの生成とアクセス |

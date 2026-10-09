@@ -1,5 +1,5 @@
 ---
-source_sha: e9a9393fc22b2d42d44cf4fbcedc3f5b2e4a8282edfa53dc730c7b3c1a5062df
+source_sha: 8e07af8827b8e86ae179772d25d167205aad2599d6674a810c0b88cb20293804
 translated: machine
 ---
 
@@ -111,7 +111,7 @@ mainittu kustannus on se, minkä maksat iteraattorin läpikäynnistä.
 | [`setattr()`](setattr.md) | O(1) | O(1) | Lisäys hajautustauluun |
 | [`hasattr()`](hasattr.md) | O(d) | O(1) | Sama haku kuin `getattr()`, poikkeus napataan kiinni |
 | [`delattr()`](delattr.md) | O(1) | O(1) | Poisto hajautustaulusta |
-| [`dir()`](dir.md) | O(n log n) | O(n) | Tuloksen järjestäminen hallitsee kustannusta |
+| [`dir()`](dir.md) | O(k + p + n log n) | O(n) | Yhdistää luokkien sanakirjat ja järjestää sitten nimet |
 | [`vars()`](vars.md) | O(1) | O(1) | Palauttaa viitteen `__dict__`-sanakirjaan, ei kopiota |
 | [`super()`](super.md) | O(d) | O(d) | Kulkee MRO:n läpi, joka on välimuistissa |
 | [`property()`](property.md) | O(1) | O(1) | Kuvaajan luonti ja käyttö |

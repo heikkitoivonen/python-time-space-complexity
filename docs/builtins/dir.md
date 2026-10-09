@@ -1,477 +1,195 @@
 # dir() Function Complexity
 
-The `dir()` function returns a list of valid attributes for an object. It's essential for object introspection and exploring available methods and properties.
+The `dir()` function returns a new, sorted list of names. With no argument it lists the names in
+the current local scope; with an argument it calls that object's `__dir__()`, turns whatever comes
+back into a list and sorts it. Every call builds and sorts a fresh list, so it is an exploration
+tool, not a fast membership test.
 
-## Complexity Analysis
+`n` is the names in the returned list, `k` is the entries in an instance's `__dict__`, and `p` is
+the class-dictionary entries merged while walking the class's bases (defined in the next
+paragraph). Bounds treat hashing and comparing one name as O(1).
+
+For an ordinary instance, `object.__dir__` copies the instance `__dict__`, then merges the
+`__dict__` of the class and recurses into each entry of `__bases__`. It follows `__bases__`, not
+the MRO, and does not remember which classes it has visited: a class reachable along several
+inheritance paths is merged once per path. With single inheritance `p` is the sum of the class
+dictionaries along the MRO; with a chain of diamonds it doubles at every diamond.
+
+## Complexity Reference
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| Collect attributes | O(n) | O(n) | n = number of attributes in MRO |
-| MRO traversal | O(d) | O(1) | d = inheritance depth |
-| Sort results | O(n log n) | O(n) | Results are sorted alphabetically |
-| Total operation | O(n log n) | O(n) | Dominated by sorting |
-
-*Note: dir() collects all attributes from the object's class hierarchy (MRO) and returns them sorted alphabetically.*
+| `dir(obj)`, default `object.__dir__` | O(k + p + n log n) | O(n) | Instance `__dict__` copy, class merge, then the sort |
+| `dir(cls)`, `type.__dir__` | O(p + n log n) | O(n) | The class and its bases; metaclass attributes are not listed |
+| `dir(module)` | O(n log n) | O(n) | n = module globals; a module-level `__dir__()` function replaces them |
+| `dir(obj)` with a custom `__dir__()` | O(D + n log n) | O(n) | D = the cost of `__dir__()` and of iterating its result, which is copied to a list and sorted |
+| `dir()` with no argument | O(n log n) | O(n) | n = names in the local scope |
 
 ## Basic Usage
 
-### List Object Attributes
+### Instances and Classes
+
+The result includes instance attributes, class attributes and everything inherited, sorted.
 
 ```python
-# O(n) - where n = number of attributes
-my_list = [1, 2, 3]
-attrs = dir(my_list)  # Returns all list methods and attributes
+class Base:
+    shared = 1
 
-# Example output
-# ['__add__', '__class__', '__contains__', ..., 'append', 'clear', 'copy', ...]
-
-# Count attributes
-num_attrs = len(dir(my_list))  # O(n)
-```
-
-### Explore Built-in Types
-
-```python
-# O(n) - enumerate all methods
-string_methods = dir("")
-list_methods = dir([])
-dict_methods = dir({})
-
-# Find specific methods
-if 'append' in dir(list):  # O(n) - list search
-    print("Lists have append method")
-```
-
-### Discover Class Members
-
-```python
-# O(n) - includes inherited members
-class MyClass:
-    class_var = 10
-    
-    def method1(self):
-        pass
-    
-    def method2(self):
+class Child(Base):
+    def method(self):
         pass
 
-obj = MyClass()
-attributes = dir(obj)  # O(n) - includes inherited from object
+obj = Child()
+obj.own = 2
 
-# Typical output: ['__class__', '__delattr__', ..., 'class_var', 'method1', 'method2']
+names = dir(obj)  # O(k + p + n log n)
+assert names == sorted(names)
+assert {"own", "method", "shared", "__init__"} <= set(names)
+assert "own" not in dir(Child)  # instance attributes belong to the instance only
+```
+
+### Custom __dir__ and Modules
+
+`dir()` sorts whatever `__dir__()` returns, so the result is always a sorted list even when the
+method returns another iterable.
+
+```python
+import math
+
+class Proxy:
+    def __dir__(self):
+        return ("zeta", "alpha")
+
+assert dir(Proxy()) == ["alpha", "zeta"]  # O(D + n log n)
+
+names = dir(math)  # O(n log n) - n = module globals
+assert "sqrt" in names and names == sorted(names)
 ```
 
 ## Complexity Details
 
-### Linear Time Traversal
+### Shared Bases Are Merged Once Per Path
+
+Each diamond in a chain doubles the number of paths to the classes above it, so `dir()` merges the
+root's dictionary 2^d times for d diamonds even though the MRO has only 3d + 2 classes.
 
 ```python
-# O(n) - iterates through all attributes
-def custom_dir(obj):
-    """Simulates how dir() works internally"""
-    attributes = []
-    
-    # Check object's __dict__
-    if hasattr(obj, '__dict__'):
-        attributes.extend(obj.__dict__.keys())  # O(k) - k = instance attributes
-    
-    # Check class and inherited classes (MRO)
-    for cls in type(obj).__mro__:  # O(d) - d = MRO depth
-        if hasattr(cls, '__dict__'):
-            attributes.extend(cls.__dict__.keys())  # O(m) - m = class attributes
-    
-    # Sort alphabetically
-    return sorted(set(attributes))  # O(n log n) - n = total unique attributes
+def diamonds(depth):
+    top = type("Top", (), {f"a{i}": i for i in range(100)})
+    cls = top
+    for i in range(depth):
+        left = type(f"L{i}", (cls,), {})
+        right = type(f"R{i}", (cls,), {})
+        cls = type(f"J{i}", (left, right), {})
+    return cls
+
+deep = diamonds(12)
+assert len(deep.__mro__) == 3 * 12 + 2
+names = dir(deep)  # O(p + n log n) - p counts Top's 100 names 2**12 times
+assert "a99" in names
 ```
 
-### Method Resolution Order (MRO) Traversal
+### dir() Is Not a Complete Attribute List
+
+`dir()` lists stored names. Attributes that `__getattr__` produces on demand, and methods defined on
+a class's metaclass, are reachable without appearing.
 
 ```python
-# O(n log n) - includes MRO traversal
-class A:
-    def method_a(self):
+class Lazy:
+    def __getattr__(self, name):
+        return name.upper()
+
+obj = Lazy()
+assert obj.anything == "ANYTHING"
+assert "anything" not in dir(obj)
+
+assert hasattr(type, "mro") and "mro" not in dir(int)
+assert int.mro() == [int, object]
+```
+
+## Common Patterns
+
+### Checking for One Attribute
+
+`name in dir(obj)` builds and sorts the whole list and then scans it; `hasattr()` does one
+attribute lookup. It also sees attributes that `dir()` omits.
+
+```python
+class Config:
+    debug = False
+
+cfg = Config()
+assert hasattr(cfg, "debug")  # one lookup
+assert "debug" in dir(cfg)    # O(k + p + n log n), then an O(n) scan
+```
+
+### Filtering Public Names
+
+Call `dir()` once and filter the list, rather than calling it per test.
+
+```python
+class Service:
+    def fetch(self):
         pass
 
-class B(A):
-    def method_b(self):
+    def store(self):
         pass
 
-class C(B):
-    def method_c(self):
+    def _cache(self):
         pass
 
-obj = C()
-# dir() traverses: C -> B -> A -> object
-# Total complexity still O(n log n) where n = total attributes in hierarchy
-attrs = dir(obj)
+    limit = 10
+
+service = Service()
+public_methods = [
+    name for name in dir(service)  # O(k + p + n log n)
+    if not name.startswith("_") and callable(getattr(service, name))
+]
+assert public_methods == ["fetch", "store"]
 ```
 
-### Performance with Inheritance
+### Instance Attributes Only
+
+`vars(obj)` returns the instance `__dict__` itself, without copying, merging or sorting; use it
+when inherited names are not wanted.
 
 ```python
-# O(n log n) - grows with inheritance depth and attribute count
-# Shallow class
-class Simple:
-    pass
+class Point:
+    dims = 2
 
-# Deep hierarchy
-class Level1:
-    attr1 = 1
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
 
-class Level2(Level1):
-    attr2 = 2
-
-class Level3(Level2):
-    attr3 = 3
-
-class Level4(Level3):
-    attr4 = 4
-
-obj = Level4()
-# dir(obj) still O(n log n) but n is larger
-attrs = dir(obj)  # ~40 attributes (including inherited)
+p = Point(1, 2)
+assert vars(p) is p.__dict__        # O(1) - no copy
+assert sorted(vars(p)) == ["x", "y"]
+assert "dims" in dir(p) and "dims" not in vars(p)
 ```
 
-## Performance Patterns
-
-### vs Accessing __dict__ Directly
-
-```python
-# Direct __dict__ access - O(1)
-obj = object()
-if hasattr(obj, '__dict__'):
-    attrs = obj.__dict__  # O(1) - just instance attributes
-    
-# vs full dir() - O(n log n)
-all_attrs = dir(obj)  # O(n log n) - all accessible attributes
-
-# Use cases:
-# - Want instance-only attributes? Use __dict__ (O(1))
-# - Want all accessible attributes? Use dir() (O(n log n))
-```
-
-### vs inspect Module
-
-```python
-# dir() - O(n log n) and simple
-simple_attrs = dir(obj)
-
-# inspect.getmembers() - O(n²) due to getattr calls
-import inspect
-detailed = inspect.getmembers(obj)  # O(n²) - calls getattr() on each attribute
-
-# Use dir() for simple listing, inspect for detailed analysis
-```
-
-## Common Use Cases
-
-### Interactive Exploration
-
-```python
-# O(n log n) - exploring object capabilities
-import json
-
-# What can I do with json?
-json_funcs = dir(json)
-
-# What methods does a list have?
-list_methods = dir([])
-
-# Typical usage in Python REPL:
-# >>> import os
-# >>> dir(os)
-# >>> [attr for attr in dir(os) if 'path' in attr.lower()]
-```
-
-### Discovering Available Methods
-
-```python
-# O(n log n) - find methods by name pattern
-class API:
-    def get_user(self): pass
-    def get_posts(self): pass
-    def set_user(self): pass
-    def delete_user(self): pass
-
-api = API()
-
-# Find all 'get' methods - O(n)
-get_methods = [m for m in dir(api) if m.startswith('get')]
-
-# Output: ['get_posts', 'get_user']
-```
-
-### Avoiding AttributeError
-
-```python
-# O(n log n) - check before accessing
-def safe_access(obj, attr_name):
-    """Safely access attribute - O(n log n) check"""
-    if attr_name in dir(obj):  # O(n log n)
-        return getattr(obj, attr_name)  # O(1)
-    else:
-        return None
-
-class MyClass:
-    my_attr = 42
-
-obj = MyClass()
-val = safe_access(obj, 'my_attr')  # Returns 42
-val = safe_access(obj, 'missing')  # Returns None
-```
-
-## Advanced Usage
-
-### Class Introspection
-
-```python
-# O(n log n) - analyze class structure
-class Parent:
-    parent_method = lambda self: None
-
-class Child(Parent):
-    child_method = lambda self: None
-
-parent_attrs = set(dir(Parent))  # O(n log n)
-child_attrs = set(dir(Child))    # O(n log n)
-
-# Find newly added attributes
-new_attrs = child_attrs - parent_attrs  # O(n)
-print(new_attrs)  # {'child_method'}
-
-# Find inherited attributes
-inherited = parent_attrs & child_attrs  # O(n)
-```
-
-### Dynamic Attribute Discovery
-
-```python
-# O(n²) - discover and access attributes
-def inspect_object(obj):
-    """Get all attributes with their types - O(n²)"""
-    attrs = dir(obj)  # O(n log n)
-    
-    results = {}
-    for attr in attrs:  # O(n) iterations
-        try:
-            value = getattr(obj, attr)  # O(1) per call
-            results[attr] = type(value).__name__
-        except:
-            results[attr] = 'Error accessing'
-    
-    return results
-
-# Total: O(n) * O(1) = O(n²) due to getattr overhead
-data = [1, 2, 3]
-attr_types = inspect_object(data)
-```
-
-### Finding Callable Attributes
-
-```python
-# O(n²) - find methods vs properties
-def get_methods(obj):
-    """Extract all methods - O(n²)"""
-    return {attr for attr in dir(obj)  # O(n log n)
-            if callable(getattr(obj, attr))}  # O(1) per check
-
-def get_properties(obj):
-    """Extract all non-callable attributes - O(n²)"""
-    return {attr for attr in dir(obj)  # O(n log n)
-            if not callable(getattr(obj, attr))}  # O(1) per check
-
-my_list = [1, 2, 3]
-methods = get_methods(my_list)  # append, clear, copy, ...
-properties = get_properties(my_list)  # Much smaller set
-```
-
-## Practical Examples
-
-### Module Exploration
-
-```python
-# O(n log n) - explore standard library module
-import math
-
-# What's available in math?
-math_attrs = dir(math)
-
-# Filter to functions (skip constants)
-import inspect
-math_funcs = [attr for attr in dir(math) 
-              if callable(getattr(math, attr)) 
-              and not attr.startswith('_')]
-
-print(math_funcs)  # ['acos', 'acosh', 'asin', ...]
-```
-
-### API Discovery
-
-```python
-# O(n log n) - discover API capabilities
-class DataService:
-    """Example API class"""
-    
-    def fetch_users(self): pass
-    def fetch_posts(self): pass
-    def create_user(self): pass
-    def update_user(self): pass
-    def delete_user(self): pass
-    def _internal_cache(self): pass
-
-service = DataService()
-
-# List all public operations
-public_ops = [op for op in dir(service) 
-              if not op.startswith('_') 
-              and callable(getattr(service, op))]
-
-# Output: ['create_user', 'delete_user', 'fetch_posts', ...]
-```
-
-### Attribute Validation
-
-```python
-# O(n log n) - validate object has required attributes
-def validate_interface(obj, required_attrs):
-    """Check object implements interface - O(n log n)"""
-    obj_attrs = dir(obj)  # O(n log n)
-    
-    missing = []
-    for attr in required_attrs:  # O(m) - m = required attributes
-        if attr not in obj_attrs:  # O(n) - list search
-            missing.append(attr)
-    
-    return missing if missing else None
-
-# Total: O(n log n) + O(m * n)
-
-class FileWriter:
-    def write(self): pass
-    def close(self): pass
-
-required = ['write', 'close', 'flush']
-missing = validate_interface(FileWriter(), required)
-# Returns: ['flush'] - missing required method
-```
-
-## Edge Cases
-
-### Built-in Types
-
-```python
-# O(n log n) - but very fast for built-ins
-int_attrs = dir(int)      # ~50 attributes
-str_attrs = dir(str)      # ~100+ attributes
-list_attrs = dir(list)    # ~50 attributes
-
-# Built-ins are optimized, actual time very small
-```
-
-### Objects Without __dict__
-
-```python
-# O(n log n) - still works for objects without __dict__
-class Slots:
-    __slots__ = ['x', 'y']
-
-obj = Slots()
-attrs = dir(obj)  # O(n log n) - works despite __slots__
-
-# Unlike __dict__, __slots__ objects still have accessible attributes
-```
-
-### Circular References
-
-```python
-# O(n log n) - handles circular references
-class Node:
-    def __init__(self, value):
-        self.value = value
-        self.next = None
-
-node1 = Node(1)
-node2 = Node(2)
-node1.next = node2
-node2.next = node1  # Circular reference
-
-attrs = dir(node1)  # O(n log n) - safely handles cycle
-```
-
-## Performance Considerations
-
-### Caching Results
-
-```python
-# Avoid repeated dir() calls
-class Inspector:
-    def __init__(self):
-        self._cache = {}
-    
-    def get_attrs(self, obj):
-        """Cache dir() results - O(1) after first call"""
-        obj_id = id(obj)
-        
-        if obj_id not in self._cache:
-            self._cache[obj_id] = dir(obj)  # O(n log n) - first call
-        
-        return self._cache[obj_id]  # O(1) - cached
-
-inspector = Inspector()
-attrs1 = inspector.get_attrs(my_list)  # O(n log n)
-attrs2 = inspector.get_attrs(my_list)  # O(1) - from cache
-```
-
-### Filtering Efficiency
-
-```python
-# Better: filter before processing
-def get_public_methods(obj):
-    """More efficient filtering"""
-    # Single pass through dir()
-    return [attr for attr in dir(obj)  # O(n log n)
-            if not attr.startswith('_')  # O(1)
-            and callable(getattr(obj, attr))]  # O(1)
-
-# vs: Multiple passes (slower)
-def slow_approach(obj):
-    attrs = dir(obj)  # O(n log n)
-    public = [a for a in attrs if not a.startswith('_')]  # O(n)
-    methods = [a for a in public if callable(getattr(obj, a))]  # O(n²)
-    return methods  # Total: O(n²)
-```
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use `dir()` for interactive exploration
-- Cache results if used multiple times on same object
-- Filter results for specific attribute types
-- Use with `help()` and `type()` for complete understanding
-- Check before accessing with `in` operator on dir() result
+- Use `hasattr()` or `getattr(obj, name, default)` to test one name
+- Use `vars(obj)` for instance attributes alone
+- Keep the list from one `dir()` call if you filter it several ways
 
 ❌ **Avoid**:
 
-- Using `dir()` in tight loops without caching
-- Assuming `dir()` output format is stable across versions
-- Using it for performance-critical code (it's O(n log n))
-- Forgetting that `dir()` includes inherited attributes
-- Assuming all listed attributes are accessible (some may raise exceptions)
-
-## Related Functions
-
-- **[getattr()](getattr.md)** - Get attribute value
-- **[hasattr()](hasattr.md)** - Check attribute existence
-- **[setattr()](setattr.md)** - Set attribute value
-- **[delattr()](delattr.md)** - Delete attribute
-- **[vars()](vars.md)** - Get __dict__
-- **[help()](help.md)** - Get documentation
-- **[type()](type_func.md)** - Get object type
-- **[inspect](https://docs.python.org/3/library/inspect.html)** - Advanced introspection
+- `name in dir(obj)` in a loop: each test rebuilds and sorts the list
+- Calling `dir()` on classes with repeated diamond inheritance in hot code
+- Treating `dir()` as the full set of reachable attributes
 
 ## Version Notes
 
-- **Python 2.x**: `dir()` available, returns list of strings
-- **Python 3.x**: Same behavior, returns alphabetically sorted list
-- **All versions**: Returns attributes in alphabetical order (implementation detail)
+- **All Python 3**: the result is a sorted list; the default `__dir__` walks `__bases__`
+  recursively without de-duplicating shared bases
+
+## Related Functions
+
+- **[vars()](vars.md)** - the instance `__dict__` itself, with no copy or sort
+- **[hasattr()](hasattr.md)** - test one name with a single lookup
+- **[getattr()](getattr.md)** - fetch a value, with a default for a missing name
+- **[help()](help.md)** - documentation rather than a name list
+- **[type()](type_func.md)** - the class whose bases `dir()` walks

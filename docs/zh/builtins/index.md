@@ -1,5 +1,5 @@
 ---
-source_sha: e9a9393fc22b2d42d44cf4fbcedc3f5b2e4a8282edfa53dc730c7b3c1a5062df
+source_sha: 8e07af8827b8e86ae179772d25d167205aad2599d6674a810c0b88cb20293804
 translated: machine
 ---
 
@@ -108,7 +108,7 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 | [`setattr()`](setattr.md) | O(1) | O(1) | 哈希表插入 |
 | [`hasattr()`](hasattr.md) | O(d) | O(1) | 与 `getattr()` 查找相同，只是捕获异常 |
 | [`delattr()`](delattr.md) | O(1) | O(1) | 哈希表删除 |
-| [`dir()`](dir.md) | O(n log n) | O(n) | 主要开销来自对结果排序 |
+| [`dir()`](dir.md) | O(k + p + n log n) | O(n) | 合并各类的字典，然后对名称排序 |
 | [`vars()`](vars.md) | O(1) | O(1) | 返回 `__dict__` 的引用，不复制 |
 | [`super()`](super.md) | O(d) | O(d) | 沿 MRO 查找，MRO 有缓存 |
 | [`property()`](property.md) | O(1) | O(1) | 描述符的创建与访问 |

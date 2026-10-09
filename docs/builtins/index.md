@@ -106,7 +106,7 @@ under Notes is what you pay to consume it.
 | [`setattr()`](setattr.md) | O(1) | O(1) | Hash table insertion |
 | [`hasattr()`](hasattr.md) | O(d) | O(1) | Same lookup as `getattr()`, exception caught |
 | [`delattr()`](delattr.md) | O(1) | O(1) | Hash table deletion |
-| [`dir()`](dir.md) | O(n log n) | O(n) | Dominated by sorting the result |
+| [`dir()`](dir.md) | O(k + p + n log n) | O(n) | Merges the class dictionaries, then sorts the names |
 | [`vars()`](vars.md) | O(1) | O(1) | Returns the `__dict__` reference, no copy |
 | [`super()`](super.md) | O(d) | O(d) | Walks the MRO, which is cached |
 | [`property()`](property.md) | O(1) | O(1) | Descriptor creation and access |
