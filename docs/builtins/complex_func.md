@@ -1,15 +1,21 @@
 # complex() Function Complexity
 
-The `complex()` function creates complex numbers from numeric values or strings.
+The `complex()` function creates a complex number from a string, from one number, or from
+a real and an imaginary part. A complex number holds two C doubles, so every result is
+the same size whatever the input.
+
+`n` is the number of characters in a string argument.
 
 ## Complexity Analysis
 
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
-| From two numbers | O(1) | O(1) | real + imaginary |
-| From complex | O(1) | O(1) | Copy or identity |
-| From string | O(n) | O(1) | n = string length |
-| From int/float | O(1) | O(1) | Direct conversion for floats and small ints; O(n) for arbitrary precision ints |
+| `complex()` | O(1) | O(1) | `0j` |
+| From two numbers | O(1) | O(1) | `complex(real, imag)` with ints or floats |
+| From complex | O(1) | O(1) | An exact `complex` is returned as the same object |
+| From int/float | O(1) | O(1) | An int too large for a float raises `OverflowError` |
+| From string | O(n) | O(n) | No copy for an ASCII string without underscores |
+| Object with `__complex__`, `__float__` or `__index__` | method + O(1) | method + O(1) | `__complex__` is tried first |
 
 ## Basic Usage
 
@@ -17,206 +23,172 @@ The `complex()` function creates complex numbers from numeric values or strings.
 
 ```python
 # O(1)
-c = complex(3, 4)        # (3+4j)
-c = complex(1.5, -2.5)   # (1.5-2.5j)
-c = complex(0, 1)        # 1j (purely imaginary)
+assert complex(3, 4) == 3 + 4j
+assert complex(1.5, -2.5) == 1.5 - 2.5j
+assert complex(0, 1) == 1j          # purely imaginary
+assert complex(real=3, imag=4) == 3 + 4j
+assert complex() == 0j
 ```
 
 ### From Single Number
 
 ```python
 # O(1)
-c = complex(3)      # (3+0j)
-c = complex(3.14)   # (3.14+0j)
-c = complex(0)      # 0j
+assert complex(3) == 3 + 0j
+assert complex(3.14) == 3.14 + 0j
+assert complex(0) == 0j
+
+# An int must fit in a float
+try:
+    complex(10**400)
+except OverflowError as e:
+    assert "too large to convert to float" in str(e)
+else:
+    raise AssertionError("expected OverflowError")
 ```
 
 ### From Complex Number
 
 ```python
-# O(1)
+# O(1) - an exact complex comes back unchanged
 original = complex(3, 4)
-c = complex(original)  # (3+4j) - returns the same object
+c = complex(original)
+assert c is original
 ```
 
 ### From String
 
 ```python
-# O(n) - where n = string length
-c = complex("3+4j")      # (3+4j)
-c = complex("-1-2j")     # (-1-2j)
-c = complex("5j")        # 5j
-c = complex("10")        # (10+0j)
+# O(n) - n = string length
+assert complex("3+4j") == 3 + 4j
+assert complex("-1-2j") == -1 - 2j
+assert complex("5j") == 5j
+assert complex("10") == 10 + 0j
+
+# Surrounding whitespace and parentheses are allowed, as are underscores in digits
+assert complex(" (3+4j) ") == 3 + 4j
+assert complex("1_000+2j") == 1000 + 2j
 ```
 
 ## Complexity Details
 
-### Numeric Conversion
-
-```python
-# O(1) - just type conversion
-int_val = 5
-float_val = 3.14
-
-c1 = complex(int_val)       # O(1) - (5+0j)
-c2 = complex(float_val)     # O(1) - (3.14+0j)
-c3 = complex(int_val, float_val)  # O(1) - (5+3.14j)
-```
-
 ### String Parsing
+
+Parsing is linear in the string length. An ASCII string is parsed in place; a string with
+non-ASCII digits or whitespace, or with underscores, is first copied, so it takes O(n)
+extra space.
 
 ```python
 # O(n) - linear in string length
-short = complex("3+4j")         # O(5)
-long = complex("123+456j")      # O(10)
+short = complex("3+4j")
+long = complex("1" * 1000 + "+" + "2" * 1000 + "j")
+assert short == 3 + 4j
+assert long.real == float("1" * 1000)
 
-# Each character must be parsed
+# O(n) space - non-ASCII digits are converted to ASCII first
+assert complex("٣+4j") == 3 + 4j  # ARABIC-INDIC DIGIT THREE
 ```
 
 ### Mathematical Operations
 
 ```python
-# O(1) - all operations constant time
+# O(1) - two doubles in, two doubles out
 c1 = complex(3, 4)
 c2 = complex(1, 2)
 
-# Arithmetic - all O(1)
-result = c1 + c2       # (4+6j)
-result = c1 * c2       # (-5+10j)
-result = c1 / c2       # (2.2-0.4j)
-result = c1 ** 2       # (-7+24j)
-```
-
-## Common Patterns
-
-### Creating Complex Numbers
-
-```python
-# O(1) - create from components
-real = 3.0
-imag = 4.0
-c = complex(real, imag)  # (3+4j)
-
-# Using j literal
-c = 3 + 4j  # Direct syntax (no function call)
-
-# From string
-c = complex("3+4j")  # O(5)
+assert c1 + c2 == 4 + 6j
+assert c1 * c2 == -5 + 10j
+assert c1 / c2 == (2.2 - 0.4j)
+assert c1**2 == -7 + 24j
+assert abs(c1) == 5.0
 ```
 
 ## Performance Patterns
 
+### Literal vs complex()
+
+A literal such as `3 + 4j` is folded into a constant when the code is compiled;
+`complex(3, 4)` is a call made every time it runs. Use `complex()` for values
+computed at run time, such as parsing user input.
+
+```python
+c = 3 + 4j              # constant
+d = complex(3, 4)       # O(1) call
+e = complex("3+4j")     # O(n) parse
+assert c == d == e
+```
+
 ### vs Tuple Representation
 
 ```python
-# Both O(1), but complex is specialized
-# Complex
+# Both O(1) to build and read
 c = complex(3, 4)
-real_part = c.real      # 3
-imag_part = c.imag      # 4
+assert (c.real, c.imag) == (3.0, 4.0)
 
-# Tuple (if you need to store both)
 coords = (3, 4)
-real_part = coords[0]   # 3
-imag_part = coords[1]   # 4
+assert coords[0] == 3 and coords[1] == 4
 
-# Complex has mathematical operations
-c1 = complex(3, 4)
-c2 = complex(1, 2)
-result = c1 + c2  # (4+6j) - direct addition
+# Complex numbers have arithmetic; tuples need it written out
+c1, c2 = complex(3, 4), complex(1, 2)
+assert c1 + c2 == 4 + 6j
 
-# Tuples need manual computation
-coords1 = (3, 4)
-coords2 = (1, 2)
-result = (coords1[0] + coords2[0], coords1[1] + coords2[1])
-```
-
-### String vs Direct
-
-```python
-# Direct - O(1)
-c = 3 + 4j
-
-# From string - O(n)
-c = complex("3+4j")  # O(5)
-
-# For constants, use direct notation
-# For user input, use complex()
+coords1, coords2 = (3, 4), (1, 2)
+assert (coords1[0] + coords2[0], coords1[1] + coords2[1]) == (4, 6)
 ```
 
 ## Edge Cases
-
-### Zero Complex
-
-```python
-# O(1)
-c = complex(0, 0)  # 0j
-c = complex(0)     # 0j
-c = 0 + 0j         # 0j
-```
-
-### Pure Real
-
-```python
-# O(1) - imaginary part is zero
-c = complex(5, 0)  # (5+0j)
-c = complex(5.5)   # (5.5+0j)
-```
-
-### Pure Imaginary
-
-```python
-# O(1) - real part is zero
-c = complex(0, 3)  # 3j
-c = 3j             # Direct notation
-```
 
 ### Conjugate
 
 ```python
 # O(1) - flip sign of imaginary part
-c = complex(3, 4)     # (3+4j)
-conj = c.conjugate()  # (3-4j)
-
-# Useful in calculations
-magnitude_sq = (c * c.conjugate()).real  # 9 + 16 = 25.0
+c = complex(3, 4)
+assert c.conjugate() == 3 - 4j
+assert (c * c.conjugate()).real == 25.0
 ```
 
 ### From String Errors
 
 ```python
-# O(n) - parsing errors
-try:
-    c = complex("3 + 4j")  # ValueError - spaces not allowed
-except ValueError:
-    pass
+# O(n) - the whole string is checked
+for text in ["3 + 4j", "3+4j+5j"]:
+    try:
+        complex(text)  # spaces inside, or a third term
+    except ValueError as e:
+        assert "malformed string" in str(e)
+    else:
+        raise AssertionError(f"expected ValueError for {text!r}")
 
+# A string cannot be combined with an imaginary part
 try:
-    c = complex("3+4j+5j")  # ValueError - invalid format
-except ValueError:
+    complex("1", 2)
+except TypeError:
     pass
+else:
+    raise AssertionError("expected TypeError")
 ```
 
 ## Mathematical Functions
 
 ```python
-# O(1) - all mathematical operations
+# O(1) - each cmath function works on two doubles
 import cmath
+import math
 
 c = complex(3, 4)
 
-# Trigonometric
-sin_c = cmath.sin(c)      # O(1)
-cos_c = cmath.cos(c)      # O(1)
+assert cmath.sqrt(-1) == 1j
+assert cmath.isclose(cmath.exp(cmath.log(c)), c)
+assert cmath.isclose(cmath.sin(c) ** 2 + cmath.cos(c) ** 2, 1)
+assert cmath.phase(c) == math.atan2(4, 3)
 
-# Logarithm
-log_c = cmath.log(c)      # O(1)
-
-# Square root
-sqrt_c = cmath.sqrt(c)    # O(1)
-
-# Exponential
-exp_c = cmath.exp(c)      # O(1)
+# The math module does not accept complex numbers
+try:
+    math.sqrt(c)
+except TypeError:
+    pass
+else:
+    raise AssertionError("expected TypeError")
 ```
 
 ## Methods
@@ -224,7 +196,7 @@ exp_c = cmath.exp(c)      # O(1)
 | Method | Time | Space | Notes |
 |--------|------|-------|-------|
 | `conjugate()` | O(1) | O(1) | Return complex conjugate (flip sign of imaginary) |
-| `from_number(x)` | O(1) | O(1) | Class method; convert number to complex (Python 3.14+) |
+| `from_number(x)` | O(1) | O(1) | Class method; convert a number, not a string, to complex (Python 3.14+); plus `__complex__`, `__float__` or `__index__` for other types |
 
 ## Attributes
 
@@ -236,51 +208,48 @@ exp_c = cmath.exp(c)      # O(1)
 ## Attributes and Methods Examples
 
 ```python
+import sys
+
 # O(1) - access properties
 c = complex(3, 4)
+assert c.real == 3.0
+assert c.imag == 4.0
+assert c.conjugate() == 3 - 4j
 
-real_part = c.real        # 3.0
-imag_part = c.imag        # 4.0
-conj = c.conjugate()      # (3-4j)
-
-# Magnitude
-magnitude = abs(c)        # 5.0
-
-# Phase angle
-import cmath
-phase = cmath.phase(c)    # atan2(4, 3)
-
-# From number (Python 3.14+)
-c = complex.from_number(3.14)  # (3.14+0j)
+if sys.version_info >= (3, 14):
+    assert complex.from_number(3.14) == 3.14 + 0j
+    try:
+        complex.from_number("3+4j")
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("expected TypeError")
 ```
 
 ## Best Practices
 
 ✅ **Do**:
 
-- Use complex literal notation: `3 + 4j`
-- Use `complex()` for string parsing: `complex("3+4j")`
-- Use `cmath` module for complex math functions
-- Use `.real` and `.imag` for components
+- Write constants as literals, `3 + 4j`: they are built once, at compile time
+- Use `complex()` to parse strings, O(n) in their length
+- Use `cmath` for complex math functions
 
 ❌ **Avoid**:
 
-- Assuming complex() is faster than literal (it's not)
-- Using complex for 2D vectors (not designed for that)
-- Forgetting j suffix when typing imaginary literals
-- Missing the `cmath` module (regular math won't work)
+- Passing complex numbers as the `real` or `imag` argument; it is deprecated from Python 3.14
+- Calling `math` functions on complex numbers: they raise `TypeError`
 
 ## Related Functions
 
 - **[abs()](abs.md)** - Magnitude of complex number
-- **[cmath](https://docs.python.org/3/library/cmath.html)** - Complex math functions
-- **[complex.conjugate()](index.md)** - Complex conjugate
+- **[float()](float_func.md)** - Real-number conversion
+- **[cmath](../stdlib/cmath.md)** - Complex math functions
 
 ## Version Notes
 
-- **Python 2.x**: Complex numbers available
-- **Python 3.x**: Same behavior, integrated well
-- **All versions**: 64-bit floating-point components
+- **Python 3.14+**: `complex.from_number()` added
+- **Python 3.14+**: A complex number as the `real` or `imag` argument emits `DeprecationWarning`, and a string passed as `real=` raises `TypeError`
+- **All Python 3**: Both parts are C doubles
 
 ## Further Reading
 
