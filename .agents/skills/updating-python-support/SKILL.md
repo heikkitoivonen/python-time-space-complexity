@@ -16,8 +16,9 @@ site, package metadata, CI, and tests disagreeing about what is supported.
    - an added version has reached its official final release date.
 3. Do not add alpha, beta, or release-candidate versions. Do not drop a version
    before EOL.
-4. Find the latest patch release for the new oldest and newest supported minor
-   versions. CI pins exact patch releases, not minor-only versions.
+4. Find the latest patch release for every supported minor version. CI pins
+   exact patch releases, not minor-only versions; the oldest and newest of them
+   are the boundaries verified locally.
 5. Record the old and new inclusive support ranges before editing. Use these as
    the audit criteria throughout the change.
 
@@ -39,6 +40,12 @@ Search for other tool-specific minimum or target versions before assuming these
 are the only settings. Regenerate `uv.lock` with `uv lock`; never hand-edit its
 `requires-python` value or dependency markers. Review dependency resolution and
 conditional markers introduced or removed by the new range.
+
+Raising Ruff's `target-version` enables pyupgrade rules for the new floor, so
+run `ruff check .` over the whole repository, not just the files you edited.
+Where the old spelling is the test's subject, keep it with a line-scoped
+`# noqa` and a comment saying why: an autofix, or a rewrite by hand, can turn
+an identity check between two spellings into a tautology.
 
 ## Update Public API Manifests
 
@@ -63,11 +70,11 @@ when their version's audit manifest is removed.
 ## Update CI Boundary Versions
 
 In `.github/workflows/deploy.yml`, the `test-linux` and `timing` jobs share one
-Python list (the `supported-pythons` YAML anchor). Keep it on exactly the oldest
-and newest supported minor lines, each pinned to its latest patch release.
+Python list (the `supported-pythons` YAML anchor). It holds every supported
+minor line, each pinned to its latest patch release.
 
-- Replace the old lower boundary when support is dropped.
-- Replace the old upper boundary when support is added.
+- Remove the dropped line's entry when support is dropped.
+- Add the new line's entry when support is added.
 - Preserve `fail-fast: false` and the patched-Python enforcement.
 - Re-read nearby comments and version-specific skip logic. Update comments that
   describe the support boundaries, but retain historical examples that remain
@@ -83,11 +90,21 @@ for example:
 
 ```bash
 rg -n '3\.10|3\.14|py310|py314|3\.10[–-]3\.14' \
-  --glob '!uv.lock' --glob '!site/**' --glob '!.venv/**'
+  --hidden --glob '!.git/**' --glob '!uv.lock' --glob '!site/**' --glob '!.venv/**' .
 ```
 
 Adapt the numbers and search separately when a combined expression would hide
 results. Inspect every match; never bulk-replace version numbers.
+
+Most of the work when dropping a version does not contain the dropped number.
+Gates on the *new* floor are dead too: `sys.version_info < (3, 11)` and
+`>= (3, 11)` once 3.10 goes, along with skips, constants and branches built on
+them. So are enumerations of minor versions such as `range(10, 15)`. Search for
+those separately:
+
+```bash
+rg -n 'version_info[^\n]*\(3,\s*1[01]\b|range\(10,' tests docs scripts
+```
 
 Update a match when it expresses the current supported set or a support
 boundary, including:
@@ -105,7 +122,10 @@ including:
 - "added in Python 3.x", "removed in Python 3.x", or a PEP's release;
 - an algorithm or behavior that changed at a named version;
 - historical version guides and factual compatibility notes;
-- ordinary numeric example data such as the float `3.14`.
+- ordinary numeric example data such as the float `3.14`;
+- version numbers that illustrate a method in instructions, such as a
+  `git diff v3.x.y:... v3.z.w:...` example in a skill or `AGENTS.md`. They
+  demonstrate a technique, not the supported range.
 
 The search is an investigation list, not an edit list. Explain any ambiguous
 match by what it means, not merely by whether it contains the old number.
@@ -128,6 +148,17 @@ Examples of changes to investigate:
 - a workaround needed only before a feature available throughout the new range;
 - a module or API removed in one of the still-supported versions;
 - a test whose skip or expected result existed only for the dropped line.
+
+When the dropped line is the only version that had an API, remove its table
+row and keep its removal in the page's Version Notes. A page for a whole module
+stays. If no supported interpreter can import it, its test file says so in its
+docstring, since runtime tests can no longer reach it.
+
+A statement naming the new floor, such as "on 3.11", must hold for the whole
+3.11 line. If behaviour arrived in a 3.11 patch release, name that patch.
+
+Test docstrings that cite a figure measured on the dropped version need a new
+measurement on the new floor, stated with its interpreter and sizes.
 
 ## Document a Newly Supported Version
 
