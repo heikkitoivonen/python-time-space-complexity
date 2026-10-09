@@ -38,10 +38,12 @@ Measurement scope:
   derived window is readable through its parent. The clock covers the other
   direction, where sixteen times the columns at a fixed row count leaves
   `derwin()` unchanged and would multiply any per-cell allocation by sixteen.
-* `resize()` grows a fresh 64-by-4 pad to 64-by-16 or 64-by-4096, with
-  construction outside the clock. At a fixed row count, 256x the destination
-  cells must cost over 32x, separating cell work from fixed or per-row work.
-  The fastest of nine samples is used; row-count growth is not varied here.
+* `resize()` grows fresh 4-by-4 pads to 16, 512 and 16,384 columns, in batches
+  of 16 with construction and release outside the clock. Four rows hold the
+  per-row allocation overhead small while the column count varies. Each 32x
+  cell-count step must cost between 3x and 256x, against constant's 1x and
+  quadratic's 1,024x; the full 1,024x interval must cost over 64x. The fastest
+  of nine batches is used. Row-count growth is not varied here.
 * The `instr()` and `getstr()` ceiling is exact, not asymptotic. Asking for
   3000 bytes of a 3000-byte row returns 2047 on 3.14 and 1023 before it, so the
   test reads the boundary off `sys.version_info` and asserts the number. The
@@ -779,22 +781,37 @@ class TestWindowAllocation:
 
     @pytest.mark.timing
     def test_resize_cost_tracks_the_cell_count(self) -> None:
-        def measure(stdscr: Any) -> tuple[float, float]:
+        columns = (16, 512, 16_384)
+        batch_size = 16
+
+        def measure(stdscr: Any) -> list[float]:
             import curses
 
             def grow(cols: int) -> Callable[[], Callable[[], Any]]:
                 def make() -> Callable[[], Any]:
-                    window = curses.newpad(64, 4)
-                    return lambda: window.resize(64, cols)
+                    windows = [curses.newpad(4, 4) for _ in range(batch_size)]
+
+                    def resize() -> None:
+                        for window in windows:
+                            window.resize(4, cols)
+
+                    return resize
 
                 return make
 
-            return _best(grow(16), 9), _best(grow(4096), 9)
+            return [_best(grow(cols), 9) / batch_size for cols in columns]
 
         (durations, _) = _screen(measure)
-        ratio = durations[1] / durations[0]
+        ratios = [
+            larger / smaller for smaller, larger in zip(durations, durations[1:], strict=False)
+        ]
 
-        assert ratio > 32, f"256x the cells made resize only x{ratio:.1f} ({durations} s)"
+        assert all(3 < ratio < 256 for ratio in ratios), (
+            f"resize: 32x cells per step cost x{ratios}; {columns=}, {durations=} s"
+        )
+        assert durations[-1] > durations[0] * 64, (
+            f"resize: 1,024x cells must exclude fixed or per-row work; {durations=} s"
+        )
 
     def test_putwin_writes_a_file_that_grows_with_the_area(self, tmp_path: pathlib.Path) -> None:
         target = str(tmp_path)
