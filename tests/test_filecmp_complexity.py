@@ -42,7 +42,7 @@ Measurement scope:
   nested object still holds its listing.
 * `dircmp(shallow=False)` on 3.13+ opens both files of a same-size,
   same-mtime pair and reports them different; the default opens neither and
-  reports them the same. On 3.10-3.12 the keyword raises `TypeError`.
+  reports them the same. On 3.11 and 3.12 the keyword raises `TypeError`.
 * An `ignore` list of 50 objects with a counting `__eq__`, over a directory of
   20 names per side, is compared 50 times per listed name; an ignored
   directory is never stat'ed, and passing `ignore` drops `DEFAULT_IGNORES`.

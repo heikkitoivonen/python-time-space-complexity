@@ -8,7 +8,7 @@ pass back to `ratecv()`, `lin2adpcm()` and `adpcm2lin()`.
 
 !!! warning "Removed in Python 3.13"
     Deprecated in Python 3.11 and removed in Python 3.13 by PEP 594. The examples need
-    Python 3.10, 3.11 or 3.12.
+    Python 3.11 or 3.12.
 
 `n` is the bytes in a fragment (each fragment, where a function takes two of the same length),
 `m` is the bytes in the `reference` passed to `findfit()`, and `o` is the bytes `ratecv()`

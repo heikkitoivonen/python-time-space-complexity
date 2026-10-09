@@ -59,13 +59,13 @@ Measurement scope:
   same input peaks under 50 KB, and both exceed 4 MB with the sizes swapped.
 * `ndiff()` line-pair comparisons are counted as `set_seq1()` calls, which
   also include one per matcher built. On 3.14+ a replaced block of r mutually similar
-  lines takes at most 22r pairs, and 4x r costs under 6x. On 3.10–3.13 the same
+  lines takes at most 22r pairs, and 4x r costs under 6x. On 3.11–3.13 the same
   shape costs more than 6x per doubling of r from 25 to 100 (cubic), and in a
   block of 50 dissimilar lines every one of the r² line pairs is recorded
   being set on a character matcher. Streaming the delta of
   a block of similar lines, 4x r (10 to 40) raises the traced peak by under
   1.5x on 3.14+ (2,000-character lines, where c dominates the O(B) line index)
-  and by more than 2x on 3.10–3.13 (200-character lines).
+  and by more than 2x on 3.11–3.13 (200-character lines).
 * `HtmlDiff.make_table()` and `make_file()` are observed to call `ndiff()`
   once. `diff_bytes()` is observed to exhaust both input iterators before its
   first line and to round-trip an undecodable byte. `restore()` is observed to
@@ -74,7 +74,7 @@ Measurement scope:
   match over 1,000 possibilities the quick ratios reject, one per survivor when
   they pass, and to reject `n <= 0` and a cutoff outside [0, 1].
 * Python 3.14+ raises `TypeError` for a string `a` or `b` in `unified_diff()`
-  and `context_diff()`; 3.10–3.13 accept it. Both sides are guarded on
+  and `context_diff()`; 3.11–3.13 accept it. Both sides are guarded on
   `sys.version_info`.
 * Every fenced Python block runs in its own subprocess and working directory,
   and a mutated assertion in one of them is asserted to fail.
@@ -624,7 +624,7 @@ def ndiff_pairs(r: int, similar: bool, monkeypatch: pytest.MonkeyPatch) -> int:
 
 class TestNdiffReplacedBlocks:
     """`Differ.compare()` / `ndiff()`: O(r) line pairs and O(c) space per
-    replaced block on 3.14+; O(r²) to O(r³) pairs and O(r·c) on 3.10–3.13."""
+    replaced block on 3.14+; O(r²) to O(r³) pairs and O(r·c) on 3.11–3.13."""
 
     @pytest.mark.skipif(sys.version_info < (3, 14), reason="windowed search from 3.14")
     def test_pairs_are_linear_in_the_block(self, monkeypatch: pytest.MonkeyPatch) -> None:

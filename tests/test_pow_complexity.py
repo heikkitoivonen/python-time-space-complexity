@@ -11,7 +11,7 @@ constructed before tracing. Peak allocation establishes growth, not an exact
 bound on the bit width of each intermediate product.
 
 The grade-school upper bounds follow long_pow, long_invmod, and division in
-CPython's Objects/longobject.c (released 3.10–3.14 branches). Initial division
+CPython's Objects/longobject.c (released 3.11–3.14 branches). Initial division
 of a b-bit base by an m-bit modulus costs O(b*m); the remaining inversion
 costs O(m²), and O(e) modular steps cost O(e*m²). Allocation probes and finite
 timings cover the size dimensions, not a proof of these asymptotic bounds.
@@ -45,8 +45,8 @@ scalar costs belongs to those types' pages.
 
 One claim cannot be settled by running code here: the page dates the modular
 inverse and the keyword arguments to Python 3.8, and the integer-to-string limit
-to 3.11 and 3.10.7. This project supports 3.10 and newer and pins 3.10.21, so
-every supported interpreter already has all three. The tests below assert that
+to 3.11 and 3.10.7. This project supports 3.11 and newer, so every supported
+interpreter already has all three. The tests below assert that
 the features are present, not the release that introduced them.
 """
 
@@ -81,9 +81,8 @@ def best_time(func: Callable[[], Any], repeats: int = 5) -> float:
 def traced_peak(func: Callable[[], Any]) -> int:
     """Return the peak bytes tracemalloc attributes to one call.
 
-    The discarded first call matters: whichever measurement runs first in a
-    process otherwise absorbs tracemalloc's own warm-up, which read 1360 bytes
-    against a steady 936 on 3.10 and made the result depend on test order."""
+    The first call is discarded so that a one-time allocation it may make
+    cannot land in whichever measurement runs first in a process."""
     func()
     tracemalloc.start()
     try:

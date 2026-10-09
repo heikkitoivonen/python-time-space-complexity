@@ -8,7 +8,7 @@ your `collect_incoming_data()`.
 
 !!! warning "Removed in Python 3.12"
     Deprecated since Python 3.6 and removed in Python 3.12 by PEP 594. The examples that
-    import it need Python 3.10 or 3.11; new code should use `asyncio` streams.
+    import it need Python 3.11; new code should use `asyncio` streams.
 
 `n` is the bytes passed to one `push()` or still held by a `simple_producer`, `r` is the bytes
 one `recv()` returns (at most `ac_in_buffer_size`), `m` is the terminators matched within those

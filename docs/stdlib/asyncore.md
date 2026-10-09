@@ -8,7 +8,7 @@ scratch, so it costs every registered channel, idle or not.
 
 !!! warning "Removed in Python 3.12"
     Deprecated since Python 3.6 and removed in Python 3.12 by PEP 594. The examples that
-    import it need Python 3.10 or 3.11; new code should use `asyncio`.
+    import it need Python 3.11; new code should use `asyncio`.
 
 `c` is the channels in the map a loop runs over, `r` is the bytes one `recv()` returns, `n` is the
 bytes passed to one `send()`, `u` is the bytes waiting in a `dispatcher_with_send` output buffer,

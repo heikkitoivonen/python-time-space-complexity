@@ -7,7 +7,7 @@ string before it is written.
 
 !!! warning "Removed in Python 3.13"
     Deprecated in Python 3.11 and removed in Python 3.13 by PEP 594. The examples that import it
-    need Python 3.10, 3.11 or 3.12; new code should use `traceback` and `logging`.
+    need Python 3.11 or 3.12; new code should use `traceback` and `logging`.
 
 `d` is the frames in the traceback and `c` is the source lines shown per frame (`context`, 5 by
 default, at least 1). The bounds count frames and lines, pricing one source line, each frame's
@@ -44,7 +44,7 @@ import contextlib
 import io
 import sys
 
-import cgitb  # Python 3.10-3.12 only
+import cgitb  # Python 3.11 and 3.12 only
 
 out = io.StringIO()
 original = sys.excepthook
@@ -78,7 +78,7 @@ sys.excepthook = original
 import io
 import sys
 
-import cgitb  # Python 3.10-3.12 only
+import cgitb  # Python 3.11 and 3.12 only
 
 def parse(value):
     return int(value)
@@ -109,7 +109,7 @@ failing line, so the report grows with the stack and with `context`.
 import re
 import sys
 
-import cgitb  # Python 3.10-3.12 only
+import cgitb  # Python 3.11 and 3.12 only
 
 def recurse(depth):
     if depth == 0:
@@ -139,7 +139,7 @@ import io
 import os
 import tempfile
 
-import cgitb  # Python 3.10-3.12 only
+import cgitb  # Python 3.11 and 3.12 only
 
 with tempfile.TemporaryDirectory() as logdir:
     out = io.StringIO()

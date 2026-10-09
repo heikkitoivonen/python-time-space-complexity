@@ -118,7 +118,7 @@ assert shutil.COPY_BUFSIZE in (64 * 1024, 256 * 1024, 1024 * 1024)
 listings along the path it is currently descending — O(d·e), not the whole tree and not one
 directory. Shape decides it: a chain 50 deep with 40 entries per level and a two-level tree of 50
 such directories hold the same 2,050 entries, yet the chain peaks several times higher. Python
-3.10–3.11 `rmtree()` retains ancestor listings the same way; newer versions keep an explicit
+3.11 `rmtree()` retains ancestor listings the same way; newer versions keep an explicit
 traversal stack, which is bounded the same.
 
 ```python

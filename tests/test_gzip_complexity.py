@@ -19,8 +19,7 @@ Measurement scope:
   bytes; before 3.14 it is the current time.
 * `decompress()` of one 10,000,000-byte member peaks above 5 MB. Over 1,000
   concatenated members of 4,000 random bytes, it hands the decompressors it
-  creates more than s·n/4 bytes from 3.11, and at most n plus one read buffer
-  per member on 3.10, where n is the input's length. A `GzipFile` over the
+  creates more than s·n/4 bytes, where n is the input's length. A `GzipFile` over the
   same input hands them at most n plus one read buffer (`READ_BUFFER_SIZE`,
   128 KiB, from 3.12; `io.DEFAULT_BUFFER_SIZE`, 8 KiB, before) per member.
   Garbage and trailing bytes that are not a member raise `BadGzipFile`, a
@@ -287,7 +286,6 @@ class TestDecompress:
         assert len(payload) < 20_000
         assert peak > 5_000_000, f"a 10 MB result peaked at {peak} bytes"
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="per-member copies from 3.11")
     def test_every_member_recopies_the_rest_of_the_input(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -301,19 +299,6 @@ class TestDecompress:
         assert counter.fed > self.MEMBERS * n // 4, (
             f"{self.MEMBERS} members of {n} bytes fed {counter.fed}; linear would be ~{n}"
         )
-
-    @pytest.mark.skipif(sys.version_info >= (3, 11), reason="3.10 reads through GzipFile")
-    def test_on_3_10_decompress_is_linear_in_the_input(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        data = self.members
-        counter = FedZlib()
-        monkeypatch.setattr(gzip, "zlib", counter)
-
-        assert gzip.decompress(data) == random_bytes(4_000) * self.MEMBERS
-
-        n = len(data)
-        assert counter.fed <= n + READ_BUFFER * self.MEMBERS, f"fed {counter.fed} for {n}"
 
     def test_a_gzipfile_recopies_up_to_one_buffer_per_member(
         self, monkeypatch: pytest.MonkeyPatch

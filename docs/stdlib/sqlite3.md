@@ -17,8 +17,7 @@ lists, its page cache - is additional. Transaction rows describe the default tra
 
 The query rows price SQLite's work, and a Python call pays for whatever part of it runs: `execute()`
 runs a query to its first row, and each fetch runs it to the next, so a fetch can scan many rows to
-return one. On Python 3.10 rows are converted one step early - `execute()` converts the first row,
-and each fetch converts the row after the one it returns - with the same totals.
+return one.
 
 ## Complexity Reference
 
@@ -26,7 +25,7 @@ and each fetch converts the row after the one it returns - with the same totals.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `sqlite3.connect(database, timeout=5.0, detect_types=0, ..., cached_statements=128, ...)` | O(1) | O(1) | Opens the file; SQLite checks that it is a database only at the first statement. `cached_statements` defaults to 100 on Python 3.10 |
+| `sqlite3.connect(database, timeout=5.0, detect_types=0, ..., cached_statements=128, ...)` | O(1) | O(1) | Opens the file; SQLite checks that it is a database only at the first statement |
 | `sqlite3.complete_statement(statement)` | O(q) | O(1) | Whether the text ends in a complete statement; nothing is compiled |
 | `sqlite3.register_adapter(type, adapter, /)` | O(1) | O(1) | One entry in `sqlite3.adapters`; the adapter then runs per bound value of that type |
 | `sqlite3.register_converter(typename, converter, /)` | O(1) | O(1) | One entry in `sqlite3.converters`, matched case-insensitively |
@@ -168,7 +167,7 @@ connection.close()
 
 ## Statement Cache
 
-A connection keeps up to 128 compiled statements (100 on Python 3.10), keyed by the SQL text.
+A connection keeps up to 128 compiled statements, keyed by the SQL text.
 Re-running the same text with new parameters skips the compile; interpolating values makes a new
 text for every new value, and each new text is compiled. An authorizer makes the compiles visible, because SQLite
 consults it only while compiling.
@@ -475,7 +474,6 @@ copy.close()
 
 ```python
 import sqlite3
-import sys
 
 connection = sqlite3.connect(':memory:')
 connection.execute('CREATE TABLE t (id INTEGER PRIMARY KEY)')
@@ -484,10 +482,9 @@ connection.execute('INSERT INTO t VALUES (1)')
 try:
     connection.execute('INSERT INTO t VALUES (1)')
 except sqlite3.IntegrityError as error:
-    # From 3.11 the result code is on the exception - O(1)
-    if sys.version_info >= (3, 11):
-        assert error.sqlite_errorcode == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY
-        assert error.sqlite_errorname == 'SQLITE_CONSTRAINT_PRIMARYKEY'
+    # The result code is on the exception - O(1)
+    assert error.sqlite_errorcode == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY
+    assert error.sqlite_errorname == 'SQLITE_CONSTRAINT_PRIMARYKEY'
 else:
     raise AssertionError('a duplicate primary key was inserted')
 

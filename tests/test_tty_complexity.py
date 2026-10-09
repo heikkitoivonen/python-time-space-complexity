@@ -25,12 +25,12 @@ Measurement scope:
 * With echo off and a line written to the controller, `setraw()` with the
   default `when` or `TCSAFLUSH` leaves nothing to read on the terminal
   (`select()` with a 0.2 s timeout), and with `TCSADRAIN` or `TCSANOW` the
-  whole line is still there to read; observed on Linux on 3.10 to 3.14, and run by the macOS
+  whole line is still there to read; observed on Linux on 3.11 to 3.14, and run by the macOS
   CI job.
 * A child process that calls `setraw()` on an inherited terminal descriptor
   and exits leaves the terminal in raw mode for the parent to read back.
 * `setcbreak()` leaves `ICRNL` as it was, set or clear, on every version
-  except 3.12.0 and 3.12.1, which clear it (observed on 3.10, 3.11,
+  except 3.12.0 and 3.12.1, which clear it (observed on 3.11,
   3.12.0-3.12.2, 3.13 and 3.14).
 * With echo on and canonical mode, one byte written to the controller without
   a line end is not readable on the terminal within 0.2 s; after `setraw()` or
@@ -45,7 +45,7 @@ Measurement scope:
   `NCCS`-entry control-character list.
 * Both fenced blocks run in their own subprocess on a fresh pseudo-terminal,
   and a mutated assertion is asserted to make its block fail. The second block
-  calls `cfmakeraw()`, so on 3.10 and 3.11 it is skipped by name.
+  calls `cfmakeraw()`, so on 3.11 it is skipped by name.
 
 Not settled here:
 

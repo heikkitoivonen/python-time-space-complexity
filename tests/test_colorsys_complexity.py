@@ -40,7 +40,7 @@ Measurement scope:
 
 Not settled here:
 
-* O(1) time for every function is read from Lib/colorsys.py on 3.10 to 3.14:
+* O(1) time for every function is read from Lib/colorsys.py on 3.11 to 3.14:
   each is straight-line float arithmetic with no loop or recursion, and the
   module is unchanged across that range apart from how `rgb_to_hls()` and
   `rgb_to_hsv()` spell the range term. Timing a function with no size

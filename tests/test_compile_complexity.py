@@ -16,7 +16,7 @@ Measurement scope:
   `ast.PyCF_ONLY_AST` and an `ast` tree passed back in; a constant bound
   predicts x1 and a quadratic one x100;
 * time: 1,000, 10,000 and 100,000 such statements, each tenfold step costing
-  between x3 and x50 (measured x8 to x22 on CPython 3.10, 3.12 and 3.14,
+  between x3 and x50 (measured x11 to x16 on CPython 3.11.17 and 3.14.8,
   aarch64). A quadratic bound predicts x100 per step;
 * no source-to-code cache: the `compile` audit event fires once per
   compile() call, twice for the same source compiled twice, which also gives
@@ -34,8 +34,8 @@ Measurement scope:
   ast.fix_missing_locations() fills them in, and a located tree with a Store
   context where Load is required raises ValueError; a hand-built
   `ast.Constant` holding a tuple of 10,000, 100,000 and 1,000,000 items
-  costs between x3 and x50 per tenfold step (measured x9 to x12 on 3.10 and
-  3.14), so its items count towards t;
+  costs between x3 and x50 per tenfold step (measured x10 to x16 on 3.11.17 and
+  3.14.8), so its items count towards t;
 * optimize: level 0 keeps asserts, docstrings and a true `__debug__`; level 1
   drops asserts and makes `__debug__` false; level 2 also drops docstrings;
   `-1` follows `python -O` and `-OO`, checked in subprocesses;
@@ -66,7 +66,7 @@ Not settled here:
   where n is mostly a long literal or whitespace; a hand-built tree has no
   source length, which is why its row uses t.
 * The tokenizer caps (MAXLEVEL 200 brackets, MAXINDENT 100 levels) are the
-  same in Parser/tokenizer.h or Parser/lexer/state.h from v3.10.19 to
+  same in Parser/tokenizer.h or Parser/lexer/state.h from v3.11.14 to
   v3.14.2. The chain lengths at which the parser stack or compiler recursion
   gives out are not pinned; only 100,000 is asserted to fail.
 * Not varied: statement shape for the scaling tests (one assignment of a

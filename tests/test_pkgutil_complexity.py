@@ -45,7 +45,7 @@ Measurement scope:
   `__loader__` without calling `importlib.util.find_spec`, and on a name that
   is not imported to call it once, as `find_loader()` does; both warn on 3.12
   and 3.13 and are absent from 3.14. `ImpImporter` and `ImpLoader` are
-  asserted to list nothing at construction and to warn on 3.10 and 3.11, and
+  asserted to list nothing at construction and to warn on 3.11, and
   to be absent from 3.12.
 * `extend_path()` is given a path of 50 entries whose `__eq__` counts calls
   and a search path of 20 directories that each hold a portion: it makes 1,000
@@ -80,7 +80,7 @@ Not settled here:
   `__init__.py`, which the caller writes. Packages are empty in every test.
 * Zip archives on the path are outside the page's scope and are not measured.
 * `ImpImporter` and `ImpLoader` methods beyond construction are not
-  measured; they are deprecated and exist only on 3.10 and 3.11.
+  measured; they are deprecated and exist only through 3.11.
 * Names the audit finds at runtime that the official documentation does not
   list are left off the page: `read_code`, `iter_importer_modules` and
   `iter_zipimport_modules` are undocumented helpers.

@@ -179,7 +179,7 @@ def compiled_chars(lines: list[str]) -> int:
 @pytest.fixture(autouse=True)
 def _default_excepthook(monkeypatch: pytest.MonkeyPatch) -> None:
     # Error output reaches write() only while sys.excepthook is the default;
-    # some test environments replace it (the exceptiongroup backport on 3.10).
+    # some test environments replace it.
     monkeypatch.setattr(sys, "excepthook", sys.__excepthook__)
 
 

@@ -13,8 +13,8 @@ Measurement scope:
   pair, at 100, 1,000 and 10,000 pairs: each 10x step is asserted under 30x in
   time, where linear predicts 10x and quadratic 100x. The same statements at
   3,000 pairs inside one function are asserted more than 5x dearer than at
-  module level; that is the b·f term, measured at 32x to 36x on 3.10 and 3.14. The traced peak
-  grows between 5x and 30x from 1,000 to 10,000 pairs (9.6x on 3.10.22), where
+  module level; that is the b·f term, measured at about 30x to 45x on 3.11.17 and 3.14.8. The traced peak
+  grows between 5x and 30x from 1,000 to 10,000 pairs (9.6x on 3.11.17), where
   linear predicts 10x and quadratic 100x. A table built from the larger input
   is held outside tracing to keep its names interned: the measurement covers
   fresh parsing and analysis, excluding growth of the process-wide intern
@@ -60,7 +60,8 @@ Not settled here:
   not nest functions more than one level deep. That `compile()` pays the same
   term follows from Python/compile.c building the same symbol table before
   code generation; it is not timed, because the rest of `compile()` is not
-  linear in the module-level shape on 3.10.
+  linear in the module-level shape on 3.11 (10x the pairs cost about 50x on
+  3.11.17).
 * `symtable()` space is measured as a traced peak only; what the returned
   tables retain after the AST is freed is not measured.
 * Treating name hashing and comparison as O(1) is a cost-model assumption.

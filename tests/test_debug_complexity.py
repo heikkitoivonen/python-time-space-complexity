@@ -87,7 +87,7 @@ Not settled here:
   observed.
 * Which constants a guarded function keeps in `co_consts` moves across the
   supported range: 3.14 holds the folded `True` or `False`, 3.13 keeps
-  neither once the branch is resolved, and 3.10 keeps `True` at the default
+  neither once the branch is resolved, and 3.11 keeps `True` at the default
   level only. Nothing here asserts on that tuple beyond the reader function,
   whose folded `True` is present on every supported version and is checked
   by identity, so an integer const cannot satisfy it.

@@ -136,7 +136,7 @@ import textwrap
 import time
 import tracemalloc
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from functools import partial
 from typing import Any
 
@@ -1188,7 +1188,7 @@ class TestIdler:
 class TestModuleFunctions:
     """`Internaldate2tuple`, `Time2Internaldate`, `ParseFlags` and `Int2AP`."""
 
-    STAMP = datetime(2024, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
+    STAMP = datetime(2024, 1, 2, 3, 4, 5, tzinfo=UTC)
 
     def test_parse_flags(self) -> None:
         assert imaplib.ParseFlags(rb"1 (FLAGS (\Seen \Answered) UID 7)") == (

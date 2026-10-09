@@ -98,7 +98,7 @@ EXPECTED_BLOCKS = 10
 HAS_MAX_HEAP = sys.version_info >= (3, 14)
 MAX_HEAP = pytest.mark.skipif(not HAS_MAX_HEAP, reason="the max-heap functions are new in 3.14")
 
-# typeshed for the 3.10 floor has no max-heap functions; every use is behind MAX_HEAP.
+# typeshed for the 3.11 floor has no max-heap functions; every use is behind MAX_HEAP.
 heapify_max: Any = getattr(heapq, "heapify_max", None)
 heappush_max: Any = getattr(heapq, "heappush_max", None)
 heappop_max: Any = getattr(heapq, "heappop_max", None)

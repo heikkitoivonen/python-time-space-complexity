@@ -71,9 +71,8 @@ assert db.guess_type('README') == (None, None)
 # A data: URL carries its own type
 assert db.guess_type('data:text/csv;base64,YSxi') == ('text/csv', None)
 
-if sys.version_info >= (3, 11):
-    # The query string is not part of the extension
-    assert db.guess_type('https://example.com/logo.png?v=2') == ('image/png', None)
+# The query string is not part of the extension
+assert db.guess_type('https://example.com/logo.png?v=2') == ('image/png', None)
 
 if sys.version_info >= (3, 13):
     assert db.guess_file_type('/srv/files/report.pdf') == ('application/pdf', None)  # O(p)

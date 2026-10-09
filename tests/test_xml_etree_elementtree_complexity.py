@@ -125,7 +125,7 @@ Not settled here:
   caches parsed trees shares their descendants between inclusions, since
   `include()` shallow-copies what it returns; that is not exercised. `base_url`'s O(c) per include is
   `urllib.parse.urljoin()`, read from Lib/xml/etree/ElementInclude.py, which
-  is unchanged in behaviour from 3.10 through 3.14; `base_url` and
+  is unchanged in behaviour from 3.11 through 3.14; `base_url` and
   `max_depth` date from 3.9, before the supported range.
 """
 
@@ -153,7 +153,7 @@ EXPECTED_BLOCKS = 15
 
 # The first patch of each minor release that scans a parent's children once per
 # tag for a positional predicate, instead of once per candidate.
-POSITIONAL_SCAN_FIXED = {(3, 10): 21, (3, 11): 16, (3, 12): 14, (3, 13): 15, (3, 14): 7}
+POSITIONAL_SCAN_FIXED = {(3, 11): 16, (3, 12): 14, (3, 13): 15, (3, 14): 7}
 
 
 def best_ns(func: Callable[[], Any], repeats: int = 7, inner: int = 1) -> float:

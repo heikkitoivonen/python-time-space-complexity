@@ -22,7 +22,7 @@ are outside the bounds and appear as "+ round trip" where an operation makes one
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `urllib.parse.urlsplit(urlstring, scheme='', allow_fragments=True)` | O(n) | O(n) | Python 3.11+: splitting the same string object again is a cache hit, O(1); the cache is bounded |
+| `urllib.parse.urlsplit(urlstring, scheme='', allow_fragments=True)` | O(n) | O(n) | Splitting the same string object again is a cache hit, O(1); the cache is bounded |
 | `urllib.parse.urlparse(urlstring, scheme='', allow_fragments=True)` | O(n) | O(n) | Builds a new result on every call |
 | `urllib.parse.urlunsplit(parts)`, `urllib.parse.urlunparse(parts)` | O(n) | O(n) | |
 | `urllib.parse.urljoin(base, url, allow_fragments=True)` | O(n) | O(n) | n = both URLs |
@@ -122,7 +122,7 @@ are outside the bounds and appear as "+ round trip" where an operation makes one
 
 ### URLopener and FancyURLopener
 
-Python 3.10 to 3.13 only; both classes were removed in 3.14.
+Python 3.13 and earlier only; both classes were removed in 3.14.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
@@ -194,9 +194,8 @@ assert fragment == 'frag' and not stripped.endswith('#frag')
 
 ### Splitting Is Cached
 
-On Python 3.11+, `urlsplit()` keeps a bounded cache of recent results, and passing the same string
-object again returns the cached tuple in O(1). Python 3.10 caches too, but scans the URL before it
-looks. `urlparse()` builds a new result every time.
+`urlsplit()` keeps a bounded cache of recent results, and passing the same string object again
+returns the cached tuple in O(1). `urlparse()` builds a new result every time.
 
 ```python
 from urllib.parse import urlsplit, urlparse
@@ -204,7 +203,7 @@ from urllib.parse import urlsplit, urlparse
 url = 'https://example.com/path?query=1#frag'
 
 first = urlsplit(url)   # O(n)
-second = urlsplit(url)  # O(1) on Python 3.11+
+second = urlsplit(url)  # O(1)
 assert first is second
 
 assert urlparse(url) is not urlparse(url)  # O(n) each time
@@ -475,7 +474,7 @@ assert rebuilt == 'https://example.com/search?q=python&page=2'
 - **Python 3.14+**: `URLopener` and `FancyURLopener` are removed
 - **Python 3.13.14+ and 3.14.5+**: `RobotFileParser` follows RFC 9309: `*` and a trailing `$` in
   rules, the longest matching rule wins with `Allow` taking ties, and groups naming the same agent
-  are merged. Earlier releases, and 3.10 to 3.12, match literal prefixes and use the first group
+  are merged. Earlier releases, and 3.11 and 3.12, match literal prefixes and use the first group
   and the first rule that apply
 
 ## Related Modules

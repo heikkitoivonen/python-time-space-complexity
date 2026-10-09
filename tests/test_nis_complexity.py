@@ -4,13 +4,12 @@ The page prices each call by the requests it makes to an NIS server and the
 entries it brings back: one request for `match()`, one streamed transfer of
 the whole map for `cat()`, several requests for `maps()`, and none for
 `get_default_domain()`. None of that can be run here. The module exists on
-Python 3.10 to 3.12 only in an interpreter built against the NIS client
-library, which the uv-installed 3.10.21, 3.11.16 and 3.12.14 builds are not,
-and every call but one needs a bound NIS domain. So the bounds are read from
+Python 3.11 and 3.12 only in an interpreter built against the NIS client
+library, which the uv-installed 3.11.17 and 3.12.14 builds are not, and every
+call but one needs a bound NIS domain. So the bounds are read from
 `Modules/nismodule.c` at v3.12.12, and what runs is the removal boundary and
 the page's examples, against a stand-in module. The file differs between
-v3.10.19, v3.11.14 and v3.12.12 only in the import-time DeprecationWarning
-added in 3.11 and in changes that move no bound.
+v3.11.14 and v3.12.12 only in changes that move no bound.
 
 Measurement scope:
 
@@ -46,7 +45,7 @@ Not settled here (source-only, `Modules/nismodule.c` at v3.12.12):
   NIS headers; both are build facts, not run.
 * API coverage is provisional on the build: the audit reports `nis` as an
   import error on these interpreters, so it cannot inspect the module. The
-  page prices the five names the 3.10 to 3.12 inventory lists: `cat`,
+  page prices the five names the 3.11 and 3.12 inventory lists: `cat`,
   `error`, `get_default_domain`, `maps` and `match`.
 """
 

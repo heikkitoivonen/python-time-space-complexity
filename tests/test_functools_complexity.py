@@ -1519,7 +1519,6 @@ class TestSingledispatchCache:
 
         assert Probe not in cache, "a new virtual subclass elsewhere invalidated the cache"
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="union registration is 3.11+")
     def test_an_abc_registered_through_a_union_enables_no_invalidation(self) -> None:
         class Interface(abc.ABC):  # noqa: B024 - registration, not abstraction, is the point
             pass
@@ -1747,7 +1746,6 @@ class TestSingledispatchRegistry:
         with pytest.raises(TypeError):
             view[str] = lambda arg: "str"  # type: ignore[index]
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="union registration is 3.11+")
     def test_a_union_registers_one_entry_per_member(self) -> None:
         @singledispatch
         def process(arg: object) -> str:

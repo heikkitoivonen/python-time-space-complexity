@@ -54,8 +54,7 @@ Measurement scope:
   the later one in that order.
   `ncalls` is `'3/1'` for three calls of which one was primitive.
 * `SortKey` has the nine members the page lists, and `SortKey('ncalls')` is
-  `SortKey.CALLS`. `str(SortKey.TIME)` is `'time'` from 3.11 and
-  `'SortKey.TIME'` on 3.10, each side guarded on `sys.version_info`.
+  `SortKey.CALLS`. `str(SortKey.TIME)` is `'time'`.
   `SortKey` and `get_stats_profile()` both predate the supported range.
 * Every method in the `Stats` table except `get_stats_profile()` and
   `dump_stats()` returns the same `Stats` object.
@@ -673,13 +672,8 @@ class TestSortKey:
         assert pstats.SortKey("tottime") is pstats.SortKey.TIME
         assert pstats.SortKey.CALLS == "calls"
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="StrEnum from 3.11")
     def test_str_is_the_value_from_311(self) -> None:
         assert str(pstats.SortKey.TIME) == "time"
-
-    @pytest.mark.skipif(sys.version_info >= (3, 11), reason="a str-mixin Enum on 3.10")
-    def test_str_is_the_member_name_on_310(self) -> None:
-        assert str(pstats.SortKey.TIME) == "SortKey.TIME"
 
 
 class TestChaining:

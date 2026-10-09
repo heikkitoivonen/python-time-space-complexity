@@ -21,9 +21,8 @@ Measurement scope:
 * The version rows are asserted on `sys.version_info`: `EXCLAMATION` and the
   `FSTRING_*` types from 3.12, `AWAIT` and `ASYNC` up to 3.12 only, and the
   `TSTRING_*` types from 3.14. That the values are renumbered between releases
-  is asserted by `token.NL`, which is 62 on 3.10 and 3.11, 65 on 3.12, 63 on
-  3.13 and 66 on 3.14 (Lib/token.py on v3.10.19, v3.11.14, v3.12.12, v3.13.11
-  and v3.14.2).
+  is asserted by `token.NL`, which is 62 on 3.11, 65 on 3.12, 63 on 3.13
+  and 66 on 3.14 (Lib/token.py on v3.11.14, v3.12.12, v3.13.11 and v3.14.2).
 * Every fenced Python block runs in its own subprocess, and a mutated
   assertion in one of them is asserted to fail.
 
@@ -50,7 +49,7 @@ import pytest
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "token.md"
 EXPECTED_BLOCKS = 2
 
-NL_BY_VERSION = {(3, 10): 62, (3, 11): 62, (3, 12): 65, (3, 13): 63, (3, 14): 66}
+NL_BY_VERSION = {(3, 11): 62, (3, 12): 65, (3, 13): 63, (3, 14): 66}
 
 
 class TestLookupsAreDicts:

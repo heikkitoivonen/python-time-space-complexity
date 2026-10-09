@@ -26,7 +26,7 @@ Measurement scope:
   hashes stay between p and 20p and comparisons under 20p. With every
   argument hashing to one value, comparisons reach p(p-1)/2, which is why the
   page's cost model treats hashing as O(1).
-* Type-variable collection, 3.11+: `Callable` over 10 and 100 distinct
+* Type-variable collection: `Callable` over 10 and 100 distinct
   objects that define `__typing_subst__` compares them v(v-1)/2 times and
   keeps all of them in `__parameters__`.
 * `get_args()`: an ordinary alias returns the identical tuple on two calls;
@@ -40,7 +40,7 @@ Measurement scope:
   file's `__future__` import, on a function and on a class, calls it when
   the statement runs before 3.14 and from 3.14 not until `__annotations__`
   is read; two reads call it once in all.
-* Runtime protocols: on 3.10 and 3.11 a check the class has already passed
+* Runtime protocols: on 3.11 a check the class has already passed
   still calls `typing._get_protocol_attrs`, which returns all 40 members.
   From 3.12 that check makes no static attribute lookup on the instance and
   does not call the protocol's `__subclasshook__`, which a new subclass then
@@ -59,9 +59,9 @@ Measurement scope:
   expression as written.
 * `assert_never()` calls `repr()` on all 1,000 elements of a list while its
   message stays under 200 characters. `no_type_check()` on a class whose
-  base defines 1,000 methods reads all 1,000 from 3.11 and none on 3.10.
+  base defines 1,000 methods reads all 1,000.
   `get_overloads()` returns the registered variants and `clear_overloads()`
-  empties them; `overload()` registers nothing on 3.10.
+  empties them.
 * A `type` statement evaluates its value on the first `__value__` read and
   not again (3.12+). `has_default()` answers without evaluating a lazy
   default (3.13+). The `evaluate_*` attributes exist exactly from 3.14.
@@ -80,12 +80,10 @@ Not settled here:
   `__value__` evaluate caller code, whose cost is the e the rows name.
 * The O(1) rows for markers, aliases, `cast`, `NewType`, `final`,
   `override` and `dataclass_transform` are read from Lib/typing.py in each
-  released branch (3.10.19 to 3.14.2): each returns an existing object or
+  released branch (3.11.14 to 3.14.2): each returns an existing object or
   sets a fixed number of attributes.
 * That `Generic[...]` and `Protocol[...]` collect their type variables the
-  same way, and that 3.10's `_collect_type_vars` makes the same list check
-  over `TypeVar` instances only, is read from Lib/typing.py; the counting
-  test runs from 3.11.
+  same way as `Callable` is read from Lib/typing.py.
 * The log factor of `no_type_check()` is `dir()`'s sort, read from source;
   only the count of names visited is observed.
 * `clear_overloads()` being O(o) follows from clearing a dictionary of
@@ -298,7 +296,6 @@ class TestVariableAritySubscriptions:
         assert typing.Tuple[fresh] is alias
         assert hashes == count
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="3.10 collects only TypeVars")
     @pytest.mark.parametrize("count", [10, 100])
     def test_collecting_type_variables_compares_each_with_those_found(self, count: int) -> None:
         """The O(v²) term of the introduction, and of the `Generic` and
@@ -524,7 +521,7 @@ class TestAnnotationsAndDefinitionTime:
 
 class TestRuntimeProtocols:
     """`isinstance()` against a runtime-checkable protocol walks its m members
-    on 3.10-3.11; from 3.12 a class that has passed is answered from a cache,
+    on 3.11; from 3.12 a class that has passed is answered from a cache,
     while failing checks and data members still read the instance."""
 
     def test_a_matching_object_passes(self) -> None:
@@ -856,7 +853,7 @@ class TestForwardReferences:
 
 class TestHelpers:
     """`cast` returns its argument; `assert_never` | O(r) builds the whole
-    repr; `no_type_check` visits inherited names from 3.11; the overload
+    repr; `no_type_check` visits inherited names; the overload
     registry is per process."""
 
     def test_cast_returns_the_same_object_unexamined(self) -> None:
@@ -865,7 +862,6 @@ class TestHelpers:
         assert cast(typing.List[str], values) is values
         assert cast("anything at all", values) is values  # type: ignore[misc]
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="assert_never is 3.11+")
     def test_assert_never_builds_the_whole_repr_before_cutting_it(self) -> None:
         reprs = 0
 
@@ -881,7 +877,7 @@ class TestHelpers:
         assert reprs == 1_000
         assert len(str(caught.value)) < 200
 
-    def test_no_type_check_visits_inherited_names_from_311(self) -> None:
+    def test_no_type_check_visits_inherited_names(self) -> None:
         reads: list[str] = []
 
         class Meta(type):
@@ -898,9 +894,9 @@ class TestHelpers:
 
         assert typing.no_type_check(Child) is Child
         assert Child.own.__no_type_check__ is True  # type: ignore[attr-defined]
-        assert len(reads) == (1_000 if sys.version_info >= (3, 11) else 0)
+        assert len(reads) == 1_000
 
-    def test_overloads_are_registered_from_311(self) -> None:
+    def test_overloads_are_registered(self) -> None:
         namespace = fresh_namespace(
             """
             from typing import overload
@@ -913,11 +909,6 @@ class TestHelpers:
                 return x
             """
         )
-        if sys.version_info < (3, 11):
-            assert not hasattr(typing, "get_overloads")
-            assert not hasattr(typing, "_overload_registry")
-            return
-
         assert len(typing.get_overloads(namespace["f"])) == 2  # type: ignore[attr-defined]
         typing.clear_overloads()  # type: ignore[attr-defined]
         assert typing.get_overloads(namespace["f"]) == []  # type: ignore[attr-defined]

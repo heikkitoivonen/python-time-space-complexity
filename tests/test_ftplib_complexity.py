@@ -64,8 +64,8 @@ Measurement scope:
   `login()` sends `AUTH TLS` before `USER` and wraps once, `secure=False`
   sends no `AUTH`, a listing before `prot_p()` is not wrapped, each
   retrieval after it is wrapped once, and none after `prot_c()`; `ccc()`
-  sends `CCC` and leaves a plain socket. `ssl_version` is asserted on 3.10
-  and 3.11 and absent from 3.12, where `keyfile`, `certfile` and a positional
+  sends `CCC` and leaves a plain socket. `ssl_version` is asserted on 3.11
+  and absent from 3.12, where `keyfile`, `certfile` and a positional
   `context` raise `TypeError`.
 * Every fenced Python block runs in its own subprocess and working
   directory; a prelude routes `ftp.example.com` to a `FakeFTPServer` and

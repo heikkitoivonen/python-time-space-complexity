@@ -23,7 +23,7 @@ Measurement scope:
   instantiates within 3x of one whose base has a single abstract method.
   Instantiating an abstract class raises `TypeError` naming all 200 of its
   four-character abstract methods in sorted order (3.12+ quotes the names,
-  3.10 and 3.11 do not); that the sort is what makes it
+  3.11 does not); that the sort is what makes it
   O(a log a) is read from Objects/typeobject.c `object_new`.
 * An uncached negative `issubclass()` calls the hook of the ABC and of each
   of 50 subclasses (51 calls); a repeat calls none; each subclass then

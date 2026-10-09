@@ -11,11 +11,9 @@ Measurement scope:
 
 * The deprecation is observed in a fresh interpreter importing the module
   twice under `warnings.simplefilter('always')`: one `DeprecationWarning`
-  from the first import and none from the second on 3.11+, none on 3.10.
-  Every non-dunder name of `re._compiler` is asserted to be the same object
-  in the alias on 3.11+; on 3.10 the module is `re.sre_compile`. Rebinding
-  `sre_compile.compile` is asserted not to reach `re.compile()` on 3.11+ and
-  to reach it on 3.10.
+  from the first import and none from the second. Every non-dunder name of
+  `re._compiler` is asserted to be the same object in the alias. Rebinding
+  `sre_compile.compile` is asserted not to reach `re.compile()`.
 * `compile()` over `x[ab]c*` repeated 100, 1,000 and 10,000 times, fastest
   of seven with the collector paused: each 10x step costs between 4x and
   40x, admitting linear growth and excluding quadratic (100x).
@@ -43,16 +41,15 @@ Measurement scope:
 Not settled here:
 
 * That compiling a tree is O(w + r) apart from the literal-prefix copying
-  counted above: the code generator is read from Lib/re/_compiler.py
-  (Lib/sre_compile.py on 3.10), and only the ordinary-pattern timing above
-  is measured. Lookarounds, conditionals and
+  counted above: the code generator is read from Lib/re/_compiler.py, and
+  only the ordinary-pattern timing above is measured. Lookarounds, conditionals and
   flags are not varied; the r term is timed without `IGNORECASE`, whose
   range walk also case-folds each code point.
 * `dis()`'s O(c·d) time and O(c) space are read from the source: it indents
   each line by its nesting level and keeps a set of the jump targets seen. Its output is checked, not
   timed.
 * The module is undocumented; which names it exposes is taken from the
-  released sources of 3.10 to 3.14, not from a documented contract.
+  released sources of 3.11 to 3.14, not from a documented contract.
 """
 
 from __future__ import annotations
@@ -102,8 +99,8 @@ def best_ns(func: Callable[[], Any], repeats: int = 7) -> float:
 
 
 def parser_module() -> Any:
-    """The module the compiler parses with: `re._parser` on 3.11+, `sre_parse` on 3.10."""
-    return getattr(re, "_parser", None) or sre_parse
+    """The module the compiler parses with."""
+    return importlib.import_module("re._parser")
 
 
 def run_python(source: str) -> subprocess.CompletedProcess[str]:
@@ -134,12 +131,8 @@ class TestTheModuleIsADeprecatedAlias:
             "print(counts)\n"
         )
         assert result.returncode == 0, result.stderr
-        if sys.version_info >= (3, 11):
-            assert result.stdout.strip() == "[['DeprecationWarning'], []]"
-        else:
-            assert result.stdout.strip() == "[[], []]"
+        assert result.stdout.strip() == "[['DeprecationWarning'], []]"
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="re._compiler is 3.11+")
     def test_every_name_is_the_compiler_s_own_object(self) -> None:
         compiler = importlib.import_module("re._compiler")
         names = [name for name in vars(compiler) if not name.startswith("__")]
@@ -148,12 +141,7 @@ class TestTheModuleIsADeprecatedAlias:
         for name in names:
             assert getattr(sre_compile, name) is getattr(compiler, name), name
 
-    @pytest.mark.skipif(sys.version_info >= (3, 11), reason="3.10 is the implementation")
-    def test_on_3_10_it_is_the_module_re_imports(self) -> None:
-        internals: Any = re
-        assert internals.sre_compile is sre_compile
-
-    def test_rebinding_compile_here_reaches_re_only_on_3_10(
+    def test_rebinding_compile_here_does_not_reach_re(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         seen: list[Any] = []
@@ -168,7 +156,7 @@ class TestTheModuleIsADeprecatedAlias:
         re.compile("rebinding-probe")
         re.purge()
 
-        assert seen == ([] if sys.version_info >= (3, 11) else ["rebinding-probe"])
+        assert seen == []
 
 
 class TestCompilingIsLinearInThePattern:

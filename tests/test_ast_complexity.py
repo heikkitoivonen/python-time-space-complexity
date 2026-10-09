@@ -9,7 +9,7 @@ Most of them can be settled by observation:
   and `_attributes` are the class tuples themselves. From 3.13 an omitted
   optional field comes from a class default - a fresh list per instance for a
   list field, one shared `Load()` for `ctx` - and an omitted required one
-  warns; on 3.10 to 3.12 the attribute is simply absent;
+  warns; on 3.11 and 3.12 the attribute is simply absent;
 * the page's grouping of the node classes is checked against the runtime class
   hierarchy: every class a row lists is a subclass of the abstract group its
   Notes name;
@@ -31,7 +31,7 @@ Most of them can be settled by observation:
   enclosing string. 500 then 4,000 nested `JoinedStr` levels emit x8.0 the
   characters in x27 the time, which rejects linear scaling (x8) without
   pinning an upper bound. The q copies are made one after another, so the
-  space stays the output size; no test measures a peak here. On 3.10 and 3.11
+  space stays the output size; no test measures a peak here. On 3.11
   `unparse()` runs out of quote characters: four levels round-trip, the fifth
   emits text the parser rejects and the sixth raises `ValueError`. The
   measurement therefore runs from 3.12, and that boundary is pinned on every
@@ -73,7 +73,7 @@ CPython 3.14.7 with 1,000 then 4,000 assignment statements unless stated:
   `fix_missing_locations`: x4.3; `increment_lineno`: x4.3; `compare`: x4.4
   on 3.14; `literal_eval` of a 1,000-then-4,000-item list: x5.4;
 * `dump` of the wide tree: x4.3 (x4.2 with `indent=2`), but of a chain 1,000
-  then 16,000 deep: x137-x151 (x133-x135 on 3.10.21), the N * h shape;
+  then 16,000 deep: x137-x151 (x158-x169 on 3.11.17), the N * h shape;
   a 4,000-deep chain against a
   wide tree of the same node count costs x6.4 more; with `indent=2` the deep
   chain's output grows x16 in characters (2.0 MB to 32 MB) and the time x101,
@@ -84,7 +84,7 @@ CPython 3.14.7 with 1,000 then 4,000 assignment statements unless stated:
   10x depth step (linear predicts 10x, quadratic 100x);
 * `get_source_segment` of the last statement: x16-x17 on 3.11.14 and 3.14.7
   for 16x the source (1,000 then 16,000 fixed-width lines), after warm-up;
-  of the first statement: x1.3 on 3.14 and x4.2 on 3.10.21, which has no
+  of the first statement: x1.3 on 3.14 and x3.9-x4.6 on 3.11.17, which has no
   `maxlines` cut in `_splitlines_no_ff` (added by gh-103285 in 3.12);
 * `get_docstring` with 16x the statements after the docstring, `clean=False`:
   x1.0; with a 1,000-then-4,000-line docstring: x4.1 under `clean=True` and
@@ -95,7 +95,7 @@ CPython 3.14.7 with 1,000 then 4,000 assignment statements unless stated:
 Sub-microsecond calls - `get_source_segment` of the first line, the
 `get_docstring` constant-time cases - are run 200 times per sample. The deep
 measurements run in a worker thread with a 256 MB stack and a raised
-recursion limit, because the limit alone lets 3.10 and 3.11 overflow the C
+recursion limit, because the limit alone lets 3.11 overflow the C
 stack on a 4,000-deep chain and take the interpreter down.
 
 Not settled here:
@@ -290,7 +290,7 @@ class TestParse:
         thousands of levels further out.
 
         Where it stops, and with which exception, moves across the supported
-        range: 3.11 raises RecursionError before 5,000 levels, while 3.10 and
+        range: 3.11 raises RecursionError before 5,000 levels, while
         3.12 to 3.14 reach 5,000 and raise MemoryError by 20,000. The test
         pins the two ends that hold on all of them.
         """
@@ -480,7 +480,7 @@ class TestDump:
         """Depth grows 16x with fixed node kinds and short fields.
 
         Linear work predicts 16x, N * h predicts 256x. After warm-up,
-        1,000 then 16,000 levels measure 133-135x on CPython 3.10.21 and
+        1,000 then 16,000 levels measure 158-169x on CPython 3.11.17 and
         137-151x on 3.14.7. The output itself grows only about 16x; this
         distinguishes repeated copying from output size alone. Field
         lengths, branching, and indentation are not varied.
@@ -637,7 +637,7 @@ class TestUnparse:
         against x8 characters. It does not pin an upper bound. Only
         `JoinedStr` nesting is varied - one `Name` at the centre, no format
         specs, no conversions, no statements and no block depth. The q term
-        goes unmeasured on 3.10 and 3.11, where `unparse()` cannot nest
+        goes unmeasured on 3.11, where `unparse()` cannot nest
         f-strings past four levels usefully at all.
         """
 

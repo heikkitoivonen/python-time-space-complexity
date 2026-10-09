@@ -2,13 +2,12 @@
 
 The page prices the module by the report it builds: installing a hook does no
 work, and formatting walks every frame of the traceback, showing `context`
-source lines and the names on the failing line for each. The module exists on
-Python 3.10, 3.11 and 3.12 only, so every runtime test takes the `cgitb`
-fixture, which skips from 3.13, and CI's 3.10 to 3.12 jobs are where they run;
-availability itself is asserted on every version. The released Lib/cgitb.py
-differs between v3.10.19, v3.11.14 and v3.12.12 only in the import-time
-DeprecationWarning, the markup of the HTML heading and a `type(...) is dict`
-check rewritten as `isinstance`. Size is settled by counting the numbered
+source lines and the names on the failing line for each. Of the supported
+versions the module exists on Python 3.11 and 3.12 only, so every runtime test
+takes the `cgitb` fixture, which skips from 3.13, and CI's 3.11 and 3.12 jobs
+are where they run; availability itself is asserted on every version. The released
+Lib/cgitb.py differs between v3.11.14 and v3.12.12 only in a
+`type(...) is dict` check rewritten as `isinstance`. Size is settled by counting the numbered
 source lines a text report shows, which needs no tolerance, and by the length
 of the returned report; time by two timing tests.
 
@@ -43,14 +42,14 @@ Measurement scope:
   formatters see no call. A local's value that `cgitb.text()` prints is
   absent from `traceback.format_exception()`'s output.
 * Every fenced Python block runs in its own subprocess. The four that import
-  `cgitb` run on 3.10 to 3.12 only; the `traceback` one runs everywhere and
+  `cgitb` run on 3.11 and 3.12 only; the `traceback` one runs everywhere and
   carries the runner's mutation check.
 
 Not settled here:
 
 * The deprecation in 3.11 and the removal in 3.13 come from PEP 594 and the
-  3.12 documentation. The import warning is asserted on 3.11 and 3.12 and its
-  absence on 3.10; `ModuleNotFoundError` from 3.13 is asserted.
+  3.12 documentation. The import warning is asserted on 3.11 and 3.12;
+  `ModuleNotFoundError` from 3.13 is asserted.
 * `enable()` and `Hook()` are O(1) by Lib/cgitb.py: each stores five
   attributes, and `enable()` assigns `sys.excepthook`.
 * The bounds exclude the `repr()` of each value shown, which `pydoc`
@@ -137,7 +136,7 @@ def test_the_module_exists_only_before_3_13() -> None:
     assert (importlib.util.find_spec("cgitb") is not None) == (not REMOVED)
 
 
-def test_importing_it_warns_from_3_11() -> None:
+def test_importing_it_warns_until_removed() -> None:
     result = subprocess.run(
         [sys.executable, "-W", "error::DeprecationWarning", "-c", "import cgitb"],
         capture_output=True,
@@ -149,10 +148,8 @@ def test_importing_it_warns_from_3_11() -> None:
 
     if REMOVED:
         assert "ModuleNotFoundError" in result.stderr
-    elif sys.version_info >= (3, 11):
-        assert "DeprecationWarning" in result.stderr
     else:
-        assert result.returncode == 0, result.stderr
+        assert "DeprecationWarning" in result.stderr
 
 
 @pytest.fixture
@@ -471,7 +468,7 @@ def _run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[st
 
 class TestDocumentedExamples:
     """Each block runs in its own subprocess and asserts its own result. The
-    blocks that import `cgitb` need 3.10, 3.11 or 3.12."""
+    blocks that import `cgitb` need 3.11 or 3.12."""
 
     def test_the_page_has_the_expected_blocks(self) -> None:
         blocks = _blocks()

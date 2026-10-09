@@ -51,9 +51,8 @@ Not settled here:
 
 * The big-endian caveat in the size paragraph: on such a host `readframes()`
   and `writeframes()` byte-swap samples wider than a byte into a copy. It is
-  read from `_byteswap` in Lib/wave.py (3.11+) and `audioop.byteswap` (3.10);
-  the space tests here are skipped on a big-endian host, and no run this
-  project performs is on one.
+  read from `_byteswap` in Lib/wave.py; the space tests here are skipped on a
+  big-endian host, and no run this project performs is on one.
 * The per-chunk cost of skipping on a seekable stream is one `seek()`; what
   that `seek()` costs is the file object's business and is not measured.
 * `Wave_read.getfp()`, `Wave_read.initfp()`, `Wave_write.initfp()` and

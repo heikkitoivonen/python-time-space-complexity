@@ -116,7 +116,7 @@ but the copy does not — the exception is given the entire buffer either way.
 |-----------|------|-------|-------|
 | `SyntaxError` | O(1) | O(1) | Raised while parsing, so the code it describes never runs; it propagates from the `compile()`, `exec()` or `import` that started the parse |
 | `SyntaxError.msg`, `.filename`, `.lineno`, `.offset`, `.text` | O(1) | O(1) | `text` holds the offending line, not the source around it; `offset` is 1-indexed. The wording of `msg` is not stable across releases |
-| `SyntaxError.end_lineno`, `.end_offset` | O(1) | O(1) | The end of the highlighted span; `end_offset` moved by one for some errors between Python 3.10 and 3.14 |
+| `SyntaxError.end_lineno`, `.end_offset` | O(1) | O(1) | The end of the highlighted span; `end_offset` moved by one for some errors between Python 3.11 and 3.14 |
 | `IndentationError` | O(1) | O(1) | A `SyntaxError` subclass |
 | `TabError` | O(1) | O(1) | An `IndentationError` subclass, raised only for indentation that mixes tabs and spaces inconsistently — uneven indentation on its own is a plain `IndentationError` |
 
@@ -227,14 +227,9 @@ BaseException
 which is what makes it safe where a bare `except:` is not.
 
 ```python
-import builtins
-import sys
-
 assert issubclass(Exception, BaseException)
 
-outside = [SystemExit, KeyboardInterrupt, GeneratorExit]
-if sys.version_info >= (3, 11):
-    outside.append(builtins.BaseExceptionGroup)
+outside = [SystemExit, KeyboardInterrupt, GeneratorExit, BaseExceptionGroup]
 
 for cls in outside:
     assert issubclass(cls, BaseException)
@@ -610,16 +605,13 @@ except TypeError as error:
 is never annotated carries no note storage at all.
 
 ```python
-import sys
-
 error = ValueError("bad row")
 assert not hasattr(error, "__notes__")  # nothing allocated yet
 
-if sys.version_info >= (3, 11):
-    error.add_note("row 14")  # O(1) amortized - a list append
-    error.add_note("file inventory.csv")
-    assert error.__notes__ == ["row 14", "file inventory.csv"]
-    assert error.args == ("bad row",)  # notes are not arguments
+error.add_note("row 14")  # O(1) amortized - a list append
+error.add_note("file inventory.csv")
+assert error.__notes__ == ["row 14", "file inventory.csv"]
+assert error.args == ("bad row",)  # notes are not arguments
 ```
 
 ## Exception Groups
@@ -632,71 +624,60 @@ of that group's traceback, context, cause and notes — the notes once per group
 multiplies rather than adds.
 
 ```python
-import sys
+first = ValueError("v1")
+inner = ExceptionGroup("inner", [TypeError("t"), ValueError("v2")])
+group = ExceptionGroup("outer", [first, inner])  # O(m) - two direct children
 
-if sys.version_info >= (3, 11):
-    first = ValueError("v1")
-    inner = ExceptionGroup("inner", [TypeError("t"), ValueError("v2")])
-    group = ExceptionGroup("outer", [first, inner])  # O(m) - two direct children
+assert group.message == "outer"  # O(1)
+assert group.args == ("outer", [first, inner])  # the children, by reference
+assert group.exceptions == (first, inner)  # O(1) - direct children, not leaves
+assert len(group.exceptions) == 2
 
-    assert group.message == "outer"  # O(1)
-    assert group.args == ("outer", [first, inner])  # the children, by reference
-    assert group.exceptions == (first, inner)  # O(1) - direct children, not leaves
-    assert len(group.exceptions) == 2
+visited = []
 
-    visited = []
+def is_value_error(exc):
+    visited.append(type(exc).__name__)
+    return isinstance(exc, ValueError)
 
-    def is_value_error(exc):
-        visited.append(type(exc).__name__)
-        return isinstance(exc, ValueError)
+matched, rest = group.split(is_value_error)  # O(n) - nothing matches above a leaf
 
-    matched, rest = group.split(is_value_error)  # O(n) - nothing matches above a leaf
+assert visited == ["ExceptionGroup", "ValueError", "ExceptionGroup", "TypeError", "ValueError"]
+assert len(matched.exceptions) == 2
+assert isinstance(rest, ExceptionGroup)
 
-    assert visited == ["ExceptionGroup", "ValueError", "ExceptionGroup", "TypeError", "ValueError"]
-    assert len(matched.exceptions) == 2
-    assert isinstance(rest, ExceptionGroup)
+assert group.subgroup(TypeError).message == "outer"  # O(n)
+assert group.subgroup(KeyError) is None  # O(n) even with nothing to return
 
-    assert group.subgroup(TypeError).message == "outer"  # O(n)
-    assert group.subgroup(KeyError) is None  # O(n) even with nothing to return
+# A node that matches is kept whole, so the walk stops there
+stopped = []
 
-    # A node that matches is kept whole, so the walk stops there
-    stopped = []
+def matches_anything(exc):
+    stopped.append(type(exc).__name__)
+    return True
 
-    def matches_anything(exc):
-        stopped.append(type(exc).__name__)
-        return True
+assert group.subgroup(matches_anything) is group
+assert stopped == ["ExceptionGroup"]
 
-    assert group.subgroup(matches_anything) is group
-    assert stopped == ["ExceptionGroup"]
+derived = group.derive([KeyError("k")])  # O(len(excs))
+assert derived.message == "outer"
+assert derived.__traceback__ is None  # split() and subgroup() copy it; derive() does not
 
-    derived = group.derive([KeyError("k")])  # O(len(excs))
-    assert derived.message == "outer"
-    assert derived.__traceback__ is None  # split() and subgroup() copy it; derive() does not
-
-    # The class follows the leaves
-    assert type(BaseExceptionGroup("g", [ValueError("v")])) is ExceptionGroup
-    assert type(BaseExceptionGroup("g", [KeyboardInterrupt()])) is BaseExceptionGroup
+# The class follows the leaves
+assert type(BaseExceptionGroup("g", [ValueError("v")])) is ExceptionGroup
+assert type(BaseExceptionGroup("g", [KeyboardInterrupt()])) is BaseExceptionGroup
 ```
 
 `except*` splits per clause, so a group met by k clauses costs up to k walks.
 
 ```python
-import sys
-
-# `except*` is a syntax error before Python 3.11, so the source is compiled at run time
-SOURCE = """
+caught = []
 try:
     raise ExceptionGroup("boom", [ValueError(1), TypeError(2), ValueError(3)])
 except* ValueError as group:      # O(n) to split
     caught.append(("ValueError", len(group.exceptions)))
 except* TypeError as group:       # O(n) again, over what is left
     caught.append(("TypeError", len(group.exceptions)))
-"""
-
-caught = []
-if sys.version_info >= (3, 11):
-    exec(SOURCE, {"caught": caught, "ExceptionGroup": ExceptionGroup})
-    assert caught == [("ValueError", 2), ("TypeError", 1)]
+assert caught == [("ValueError", 2), ("TypeError", 1)]
 ```
 
 ## Generators and StopIteration
@@ -778,8 +759,7 @@ except ZeroDivisionError:
     exc_type, exc_value, exc_traceback = sys.exc_info()  # O(1)
     assert exc_type is ZeroDivisionError
     assert exc_traceback is exc_value.__traceback__
-    if sys.version_info >= (3, 11):
-        assert sys.exception() is exc_value  # O(1)
+    assert sys.exception() is exc_value  # O(1)
 
 assert sys.exc_info() == (None, None, None)  # nothing is being handled here
 ```
@@ -931,7 +911,7 @@ assert issubclass(ValidationError, AppError)
 - **Python 3.11+**: `ExceptionGroup`, `BaseExceptionGroup` and `except*`;
   `BaseException.add_note()` and `__notes__`; `sys.exception()`; `asyncio.TimeoutError` became an
   alias of `TimeoutError`
-- **All Python 3.10+**: `NameError.name`, `AttributeError.name` and `.obj`,
+- **Python 3.10+**: `NameError.name`, `AttributeError.name` and `.obj`,
   `SyntaxError.end_lineno` and `.end_offset`, `EncodingWarning`, and `socket.timeout` as an alias
   of `TimeoutError`
 - **All Python 3**: `EnvironmentError` and `IOError`, and on Windows `WindowsError`, are `OSError`

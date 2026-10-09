@@ -149,7 +149,7 @@ Not settled here:
   from a truncation is a property of TLS, not of this module. What is checked
   here is that `shutdown()` clears the TLS state first.
 * `get_verified_chain()` and `get_unverified_chain()` do not exist before
-  3.13, so the chain-length pair skips on 3.10 through 3.12 and the
+  3.13, so the chain-length pair skips on 3.11 and 3.12 and the
   handshake's c term is unverified on those versions. The PSK callbacks skip
   there for the same reason.
 * The Version Notes are asserted against the running interpreter, so the
@@ -158,8 +158,8 @@ Not settled here:
   behind `#ifdef`s while `OP_LEGACY_SERVER_CONNECT` does not - the Python
   boundary and the library condition are asserted separately, so a Python new
   enough for the name is not read as a promise that the build has it.
-* A build linked against an OpenSSL these runs did not use. Five interpreters
-  here all link OpenSSL 3.x, so the rows that say "where the linked OpenSSL
+* A build linked against an OpenSSL these runs did not use. The 3.11 to 3.14
+  interpreters here all link OpenSSL 3.x, so the rows that say "where the linked OpenSSL
   defines it" are unverified against a 1.1.1 build.
 * Whether `load_verify_locations()` costs more for input that repeats the same
   certificate. The page prices the store it builds, and repeated input is a

@@ -28,7 +28,7 @@ is O(1).
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | Defining an annotated function, with `annotations` | O(1) | O(1) | Nothing is evaluated or built until the first read |
-| Defining an annotated function, without it, Python 3.10-3.13 | O(a + e) | O(a) | Every annotation expression is evaluated at definition |
+| Defining an annotated function, without it, Python 3.11-3.13 | O(a + e) | O(a) | Every annotation expression is evaluated at definition |
 | Defining an annotated function, without it, Python 3.14+ | O(1) | O(1) | Evaluation is deferred to the first `__annotations__` read |
 | First `function.__annotations__` read | O(a) | O(a) | Plus e on 3.14+ without the import. The dictionary is cached, so later reads are O(1) |
 | `typing.get_type_hints(function)` on string annotations | O(a + e) | O(a) | Evaluates every string again on each call; nothing is cached |
@@ -45,14 +45,14 @@ is O(1).
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `_Feature.optional`, `_Feature.getOptionalRelease()` | O(1) | O(1) | The release that first accepted the import, a 5-tuple shaped like `sys.version_info`; the method returns the attribute itself |
-| `_Feature.mandatory`, `_Feature.getMandatoryRelease()` | O(1) | O(1) | The release the feature became the default, or `None` when that is undetermined, as it is for `annotations` on 3.11+ |
+| `_Feature.mandatory`, `_Feature.getMandatoryRelease()` | O(1) | O(1) | The release the feature became the default, or `None` when that is undetermined, as it is for `annotations` |
 | `_Feature.compiler_flag` | O(1) | O(1) | The bit to pass as `compile(..., flags=...)` to turn the feature on in dynamically compiled code |
 
 ## Postponed Annotations
 
 ### When Annotation Expressions Run
 
-Without the import, Python 3.10-3.13 evaluate every annotation when the `def` runs, and 3.14
+Without the import, Python 3.11-3.13 evaluate every annotation when the `def` runs, and 3.14
 defers that to the first read of `__annotations__`. Either way the evaluated dictionary is kept, so
 the cost is paid once per function.
 
@@ -66,7 +66,7 @@ def expensive():
     calls += 1
     return int
 
-def plain(x: expensive()) -> expensive():  # O(a + e) on 3.10-3.13, O(1) on 3.14+
+def plain(x: expensive()) -> expensive():  # O(a + e) on 3.11-3.13, O(1) on 3.14+
     pass
 
 if sys.version_info >= (3, 14):

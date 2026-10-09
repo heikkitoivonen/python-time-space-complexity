@@ -71,8 +71,7 @@ Measurement scope:
   the third case, and is asserted to build no children and still reject an
   unknown name. Which of the two paths a spec took is asserted through what it
   stored rather than through a clock, because the fixed cost of building a mock
-  moved far more between releases than either path did, and a timing test
-  comparing them does not hold at the 3.10 floor.
+  moved far more between releases than either path did.
 * Two spec'd mocks differing only in how many names their spec holds are timed
   on an attribute that both already cached, so the only work left in the loop is
   the membership test the row prices. The `assertLogs` cache claim is counted
@@ -115,10 +114,10 @@ Measurement scope:
   and a `timeout` keyword passed to `wait_until_any_call_with` would join the
   signature being waited for instead - which a test of its own pins.
 * Version boundaries are asserted in both directions where a name appeared
-  inside the supported range - `enterContext` at 3.11, `addDuration` and
-  `collectedDurations` at 3.12, `ThreadingMock` and `loop_factory` at 3.13, and
-  the `assertHasAttr`, `assertIsSubclass` and `assertStartsWith` families at
-  3.14 - so the release that moves one fails here.
+  inside the supported range - `addDuration` and `collectedDurations` at 3.12,
+  `ThreadingMock` and `loop_factory` at 3.13, and the `assertHasAttr`,
+  `assertIsSubclass` and `assertStartsWith` families at 3.14 - so the release
+  that moves one fails here.
 * Dimensions these tests do *not* vary: the element type in every timing test,
   which is a small int or a one-element list throughout; the number of keyword
   arguments in any mock call, which is zero or one; the traceback depth behind a
@@ -173,7 +172,7 @@ EXPECTED_BLOCKS = 7
 
 
 def api(module: Any, name: str) -> Any:
-    """A unittest name typeshed does not offer at the 3.10 floor pyright checks."""
+    """A unittest name typeshed does not offer at the 3.11 floor pyright checks."""
     return getattr(module, name)
 
 
@@ -720,7 +719,6 @@ class TestCleanupsRunLastInFirstOut:
         assert under_debug == ["first"]
         assert under_run == ["first", "second"]
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="doModuleCleanups is exported from 3.11")
     def test_module_cleanups_all_run_and_the_first_failure_is_the_one_raised(self) -> None:
         reached: list[str] = []
 
@@ -732,7 +730,7 @@ class TestCleanupsRunLastInFirstOut:
         unittest.addModuleCleanup(failing, "registered second")
 
         with pytest.raises(RuntimeError) as raised:
-            api(unittest, "doModuleCleanups")()
+            unittest.doModuleCleanups()
 
         assert reached == ["registered second", "registered first"]
         assert str(raised.value) == "registered second"
@@ -1848,16 +1846,6 @@ class TestMockOpenServesOneHandleLazily:
 
 class TestVersionBoundaries:
     """Names that appeared inside the supported range, asserted both ways."""
-
-    def test_the_module_scoped_names_arrived_in_311(self) -> None:
-        recent = sys.version_info >= (3, 11)
-        assert hasattr(unittest.TestCase, "enterContext") is recent
-        assert hasattr(unittest.TestCase, "enterClassContext") is recent
-        assert hasattr(unittest, "enterModuleContext") is recent
-        assert hasattr(unittest, "doModuleCleanups") is recent
-        # addModuleCleanup predates them, so the boundary is the export of the
-        # names beside it rather than module cleanups as a feature.
-        assert hasattr(unittest, "addModuleCleanup")
 
     def test_durations_arrived_in_312(self) -> None:
         assert hasattr(unittest.TestResult, "addDuration") is (sys.version_info >= (3, 12))

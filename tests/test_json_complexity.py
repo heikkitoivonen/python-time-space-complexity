@@ -114,7 +114,7 @@ Measurement scope:
 Not settled here:
 
 * The C encoder and decoder's recursion guards follow
-  `scan_once_unicode` and `encoder_listencode_obj` in CPython 3.10-3.14's
+  `scan_once_unicode` and `encoder_listencode_obj` in CPython 3.11-3.14's
   Modules/_json.c. Their failure depth depends on the version, build and
   available stack; a fixed input depth cannot establish a portable limit.
   These tests do not exhaust the C stack to measure that environment's limit.

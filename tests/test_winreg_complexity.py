@@ -23,8 +23,8 @@ Measurement scope:
   That is the M term: the buffers are sized for the largest value, read from
   `RegQueryInfoKeyW` in PC/winreg.c, on every supported version. Time does
   not follow M: in a timing test 1,000x the largest value makes the same
-  one-byte `EnumValue()` under 100x dearer (x3.0 on 3.14, x4.3 on 3.11 and
-  x13 on 3.10, fastest of seven runs of 200 calls), because the buffer is
+  one-byte `EnumValue()` under 100x dearer (x3.0 on 3.14 and x4.3 on 3.11,
+  fastest of seven runs of 200 calls), because the buffer is
   allocated, not filled. Only the one-byte value was read, so n is not
   varied.
 * `EnumKey()` peaks under 4 KB beside a 255-character subkey name, its

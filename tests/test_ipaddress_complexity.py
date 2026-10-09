@@ -41,8 +41,8 @@ Measurement scope:
   IPv6 address raises `TypeError` while `get_mixed_type_key` sorts them.
 * `is_private` and `is_global` are asserted for 192.0.0.8, 192.0.0.9 and
   100.64.0.1 on
-  the patch releases that carry the IANA registry fix, 3.10.15, 3.11.10,
-  3.12.4 and 3.13.0, and the test is skipped on an earlier patch.
+  the patch releases that carry the IANA registry fix, 3.11.10, 3.12.4 and
+  3.13.0, and the test is skipped on an earlier patch.
   `ipv6_mapped` is guarded to 3.13+.
 * Leading zeros in an IPv4 string raise `AddressValueError`; both exceptions
   subclass `ValueError`.
@@ -481,13 +481,11 @@ class TestSpecialPurposeRanges:
         assert v4("10.0.0.0/8").is_private and not v4("10.0.0.0/8").is_global
 
     @pytest.mark.skipif(
-        sys.version_info[:2] == (3, 10)
-        and sys.version_info < (3, 10, 15)
-        or sys.version_info[:2] == (3, 11)
+        sys.version_info[:2] == (3, 11)
         and sys.version_info < (3, 11, 10)
         or sys.version_info[:2] == (3, 12)
         and sys.version_info < (3, 12, 4),
-        reason="the IANA registry fix arrived in 3.10.15, 3.11.10, 3.12.4 and 3.13.0",
+        reason="the IANA registry fix arrived in 3.11.10, 3.12.4 and 3.13.0",
     )
     def test_the_registry_answers(self) -> None:
         assert addr("192.0.0.9").is_global

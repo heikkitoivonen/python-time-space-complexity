@@ -23,7 +23,7 @@ Category C, claims execution cannot settle here:
   only ever show that a prefix is produced without the iterator ending, which
   TestCreatingIterators does; it cannot show the absence of an end.
 * The Version Notes for Python 2.6 and "Python 3.x: All modern functions
-  available". The oldest interpreter this project supports is 3.10, so the
+  available". The oldest interpreter this project supports is 3.11, so the
   earlier entries are history rather than something the suite can exercise.
   The 3.10 and 3.12 entries are covered by TestVersionedAdditions.
 """

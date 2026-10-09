@@ -30,7 +30,7 @@ member at O(b); running a module's body is the module's own cost and is not pric
 | `zipimporter.get_data(pathname)` | O(b) | O(b) | Opens the archive and reads the member on every call; `OSError` if there is no such member |
 | `zipimporter.is_package(fullname)` | O(1) | O(1) | Name lookups only; raises `ZipImportError` if the module is not in the archive |
 | `zipimporter.load_module(fullname)` | O(b) | O(b) | Deprecated, and warns; reads and decodes the member once, then runs the module body |
-| `zipimporter.invalidate_caches()` | O(1) | O(1) | Drops the cached directory, and the next lookup rereads it, O(n). Python 3.10-3.12 reread it here, O(n) |
+| `zipimporter.invalidate_caches()` | O(1) | O(1) | Drops the cached directory, and the next lookup rereads it, O(n). Python 3.11 and 3.12 reread it here, O(n) |
 | `zipimporter.get_resource_reader(fullname)` | O(1) | O(1) | Each `files()` call on the reader opens the archive with `zipfile` and reads its central directory again, O(n) |
 | `zipimporter.archive`, `zipimporter.prefix` | O(1) | O(1) | The archive's path, and the subpath inside it: `''`, or ending in a separator |
 
@@ -151,7 +151,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
 The directory is read once per archive path, so an importer does not see members added after it
 was built. `invalidate_caches()` drops the cached directory, and the next lookup reads it again; on
-Python 3.10-3.12 `invalidate_caches()` rereads it itself.
+Python 3.11 and 3.12 `invalidate_caches()` rereads it itself.
 
 ```python
 import os
@@ -169,7 +169,7 @@ with tempfile.TemporaryDirectory() as tmp:
         zf.writestr('second.py', '')
 
     assert importer.find_spec('second') is None  # the cached directory is unchanged
-    importer.invalidate_caches()  # O(1); O(n) on Python 3.10-3.12
+    importer.invalidate_caches()  # O(1); O(n) on Python 3.11 and 3.12
     assert importer.find_spec('second') is not None  # O(n) to reread on 3.13+, then O(b)
 ```
 

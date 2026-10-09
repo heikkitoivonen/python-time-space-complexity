@@ -45,8 +45,8 @@ access, but inline storage holds at most SHARED_KEYS_MAX_SIZE = 30 attributes,
 so that first call is bounded and the row stays O(1).
 
 Elapsed time settles the function-scope row: x16 in bound locals (1,000 to
-16,000) costs x21.1 on 3.10, x16.6 on 3.11, x22.5 on 3.12, x211.5 on 3.13 and
-x211.6 on 3.14, where linear predicts x16 and quadratic x256. The assignments
+16,000) costs x16.6 on 3.11, x22.5 on 3.12, x211.5 on 3.13 and x211.6 on
+3.14, where linear predicts x16 and quadratic x256. The assignments
 that bind the locals are included in the timed call; a control function with
 the same assignments and no vars() shows they are about 1% of it at 8,000.
 The getattr-loop comparison is timed at three attributes, in batches of 1,000

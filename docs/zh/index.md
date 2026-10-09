@@ -1,5 +1,5 @@
 ---
-source_sha: a6420f60430b8218f2a6e14ea6d7dddb274b0d9fbf9affa7a90744e24e8b4a43
+source_sha: 820e00694858fe62e65db7b6bf1626fd70706ad5e93b5d99a554161c563e5a09
 translated: machine
 ---
 
@@ -56,7 +56,7 @@ translated: machine
 
 ## 覆盖范围
 
-- **Python 版本**：3.10-3.14
+- **Python 版本**：3.11-3.14
 - **实现**：CPython、PyPy、Jython、IronPython
 - **操作**：2200 多项内置与标准库操作
 - **更新**：随 Python 新版本发布定期更新

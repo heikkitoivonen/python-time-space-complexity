@@ -10,9 +10,8 @@ Measurement scope:
 
 * The deprecation is observed in a fresh interpreter importing the module
   twice under `warnings.simplefilter('always')`: one `DeprecationWarning`
-  from the first import and none from the second on 3.11+, none on 3.10.
-  Every non-dunder name of `re._constants` is asserted to be the same object
-  in the alias on 3.11+.
+  from the first import and none from the second. Every non-dunder name of
+  `re._constants` is asserted to be the same object in the alias.
 * Every member of `OPCODES`, `ATCODES` and `CHCODES` is asserted to index
   its own list back to itself, to be an `int` and to print as its `.name`.
   `MIN_REPEAT` and `MAX_REPEAT` are asserted absent from `OPCODES` and
@@ -22,28 +21,25 @@ Measurement scope:
   values are members of the matching list; `CH_NEGATE` (3.14+) to map each
   category to the name with `NOT_` added or removed before its last word.
 * Each `SRE_FLAG_*` is asserted equal to the `re` flag of the same name;
-  `SRE_FLAG_TEMPLATE` and `re.TEMPLATE` to exist exactly on 3.10 to 3.12.
+  `SRE_FLAG_TEMPLATE` and `re.TEMPLATE` to exist exactly before 3.13.
   The `SRE_INFO_*` bits are asserted in the header of a compiled literal
   pattern, read with the compiler's private `_code()`. `MAGIC`, `MAXREPEAT`
   and `MAXGROUPS` are asserted equal to `_sre`'s. That `MAXGROUPS` counts
   group 0 is settled in tests/test_sre_parse_complexity.py, where a limit
   patched to 3 admits two opened groups.
 * Version-bounded names are asserted by presence: `ATOMIC_GROUP` and the
-  possessive repeats on 3.11+, `CALL` on 3.10 only, `CH_NEGATE` on 3.14+,
+  possessive repeats present and `CALL` absent, `CH_NEGATE` on 3.14+,
   `PatternError` on 3.13+; `error` is `re.error` everywhere.
 * The single fenced Python block runs in its own subprocess, and a mutated
   assertion in it is asserted to fail.
 
 Not settled here:
 
-* That the 3.10 parser never produces `CALL`: Lib/sre_parse.py at v3.10.19
-  has no code path that appends it; only the compiler and `getwidth()`
-  mention it.
 * That opcode values and `MAGIC` change between releases is read from the
-  released sources (`MAGIC` is different in 3.10, 3.11, 3.12 and 3.13), not
+  released sources (`MAGIC` is different in 3.11, 3.12 and 3.13), not
   asserted, since one interpreter sees one release.
 * The module is undocumented; which names it exposes is taken from the
-  released sources of 3.10 to 3.14, not from a documented contract.
+  released sources of 3.11 to 3.14, not from a documented contract.
 """
 
 from __future__ import annotations
@@ -71,9 +67,8 @@ FLAG_NAMES = ("IGNORECASE", "LOCALE", "MULTILINE", "DOTALL", "UNICODE", "VERBOSE
 
 
 def compiler_module() -> Any:
-    """The compiler `re` uses: `re._compiler` on 3.11+, `sre_compile` on 3.10."""
-    internals: Any = re
-    return getattr(re, "_compiler", None) or internals.sre_compile
+    """The compiler `re` uses."""
+    return importlib.import_module("re._compiler")
 
 
 class TestTheModuleIsADeprecatedAlias:
@@ -101,12 +96,8 @@ class TestTheModuleIsADeprecatedAlias:
             check=False,
         )
         assert result.returncode == 0, result.stderr
-        if sys.version_info >= (3, 11):
-            assert result.stdout.strip() == "[['DeprecationWarning'], []]"
-        else:
-            assert result.stdout.strip() == "[[], []]"
+        assert result.stdout.strip() == "[['DeprecationWarning'], []]"
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="re._constants is 3.11+")
     def test_every_name_is_the_constants_module_s_own_object(self) -> None:
         constants = importlib.import_module("re._constants")
         names = [name for name in vars(constants) if not name.startswith("__")]
@@ -143,8 +134,8 @@ class TestOpcodes:
 
     def test_the_version_bounded_opcodes(self) -> None:
         for name in ("ATOMIC_GROUP", "POSSESSIVE_REPEAT", "POSSESSIVE_REPEAT_ONE"):
-            assert hasattr(sre_constants, name) == (sys.version_info >= (3, 11)), name
-        assert hasattr(sre_constants, "CALL") == (sys.version_info < (3, 11))
+            assert hasattr(sre_constants, name), name
+        assert not hasattr(sre_constants, "CALL")
 
 
 class TestOpcodeMaps:

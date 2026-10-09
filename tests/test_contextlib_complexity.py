@@ -30,8 +30,8 @@ Measurement scope:
   best of five, for `ExitStack` and `AsyncExitStack`, with the body raising.
   Exits that raise without handling the exception in flight - an `__exit__`
   method that raises, which the stack calls outside any `except` block - grow
-  less than 100x from k = 250 to 8,000 (x19 to x47 measured on 3.10 and
-  3.14). `@contextmanager` and `@asynccontextmanager` objects whose `finally`
+  less than 100x from k = 250 to 8,000 (x10 to x38 measured on 3.11.17 and
+  3.14.8). `@contextmanager` and `@asynccontextmanager` objects whose `finally`
   raises grow more than 160x from k = 250 to 16,000, where linear predicts
   64x and quadratic 4096x (x916 and x1017 on 3.14). At k = 250 per-exit
   overhead still dominates: from 250 to 8,000 they grow x220 to x390 on
@@ -49,7 +49,6 @@ Measurement scope:
 * `redirect_stdout()`, `redirect_stderr()` and `chdir()` are asserted to
   restore the previous value, to work when the same object is nested in
   itself, and to be visible from another thread while the block runs.
-  `chdir()` is guarded on 3.11.
 * A `ContextDecorator` subclass used as a decorator is observed entering the
   same instance on every call. `__enter__` and `__aenter__` of the two
   abstract base classes return `self`; `isinstance()` recognises a class that
@@ -80,7 +79,6 @@ Not settled here:
 from __future__ import annotations
 
 import asyncio
-import builtins
 import gc
 import io
 import os
@@ -101,6 +99,7 @@ from contextlib import (
     ExitStack,
     aclosing,
     asynccontextmanager,
+    chdir,
     closing,
     contextmanager,
     nullcontext,
@@ -114,7 +113,6 @@ import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "contextlib.md"
 EXPECTED_BLOCKS = 12
-GROUP: Any = getattr(builtins, "ExceptionGroup", None)
 
 
 def best_seconds(func: Callable[[], Any], repeats: int = 5) -> float:
@@ -641,18 +639,18 @@ class TestSuppress:
     @pytest.mark.skipif(sys.version_info < (3, 12), reason="exception groups from 3.12")
     def test_a_group_is_split(self) -> None:
         with suppress(ValueError):
-            raise GROUP("all", [ValueError(1), ValueError(2)])
+            raise ExceptionGroup("all", [ValueError(1), ValueError(2)])
 
-        with pytest.raises(GROUP) as raised, suppress(ValueError):
-            raise GROUP("mixed", [ValueError(1), KeyError(2)])
+        with pytest.raises(ExceptionGroup) as raised, suppress(ValueError):
+            raise ExceptionGroup("mixed", [ValueError(1), KeyError(2)])
 
         assert [type(e) for e in raised.value.exceptions] == [KeyError]
 
     @pytest.mark.skipif(sys.version_info[:2] != (3, 11), reason="3.11 has groups, not the split")
     def test_on_311_a_group_passes_through(self) -> None:
-        group = GROUP("all", [ValueError(1)])
+        group = ExceptionGroup("all", [ValueError(1)])
 
-        with pytest.raises(GROUP) as raised, suppress(ValueError):
+        with pytest.raises(ExceptionGroup) as raised, suppress(ValueError):
             raise group
 
         assert raised.value is group
@@ -661,7 +659,7 @@ class TestSuppress:
     @pytest.mark.skipif(sys.version_info < (3, 12), reason="exception groups from 3.12")
     def test_the_split_grows_with_the_group(self) -> None:
         def splitting(g: int) -> Callable[[], None]:
-            group = GROUP("g", [ValueError(n) for n in range(g)])
+            group = ExceptionGroup("g", [ValueError(n) for n in range(g)])
 
             def run() -> None:
                 group.__traceback__ = None
@@ -709,10 +707,7 @@ class TestProcessWideSwaps:
         assert getattr(sys, name) is original
         assert buffer.getvalue() == "x"
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="chdir is 3.11+")
     def test_chdir_restores_nests_and_is_process_wide(self, tmp_path: pathlib.Path) -> None:
-        from contextlib import chdir  # type: ignore[attr-defined]
-
         start = os.getcwd()
         manager = chdir(tmp_path)
 

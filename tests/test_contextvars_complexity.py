@@ -16,7 +16,7 @@ Measurement scope:
 * `ContextVar.set()` and `ContextVar.reset()` are measured in contexts of 32,
   1,024 and 32,768 variables, as the median traced peak over 15 of the
   context's own variables. Each 32-fold step raises the peak - by about 300
-  bytes on 64-bit 3.10 and 3.14 - and the largest context's peak is under four
+  bytes on 64-bit 3.11 and 3.14 - and the largest context's peak is under four
   times the smallest's, where a copy of the mapping would be 1,024 times.
 * `copy_context()` and `Context.copy()` peak under 1 KB in a context of
   32,768 variables. The copy and the original are asserted to diverge in both
@@ -45,7 +45,7 @@ Measurement scope:
   `sys.flags.thread_inherit_context` is unset.
 * An asyncio task is observed to see the context as it was when the task was
   created, not a set the parent makes afterwards, and a task given `context=`
-  to run in that context and set its variables there (3.11+).
+  to run in that context and set its variables there.
 * The inheriting thread's own set is asserted to leave the caller's value in
   place (3.14+).
 * Every fenced Python block runs in its own subprocess, and a mutated
@@ -561,7 +561,6 @@ class TestThreadsAndTasks:
 
         assert asyncio.run(main()) == "at creation"
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="create_task(context=) is 3.11+")
     def test_a_task_given_a_context_runs_in_it(self) -> None:
         variable: ContextVar[str] = ContextVar("variable", default="unset")
         given = Context()
@@ -574,8 +573,7 @@ class TestThreadsAndTasks:
 
         async def main() -> str:
             variable.set("caller")
-            options: dict[str, Any] = {"context": given}  # the keyword is 3.11+
-            return await asyncio.create_task(write(), **options)
+            return await asyncio.create_task(write(), context=given)
 
         assert asyncio.run(main()) == "given"
         assert given[variable] == "written"

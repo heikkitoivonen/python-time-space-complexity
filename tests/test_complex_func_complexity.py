@@ -11,13 +11,13 @@ DBL_MAX_EXP bits. Its sticky-bit loop scans the low digits until the first
 nonzero one, so rejecting a power of two is O(d) in the int's digits while a
 typical large int stops after a few. From v3.14.2: complex.from_number(), a
 DeprecationWarning for a complex `real` or `imag` argument, and TypeError for
-a string passed as `real=` (v3.10.19 to v3.13.11 accept it).
+a string passed as `real=` (v3.11.14 to v3.13.11 accept it).
 
 Measurement scope:
 
 * identity: complex(c) is c for an exact complex;
 * time, string: a thousandfold step in length, 2,002 to 2,000,002 characters,
-  measured x1,006 (3.10) and x1,119 (3.14). The test accepts x100 to x30,000:
+  measured x950 (3.11.17) and x1,119 (3.14). The test accepts x100 to x30,000:
   a constant-time claim predicts x1 and a quadratic one x1,000,000;
 * space, string: tracemalloc's peak parsing a 200,002-character ASCII string
   is under 1 KiB; a 200,001-character string of Arabic-Indic digits peaks above
@@ -39,7 +39,7 @@ Not settled here:
   subclasses as the class or the argument (the identity shortcut is exact-type
   only).
 * Rejection time is not priced on the page: rejecting 1 << 10_000_000 against
-  1 << 1100 measured x846 (3.10) and x1,300 (3.14), from the sticky-bit scan
+  1 << 1100 measured x820 (3.11.17) and x1,300 (3.14), from the sticky-bit scan
   over zero low digits, a power-of-two shape that ordinary ints do not have.
 """
 

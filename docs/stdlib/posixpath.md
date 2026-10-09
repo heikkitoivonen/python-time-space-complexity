@@ -39,7 +39,7 @@ in the `join()` row. A system call counts as O(1), as it does on the [os page](o
 | `posixpath.normpath(path)` | O(L) | O(L) | Lexical: `..` removes the component before it even when that is a symlink |
 | `posixpath.normcase(s)` | O(1) | O(1) | Returns the argument itself, on macOS too |
 | `posixpath.isabs(s)` | O(1) | O(1) | Checks for a leading `/` |
-| `posixpath.expandvars(path)` | O(L + V) | O(L + V) | `$name` and `${name}`; an unknown name is left as it is. Releases before 3.14.1, 3.13.10, 3.12.13, 3.11.15 and 3.10.20 rebuild the path for each substitution: O(e·(L + V)) for e substitutions |
+| `posixpath.expandvars(path)` | O(L + V) | O(L + V) | `$name` and `${name}`; an unknown name is left as it is. Releases before 3.14.1, 3.13.10, 3.12.13 and 3.11.15 rebuild the path for each substitution: O(e·(L + V)) for e substitutions |
 | `posixpath.expanduser(path)` | O(L + H) | O(L + H) | `~` is `HOME`; `~user`, and `~` with `HOME` unset, ask the password database, at whatever that backend costs. Windows has no `pwd` module, and returns those unchanged |
 
 ### Resolving against the filesystem

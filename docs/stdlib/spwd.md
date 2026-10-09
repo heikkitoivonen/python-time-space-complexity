@@ -7,7 +7,7 @@ with the usual `files` backend that is `/etc/shadow`, which normally only root c
 
 !!! warning "Removed in Python 3.13"
     Deprecated in Python 3.11 and removed in Python 3.13 by PEP 594. The page covers the module
-    as it is on Python 3.10 to 3.12 on Unix; the examples also need privileges to read the
+    as it is on Python 3.11 and 3.12 on Unix; the examples also need privileges to read the
     database and an entry for `root` in it.
 
 `n` is the entries in the database. The bounds are those of the `files` backend, and treat one

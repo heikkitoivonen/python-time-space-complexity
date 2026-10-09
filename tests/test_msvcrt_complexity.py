@@ -77,8 +77,8 @@ Measurement scope:
   fastest of seven calls after a first call has released whatever was free. On an ARM64 build it grows at every
   step and costs over 4x as much at 16,000 as at 1,000, where a constant cost
   predicts 1x. On every build 16x the blocks costs under 64x, which excludes
-  a quadratic walk. The x64 builds of 3.10 and 3.12, run under emulation on
-  ARM64 Windows, stayed flat from 1,000 to 64,000 blocks: the cost is the
+  a quadratic walk. The x64 build of 3.12, run under emulation on ARM64
+  Windows, stayed flat from 1,000 to 64,000 blocks: the cost is the
   Windows heap's, and not every heap walks its blocks.
 * `setmode()` returns the previous mode, and `O_TEXT` turns a written `\\n`
   into `\\r\\n`. `get_osfhandle()` returns the handle `open_osfhandle()` was
@@ -93,8 +93,8 @@ Measurement scope:
   are asserted absent from a release build.
 * Every fenced block on the page runs in its own subprocess with a console of
   its own, and a mutated assertion in one of them is asserted to fail.
-* The file passes on 3.14 ARM64, on 3.13 ARM64, and on the x64 builds of
-  3.10 and 3.12 under emulation, where the ARM64-only heapmin test skips.
+* The file passes on 3.14 ARM64, on 3.13 ARM64, and on the x64 build of
+  3.12 under emulation, where the ARM64-only heapmin test skips.
 
 Not settled here:
 

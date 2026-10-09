@@ -36,7 +36,7 @@ Measurement scope:
   copies keys and not values: O(n). The O(b) of `nt.environ` itself is read
   from `convertenviron()` in Modules/posixmodule.c, one new str per key and
   value, and the loop that shares the values from `_createenviron()`
-  (3.10-3.13) and `_create_environ_mapping()` (3.14) in Lib/os.py;
+  (3.11-3.13) and `_create_environ_mapping()` (3.14) in Lib/os.py;
   interpreter startup cannot be timed from inside the interpreter. The
   child also shows `nt.environ` missing an upper-case spelling that
   `os.environ` finds.
@@ -70,7 +70,7 @@ Measurement scope:
   `_getfinalpathname()`, `readlink()`, `_getfullpathname()` and
   `_getvolumepathname()` are counted there too.
 * Which version added each private name was found by listing `dir(nt)` on
-  3.10.21, 3.11.16, 3.12.14, 3.13.15 and 3.14.7; the tests assert each name
+  3.11.16, 3.12.14, 3.13.15 and 3.14.7; the tests assert each name
   against `sys.version_info` and were run on each of those versions.
 * Every fenced block on the page runs in its own subprocess, and a mutated
   assertion in one of them is asserted to fail.

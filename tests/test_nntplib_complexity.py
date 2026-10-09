@@ -9,11 +9,10 @@ process, behind a `FakeSocket` whose `makefile('rwb')` is the one file
 module's own code. The fake counts the replies it sends, which is the exchange
 count, and the lines the client reads. Space claims are settled by traced
 allocation; the growth rates only a stopwatch shows are timed at sizes far
-apart. The module exists on Python 3.10, 3.11 and 3.12 only, so every test
-that touches it takes the `nntplib` fixture, which skips from 3.13; run them
-with one of those interpreters. Lib/nntplib.py differs between v3.10.19,
-v3.11.14 and v3.12.12 only in the import-time DeprecationWarning added in
-3.11: no bound moves.
+apart. The module exists on Python 3.11 and 3.12 only, so every test that
+touches it takes the `nntplib` fixture, which skips from 3.13; run them with
+one of those interpreters. Lib/nntplib.py is the same at v3.11.14 and
+v3.12.12.
 
 Measurement scope:
 
@@ -90,8 +89,8 @@ Measurement scope:
   `NNTPPermanentError`, an unexpected 2xx `NNTPReplyError`, a reply starting
   with 6 `NNTPProtocolError`; each carries the reply in `response` and
   subclasses `NNTPError`.
-* The import warns on 3.11 and 3.12, not on 3.10, and raises
-  `ModuleNotFoundError` from 3.13.
+* The import warns on 3.11 and 3.12, and raises `ModuleNotFoundError` from
+  3.13.
 * Every fenced Python block runs in its own subprocess against a
   `FakeServer`, installed by a prelude that replaces
   `socket.create_connection()`, and a mutated assertion in a block is
@@ -675,8 +674,8 @@ def overview_lines(count: int) -> list[bytes]:
 
 
 class TestAvailability:
-    """`import nntplib` works on 3.10 to 3.12, warning from 3.11, and fails
-    from 3.13."""
+    """`import nntplib` works on 3.11 and 3.12 with a warning, and fails from
+    3.13."""
 
     @pytest.mark.skipif(sys.version_info < (3, 13), reason="the module exists before 3.13")
     def test_importing_it_from_3_13_raises(self) -> None:
@@ -693,10 +692,9 @@ class TestAvailability:
             stdin=subprocess.DEVNULL,
             check=False,
         )
-        assert (result.returncode != 0) == (sys.version_info >= (3, 11)), result.stderr
-        if sys.version_info >= (3, 11):
-            assert "DeprecationWarning" in result.stderr
-            assert "nntplib" in result.stderr
+        assert result.returncode != 0, result.stderr
+        assert "DeprecationWarning" in result.stderr
+        assert "nntplib" in result.stderr
 
 
 # --- Connections ----------------------------------------------------------------

@@ -11,9 +11,9 @@ exception raised. A stopwatch is used only for the decorator and for
 Measurement scope:
 
 * The decorator, through `make_dataclass()`, at 25 and 400 int fields: 16x
-  the fields cost between x11 and x18 on 3.10 to 3.14, where a quadratic
+  the fields cost between x11 and x18 on 3.11 to 3.14, where a quadratic
   would cost x256; the test asserts x4 to x80. At thousands of fields the
-  compile step grows faster than linear on 3.10 to 3.13 (6,400 fields cost
+  compile step grows faster than linear on 3.11 to 3.13 (6,400 fields cost
   x7.7 to x10 the time of 1,600) and stays linear on 3.14 (x3.8); that width
   is outside what the page prices. `default_factory` is asserted uncalled by
   the decorator, called once per instance that omits the field, and skipped
@@ -23,12 +23,13 @@ Measurement scope:
   and without `slots=True` is compared by traced peak at 10 and 1,000 fields,
   arguments built inside the measurement: both grow more than 5x, and the
   slotted peak at 1,000 fields is the smaller (52,704 against 75,944 bytes on
-  3.14, 44,884 against 47,820 on 3.10). With `slots=True` the field is a member descriptor on the class and
-  the instance has no `__dict__`; without it, the value is in `vars(obj)`.
+  3.14, 47,856 against 78,840 on 3.11). With `slots=True` the field is a
+  member descriptor on the class and the instance has no `__dict__`; without
+  it, the value is in `vars(obj)`.
 * Generated `__eq__`, `__lt__`, `__hash__` and `__repr__` peaks at 200 and
-  2,000 fields on 3.10 to 3.14: `__lt__` about 4.9 KB and 48 KB, `__hash__`
+  2,000 fields on 3.11 to 3.14: `__lt__` about 4.9 KB and 48 KB, `__hash__`
   3.2 KB and 32 KB, `__repr__` 14 to 16 KB and 144 to 160 KB; `__eq__` the
-  same as `__lt__` on 3.10 to 3.12 and zero at both widths on 3.13 and 3.14. The
+  same as `__lt__` on 3.11 and 3.12 and zero at both widths on 3.13 and 3.14. The
   zero is measured on a second call, after warming, because from 3.12 a
   code object's first run after any tracer was installed allocates
   monitoring data. At 10 fields 3.11 and 3.12 take the tuples from a
@@ -46,7 +47,7 @@ Measurement scope:
   dictionaries, so a shared value is counted once per reference; a list in a
   field comes back as a different list.
 * `replace()` is asserted to run `__post_init__` again and to reject an
-  `init=False` field with `ValueError` on 3.10 to 3.12 and `TypeError` from
+  `init=False` field with `ValueError` on 3.11 and 3.12 and `TypeError` from
   3.13, each version asserting the other type is not raised. `copy.replace()`
   is asserted to work from 3.13.
 * `fields()` is asserted to return equal, distinct tuples on two calls of a
@@ -54,9 +55,8 @@ Measurement scope:
   leave out `InitVar` and `ClassVar` pseudo-fields. `Field.metadata` is
   asserted to show a later change to the mapping passed in, and `Field.doc`
   to exist from 3.14.
-* A default whose class sets `__hash__ = None` is rejected with `ValueError`
-  from 3.11 and accepted on 3.10; a `list` default is rejected on every
-  version.
+* A default whose class sets `__hash__ = None` is rejected with `ValueError`,
+  as is a `list` default.
 * Every fenced Python block runs in its own subprocess and working
   directory, and an import mutated in one of them is asserted to fail.
 
@@ -187,15 +187,14 @@ class TestDecoratorIsLinearInFields:
         assert Config(tags=[1]).tags == [1]
         assert len(calls) == 2, "a supplied value should bypass the factory"
 
-    def test_a_list_default_is_rejected_on_every_version(self) -> None:
+    def test_a_list_default_is_rejected(self) -> None:
         with pytest.raises(ValueError, match="mutable default"):
 
             @dataclass
             class Broken:
                 tags: list = []  # noqa: RUF012
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="3.10 checks list, dict, set only")
-    def test_any_unhashable_default_is_rejected_from_311(self) -> None:
+    def test_any_unhashable_default_is_rejected(self) -> None:
         class Unhashable:
             __hash__ = None  # type: ignore[assignment]
 
@@ -204,17 +203,6 @@ class TestDecoratorIsLinearInFields:
             @dataclass
             class Broken:
                 value: Unhashable = Unhashable()  # noqa: RUF009
-
-    @pytest.mark.skipif(sys.version_info >= (3, 11), reason="3.11 rejects any unhashable default")
-    def test_310_accepts_an_unhashable_default_of_another_type(self) -> None:
-        class Unhashable:
-            __hash__ = None  # type: ignore[assignment]
-
-        @dataclass
-        class Accepted:
-            value: Unhashable = Unhashable()  # noqa: RUF009
-
-        assert Accepted().value is Accepted().value
 
 
 class TestInitStoresOneValuePerField:

@@ -5,7 +5,7 @@ which range-checks the value and returns a one-character string: a cached
 singleton below 256, a new string otherwise. The argument is converted
 differently across the supported range:
 
-* v3.10.19, v3.11.14 and v3.12.12 use the Argument Clinic `int` converter, so
+* v3.11.14 and v3.12.12 use the Argument Clinic `int` converter, so
   an int outside the C `int` range raises OverflowError before the range check;
 * v3.13.11 and v3.14.2 call PyLong_AsLongAndOverflow and clamp an overflowing
   value, so every out-of-range int raises ValueError (gh-76763, from 3.13.0).

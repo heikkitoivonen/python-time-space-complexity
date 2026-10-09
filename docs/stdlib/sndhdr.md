@@ -7,7 +7,7 @@ file is handed on to `wave` or `aifc`, which read its chunk headers but not its 
 
 !!! warning "Removed in Python 3.13"
     Deprecated in Python 3.11 and removed in Python 3.13 by PEP 594. The examples that import
-    it need Python 3.10, 3.11 or 3.12.
+    it need Python 3.11 or 3.12.
 
 `t` is the functions in `sndhdr.tests`, eight built in, and `c` is the chunk headers read from a
 WAV or AIFF file: those up to the `data` chunk in a WAV file, and every chunk in an AIFF or AIFC
@@ -187,7 +187,7 @@ assert (params.framerate, params.nchannels, params.nframes) == (8000, 1, 8000)
 
 - **Python 3.11 and 3.12**: Importing the module emits a `DeprecationWarning`
 - **Python 3.12**: A PCM WAV file in the `WAVE_FORMAT_EXTENSIBLE` layout is recognised as `'wav'`;
-  3.10 and 3.11 return `None` for it
+  earlier versions return `None` for it
 - **Python 3.13+**: Removed by PEP 594, with `aifc` and `sunau`; `import sndhdr` raises
   `ModuleNotFoundError`
 

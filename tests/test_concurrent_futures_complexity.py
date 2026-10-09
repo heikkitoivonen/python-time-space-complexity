@@ -50,9 +50,9 @@ Measurement scope:
   futures, `wait()` reads each state once and each condition twice, and
   hashes futures at most six times per input. The original condition locks
   and identity hashes are retained; the sort is observed once at each size.
-* `concurrent.futures.TimeoutError` is the builtin from 3.11 and a distinct
-  class before; the `Broken*` classes subclass `BrokenExecutor`; the
-  `return_when` constants are their own names as strings.
+* `concurrent.futures.TimeoutError` is the builtin `TimeoutError`; the
+  `Broken*` classes subclass `BrokenExecutor`; the `return_when` constants
+  are their own names as strings.
 * Every fenced Python block runs in its own subprocess, and a mutated
   assertion in one of them is asserted to fail.
 
@@ -498,11 +498,8 @@ class TestConstantsAndExceptions:
         for name in ("FIRST_COMPLETED", "FIRST_EXCEPTION", "ALL_COMPLETED"):
             assert getattr(futures, name) == name
 
-    def test_timeout_error_is_the_builtin_from_3_11(self) -> None:
-        if sys.version_info >= (3, 11):
-            assert futures.TimeoutError is TimeoutError
-        else:
-            assert futures.TimeoutError is not TimeoutError
+    def test_timeout_error_is_the_builtin(self) -> None:
+        assert futures.TimeoutError is TimeoutError
 
     def test_broken_pools_share_a_base(self) -> None:
         from concurrent.futures import process, thread

@@ -6,13 +6,11 @@ over the chunk headers of a WAV or AIFF file: O(t + c) time and O(1) space.
 The reads are settled by a counting `io.FileIO` put in place of the module's
 `open`, which counts every byte read through it; the order by counting
 wrappers around every function; the space by traced peaks over files whose
-chunk count grows a thousandfold. The module exists on Python 3.10, 3.11 and
-3.12 only, so every test that touches it takes the `sndhdr` fixture, which
+chunk count grows a thousandfold. The module exists on Python 3.11 and 3.12
+only, so every test that touches it takes the `sndhdr` fixture, which
 skips from 3.13; run them with one of those interpreters. Lib/sndhdr.py
-differs between v3.10.19, v3.11.14 and v3.12.12 in the import-time
-DeprecationWarning, a warning filter around its `import aifc`, and docstrings;
-Lib/wave.py reads the `WAVE_FORMAT_EXTENSIBLE` layout from v3.12.0 and not in
-v3.10.19 or v3.11.14.
+is the same at v3.11.14 and v3.12.12; Lib/wave.py reads the
+`WAVE_FORMAT_EXTENSIBLE` layout from v3.12.0 and not in v3.11.14.
 
 Measurement scope:
 
@@ -41,10 +39,10 @@ Measurement scope:
   `.snd` raises `IndexError`. A `WAVE_FORMAT_EXTENSIBLE` WAV is `'wav'` from
   3.12 and `None` before; only the PCM subformat is built. Two zero bytes
   and a little-endian rate of 8,000 in front of text are `'sndr'`.
-* The import warns on 3.11 and 3.12, not on 3.10, and raises
-  `ModuleNotFoundError` from 3.13.
+* The import warns on 3.11 and 3.12 and raises `ModuleNotFoundError` from
+  3.13.
 * Every fenced Python block that imports the module runs in its own
-  subprocess on 3.10 to 3.12, the one that does not runs on every version,
+  subprocess on 3.11 and 3.12, the one that does not runs on every version,
   and a mutated assertion in one of them is asserted to fail.
 
 Not settled here:
@@ -61,8 +59,8 @@ Not settled here:
 * `SndHeaders` and the module's helpers (`get_long_be`, `get_long_le`,
   `get_short_be`, `get_short_le`, the eight `test_*` functions by name, and
   the `test` and `testall` command-line routines) are outside the official
-  API inventory, so the audit lists them under needs-classification on 3.10
-  to 3.12. The page documents `SndHeaders` and reaches the `test_*` functions
+  API inventory, so the audit lists them under needs-classification on 3.11
+  and 3.12. The page documents `SndHeaders` and reaches the `test_*` functions
   through `sndhdr.tests`; the rest are not covered.
 """
 
@@ -231,7 +229,7 @@ def test_the_module_exists_only_before_3_13() -> None:
 
 
 class TestAvailability:
-    """`import sndhdr` works on 3.10 to 3.12, warning from 3.11, and fails
+    """`import sndhdr` works on 3.11 and 3.12, warning on both, and fails
     from 3.13."""
 
     @pytest.mark.skipif(sys.version_info < (3, 13), reason="the module exists before 3.13")
@@ -249,10 +247,9 @@ class TestAvailability:
             stdin=subprocess.DEVNULL,
             check=False,
         )
-        assert (result.returncode != 0) == (sys.version_info >= (3, 11)), result.stderr
-        if sys.version_info >= (3, 11):
-            assert "DeprecationWarning" in result.stderr
-            assert "sndhdr" in result.stderr
+        assert result.returncode != 0, result.stderr
+        assert "DeprecationWarning" in result.stderr
+        assert "sndhdr" in result.stderr
 
 
 class TestWhatReadsTheHeader:

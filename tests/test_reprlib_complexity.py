@@ -242,11 +242,10 @@ class TestRepr:
             printer.maxother,
         ) == (6, 6, 6, 5, 4, 6, 6, 6, 30, 40, 30)
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="fillvalue is 3.11+")
     def test_fillvalue(self) -> None:
         printer = reprlib.Repr()
-        assert printer.fillvalue == "..."  # type: ignore[attr-defined]
-        printer.fillvalue = "~"  # type: ignore[attr-defined]
+        assert printer.fillvalue == "..."
+        printer.fillvalue = "~"
         printer.maxlist = 2
         assert printer.repr([1, 2, 3]) == "[1, 2, ~]"
 

@@ -8,7 +8,7 @@ filesystem calls per file, and uses modification times to decide which files it 
 
 !!! warning "Removed in Python 3.12"
     Deprecated in Python 3.10 by PEP 632 and removed in Python 3.12. The examples need
-    Python 3.10 or 3.11.
+    Python 3.11.
 
 `n` is the items in the list or directory tree an operation is given (sources, objects, library
 names, files), `b` is the bytes those files hold, `d` is the components of a path, `L` is the
@@ -51,7 +51,6 @@ one step: the compiler's, linker's or archiver's own work is not priced here.
 | `distutils.command.sdist` | O(t·n·(r + log(t·n)) + b) | O(t·n) | t = patterns in `MANIFEST.in` plus one for the default files, r = entries removed, by an exclusion or as duplicates of an earlier match. Each pattern is matched against all n files of the tree, and the list keeps one entry per match until it is sorted and deduplicated; each removal deletes from that list. The files are then linked or copied into a release tree and archived |
 | `distutils.command.bdist`, `distutils.command.bdist_dumb` | O(n·d + n log n + b) | O(n) | Install into a temporary tree, then archive it with `make_archive()` |
 | `distutils.command.bdist_rpm` | As `sdist`, plus `rpmbuild` | O(n) | Runs `sdist`, writes a spec file and runs `rpmbuild` on them |
-| `distutils.command.bdist_msi` | O(n + b) | O(n) | Python 3.10 on Windows only: it needs `msilib` |
 | `distutils.command.bdist_packager` | - | - | Named in the 3.10 and 3.11 documentation index, but no such module ships |
 | `distutils.command.check` | O(1) | O(1) | Warns about missing required metadata. `--restructuredtext` also parses the long description, which needs a parser outside the standard library |
 | `distutils.command.config` | O(1) compiler runs per `try_*` call | O(1) | Each call writes a test program: `try_compile()` compiles it, `try_link()` also links it, and `try_run()` also runs it |

@@ -8,11 +8,10 @@ subclasses show how many lookups and membership checks `findmatch()` makes,
 a counting sort key shows how many comparisons its sort makes, and a recording
 `os.system()` shows which `test` commands it runs. One timing test covers the
 growth of `getcaps()` and one traced peak the space of `findmatch()`. The
-module exists on Python 3.10, 3.11 and 3.12 only, so every test that touches
-it takes the `mailcap` fixture, which skips from 3.13; run them with one of
-those interpreters. Lib/mailcap.py differs between v3.10.19, v3.11.14 and
-v3.12.12 only in the import-time DeprecationWarning added in 3.11 and in how
-the read loop is spelled: no bound moves.
+module exists on Python 3.11 and 3.12 only, so every test that touches it
+takes the `mailcap` fixture, which skips from 3.13; run them with one of
+those interpreters. Lib/mailcap.py differs between v3.11.14 and v3.12.12 only
+in how the read loop is spelled: no bound moves.
 
 Measurement scope:
 
@@ -48,9 +47,9 @@ Measurement scope:
   `%t`, or an unsafe parameter under `%{name}`, skips that entry with
   `UnsafeMailcapInput` and the next one is used. `UnsafeMailcapInput` is a
   `Warning` subclass.
-* The import warns on 3.11 and 3.12, not on 3.10, and raises
-  `ModuleNotFoundError` from 3.13.
-* Every fenced Python block runs in its own subprocess on 3.10 to 3.12, and a
+* The import warns on 3.11 and 3.12, and raises `ModuleNotFoundError` from
+  3.13.
+* Every fenced Python block runs in its own subprocess on 3.11 and 3.12, and a
   mutated assertion in one of them is asserted to fail. One block runs two
   real shell commands, `exit 1` and `exit 0`.
 
@@ -58,8 +57,8 @@ Not settled here:
 
 * The deprecation in 3.11 and the removal in 3.13 come from the 3.12
   documentation and PEP 594. The unsafe-input checks arrived in 3.10.8 and
-  3.11.0 (`git tag --contains` on the change in CPython); only the newest
-  3.10 patch is run.
+  3.11.0 (`git tag --contains` on the change in CPython), so every supported
+  interpreter has them.
 * What a shell process costs is the operating system's and is not measured.
 * The page's bounds assume a handful of files, short entries, a short
   filename and a short `plist`. `subst()` walks the field character by
@@ -167,8 +166,8 @@ def write_caps(path: pathlib.Path, text: str) -> str:
 
 
 class TestAvailability:
-    """`import mailcap` works on 3.10 to 3.12, warning from 3.11, and fails
-    from 3.13."""
+    """`import mailcap` works on 3.11 and 3.12 with a warning, and fails from
+    3.13."""
 
     @pytest.mark.skipif(sys.version_info < (3, 13), reason="the module exists before 3.13")
     def test_importing_it_from_3_13_raises(self) -> None:
@@ -185,10 +184,9 @@ class TestAvailability:
             stdin=subprocess.DEVNULL,
             check=False,
         )
-        assert (result.returncode != 0) == (sys.version_info >= (3, 11)), result.stderr
-        if sys.version_info >= (3, 11):
-            assert "DeprecationWarning" in result.stderr
-            assert "mailcap" in result.stderr
+        assert result.returncode != 0, result.stderr
+        assert "DeprecationWarning" in result.stderr
+        assert "mailcap" in result.stderr
 
 
 class TestGetcapsRereadsEveryFile:

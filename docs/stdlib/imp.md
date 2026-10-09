@@ -56,7 +56,7 @@ writes a `.pyc` under `__pycache__`; a later load whose cache is still valid
 reads the bytecode instead of compiling. `load_compiled()` starts from the
 `.pyc` directly and never compiles.
 
-Run this example on Python 3.10 or 3.11.
+Run this example on Python 3.11.
 
 ```python
 import imp

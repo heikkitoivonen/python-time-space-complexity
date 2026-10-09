@@ -37,7 +37,7 @@ alone makes them. Hooks a class overrides - `_missing_()`, `_generate_next_value
 | `Enum._generate_next_value_(name, start, count, last_values)` | O(n) | O(n) | Called once per `auto()` with a fresh list of the values so far |
 | `Enum._missing_(value)` | O(1) | O(1) | Called when `C(value)` finds no member; the default returns `None` |
 | `Enum._ignore_` | O(i) | O(i) | i = names listed; they are dropped from the class body |
-| `Enum._order_` | O(n²) | O(n) | Checked once, when the class is built: each name is looked for in the list of canonical member names; O(n) on 3.10 |
+| `Enum._order_` | O(n²) | O(n) | Checked once, when the class is built: each name is looked for in the list of canonical member names |
 | `Enum._add_alias_(name)`, `Enum._add_value_alias_(value)` | O(1) expected; O(n) for an unhashable value | O(1) | Python 3.13+; add a name or a value that leads to an existing member |
 | `enum.member(obj)`, `enum.nonmember(obj)` | O(1) | O(1) | Python 3.11+; mark a class-body name as a member or not |
 | `enum.property` | O(1) | O(1) | Python 3.11+; the descriptor behind `name` and `value`, so a member may have either name |
@@ -62,8 +62,8 @@ alone makes them. Hooks a class overrides - `_missing_()`, `_generate_next_value
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `enum.Flag`, `enum.IntFlag` | O(1) | O(1) | Members are bits or named combinations of them; other combinations are made on demand |
-| `a \| b`, `a & b`, `a ^ b` | O(1) expected; O(n) the first time a value is made, O(n log n) on 3.10 | O(1); O(n) the first time | A new combination is built once and cached on the class for as long as the class lives |
-| `~flag` | O(n); O(n²) on 3.10 | O(n) | Python 3.11+ caches the result on the operand, so a repeat is O(1); 3.10 recomputes it on every call |
+| `a \| b`, `a & b`, `a ^ b` | O(1) expected; O(n) the first time a value is made | O(1); O(n) the first time | A new combination is built once and cached on the class for as long as the class lives |
+| `~flag` | O(n) | O(n) | The result is cached on the operand, so a repeat is O(1) |
 | `member in flag` | O(1) | O(1) | A bitwise test |
 | `iter(flag)` | O(b) | O(1) | Python 3.11+; the members whose bits are set. A class whose members are defined out of value order sorts them first: O(b log b) time, O(b) space |
 | `len(flag)`, `bool(flag)` | O(1) | O(1) | `len()` is 3.11+ and counts the bits set |
@@ -200,7 +200,7 @@ if sys.version_info >= (3, 12):
 ```
 
 !!! warning "`value in C` depends on the version"
-    On 3.10 and 3.11 a raw value raises `TypeError`, with a `DeprecationWarning` announcing the
+    On 3.11 a raw value raises `TypeError`, with a `DeprecationWarning` announcing the
     change. On 3.12.0 to 3.12.9 a hashable value is answered and an unhashable one still raises
     `TypeError`; 3.12.10 and 3.13 answer both.
 
@@ -211,7 +211,6 @@ made it is built and cached on the class, so the same combination is the same ob
 and every distinct value made stays cached for as long as the class lives.
 
 ```python
-import sys
 from enum import Flag, auto
 
 class Permission(Flag):
@@ -226,20 +225,18 @@ assert Permission.READ in combined                    # O(1) - a bitwise test
 assert Permission.EXECUTE not in combined
 assert (combined & Permission.READ) is Permission.READ
 
-if sys.version_info >= (3, 11):
-    assert len(combined) == 2                                # O(1)
-    assert [p.name for p in combined] == ['READ', 'WRITE']  # O(b)
+assert len(combined) == 2                                # O(1)
+assert [p.name for p in combined] == ['READ', 'WRITE']  # O(b)
 ```
 
 ## Validation
 
-`unique()` walks the members once and refuses aliases. `verify()` (3.11+) generalises it; its
+`unique()` walks the members once and refuses aliases. `verify()` generalises it; its
 `CONTINUOUS` check walks every integer between the smallest and largest value, so it suits values
 that are close together.
 
 ```python
-import sys
-from enum import Enum, unique
+from enum import CONTINUOUS, Enum, unique, verify
 
 try:
     @unique  # O(n)
@@ -251,18 +248,15 @@ except ValueError as error:
 else:
     raise AssertionError('an alias passed unique()')
 
-if sys.version_info >= (3, 11):
-    from enum import CONTINUOUS, verify
-
-    try:
-        @verify(CONTINUOUS)  # O(n + r), r = largest value - smallest
-        class Gapped(Enum):
-            A = 1
-            C = 3
-    except ValueError as error:
-        assert 'missing values 2' in str(error)
-    else:
-        raise AssertionError('a gap passed verify(CONTINUOUS)')
+try:
+    @verify(CONTINUOUS)  # O(n + r), r = largest value - smallest
+    class Gapped(Enum):
+        A = 1
+        C = 3
+except ValueError as error:
+    assert 'missing values 2' in str(error)
+else:
+    raise AssertionError('a gap passed verify(CONTINUOUS)')
 ```
 
 ## Integer and String Enums
@@ -271,8 +265,7 @@ if sys.version_info >= (3, 11):
 heard of the enum, at the price of comparing equal to a bare value.
 
 ```python
-import sys
-from enum import Enum, IntEnum
+from enum import Enum, IntEnum, StrEnum
 
 class Priority(IntEnum):
     LOW = 1
@@ -287,13 +280,10 @@ class Plain(Enum):
 
 assert Plain.HIGH != 3               # a plain member is not its value
 
-if sys.version_info >= (3, 11):
-    from enum import StrEnum
+class Mode(StrEnum):
+    READ = 'r'
 
-    class Mode(StrEnum):
-        READ = 'r'
-
-    assert Mode.READ == 'r' and f'{Mode.READ}' == 'r'
+assert Mode.READ == 'r' and f'{Mode.READ}' == 'r'
 ```
 
 ## Performance Best Practices

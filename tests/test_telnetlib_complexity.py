@@ -8,12 +8,11 @@ by a stopwatch: a `Telnet` subclass turns the cooked queue into a property
 that adds up the length of every value assigned to it. In the read loops each
 of those values is a concatenation the method has just built, so the sum
 stands in for the bytes copied; it is a proxy, not an allocation count. The
-module exists on Python 3.10, 3.11 and
+module exists on Python 3.11 and
 3.12 only, so every runtime test takes the `telnetlib` fixture, which skips
 from 3.13; availability itself is asserted on every version. Lib/telnetlib.py
-differs between v3.10.19 and v3.12.12 only in the import-time
-DeprecationWarning, which 3.11 adds, and in a class-level `sock = None`, which
-3.12 adds. Connections are real loopback TCP connections built with
+differs between v3.11.14 and v3.12.12 only in a class-level `sock = None`,
+which 3.12 adds. Connections are real loopback TCP connections built with
 `socket.create_server()`; the copy counts use an in-memory socket that serves
 the data 50 bytes at a time, with the descriptor of a socket that always has
 a byte waiting, so `select()` reports it ready.
@@ -82,8 +81,8 @@ Measurement scope:
   arrives, then prints the closed message and stops once the peer closes.
   That each poll has a zero timeout, so the loop never waits for data, is
   read from Lib/telnetlib.py (`sock_avail()` calls `select(0)`).
-* The constants, and the import, which warns on 3.11 and 3.12, not on 3.10,
-  and raises `ModuleNotFoundError` from 3.13.
+* The constants, and the import, which warns on 3.11 and 3.12 and raises
+  `ModuleNotFoundError` from 3.13.
 * Every fenced Python block runs in its own subprocess, and a mutated
   assertion in one of them is asserted to fail.
 
@@ -279,7 +278,7 @@ class Pattern:
 
 
 class TestAvailability:
-    """`import telnetlib` works on 3.10 to 3.12, warning from 3.11, and fails
+    """`import telnetlib` works with a warning on 3.11 and 3.12, and fails
     from 3.13."""
 
     @pytest.mark.skipif(sys.version_info < (3, 13), reason="the module exists before 3.13")
@@ -297,8 +296,8 @@ class TestAvailability:
             stdin=subprocess.DEVNULL,
             check=False,
         )
-        assert (result.returncode != 0) == (sys.version_info >= (3, 11))
-        assert ("DeprecationWarning" in result.stderr) == (sys.version_info >= (3, 11))
+        assert result.returncode != 0
+        assert "DeprecationWarning" in result.stderr
 
 
 class TestEachRecvTakesFiftyBytes:

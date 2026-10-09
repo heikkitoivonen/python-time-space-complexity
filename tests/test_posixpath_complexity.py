@@ -15,8 +15,8 @@ tests settle the O(L) rows, `expandvars()` on either side of its fix, and
 Measurement scope:
 
 * Which implementation runs where: with `posix` present, `normpath` is
-  `posix._path_normpath` from 3.12 (on 3.11 a wrapper around it, on 3.10
-  Python) and `splitroot` is `posix._path_splitroot_ex` from 3.13. The
+  `posix._path_normpath` from 3.12 (on 3.11 a wrapper around it) and
+  `splitroot` is `posix._path_splitroot_ex` from 3.13. The
   fallback's `normpath` and (3.12+) `splitroot` are its own Python
   functions. Nine sample paths - relative, absolute, two and three leading
   slashes, `.` and `..` runs, trailing slashes, empty - give equal results
@@ -32,7 +32,7 @@ Measurement scope:
   `isabs()` of a 10,000,000-character path costs under 5x what a
   10-character one does.
 * O(L) rows, timed at L = 3,000, 30,000 and 300,000: each 10x step costs
-  under 30x, where quadratic predicts 100x (x8 to x18 measured on 3.10,
+  under 30x, where quadratic predicts 100x (x8 to x18 measured on 3.11,
   3.12, 3.13 and 3.14 for the functions that scan the whole path). `split`
   and `dirname` take a path of `ab/./` components; `basename` and `splitext`
   one component with no `/` or `.`, the shape that makes their reverse
@@ -45,7 +45,7 @@ Measurement scope:
   over 8x on the second 4x step and over 48x across both, where linear
   predicts 4x and 16x; the same sizes as str cost under 8x per step.
 * `expandvars()`: the releases that run one `re.sub()` pass (3.14.1,
-  3.13.10, 3.12.13, 3.11.15, 3.10.20 and later) are the ones with a
+  3.13.10, 3.12.13, 3.11.15 and later) are the ones with a
   `_varsub` module global, and on them 4,000, 16,000 and 64,000
   substitutions cost under 64x across both 4x steps, where linear predicts
   16x and quadratic 256x (x3.3 to x4.4 per step measured). On earlier
@@ -72,7 +72,7 @@ Measurement scope:
 * `realpath()` space: a chain of 160 symlinks in a directory four
   150-character names below the temporary directory (under macOS's
   1,024-byte PATH_MAX) peaks at over 2.5x the traced allocation of a chain
-  of 40 (x3.8 to x4.0 on 3.10, 3.12, 3.13 and 3.14), where R grows by about
+  of 40 (x3.8 to x4.0 on 3.11, 3.12, 3.13 and 3.14), where R grows by about
   half; this is the j·R term.
 * `ismount()`: from 3.13 two `os.lstat()` calls and no `realpath()` for a
   directory that is not a mount point; through 3.12 one `realpath()` call.
@@ -143,7 +143,7 @@ POSIX_BLOCKS = ("posixpath.realpath(via_link)",)
 FILESYSTEM = ("stat", "lstat", "fstat", "readlink", "getcwd")
 
 # The first release of each line whose expandvars() is one re.sub() pass.
-EXPANDVARS_FIXED = {10: 20, 11: 15, 12: 13, 13: 10, 14: 1}
+EXPANDVARS_FIXED = {11: 15, 12: 13, 13: 10, 14: 1}
 
 
 def best_ns(func: Callable[[], Any], repeats: int = 5, inner: int = 1) -> float:
@@ -237,8 +237,7 @@ class TestWhereEachImplementationRuns:
     @pytest.mark.skipif(os.name != "posix", reason="the posix module exists only on POSIX")
     def test_with_posix_the_helpers_are_bound(self) -> None:
         posix: Any = importlib.import_module("posix")
-        has_normpath = hasattr(posix, "_path_normpath")
-        assert has_normpath == (sys.version_info >= (3, 11))
+        assert hasattr(posix, "_path_normpath")
         assert (posixpath.normpath is getattr(posix, "_path_normpath", None)) == (
             sys.version_info >= (3, 12)
         )
@@ -699,7 +698,7 @@ class TestConstants:
 
 class TestVersionBoundaries:
     """Version Notes: `splitroot()` and `isjunction()` 3.12+, `isdevdrive()`
-    3.13+, `ALLOW_MISSING` 3.10.18, 3.11.13, 3.12.11 and 3.13.4+."""
+    3.13+, `ALLOW_MISSING` 3.11.13, 3.12.11 and 3.13.4+."""
 
     @pytest.mark.parametrize("name", ["splitroot", "isjunction"])
     def test_the_312_names(self, name: str) -> None:
@@ -709,7 +708,7 @@ class TestVersionBoundaries:
         assert hasattr(posixpath, "isdevdrive") == (sys.version_info >= (3, 13))
 
     def test_allow_missing_arrives_in_the_listed_patches(self) -> None:
-        firsts = {10: 18, 11: 13, 12: 11, 13: 4}
+        firsts = {11: 13, 12: 11, 13: 4}
         minor, micro = sys.version_info[1], sys.version_info[2]
         expected = micro >= firsts[minor] if minor in firsts else True
 

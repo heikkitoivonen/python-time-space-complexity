@@ -11,7 +11,7 @@ stopwatch:
   comes back as its UTF-8 encoding, and 1,025 bytes raise ValueError. `F_GETFL`
   is used as the command because the kernel ignores its argument, so the
   buffer comes back unchanged at any size. The same limit applies on every
-  supported version (`sizeof buf` on 3.10, `FCNTL_BUFSZ` from 3.14). Before
+  supported version (`sizeof buf` before 3.14, `FCNTL_BUFSZ` from 3.14). Before
   3.14 the argument is parsed with `s#`, which takes str and `bytes` only, so a
   `bytearray` raises TypeError there and is copied like `bytes` from 3.14.
 * `ioctl()` has three shapes. An integer argument is passed by value. A
@@ -47,8 +47,9 @@ running interpreter exposes has a row, and every name a row mentions is one
 Modules/fcntlmodule.c can define, listed here by name. Which of those the
 interpreter has depends on the platform and kernel headers it was built
 against, so the tests do not assert any particular one exists; they do assert
-that names first exposed by 3.11, 3.12, 3.13 and 3.14 are absent on older
-interpreters, and that their rows say which version added them.
+that names first exposed by 3.12, 3.13 and 3.14 are absent on older
+interpreters, and that the rows for those and for the 3.11 names say which
+version added them.
 
 Both code blocks on the page run from a temporary directory. The first
 replaces whatever data.txt held with 'Protected data'. Run with `fcntl.flock`
@@ -117,6 +118,9 @@ KNOWN_CONSTANTS = frozenset(
 """Every constant Modules/fcntlmodule.c can define on the 3.14 branch, each under an #ifdef."""
 
 FUNCTIONS = frozenset({"fcntl", "ioctl", "flock", "lockf"})
+
+OLDEST_SUPPORTED = (3, 11)
+"""Names this release added need no absence check: no supported interpreter predates it."""
 
 ADDED_IN: dict[tuple[int, int], frozenset[str]] = {
     (3, 11): frozenset({"F_DUP2FD", "F_DUP2FD_CLOEXEC"}),
@@ -291,7 +295,7 @@ class TestEveryPublicNameIsDocumented:
         assert constants <= KNOWN_CONSTANTS, sorted(constants - KNOWN_CONSTANTS)
         assert FUNCTIONS <= _public_names()
 
-    @pytest.mark.parametrize("version", sorted(ADDED_IN))
+    @pytest.mark.parametrize("version", sorted(v for v in ADDED_IN if v > OLDEST_SUPPORTED))
     def test_names_added_later_are_absent_before_their_release(
         self, version: tuple[int, int]
     ) -> None:

@@ -7,7 +7,7 @@ license = { text = "MIT" }
 authors = [
     { name = "Python Complexity Contributors" }
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 keywords = [
     "big-o",
     "complexity",
@@ -22,7 +22,6 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -75,7 +74,7 @@ dev = [
 exclude-newer = "15 days"
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 100
 exclude = [
     ".git",
@@ -154,8 +153,8 @@ markers = [
 [tool.pyright]
 # The floor of the supported range, not whichever interpreter happens to be
 # in .venv. Code here must type-check on the oldest version the project
-# claims, and typeshed's 3.10 signatures are the narrowest it has to satisfy.
-pythonVersion = "3.10"
+# claims, and typeshed's 3.11 signatures are the narrowest it has to satisfy.
+pythonVersion = "3.11"
 # The platform CI checks, whatever the host. Windows-only code paths are
 # guarded at runtime and reach their attributes through getattr or ignores.
 pythonPlatform = "Linux"

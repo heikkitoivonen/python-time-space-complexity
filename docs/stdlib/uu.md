@@ -7,7 +7,7 @@ writes a line at a time, so neither holds the data. The per-line conversion is `
 
 !!! warning "Removed in Python 3.13"
     Deprecated in Python 3.11 and removed in Python 3.13 by PEP 594. The page covers the module
-    as it is on Python 3.10 to 3.12; the examples need 3.10.12+, 3.11.4+ or 3.12.
+    as it is on Python 3.11 and 3.12; the examples need 3.11.4+ or 3.12.
     `binascii.b2a_uu()` and `binascii.a2b_uu()`, which convert one line, remain.
 
 `n` is the bytes of binary data, `m` is the bytes `decode()` reads, from the start of its input

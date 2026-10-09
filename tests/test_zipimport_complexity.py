@@ -38,7 +38,7 @@ Measurement scope:
   `.pyc` beside it none. A module the archive lacks, looked up through
   `sys.path` with the archive first, makes between one and five probes of
   its 10,001-entry directory and reads nothing.
-* `invalidate_caches()` calls `_read_directory` inside the call on 3.10-3.12
+* `invalidate_caches()` calls `_read_directory` inside the call on 3.11 and 3.12
   and not on 3.13+, where the next lookup calls it once; on every version a
   member appended to the archive becomes visible after it, and
   `importlib.invalidate_caches()` reaches an importer in
@@ -498,7 +498,7 @@ class TestImportingThroughSysPath:
 
 
 class TestInvalidatingTheDirectory:
-    """`invalidate_caches()` | O(1) on 3.13+, O(n) on 3.10-3.12: it drops the
+    """`invalidate_caches()` | O(1) on 3.13+, O(n) on 3.11 and 3.12: it drops the
     cached directory, and either rereads it at once or at the next lookup."""
 
     @pytest.mark.skipif(sys.version_info < (3, 13), reason="deferred from 3.13")

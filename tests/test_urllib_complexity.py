@@ -15,11 +15,9 @@ Measurement scope:
 
 * `urlsplit()` returns the same object for the same string on every
   supported version, a new one after `clear_cache()`, and a new one after 500
-  other URLs, so the cache is bounded. On 3.11+ a warm split of a 1,000,000
+  other URLs, so the cache is bounded. A warm split of a 1,000,000
   character URL costs under 5x a 10,000 character one (about 75 ns at both
-  sizes on 3.14); on 3.10 it costs over 20x, because the URL is scanned
-  before the cache is consulted. `urlparse()` returns a new, equal result on
-  every call.
+  sizes on 3.14). `urlparse()` returns a new, equal result on every call.
 * Linear space, one probe per row: the traced peak grows more than 20x from
   10,000 to 1,000,000 characters for `urlsplit` (cache cleared), `urlparse`,
   `urlunsplit`, `urlunparse`, `urljoin`, `urldefrag`, `unwrap`, the six quote
@@ -69,7 +67,7 @@ Measurement scope:
   read to the end, 1,000,000 bytes of it, and closed before the next
   request; the final response's body is untouched. That the read is one
   unbounded `fp.read()`, so O(b) space, is read from
-  `HTTPRedirectHandler.http_error_302` in Lib/urllib/request.py. 308 is followed on 3.11+ and raised on 3.10.
+  `HTTPRedirectHandler.http_error_302` in Lib/urllib/request.py. 308 is followed.
   `redirect_request()` keeps an ordinary header and `Content-Encoding`, and
   drops the body with `Content-Length` and `Content-Type`. Basic and digest challenges each take 2 requests; basic
   with `HTTPPasswordMgrWithPriorAuth` and `is_authenticated=True` takes 1,
@@ -112,7 +110,7 @@ Measurement scope:
   exercised through a `file:` URL, and through the in-process peer a 401 or
   403 answer disallows everything and a 404 allows everything.
   `site_maps()` returns the same list object each time.
-* On 3.10 to 3.13, `URLopener` warns on construction and calls `getproxies()`
+* On 3.11 to 3.13, `URLopener` warns on construction and calls `getproxies()`
   with no mapping, `open()` returns a stream over an unread local file,
   `retrieve()` returns a local file's own path,
   `open_unknown()` raises `OSError`, and `FancyURLopener.prompt_user_passwd()`
@@ -186,7 +184,7 @@ URLRETRIEVE_FILE_PATH = (
     "urlretrieve() hands back a file: URL's path as written (///C:/...), not a Windows path"
 )
 
-# RFC 9309 was backported to these maintenance releases, not to 3.10-3.12.
+# RFC 9309 was backported to these maintenance releases, not to 3.11 or 3.12.
 ROBOT_RFC_9309 = sys.version_info >= (3, 14, 5) or ((3, 13, 14) <= sys.version_info < (3, 14))
 HAS_URLOPENER = sys.version_info < (3, 14)
 
@@ -306,8 +304,8 @@ def assert_linear_space(make: Callable[[int], Callable[[], Any]], what: str) -> 
 
 
 class TestUrlsplitIsCached:
-    """`urlsplit` | O(n), and a cache hit for the same string object is O(1)
-    on 3.11+; `urlparse` builds a new result on every call."""
+    """`urlsplit` | O(n), and a cache hit for the same string object is O(1);
+    `urlparse` builds a new result on every call."""
 
     URL = "https://user:pass@example.com:8080/a/b/c?x=1&y=2#frag"
 
@@ -339,17 +337,14 @@ class TestUrlsplitIsCached:
         assert urllib.parse.urlparse(self.URL) == urllib.parse.urlparse(self.URL)
 
     @pytest.mark.timing
-    def test_a_cache_hit_scales_with_the_python_version(self) -> None:
+    def test_a_cache_hit_does_not_scan_the_url(self) -> None:
         urls = ["https://example.com/" + "a" * size for size in (SMALL, LARGE)]
         for url in urls:
             urllib.parse.urlsplit(url)
         durations = [best_ns(partial(urllib.parse.urlsplit, url), inner=50) for url in urls]
         ratio = durations[1] / durations[0]
 
-        if sys.version_info < (3, 11):
-            assert ratio > 20, f"3.10 must scan before a cache hit: {durations}, ratio={ratio}"
-        else:
-            assert ratio < 5, f"a cache hit must not scan the URL: {durations}, ratio={ratio}"
+        assert ratio < 5, f"a cache hit must not scan the URL: {durations}, ratio={ratio}"
 
 
 class TestParsingIsLinear:
@@ -1014,20 +1009,15 @@ class TestRoundTrips:
         assert streams[1].raw.offset == 0, "the final body was read before open() returned"
         assert response.read() == b"final"
 
-    def test_308_is_followed_from_311(self) -> None:
+    def test_308_is_followed(self) -> None:
         def route(req: urllib.request.Request) -> tuple[int, Any, bytes]:
             if req.full_url.endswith("/start"):
                 return 308, headers(Location="http://peer/next"), b""
             return 200, headers(), b"done"
 
         peer = Peer(route)
-        if sys.version_info >= (3, 11):
-            assert peer_opener(peer).open("http://peer/start").read() == b"done"
-            assert len(peer.requests) == 2
-        else:
-            with pytest.raises(urllib.error.HTTPError):
-                peer_opener(peer).open("http://peer/start")
-            assert len(peer.requests) == 1
+        assert peer_opener(peer).open("http://peer/start").read() == b"done"
+        assert len(peer.requests) == 2
 
     def test_redirect_request_drops_the_body_and_its_headers(self) -> None:
         request = urllib.request.Request(
@@ -1622,7 +1612,7 @@ class TestRobotFileParser:
 
 @pytest.mark.skipif(not HAS_URLOPENER, reason="URLopener and FancyURLopener were removed in 3.14")
 class TestLegacyOpeners:
-    """`URLopener` and `FancyURLopener`, Python 3.10 to 3.13."""
+    """`URLopener` and `FancyURLopener`, Python 3.11 to 3.13."""
 
     @staticmethod
     def _opener(kind: str = "URLopener", **kwargs: Any) -> Any:

@@ -16,13 +16,11 @@ Measurement scope:
 * `mean()`, `fmean()`, `geometric_mean()`, `variance()`, `pvariance()`,
   `stdev()`, `pstdev()` and `NormalDist.from_samples()` over a generator of
   200,000 floats return what they return for the list, and peak under
-  64 KB on 3.11+, against over 1.6 MB for
-  `median()` of the same generator. On 3.10 the six that copy an iterator
-  (`mean()`, the variance family and `from_samples()`) are asserted to peak
-  over 1.6 MB instead. `harmonic_mean()` peaks under 64 KB over a list and
+  64 KB, against over 1.6 MB for
+  `median()` of the same generator. `harmonic_mean()` peaks under 64 KB over a list and
   over 1.6 MB over a generator, and likewise for a list and a generator of
   weights; `fmean()` with a generator of weights peaks over 1.6 MB and with
-  a list of weights under 64 KB (3.11+). A `range` of weights peaks over
+  a list of weights under 64 KB. A `range` of weights peaks over
   1.6 MB on 3.12+ and under 64 KB on 3.11. `mean()`, `variance()` and `pvariance()` are asserted to return
   a `Fraction` for `Fraction` data and a `Decimal` for `Decimal` data.
 * `mean()` and `variance()` are timed at 10,000, 40,000 and 160,000 floats;
@@ -38,12 +36,11 @@ Measurement scope:
   `StatisticsError` before.
 * `mode()` and `multimode()` over 100,000 values peak more than 20x higher
   with 100,000 distinct values than with 10. Ties are asserted to resolve to
-  the first value seen. `multimode()` is observed to call
-  `Counter.most_common()` with no argument on 3.10, which sorts every
-  count, and not at all on 3.11+.
+  the first value seen. `multimode()` is observed not to call
+  `Counter.most_common()`, which sorts every count.
 * `covariance()` over two lists of 100,000 floats peaks under 64 KB;
   `correlation()` and `linear_regression()` peak over 1.6 MB on 3.12+ and
-  under 64 KB on 3.10 and 3.11; `linear_regression(proportional=True)` peaks
+  under 64 KB on 3.11; `linear_regression(proportional=True)` peaks
   under 64 KB. Iterators are asserted to raise `TypeError`. The ranked
   correlation (3.12+) is asserted to make over 100,000 comparisons on 10,000
   shuffled values.
@@ -125,7 +122,7 @@ MINIMUM_VERSION = {
 SMALL = 64_000
 LARGE = 1_600_000
 
-# Typed as Any for the APIs newer than typeshed's 3.10 signatures; each use is
+# Typed as Any for the APIs newer than typeshed's 3.11 signatures; each use is
 # guarded on sys.version_info.
 NEWER: Any = statistics
 
@@ -185,7 +182,6 @@ STREAMING: dict[str, Callable[[Iterable[float]], Any]] = {
     "pstdev": statistics.pstdev,
     "from_samples": statistics.NormalDist.from_samples,
 }
-COPIED_ON_310 = {"mean", "variance", "pvariance", "stdev", "pstdev", "from_samples"}
 
 
 class TestStreamingFunctionsHoldNoData:
@@ -202,10 +198,7 @@ class TestStreamingFunctionsHoldNoData:
         assert func(x for x in self.DATA) == func(self.DATA)
         peak = peak_bytes(lambda: func(x for x in self.DATA))
 
-        if sys.version_info < (3, 11) and name in COPIED_ON_310:
-            assert peak > LARGE, f"{name}() of a generator peaked at only {peak} bytes on 3.10"
-        else:
-            assert peak < SMALL, f"{name}() of a generator peaked at {peak} bytes"
+        assert peak < SMALL, f"{name}() of a generator peaked at {peak} bytes"
 
     def test_the_median_of_the_same_generator_holds_it_all(self) -> None:
         peak = peak_bytes(lambda: statistics.median(x for x in self.DATA))
@@ -228,14 +221,13 @@ class TestStreamingFunctionsHoldNoData:
         assert listed < SMALL, f"harmonic_mean() with list weights peaked at {listed} bytes"
         assert streamed > LARGE, f"harmonic_mean() with generator weights peaked at {streamed}"
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="fmean() weights are 3.11+")
     def test_fmean_copies_weights_that_are_not_a_list_or_tuple(self) -> None:
         weights = [1.0] * len(self.DATA)
 
-        listed = peak_bytes(lambda: NEWER.fmean(self.DATA, weights))
-        streamed = peak_bytes(lambda: NEWER.fmean(self.DATA, (w for w in weights)))
+        listed = peak_bytes(lambda: statistics.fmean(self.DATA, weights))
+        streamed = peak_bytes(lambda: statistics.fmean(self.DATA, (w for w in weights)))
 
-        ranged = peak_bytes(lambda: NEWER.fmean(self.DATA, range(len(self.DATA))))
+        ranged = peak_bytes(lambda: statistics.fmean(self.DATA, range(len(self.DATA))))
 
         assert listed < SMALL, f"fmean() with list weights peaked at {listed} bytes"
         assert streamed > LARGE, f"fmean() with generator weights peaked at {streamed} bytes"
@@ -243,7 +235,7 @@ class TestStreamingFunctionsHoldNoData:
             assert ranged > LARGE, f"fmean() with range weights peaked at only {ranged} bytes"
         else:
             assert ranged < SMALL, f"fmean() with range weights peaked at {ranged} bytes on 3.11"
-        assert NEWER.fmean([10, 20], weights=[3, 1]) == 12.5
+        assert statistics.fmean([10, 20], weights=[3, 1]) == 12.5
 
 
 class TestExactArithmeticGrowsLinearly:
@@ -367,7 +359,7 @@ class TestModeCountsDistinctValues:
         assert statistics.mode([2, 1, 1, 2]) == 2
         assert statistics.multimode([2, 1, 1, 2, 3]) == [2, 1]
 
-    def test_multimode_sorts_the_counts_only_on_310(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_multimode_does_not_sort_the_counts(self, monkeypatch: pytest.MonkeyPatch) -> None:
         calls: list[object] = []
 
         class RecordingCounter(Counter):
@@ -378,7 +370,7 @@ class TestModeCountsDistinctValues:
         monkeypatch.setattr(statistics, "Counter", RecordingCounter)
 
         assert statistics.multimode([1, 1, 2]) == [1]
-        assert calls == ([None] if sys.version_info < (3, 11) else []), calls
+        assert calls == [], calls
 
 
 class TestTwoInputFunctions:
@@ -405,9 +397,8 @@ class TestTwoInputFunctions:
         else:
             assert peak < SMALL, f"{name}() peaked at {peak} bytes"
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="proportional is 3.11+")
     def test_proportional_regression_holds_nothing(self) -> None:
-        peak = peak_bytes(lambda: NEWER.linear_regression(self.X, self.Y, proportional=True))
+        peak = peak_bytes(lambda: statistics.linear_regression(self.X, self.Y, proportional=True))
 
         assert peak < SMALL, f"linear_regression(proportional=True) peaked at {peak} bytes"
 

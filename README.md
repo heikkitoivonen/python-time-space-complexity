@@ -4,7 +4,7 @@
 
 [![Lint / Format](https://img.shields.io/github/actions/workflow/status/heikkitoivonen/python-time-space-complexity/deploy.yml?label=lint%20%2F%20format)](https://github.com/heikkitoivonen/python-time-space-complexity/actions/workflows/deploy.yml)
 [![Type Check](https://img.shields.io/github/actions/workflow/status/heikkitoivonen/python-time-space-complexity/deploy.yml?label=type%20check)](https://github.com/heikkitoivonen/python-time-space-complexity/actions/workflows/deploy.yml)
-[![Python](https://img.shields.io/badge/python-3.10%20to%203.14-blue)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.11%20to%203.14-blue)](https://www.python.org/)
 [![License](https://img.shields.io/github/license/heikkitoivonen/python-time-space-complexity)](LICENSE.txt)
 [![Docs](https://img.shields.io/badge/docs-pythoncomplexity.com-brightgreen)](https://pythoncomplexity.com)
 
@@ -15,7 +15,7 @@ A comprehensive resource documenting the time and space complexity of Python's b
 This project provides detailed documentation of algorithmic complexity for:
 - **Python Built-ins**: `list`, `dict`, `set`, `str`, etc.
 - **Standard Library Modules**: `collections`, `heapq`, `bisect`, `annotationlib`, `compression.zstd`, and more
-- **Python Versions**: 3.10–3.14 (including new 3.14 features)
+- **Python Versions**: 3.11–3.14 (including new 3.14 features)
 - **Alternative Implementations**: CPython, PyPy, Jython, IronPython
 
 ## Features
@@ -36,7 +36,7 @@ Visit the documentation at: [pythoncomplexity.com](https://pythoncomplexity.com)
 ## Quick Start
 
 ### Prerequisites
-- Python 3.10+ (3.14 recommended)
+- Python 3.11+ (3.14 recommended)
 - [uv](https://github.com/astral-sh/uv) - Fast Python package manager
 - Git
 
@@ -254,7 +254,7 @@ git push origin feature/add-missing-complexity
 ## Code Quality Standards
 
 ### Linting & Formatting
-- **ruff** for linting (line length: 100 chars, Python 3.10+ compatibility)
+- **ruff** for linting (line length: 100 chars, Python 3.11+ compatibility)
 - **pyright** for static type checking
 - **pytest** for testing
 
@@ -341,8 +341,7 @@ dq.appendleft(item)
 
 ### Python Version Performance
 ```
-Python 3.10     ← Baseline
-Python 3.11     ← +10-60% improvements (inline caching!)
+Python 3.11     ← Baseline (inline caching)
 Python 3.12     ← +5-10% improvements
 Python 3.13     ← Similar (experimental free-threading)
 Python 3.14     ← Better GC pauses, new heapq max-heap

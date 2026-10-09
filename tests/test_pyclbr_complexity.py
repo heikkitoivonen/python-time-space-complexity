@@ -15,7 +15,7 @@ Measurement scope:
   between 2x and 8x, where a quadratic parse would cost 16x.
 * Kept against passed through: two modules of 200 functions, one with a
   one-line body and one with 32-line bodies, differ over 6x in traced peak
-  (16x measured on 3.10 and 3.14) while the memory still held with the result differs under 2x.
+  (17x measured on 3.11 and 3.14) while the memory still held with the result differs under 2x.
 * The cache: a repeat `readmodule_ex()` parses nothing and returns the same
   dict, even after the file gains a class or when `path` points at another
   file of the same name; in a subprocess, after `importlib.reload(pyclbr)`
@@ -35,10 +35,9 @@ Measurement scope:
   path finder is replaced by one that raises); the first extension module in
   `lib-dynload` gives `{}` (skipped where the build has none there), and so
   does a module present only as a `.pyc`, and a package present only as
-  `__init__.pyc` gives just `'__path__'`. On 3.11+ each of `os`, `io` and
-  `codecs` whose spec origin is `frozen` gives `{}`; on 3.10 `os` is read
-  from source and is not empty, as it is on 3.11+ in a subprocess run with
-  `-X frozen_modules=off`.
+  `__init__.pyc` gives just `'__path__'`. Each of `os`, `io` and `codecs`
+  whose spec origin is `frozen` gives `{}`; `os` is read from source and is
+  not empty in a subprocess run with `-X frozen_modules=off`.
 * Every `Class` and `Function` attribute is asserted on a small module:
   resolved and unresolved `super` entries (a base named after an earlier
   function resolves to that `Function`), `methods`, `children`, `parent`,
@@ -55,7 +54,7 @@ Not settled here:
   path length and directory size are not varied.
 * O(1) for attribute reads, for building a `Class` or `Function`, for a
   builtin module and for a cache hit (a dict membership test and lookup) is
-  read from Lib/pyclbr.py (3.10 through 3.14 are identical); only the builtin
+  read from Lib/pyclbr.py (3.11 through 3.14 are identical); only the builtin
   module's avoidance of the path search, and a cache hit's avoidance of any
   parse, are observed.
 * A dotted base such as `module.Class` whose module was never read is left out
@@ -536,7 +535,6 @@ class TestModulesWithoutSource:
 
         assert pyclbr.readmodule_ex("bytepkg", [str(tmp_path)]) == {"__path__": [str(package)]}
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="frozen os starts in 3.11")
     def test_a_frozen_module_is_empty(self) -> None:
         frozen = [
             name
@@ -549,7 +547,6 @@ class TestModulesWithoutSource:
             )
         assert {name: pyclbr.readmodule_ex(name) for name in frozen} == dict.fromkeys(frozen, {})
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="frozen os starts in 3.11")
     def test_turning_frozen_modules_off_reads_os_from_source(self) -> None:
         result = subprocess.run(
             [
@@ -564,10 +561,6 @@ class TestModulesWithoutSource:
             timeout=60,
         )
         assert result.returncode == 0, result.stderr
-
-    @pytest.mark.skipif(sys.version_info >= (3, 11), reason="3.10 reads os from source")
-    def test_os_is_read_from_source_on_310(self) -> None:
-        assert "walk" in pyclbr.readmodule_ex("os")
 
 
 class TestClassAndFunctionAttributes:

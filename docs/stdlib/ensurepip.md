@@ -4,7 +4,7 @@ The `ensurepip` module installs the pip that ships inside Python, without a netw
 installing itself: `bootstrap()` copies the bundled wheels to a temporary directory and runs pip
 from them in one child interpreter, which unpacks and installs them.
 
-`p` is the size of the bundled wheels: pip's, plus setuptools' on Python 3.10 and 3.11. It is
+`p` is the size of the bundled wheels: pip's, plus setuptools' on Python 3.11. It is
 fixed by the Python release, so no argument changes it. Space is what the call writes to disk.
 The bounds are for the wheels Python bundles; a build configured with `--with-wheel-pkg-dir`
 installs a pip wheel from that directory instead.
@@ -110,7 +110,7 @@ the calling process still needs its pip settings or will bootstrap again.
 
 ## Version Notes
 
-- **Python 3.12+**: `bootstrap()` installs pip only; on 3.10 and 3.11 it also installs the bundled
+- **Python 3.12+**: `bootstrap()` installs pip only; on 3.11 and earlier it also installs the bundled
   setuptools
 - **All Python 3**: The bundled pip changes between patch releases, so read `version()` rather
   than assuming one; some Linux distributions remove `ensurepip` or point it at their own wheels

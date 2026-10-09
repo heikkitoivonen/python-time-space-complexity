@@ -2,7 +2,7 @@
 
 > Comprehensive documentation of time and space complexity for Python built-in operations and standard library modules.
 
-This site documents the Big-O time and space complexity of Python operations across built-in types, built-in functions, and standard library modules. It covers CPython 3.10–3.14, with notes on PyPy, Jython, and IronPython.
+This site documents the Big-O time and space complexity of Python operations across built-in types, built-in functions, and standard library modules. It covers CPython 3.11–3.14, with notes on PyPy, Jython, and IronPython.
 
 ## Built-in Types
 
@@ -21,7 +21,7 @@ This site documents the Big-O time and space complexity of Python operations acr
 ## Built-in Functions
 
 - [len()](https://pythoncomplexity.com/builtins/len/): O(1) for built-in types
-- [sorted()](https://pythoncomplexity.com/builtins/sorted/): O(n log n) Timsort
+- [sorted()](https://pythoncomplexity.com/builtins/sorted/): O(n log n) Powersort
 - [max()](https://pythoncomplexity.com/builtins/max/): O(n) linear scan
 - [min()](https://pythoncomplexity.com/builtins/min/): O(n) linear scan
 - [sum()](https://pythoncomplexity.com/builtins/sum/): O(n) accumulation

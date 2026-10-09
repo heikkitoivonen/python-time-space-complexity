@@ -7,8 +7,8 @@ Objects/object.c: one _PyType_Lookup on type(obj) (the type attribute cache, a
 walk of the MRO on a miss) for a data descriptor, then a dict deletion. On a
 class it reaches type_setattro in Objects/typeobject.c, which calls
 PyType_Modified and so invalidates the version tag of the class and of every
-subclass that has one. The same shape holds in the v3.10.19, v3.11.14,
-v3.12.12, v3.13.11 and v3.14.2 tags.
+subclass that has one. The same shape holds in the v3.11.14, v3.12.12,
+v3.13.11 and v3.14.2 tags.
 
 Measurement scope:
 
@@ -25,7 +25,8 @@ Measurement scope:
   accepted below x3; a linear scan would predict about x10,000;
 * class deletion grows with subclasses: deleting a class attribute with 20,000
   version-tagged subclasses against none, measured about x4,000 on the pinned
-  interpreter (aarch64, CPython 3.14) and x4,000 on 3.10; accepted above x50;
+  interpreter (aarch64, CPython 3.14) and x4,500 to x9,000 on 3.11.17;
+  accepted above x50;
 * space: tracemalloc's traced peak for a warmed instance delattr() is zero;
 * every fenced block runs in a subprocess and asserts its own results.
 
@@ -34,14 +35,8 @@ Not settled here:
 * O(d) on a type cache miss is source-only: the MRO walk in _PyType_Lookup.
 * Module deletion is source-only: module_setattro falls through to the
   generic dict deletion.
-* On 3.10 only, the first deletion from a key-sharing (split) instance dict
-  converts it to a combined table: sys.getsizeof() of a 20-attribute dict goes
-  from 232 to 640 bytes. It is O(a) in that instance's attributes once per
-  instance, so the page keeps the O(1) row; 3.11+ keep the size unchanged.
 * The Best Practices lists are advice; the class-attribute item rests on the
   subclass measurement above.
-* Not tested: the 3.10 split-dict conversion above, which the page does not
-  claim.
 * Not varied: hierarchy depth for class deletion (the 20,000 subclasses are
   direct children), name length (hashing is priced at O(1)), and C types with their
   own tp_setattro other than modules.

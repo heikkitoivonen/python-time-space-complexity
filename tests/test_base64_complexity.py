@@ -232,8 +232,9 @@ class TestPythonLoopsAreSlowerThanBinascii:
     @pytest.mark.timing
     def test_base16_stays_close_to_base64(self) -> None:
         """Before 3.14, `b16decode()` validates with `re.search()` before
-        `unhexlify()`: a second C pass, measured at x6.5-x12.3 `b64decode()`
-        on 3.10-3.13, where the Python-loop decoders measured x35 and up."""
+        `unhexlify()`: a second C pass, measured at x9.4-x10.3 `b64decode()`
+        on 3.11.17 with 300,000 bytes, where the Python-loop decoders measured
+        x36 and up."""
         encoded = base64.b16encode(self.DATA)
         b64_encoded = base64.b64encode(self.DATA)
         decode_bound = 5 if sys.version_info >= (3, 14) else 25

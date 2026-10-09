@@ -2,11 +2,10 @@
 
 The page prices the module by the bytes it copies: a read is walked once and
 sliced at each terminator, a push is chunked once, and a send step moves one
-chunk. The module exists on Python 3.10 and 3.11 only, so every runtime test
-takes the `asynchat` fixture, which skips from 3.12, and CI's 3.10 and 3.11
-jobs are where they run; availability itself is asserted on every version.
-The released Lib/asynchat.py differs between v3.10.19 and v3.11.14 only in how
-its import-time DeprecationWarning is raised. Copies are settled by observation
+chunk. Of the supported versions the module exists on Python 3.11 only, so every
+runtime test takes the `asynchat` fixture, which skips from 3.12, and CI's 3.11
+job is where they run; availability itself is asserted on every version.
+Copies are settled by observation
 rather than timing: a proper slice of a `bytes` object two or more bytes long
 is a new object of that length, so the length of each such remainder the
 channel creates is the number of bytes it copied. Channels are built on `socket.socketpair()` with a private map, and
@@ -56,15 +55,15 @@ Measurement scope:
   `writable()` follows the queue; `use_encoding` encodes a `str` terminator
   with Latin-1, so `set_terminator()` then costs O(t) for the encoding.
 * Every fenced Python block runs in its own subprocess. The four that import
-  `asynchat` run on 3.10 and 3.11 only; the `asyncio` one runs everywhere and
+  `asynchat` run on 3.11 only; the `asyncio` one runs everywhere and
   carries the runner's mutation check.
 
 Not settled here:
 
 * The deprecation in 3.6 and the removal in 3.12 come from the 3.11
-  documentation and PEP 594. The import warning is asserted on 3.10 and 3.11;
+  documentation and PEP 594. The import warning is asserted on 3.11;
   that it starts at 3.10 is read from Lib/asynchat.py at v3.9.0 and v3.10.0,
-  since 3.9 is not supported. `ModuleNotFoundError` from 3.12 is asserted.
+  since neither version is supported. `ModuleNotFoundError` from 3.12 is asserted.
 * The `t²` term of `handle_read()` is `find_prefix_at_end()`, settled by its
   own test above; `handle_read()` is not varied in t, the r·m copying is
   observed for bytes terminators only (an int terminator slices the rest of
@@ -172,7 +171,7 @@ def blocked_send(chat: Any, accept: int = 0) -> list[bytes]:
 
 
 class TestAvailability:
-    """`import asynchat` works on 3.10 and 3.11 and fails from 3.12."""
+    """`import asynchat` works on 3.11 and fails from 3.12."""
 
     @pytest.mark.skipif(sys.version_info < (3, 12), reason="the module exists before 3.12")
     def test_importing_it_from_3_12_raises(self) -> None:
@@ -542,7 +541,7 @@ def _run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[st
 
 class TestDocumentedExamples:
     """Each block runs in its own subprocess and asserts its own result. The
-    blocks that import `asynchat` need 3.10 or 3.11."""
+    blocks that import `asynchat` need 3.11."""
 
     def test_the_page_has_the_expected_blocks(self) -> None:
         blocks = _blocks()

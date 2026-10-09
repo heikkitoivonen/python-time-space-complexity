@@ -9,7 +9,7 @@ find_name_in_mro, which walks the MRO. Assigning a class attribute calls
 PyType_Modified, which clears the version tag of the class and its subclasses.
 From v3.13.0 assign_version_tag refuses a class that has used
 MAX_VERSIONS_PER_CLASS (1,000) tags, and its lookups are never cached again;
-v3.10.19, v3.11.14 and v3.12.12 have no such limit. Up to v3.12.12
+v3.11.14 and v3.12.12 have no such limit. Up to v3.12.12
 cm_descr_get delegates to the wrapped object's `__get__` when it has one;
 v3.13.11 and v3.14.2 always bind.
 
@@ -30,13 +30,13 @@ Measurement scope:
   The test asserts more than x10; a cached O(1) lookup predicts x1;
 * losing the cache: after 2,000 rounds of assigning a class attribute and
   reading the classmethod, a lookup on a 1,000-class chain measured x150 to x200 a
-  fresh chain's on 3.13 and 3.14, and x1 on 3.10 and 3.12. The test asserts
+  fresh chain's on 3.13 and 3.14, and x1 on 3.11.17 and 3.12. The test asserts
   more than x10 on 3.13+ and under x3 before it. 2,000 assignments with no
   lookup between them, and 3,000 bumps of an itertools.count the class holds,
   each leave the lookup at x1 on every version;
 * wrapping property: `@classmethod` over `@property` reads as the property's
-  value on 3.10 to 3.12 and as a bound method on 3.13+, run on 3.10, 3.11,
-  3.12, 3.13 and 3.14;
+  value on 3.11 and 3.12 and as a bound method on 3.13+, run on 3.11 to
+  3.14;
 * copied attributes and `__wrapped__`;
 * every fenced block runs in a subprocess; the blocks assert their own results.
 

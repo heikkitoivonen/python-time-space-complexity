@@ -49,7 +49,7 @@ Measurement scope:
   distinct frames tuples, not 20,000. In a timing test with the cyclic
   collector disabled, a snapshot of 160,000 live blocks costs between 16x and
   1,000x one of 2,500, where linear predicts 64x and quadratic 4,096x.
-* `statistics()` on 20,000 traces sharing one traceback: on 3.10-3.13,
+* `statistics()` on 20,000 traces sharing one traceback: on 3.11-3.13,
   1,000 stored frames cost more than 8x one frame for `'lineno'`; on 3.14+
   less than 5x, because the shared tuple's hash is cached. With
   `cumulative=True`, 100 frames cost more than 20x one on every version. Over 1,500

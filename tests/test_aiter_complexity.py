@@ -4,7 +4,7 @@ aiter() is builtin_aiter in Python/bltinmodule.c, which is PyObject_GetAIter in
 Objects/abstract.c: it reads the argument type's ``am_aiter`` slot (TypeError
 when there is none), calls it once, and checks that the result's type has an
 ``am_anext`` slot (TypeError when it does not). It builds nothing of its own.
-The function is the same in effect from 3.10 to 3.14; the only change between
+The function is the same in effect from 3.11 to 3.14; the only change between
 the released branches is a Py_SETREF cleanup in 3.12. An async generator's
 ``__aiter__`` is PyObject_SelfIter, so it returns the generator itself.
 

@@ -7,9 +7,7 @@ costs its compilation the first time and a single regex match after that.
 
 `n` is the characters in a name (the longest one, for a filter), `p` the characters in a pattern,
 `k` the names passed to a filter and `r` the names it returns. Matching bounds are for a pattern
-already in the cache; the first use of a pattern adds the compilation row below. On Python 3.10
-each match also takes O(p) space, a capture group per interior `*`, and so does every row that
-matches.
+already in the cache; the first use of a pattern adds the compilation row below.
 
 ## Complexity Reference
 
@@ -19,7 +17,7 @@ matches.
 |-----------|------|-------|-------|
 | `fnmatch.fnmatchcase(name, pat)` | O(n·p) | O(1) | Case always counts. O(n) for patterns such as `*.txt`; the worst case needs a long run after a `*` that keeps almost matching. Wildcards never backtrack into each other, so no pattern is exponential |
 | `fnmatch.fnmatch(name, pat)` | O(n·p) | O(1) | Applies `os.path.normcase` to both arguments first: unchanged on POSIX (macOS included), so case counts there; case-normalized copies on Windows, O(n + p) space. Otherwise as `fnmatchcase()` |
-| First use of a pattern | O(p) | O(p) | `translate()` plus `re.compile()`; the matcher stays in an LRU cache of 32,768 patterns (256 on Python 3.10) shared by `fnmatch`, `fnmatchcase`, `filter` and `filterfalse` |
+| First use of a pattern | O(p) | O(p) | `translate()` plus `re.compile()`; the matcher stays in an LRU cache of 32,768 patterns shared by `fnmatch`, `fnmatchcase`, `filter` and `filterfalse` |
 
 ### Filtering
 
@@ -120,7 +118,7 @@ else:
 
 The cache is keyed on the pattern, so the cost of compiling is paid once per
 distinct pattern, not per call. A program that cycles through more distinct patterns than the
-cache holds - 32,768, or 256 on Python 3.10 - pays the O(p) compilation again each time an
+cache holds - 32,768 - pays the O(p) compilation again each time an
 evicted pattern returns.
 
 ```python

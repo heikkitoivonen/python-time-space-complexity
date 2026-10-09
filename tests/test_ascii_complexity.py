@@ -3,7 +3,7 @@
 ascii() is PyObject_ASCII in Objects/object.c: PyObject_Repr(x), then, unless
 the result is already pure ASCII, one "backslashreplace" encode of the whole
 result to bytes and one decode back to str. An ASCII-only repr is returned as
-the very object `__repr__` produced. The function is identical in the v3.10.19,
+the very object `__repr__` produced. The function is identical in the
 v3.11.14, v3.12.12, v3.13.11 and v3.14.2 tags, so no version is treated apart.
 
 The single pass over the whole repr is read from that source. Observation

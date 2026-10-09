@@ -7,7 +7,7 @@ whole file and its tree are in memory while that file is processed.
 
 !!! warning "Removed in Python 3.13"
     Deprecated in Python 3.11 and removed in Python 3.13. The page covers the module as it is on
-    Python 3.10 to 3.12, and its examples run only there. The official documentation calls every
+    Python 3.11 and 3.12, and its examples run only there. The official documentation calls every
     interface except the `2to3` command unstable; the classes below are the ones that command is
     built from. The grammar is Python 2's plus the Python 3 syntax of 3.8 and earlier, so a
     `match` statement is a parse error.
@@ -161,7 +161,7 @@ the changes back, `-n` skips the `.bak` copies, and `-j N` refactors N files at 
 separate processes.
 
 ```bash
-# Python 3.10 to 3.12
+# Python 3.11 and 3.12
 2to3 script.py                 # Show the diff only
 2to3 -w script.py              # Write back, keeping script.py.bak
 2to3 -w -n src/                # Write back a whole tree, no backups

@@ -8,7 +8,7 @@ number of system calls.
 
 !!! warning "Removed in Python 3.13"
     Deprecated in Python 3.11 and removed in Python 3.13 by PEP 594, with no standard-library
-    replacement. The page covers the module as it is on Python 3.10 to 3.12 on Linux and
+    replacement. The page covers the module as it is on Python 3.11 and 3.12 on Linux and
     FreeBSD; the examples also need an OSS audio device and mixer.
 
 `n` is the bytes passed to `write()` or `writeall()`, or the `size` asked of `read()`. The bounds

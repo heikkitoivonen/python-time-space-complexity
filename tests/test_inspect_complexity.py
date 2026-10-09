@@ -34,8 +34,8 @@ Measurement scope:
   5x again. `classify_class_attrs()` is timed over chains 100, 400 and 1,600
   deep, with the name count held at `dir()` of an empty chain: 16x the depth
   costs over 40x and under 1,000x, where linear predicts 16x, quadratic 256x
-  and cubic 4,096x (about x80 measured on 3.10 and x125 on 3.14; the shallow
-  end still fits the type attribute cache). Its m·c `getattr` calls on
+  and cubic 4,096x (about x140 to x160 measured on 3.11.17 and x150 on
+  3.14.8; the shallow end still fits the type attribute cache). Its m·c `getattr` calls on
   classes are what grow: swept over every class and name of the chain, the
   cost per lookup rises over 4x from 100 to 1,600 deep (x20 measured), while
   repeating one lookup m·c times stays under 2x. Its metaclass term is the
@@ -96,9 +96,7 @@ Measurement scope:
   already walked and suppresses them. That only matches are cached is
   observed rather than timed: three calls for a code object whose filename
   belongs to no loaded module leave `modulesbyfile` without an entry for it
-  every time, so there is nothing for the next call to reuse. Timing that
-  against a cached hit would not settle it - on 3.10 the cached path is the
-  slower of the two, because it re-normalises the path. What is timed is the
+  every time, so there is nothing for the next call to reuse. What is timed is the
   row's O(1): resolving through `__module__` costs less than a twentieth of
   the scan. The same scan reaching `getsourcefile()` and `getframeinfo()` at
   `context=0` is read from Lib/inspect.py, not timed: the page states it as a
@@ -433,12 +431,10 @@ class TestGetmembersRunsDescriptors:
         assert calls == ["value"]
         assert members["value"] == 1
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="getmembers_static is Python 3.11+")
     def test_getmembers_static_evaluates_none(self) -> None:
         probe, calls = self._probe()
 
-        getmembers_static = inspect.getmembers_static  # type: ignore[attr-defined]
-        members = dict(getmembers_static(probe))
+        members = dict(inspect.getmembers_static(probe))
 
         assert calls == []
         assert isinstance(members["value"], property)
@@ -1108,7 +1104,6 @@ class TestStackContextReadsSource:
         return namespace["spread"]
 
     @pytest.mark.timing
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="positions arrived in 3.11")
     def test_context_zero_still_walks_to_the_current_instruction(self) -> None:
         """The x term: context=0 skips the source read, not the position table."""
 
@@ -1404,10 +1399,8 @@ class TestPredicatesAgreeWithTheTypes:
         assert inspect.ismethoddescriptor(DeleteOnly()) is (sys.version_info < (3, 13))
         assert inspect.ismemberdescriptor(Holder.slot)
         assert inspect.isgetsetdescriptor(vars(type(len))["__qualname__"])
-        if sys.version_info >= (3, 11):
-            ismethodwrapper = inspect.ismethodwrapper  # type: ignore[attr-defined]
-            assert ismethodwrapper(object().__str__)
-            assert not ismethodwrapper(len)
+        assert inspect.ismethodwrapper(object().__str__)
+        assert not inspect.ismethodwrapper(len)
 
     def test_the_awaitable_predicates(self) -> None:
         async def coro() -> int:
@@ -1896,9 +1889,8 @@ class TestRemainingReferenceRows:
         assert info.index == 0
         assert outer[0].frame.f_code.co_name == info.function
 
-        if sys.version_info >= (3, 11):
-            assert info.positions is not None
-            assert info.positions.lineno is not None
+        assert info.positions is not None
+        assert info.positions.lineno is not None
 
     def test_getinnerframes_walks_the_traceback(self) -> None:
         def fails() -> None:

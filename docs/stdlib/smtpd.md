@@ -8,7 +8,7 @@ connection holds up every other.
 
 !!! warning "Removed in Python 3.12"
     Deprecated since Python 3.6 and removed in Python 3.12 by PEP 594. The examples need Python
-    3.10 or 3.11; new code should build on `asyncio`.
+    3.11; new code should build on `asyncio`.
 
 `n` is the bytes of one message's data, `k` is the characters of one command line, `p` is the
 recipients accepted for the current message, and `s` is the server's `data_size_limit`. The bounds
@@ -68,13 +68,6 @@ per-pass cost of the loop itself is on the [asyncore](asyncore.md) page.
 |-----------|------|-------|-------|
 | `smtpd.PureProxy(localaddr, remoteaddr, ...)` | O(1) | O(1) | Relays to `remoteaddr`. `enable_SMTPUTF8=True` raises `ValueError`. Pass `decode_data=True`: its `process_message()` takes no keyword arguments, so without it every message raises `TypeError` and the channel closes |
 | `PureProxy.process_message(peer, mailfrom, rcpttos, data)` | O(n + p) | O(n + p) | Adds an `X-Peer` header and sends the message with a new `smtplib.SMTP` connection, one per message, with one `RCPT` per recipient; the loop waits for the whole session. Refusals and connection failures are not reported: the client still gets `250 OK` |
-
-### MailmanProxy
-
-| Operation | Time | Space | Notes |
-|-----------|------|-------|-------|
-| `smtpd.MailmanProxy(localaddr, remoteaddr, ...)` | O(1) | O(1) | Python 3.10 only. A `PureProxy` that hands mailing-list addresses to a list manager; building one emits a `DeprecationWarning`, and `enable_SMTPUTF8=True` raises `ValueError` |
-| `MailmanProxy.process_message(peer, mailfrom, rcpttos, data)` | O(n + p²) | O(n + p) | Takes no keyword arguments, so it needs `decode_data=True`. It imports the list manager's package, which Python does not ship; without it every message raises `ModuleNotFoundError`. With it, list recipients are removed from `rcpttos` one at a time and the rest are relayed as `PureProxy` does; the package's own work is outside the bound |
 
 ### Module constants
 

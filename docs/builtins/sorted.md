@@ -18,7 +18,7 @@ n is the number of items; one comparison counts as O(1), and the size of a key i
 ### Simple Sorting
 
 ```python
-# O(n log n) - Timsort (≤3.10) or Powersort (3.11+)
+# O(n log n) - Powersort
 numbers = [3, 1, 4, 1, 5, 9, 2, 6]
 result = sorted(numbers)
 # [1, 1, 2, 3, 4, 5, 6, 9]
@@ -109,7 +109,7 @@ result = sorted(coords, key=lambda c: c[1])
 ### How It Works
 
 ```
-Python sorts with Timsort (through 3.10) or Powersort (3.11+): a merge sort
+Python sorts with Powersort (Timsort with a new merge policy from 3.11): a merge sort
 that starts from the runs already present in the input.
 1. Scan for natural runs - ascending, or descending, which are reversed in place
 2. Extend short runs to 32-64 elements with binary insertion sort

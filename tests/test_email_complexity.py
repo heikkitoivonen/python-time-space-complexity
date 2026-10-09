@@ -81,10 +81,7 @@ Not settled by execution:
   source and no test asserts it;
 * that the non-ASCII refold of ``EmailPolicy.fold()`` arrived in 3.11.8 and
   3.12.2 rather than at either release boundary: the assertion is on the
-  behaviour, which the pinned patch release of every version but 3.10 has;
-* ``MIMEImage`` and ``MIMEAudio`` sniffing on Python 3.10 goes through
-  ``imghdr`` and ``sndhdr``; the result is checked on every version, the
-  module reached is not;
+  behaviour, which the pinned patch release of every supported version has;
 * that ``feed()`` costs the same however the input is chunked: the
   result is checked byte by byte against one call, the amortized cost is
   read from ``BufferedSubFile.push``, which scans each chunk once and reads
@@ -142,7 +139,7 @@ import pytest
 
 PY = sys.executable
 # The first patch release of each minor whose as_bytes() verifies folded headers.
-BYTES_HEADER_CHECK = {(3, 10): 20, (3, 11): 15, (3, 12): 13, (3, 13): 12, (3, 14): 3}
+BYTES_HEADER_CHECK = {(3, 11): 15, (3, 12): 13, (3, 13): 12, (3, 14): 3}
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "email.md"
 EXPECTED_BLOCKS = 3
 
@@ -991,7 +988,7 @@ class TestGenerator:
     @pytest.mark.skipif(
         sys.version_info[2] < BYTES_HEADER_CHECK.get(sys.version_info[:2], 0),
         reason="version: as_bytes() header verification arrived in "
-        "3.10.20, 3.11.15, 3.12.13, 3.13.12 and 3.14.3",
+        "3.11.15, 3.12.13, 3.13.12 and 3.14.3",
     )
     def test_a_folded_header_passes_verification_and_as_bytes_checks_too(self) -> None:
         message = Message()
@@ -1170,14 +1167,10 @@ class TestPolicy:
         assert policy.compat32.fold("Subject", "plain") == "Subject: plain\n"
         assert policy.default.fold("Subject", "plain") == "Subject: plain\n"
 
-    def test_a_short_non_ascii_source_value_is_refolded_except_on_3_10(self) -> None:
-        """Python 3.10 writes it out as it is, which is O(v) rather than O(v·t)."""
+    def test_a_short_non_ascii_source_value_is_refolded(self) -> None:
         folded = policy.default.fold("Subject", "hé")
 
-        if sys.version_info >= (3, 11):
-            assert folded == "Subject: =?utf-8?q?h=C3=A9?=\n"
-        else:
-            assert folded == "Subject: hé\n"
+        assert folded == "Subject: =?utf-8?q?h=C3=A9?=\n"
         assert policy.SMTPUTF8.fold("Subject", "hé") == "Subject: hé\r\n"
 
 

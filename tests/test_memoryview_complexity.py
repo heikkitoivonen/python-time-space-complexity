@@ -280,8 +280,8 @@ class TestSliceAssignment:
     @pytest.mark.timing
     def test_time_is_linear_in_the_slice_length(self) -> None:
         """A thousandfold step, 10,000 to 10,000,000 bytes: constant predicts
-        x1, linear x1,000, quadratic x1,000,000. Measured x822 to x994 on
-        3.10 to 3.14 (aarch64)."""
+        x1, linear x1,000, quadratic x1,000,000. Measured x873 to x931 on
+        3.11.17 and x1,051 to x1,203 on 3.14.8 (aarch64)."""
         small, large = 10_000, 10_000_000
         small_dst, large_dst = memoryview(bytearray(small)), memoryview(bytearray(large))
         small_src, large_src = bytes(small), bytes(large)

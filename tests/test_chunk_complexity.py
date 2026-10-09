@@ -6,11 +6,11 @@ one seek on a seekable file and a read of the rest of the body on an
 unseekable one. Every one of those is settled by observation - a recording
 file that counts the bytes read and the `seek()` and `tell()` calls made
 through it - and the O(1) and O(k) space of skipping and reading by a
-`tracemalloc` peak, so nothing here is timed. The module exists on Python
-3.10, 3.11 and 3.12 only, so every test that touches it takes the `chunk`
-fixture, which skips from 3.13; run them with one of those interpreters. Lib/chunk.py differs between
-v3.10.19, v3.11.14 and v3.12.12 only in the import-time DeprecationWarning
-added in 3.11: no bound moves.
+`tracemalloc` peak, so nothing here is timed. Of the supported
+versions the module exists on Python 3.11 and 3.12 only, so every test that
+touches it takes the `chunk` fixture, which skips from 3.13; run them with one
+of those interpreters. Lib/chunk.py is the same at v3.11.14 and v3.12.12, so
+no version is treated apart.
 
 Measurement scope:
 
@@ -46,9 +46,9 @@ Measurement scope:
   unseekable one reads the rest of the body; it leaves the file open, can be
   called twice, and makes `read()`, `skip()`, `seek()`, `tell()` and
   `isatty()` raise `ValueError`. `isatty()` is `False` on an open chunk.
-* The import warns on 3.11 and 3.12, not on 3.10, and raises
-  `ModuleNotFoundError` from 3.13.
-* Every fenced Python block runs in its own subprocess on 3.10 to 3.12, and a
+* The import warns on 3.11 and 3.12, and raises `ModuleNotFoundError` from
+  3.13.
+* Every fenced Python block runs in its own subprocess on 3.11 and 3.12, and a
   mutated assertion in one of them is asserted to fail.
 
 Not settled here:
@@ -169,8 +169,8 @@ def chunk() -> Iterator[Any]:
 
 
 class TestAvailability:
-    """`import chunk` works on 3.10 to 3.12, warning from 3.11, and fails
-    from 3.13."""
+    """`import chunk` works with a warning on 3.11 and 3.12, and fails from
+    3.13."""
 
     @pytest.mark.skipif(sys.version_info < (3, 13), reason="the module exists before 3.13")
     def test_importing_it_from_3_13_raises(self) -> None:
@@ -178,7 +178,7 @@ class TestAvailability:
             importlib.import_module("chunk")
 
     @pytest.mark.skipif(sys.version_info >= (3, 13), reason="chunk was removed in 3.13")
-    def test_importing_it_warns_from_3_11(self) -> None:
+    def test_importing_it_warns(self) -> None:
         result = subprocess.run(
             [sys.executable, "-W", "error::DeprecationWarning", "-c", "import chunk"],
             capture_output=True,
@@ -187,10 +187,9 @@ class TestAvailability:
             stdin=subprocess.DEVNULL,
             check=False,
         )
-        assert (result.returncode != 0) == (sys.version_info >= (3, 11)), result.stderr
-        if sys.version_info >= (3, 11):
-            assert "DeprecationWarning" in result.stderr
-            assert "chunk" in result.stderr
+        assert result.returncode != 0, result.stderr
+        assert "DeprecationWarning" in result.stderr
+        assert "chunk" in result.stderr
 
 
 class TestConstructionReadsTheHeader:

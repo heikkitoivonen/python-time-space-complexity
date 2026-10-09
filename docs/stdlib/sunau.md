@@ -8,7 +8,7 @@ once.
 
 !!! warning "Removed in Python 3.13"
     Deprecated in Python 3.11 and removed in Python 3.13 (PEP 594). The page covers the module
-    as it is on Python 3.10 to 3.12, and its examples run only there; from 3.11, `import sunau`
+    as it is on Python 3.11 and 3.12, and its examples run only there; there, `import sunau`
     emits a `DeprecationWarning`.
 
 Frames are the unit throughout. `k` is the frames read or written in one call and `w` is the

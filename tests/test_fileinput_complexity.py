@@ -39,10 +39,9 @@ Measurement scope:
   open hook with `inplace=True` raises `ValueError`.
 * `hook_encoded()` is asserted to open nothing when called; `hook_compressed()`
   reads `.gz` and `.bz2` files and plain ones, and `mode='rb'` yields bytes.
-* `mode='rU'` raises `ValueError` and `FileInput` has no `__getitem__` from
-  3.11; on 3.10 `'rU'` is accepted with a `DeprecationWarning`. Text mode with
-  neither `encoding` nor an open hook is observed to call `open()` with
-  `encoding='locale'`.
+* `mode='rU'` raises `ValueError` and `FileInput` has no `__getitem__`. Text
+  mode with neither `encoding` nor an open hook is observed to call `open()`
+  with `encoding='locale'`.
 * Every fenced Python block runs in its own subprocess and temporary working
   directory, and a mutated assertion in one of them is asserted to fail.
 
@@ -462,16 +461,10 @@ class TestOpenHooks:
 class TestVersionNotes:
     """The 3.11 removals, and the locale default in text mode."""
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="version: 'U' modes removed in 3.11")
     def test_u_modes_and_indexing_are_gone(self) -> None:
         with pytest.raises(ValueError, match="'r' or 'rb'"):
             fileinput.FileInput("a", mode="rU")
         assert not hasattr(fileinput.FileInput, "__getitem__")
-
-    @pytest.mark.skipif(sys.version_info >= (3, 11), reason="version: 'U' modes exist before 3.11")
-    def test_u_modes_are_deprecated_on_3_10(self) -> None:
-        with pytest.warns(DeprecationWarning, match="'U' mode"):
-            fileinput.FileInput("a", mode="rU")
 
     def test_text_mode_without_an_encoding_opens_with_the_locale(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch

@@ -1,4 +1,4 @@
-"""Evidence for docs/stdlib/imp.md on Python 3.10 and 3.11.
+"""Evidence for docs/stdlib/imp.md on Python 3.11.
 
 The documented scope is the API in the official 3.11 documentation plus the
 undocumented load_source, load_compiled and load_package loaders. The _imp
@@ -32,7 +32,7 @@ nothing and compiles again.
 Source-only, because b and f are fixed per interpreter and cannot be varied:
 is_builtin and init_builtin walk PyImport_Inittab with a string compare per
 entry, and is_frozen and init_frozen walk the frozen tables the same way
-(Python/import.c is_builtin and look_up_frozen on 3.11, find_frozen on 3.10).
+(Python/import.c is_builtin and look_up_frozen on 3.11).
 load_dynamic's cost is dlopen and the extension's init function, which no
 Python-level counter sees; the test checks only that Python reads nothing.
 The deprecation and removal versions come from the official documentation
@@ -577,7 +577,7 @@ def test_examples(tmp_path: Path, index: int) -> None:
     blocks = re.findall(r"```python\n(.*?)```", text, re.DOTALL)
     assert len(blocks) == 2
     if index == 0 and sys.version_info >= (3, 12):
-        pytest.skip("version: the imp example needs Python 3.10 or 3.11")
+        pytest.skip("version: the imp example needs Python 3.11")
     line = text[: text.index(blocks[index])].count("\n") + 1
     result = subprocess.run(
         [sys.executable, "-W", "ignore::DeprecationWarning", "-c", blocks[index]],

@@ -15,9 +15,9 @@ Measurement scope:
 * Statement cache: with an authorizer counting compiles, one SQL text run ten
   times compiles once and ten distinct texts compile ten times. Running a set
   of distinct `SELECT i` texts and then running them all again recompiles
-  nothing at the default size - 128 texts on 3.11+, 100 on 3.10 - and
-  recompiles something at one more. 3.11+ evicts the least recently used,
-  3.10 the least used; only the capacity is on the page. `executescript()`
+  nothing at the default size, 128 texts, and recompiles something at one
+  more. The cache evicts the least recently used statement; only the
+  capacity is on the page. `executescript()`
   compiles its statement again on every run. After `set_authorizer()`, a
   statement compiled before it compiles once more and then hits the cache;
   `set_authorizer()` with 10,000 statements held costs more than 50x
@@ -43,9 +43,8 @@ Measurement scope:
   script. One-column TEXT and BLOB rows of 1,000 and 1,000,000 bytes retain
   more than 100x the traced memory. `fetchall()` over 20,000 100-character
   rows peaks more than 100x iteration's peak, and `fetchmany(100)` under a
-  hundredth of `fetchall()`. On 3.10, `execute()` converts the first row and
-  each fetch the row after; on 3.11+ each fetch converts its own row, observed
-  by a counting `text_factory`.
+  hundredth of `fetchall()`. Each fetch converts its own row, observed by a
+  counting `text_factory`.
 * Binding: 1 KB against 1 MB of TEXT or BLOB with one parameter, through
   `execute()` and `executemany()`, with SQL that returns or stores only
   `typeof(?)`: more than 5x the time. A `bytearray` changed after binding does
@@ -78,7 +77,7 @@ Measurement scope:
   peaks at under 100 KB both times, while `list()` of it peaks more than 100x
   higher at 200,000; statements are counted for one table. `serialize()`
   grows past 1 MB for 1 MB of rows and `deserialize()` round-trips it.
-* Blob (3.11+): on a 20,000,000-byte blob, a fresh handle's first 100-byte
+* Blob: on a 20,000,000-byte blob, a fresh handle's first 100-byte
   read at the end costs more than 20x one at the start (about 220x measured),
   while repeated reads through one handle cost within 3x at both ends, and
   `blobopen()` on it costs within 3x of `blobopen()` on a 100-byte blob. A
@@ -153,7 +152,7 @@ import pytest
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "sqlite3.md"
 EXPECTED_BLOCKS = 13
 
-# The 3.10 constant set: authorizer action codes, the three authorizer return
+# The authorizer constant set: authorizer action codes, the three authorizer return
 # values, and SQLITE_DONE.
 AUTHORIZER_CODES = {
     "SQLITE_ALTER_TABLE",
@@ -214,7 +213,7 @@ DBCONFIG_NAMES = {
     "SQLITE_DBCONFIG_WRITABLE_SCHEMA",
 }
 
-# Documented names that not every supported version has, as
+# Documented names whose rows carry the version that added or removed them, as
 # (owner, name, first version with it, first version without it, row marker).
 VERSION_GATED: list[tuple[Any, str, tuple[int, int] | None, tuple[int, int] | None, str]] = [
     (sqlite3, "Blob", (3, 11), None, "Python 3.11+"),
@@ -227,10 +226,6 @@ VERSION_GATED: list[tuple[Any, str, tuple[int, int] | None, tuple[int, int] | No
     (sqlite3.Connection, "getconfig", (3, 12), None, "Python 3.12+"),
     (sqlite3.Connection, "autocommit", (3, 12), None, "Python 3.12+"),
 ]
-
-needs_blob = pytest.mark.skipif(
-    not hasattr(sqlite3.Connection, "blobopen"), reason="Connection.blobopen is Python 3.11+"
-)
 
 
 def best_ns(func: Callable[[], Any], repeats: int = 7, inner: int = 1) -> float:
@@ -342,8 +337,8 @@ class TestConstantFamilies:
         results = constants - limits - dbconfig - authorizer
 
         assert authorizer == AUTHORIZER_CODES
-        assert len(limits) == (12 if sys.version_info >= (3, 11) else 0)
-        assert len(results) == (103 if sys.version_info >= (3, 11) else 0)
+        assert len(limits) == 12
+        assert len(results) == 103
         assert dbconfig <= DBCONFIG_NAMES, f"unreviewed: {dbconfig - DBCONFIG_NAMES}"
         if sys.version_info < (3, 12):
             assert not dbconfig
@@ -375,7 +370,7 @@ class TestConnectDefersTheCheck:
 
 
 class TestStatementCache:
-    """Up to 128 compiled statements by SQL text (100 on 3.10), counted by an
+    """Up to 128 compiled statements by SQL text, counted by an
     authorizer, which SQLite consults only while compiling."""
 
     def test_one_text_compiles_once(self, rows: sqlite3.Connection) -> None:
@@ -410,21 +405,18 @@ class TestStatementCache:
             connection.close()
 
     def test_the_default_capacity(self) -> None:
-        capacity = 128 if sys.version_info >= (3, 11) else 100
-
-        assert self._recompiles_after(capacity) == 0
-        assert self._recompiles_after(capacity + 1) > 0
+        assert self._recompiles_after(128) == 0
+        assert self._recompiles_after(129) > 0
 
     def test_the_capacity_is_a_connection_argument(self) -> None:
         assert self._recompiles_after(8, cached_statements=8) == 0
         assert self._recompiles_after(9, cached_statements=8) > 0
 
-    def test_the_page_gives_both_defaults(self) -> None:
+    def test_the_page_gives_the_default(self) -> None:
         text = PAGE.read_text(encoding="utf-8")
 
         assert "cached_statements=128" in text
-        assert "`cached_statements` defaults to 100 on Python 3.10" in text
-        assert "up to 128 compiled statements (100 on Python 3.10)" in text
+        assert "up to 128 compiled statements," in text
 
     def test_setting_an_authorizer_expires_compiled_statements(
         self, rows: sqlite3.Connection
@@ -866,7 +858,7 @@ class TestFetchingHoldsWhatYouAskFor:
             connection.close()
         assert retained[1] > retained[0] * 100, retained
 
-    def test_rows_convert_one_step_early_on_310_only(self) -> None:
+    def test_each_fetch_converts_its_own_row(self) -> None:
         connection = sqlite3.connect(":memory:")
         conversions = []
 
@@ -877,9 +869,9 @@ class TestFetchingHoldsWhatYouAskFor:
         connection.text_factory = text_factory
         try:
             cursor = connection.execute("SELECT 'first' UNION ALL SELECT 'second'")
-            assert conversions == ([5] if sys.version_info < (3, 11) else [])
+            assert conversions == []
             assert cursor.fetchone() == ("first",)
-            assert conversions == ([5, 6] if sys.version_info < (3, 11) else [5])
+            assert conversions == [5]
             assert cursor.fetchall() == [("second",)]
             assert conversions == [5, 6]
         finally:
@@ -1251,8 +1243,6 @@ class TestCallbacks:
             names.set_progress_handler(None, 0)
 
     def test_limits_round_trip(self) -> None:
-        if not hasattr(sqlite3.Connection, "setlimit"):
-            pytest.skip("version: Connection.setlimit is Python 3.11+")
         connection: Any = sqlite3.connect(":memory:")
         try:
             category = sqlite3.SQLITE_LIMIT_SQL_LENGTH  # type: ignore[attr-defined]
@@ -1329,8 +1319,6 @@ class TestCopyingADatabase:
         connection: Any = self._filled(1_000, width=1_000)
         if not hasattr(connection, "serialize"):
             connection.close()
-            if sys.version_info < (3, 11):
-                pytest.skip("version: Connection.serialize is Python 3.11+")
             pytest.skip("missing sqlite-serialize: this SQLite has no serialize API")
         copy: Any = sqlite3.connect(":memory:")
         try:
@@ -1345,7 +1333,6 @@ class TestCopyingADatabase:
             copy.close()
 
 
-@needs_blob
 class TestBlob:
     """`Blob` reads and writes part of a value without loading it."""
 
@@ -1439,11 +1426,8 @@ class TestErrors:
             with pytest.raises(sqlite3.IntegrityError) as caught:
                 connection.execute("INSERT INTO t VALUES (1)")
 
-            if sys.version_info >= (3, 11):
-                assert caught.value.sqlite_errorname == "SQLITE_CONSTRAINT_PRIMARYKEY"
-                assert caught.value.sqlite_errorcode == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY
-            else:
-                assert not hasattr(caught.value, "sqlite_errorcode")
+            assert caught.value.sqlite_errorname == "SQLITE_CONSTRAINT_PRIMARYKEY"
+            assert caught.value.sqlite_errorcode == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY
         finally:
             connection.close()
 

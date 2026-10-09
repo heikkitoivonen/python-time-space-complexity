@@ -8,7 +8,7 @@ from scripts.audit_documentation import load_public_manifest
 from scripts.build_api_manifest import build_manifest
 
 
-@pytest.mark.parametrize("minor", range(10, 15))
+@pytest.mark.parametrize("minor", range(11, 15))
 def test_supported_snapshots_preserve_version_boundaries(minor: int) -> None:
     version = f"3.{minor}"
     manifest = load_public_manifest(version)
@@ -17,7 +17,7 @@ def test_supported_snapshots_preserve_version_boundaries(minor: int) -> None:
     apis = manifest["apis"]
     assert "builtins.len" in apis
     assert "json.JSONDecoder.raw_decode" in apis
-    assert ("tomllib" in apis) == (minor >= 11)
+    assert "tomllib" in apis
     assert ("asyncore" in apis) == (minor <= 11)
     assert ("sys.monitoring" in apis) == (minor >= 12)
     assert ("annotationlib" in apis) == (minor >= 14)

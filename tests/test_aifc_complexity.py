@@ -8,12 +8,10 @@ a sink records the objects it is handed and the seeks it takes, a counting id
 records the comparisons a marker lookup makes, and traced allocation separates
 a copy of the frames from none by orders of magnitude.
 
-`aifc` exists on Python 3.10 to 3.12 and is gone from 3.13, so every runtime
+`aifc` exists on Python 3.11 and 3.12 and is gone from 3.13, so every runtime
 test is skipped on 3.13 and later; there, only the availability boundary and
 the page's block count are checked. The module is identical on 3.11 and 3.12
-(`Lib/aifc.py` at v3.11.0 and v3.12.12); 3.10 lacks the deprecation warning
-and the `sowt` compression type, both of which are asserted on each side of
-the boundary.
+(`Lib/aifc.py` at v3.11.0 and v3.12.12), so no version is treated apart.
 
 Measurement scope:
 
@@ -65,10 +63,9 @@ Measurement scope:
   the writer is asserted to store as given. An AIFF file reads back as
   `b'NONE'` and `b'not compressed'`. A file that does not start with
   `FORM`, a `FORM` of another type, one without `SSND` and one with an
-  unknown compression type raise `aifc.Error`. `sowt` reads and writes on
-  3.11+, storing the samples byte-swapped and returning them as written, and
-  raises `aifc.Error` on 3.10; importing warns on 3.11+ and not on
-  3.10.
+  unknown compression type raise `aifc.Error`. `sowt` reads and writes,
+  storing the samples byte-swapped and returning them as written; importing
+  warns.
 * Every fenced Python block runs in its own subprocess and working directory,
   and a mutated assertion in one of them is asserted to fail.
 
@@ -269,7 +266,7 @@ def stereo_writer(sink: Any, nframes: int = 0) -> Any:
 
 
 class TestAvailability:
-    """The page's scope: present on 3.10 to 3.12, removed from 3.13."""
+    """The page's scope: present on 3.11 and 3.12, removed from 3.13."""
 
     def test_the_module_exists_only_before_313(self) -> None:
         found = importlib.util.find_spec("aifc") is not None
@@ -277,7 +274,7 @@ class TestAvailability:
         assert found == (sys.version_info < (3, 13))
 
     @REQUIRES_AIFC
-    def test_importing_warns_from_311(self) -> None:
+    def test_importing_warns(self) -> None:
         result = subprocess.run(
             [sys.executable, "-W", "error::DeprecationWarning", "-c", "import aifc"],
             capture_output=True,
@@ -287,11 +284,8 @@ class TestAvailability:
             check=False,
         )
 
-        if sys.version_info >= (3, 11):
-            assert result.returncode != 0
-            assert "DeprecationWarning" in result.stderr
-        else:
-            assert result.returncode == 0, result.stderr
+        assert result.returncode != 0
+        assert "DeprecationWarning" in result.stderr
 
 
 @REQUIRES_AIFC
@@ -857,8 +851,7 @@ class TestFormats:
         with pytest.raises(aifc.Error, match="unsupported compression type"):
             aifc.open(io.BytesIO(raw), "rb")
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="sowt from 3.11")
-    def test_sowt_reads_and_writes_from_311(self) -> None:
+    def test_sowt_reads_and_writes(self) -> None:
         buffer = KeepOpen()
         with aifc.open(buffer, "wb") as out:
             out.setparams((1, 2, 8000, 0, b"sowt", b""))
@@ -869,17 +862,6 @@ class TestFormats:
         assert buffer.getvalue().endswith(b"\x01\x00\x03\x02")
         assert audio.getcomptype() == b"sowt"
         assert audio.readframes(2) == b"\x00\x01\x02\x03"
-
-    @pytest.mark.skipif(sys.version_info >= (3, 11), reason="sowt from 3.11")
-    def test_sowt_raises_before_311(self) -> None:
-        out = aifc.open(RecordingSink(), "wb")
-        with pytest.raises(aifc.Error, match="unsupported compression type"):
-            out.setcomptype(b"sowt", b"")
-        raw = aifc_bytes(1, nchannels=1).replace(b"NONE", b"sowt", 1)
-        with pytest.raises(aifc.Error, match="unsupported compression type"):
-            aifc.open(io.BytesIO(raw), "rb")
-        out.setparams((1, 1, 8000, 0, *NONE))
-        out.close()
 
 
 def _blocks() -> list[tuple[int, str]]:

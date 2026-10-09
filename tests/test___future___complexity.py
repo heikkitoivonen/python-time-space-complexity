@@ -23,16 +23,16 @@ Measurement scope:
 * Defining an annotated function is O(1) with `annotations`: the module's
   bytecode for a `def` with 2 and with 2,000 annotated parameters stays within
   2x in instruction count on every supported version. Without the import,
-  3.10-3.13 grow more than 100x, one evaluation per annotation, and 3.14 stays
+  3.11-3.13 grow more than 100x, one evaluation per annotation, and 3.14 stays
   within 2x. The instruction count is the evidence and the definition is not
   timed: the `dis` output shows the annotations reaching the function as one
-  constant tuple on 3.10-3.13 and one `__annotate__` code object on 3.14.
+  constant tuple on 3.11-3.13 and one `__annotate__` code object on 3.14.
 * A counting annotation expression runs zero times at definition and on
   `__annotations__` reads under the import, for a function and a class body,
   whose values are the source strings, and zero times when a module body runs.
-  Without the import, class and module bodies are observed only on 3.10-3.13,
+  Without the import, class and module bodies are observed only on 3.11-3.13,
   where they evaluate each annotation once. Without the import it
-  runs once per annotation at definition on 3.10-3.13, and on 3.14 zero times
+  runs once per annotation at definition on 3.11-3.13, and on 3.14 zero times
   at definition and once per annotation on the first read. Both cases return
   the same dictionary object on a second read with no further evaluation, and
   the dictionary has one entry per annotation.
@@ -45,8 +45,8 @@ Measurement scope:
   `_Feature`; the two still optional are `barry_as_FLUFL` and `annotations`.
   `getOptionalRelease()` and `getMandatoryRelease()` return the `optional` and
   `mandatory` objects themselves. `annotations.mandatory` is asserted to be
-  `(3, 11, 0, 'alpha', 0)` on 3.10 and `None` on 3.11+, which matches
-  Lib/__future__.py at v3.10.19, v3.11.14, v3.12.12, v3.13.11 and v3.14.2.
+  `None`, which matches Lib/__future__.py at v3.11.14, v3.12.12, v3.13.11 and
+  v3.14.2.
 * Every fenced Python block runs in its own subprocess, and a mutated assertion
   in one of them is asserted to fail.
 
@@ -216,7 +216,7 @@ class TestMandatoryFeaturesChangeNothing:
 
 class TestDefiningAnAnnotatedFunctionIsConstant:
     """Defining an annotated function | O(1) with the import, O(a + e) without
-    on 3.10-3.13, O(1) without on 3.14+. Counted in bytecode instructions for 2
+    on 3.11-3.13, O(1) without on 3.14+. Counted in bytecode instructions for 2
     and 2,000 annotated parameters."""
 
     def test_with_the_import_the_definition_does_not_grow(self) -> None:
@@ -242,7 +242,7 @@ class TestDefiningAnAnnotatedFunctionIsConstant:
 
 class TestWhenAnnotationExpressionsRun:
     """With `annotations` no annotation expression runs; without it they run at
-    definition on 3.10-3.13 and on the first `__annotations__` read on 3.14+.
+    definition on 3.11-3.13 and on the first `__annotations__` read on 3.14+.
     The first read is O(a) and cached."""
 
     ANNOTATIONS = 5
@@ -371,10 +371,7 @@ class TestTheFeatureTable:
     def test_annotations_has_no_mandatory_release(self) -> None:
         mandatory = __future__.annotations.getMandatoryRelease()
 
-        if sys.version_info >= (3, 11):
-            assert mandatory is None
-        else:
-            assert mandatory == (3, 11, 0, "alpha", 0)
+        assert mandatory is None
 
 
 def _blocks() -> list[tuple[int, str]]:

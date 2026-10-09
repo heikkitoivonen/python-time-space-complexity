@@ -63,7 +63,7 @@ Measurement scope:
 * With `compressobj()`, the zlib stream minus its 2-byte header and 4-byte
   trailer equals the raw (`wbits=-15`) stream; `wbits=31` output is read by
   `gzip.decompress()` and by `wbits=47`. `compress(data, wbits=...)` is
-  asserted on 3.11+, and to raise `TypeError` before.
+  asserted to give the same raw stream.
 * `unused_data` holds bytes after the end of the stream, `eof` turns true
   there, and a truncated stream raises `zlib.error`.
 * Each checksum over 16,000,000 bytes peaks under 1,000 traced bytes, where
@@ -533,17 +533,9 @@ class TestWbitsChoosesTheWrapper:
         assert gzip.decompress(gzip_format) == data
         assert zlib.decompress(gzip_format, wbits=32 + 15) == data
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="version: wbits added in 3.11")
     def test_compress_accepts_wbits(self) -> None:
         data = word_text(100_000)
-        compress: Callable[..., bytes] = zlib.compress  # typed for 3.10, which lacks wbits
-        assert compress(data, wbits=-15) == self._deflate(data, -15)
-
-    @pytest.mark.skipif(sys.version_info >= (3, 11), reason="version: wbits exists from 3.11")
-    def test_compress_rejects_wbits_before_3_11(self) -> None:
-        compress: Callable[..., bytes] = zlib.compress
-        with pytest.raises(TypeError):
-            compress(b"data", wbits=-15)
+        assert zlib.compress(data, wbits=-15) == self._deflate(data, -15)
 
 
 class TestDataAfterTheStream:

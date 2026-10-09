@@ -62,7 +62,7 @@ Not settled here:
   `array_resize()` calling `PyMem_Realloc`; whether it moves is the
   allocator's choice and is not observed.
 * `clear()` and `memoryview()` are O(1) and `buffer_info()`, `typecode` and
-  `itemsize` are attribute reads, from Modules/arraymodule.c on the 3.10-3.14
+  `itemsize` are attribute reads, from Modules/arraymodule.c on the 3.11-3.14
   release branches (`clear()` resizes to zero and frees the buffer; the
   allocator's cost for that free is not measured).
 * `a < b` follows the same comparison loop as `==`, which is what is timed;

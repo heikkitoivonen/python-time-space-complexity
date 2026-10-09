@@ -183,7 +183,7 @@ than something the constructors do.
 ```python
 import ast
 
-# O(1) per node; passing every field keeps the tree valid on 3.10 as well
+# O(1) per node; passing every field keeps the tree valid on 3.11 and 3.12 as well
 call = ast.Call(
     func=ast.Name(id="print", ctx=ast.Load()),
     args=[ast.Constant(value="hi", kind=None)],

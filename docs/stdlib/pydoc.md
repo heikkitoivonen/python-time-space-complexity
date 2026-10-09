@@ -14,7 +14,7 @@ its `__all__` is a list or tuple, the class cost for each class it documents, an
 the k submodules or package entries it lays out in columns; O(a log a + a·d² + w) for a class, plus
 O(s log s) in text, which lists its built-in subclasses; O(w) for anything else. An
 object without a docstring adds O(F) to read its source file into `linecache` once, where `F` is
-the characters of that file, and on Python 3.10-3.12 a class without one adds O(F) every time.
+the characters of that file, and on Python 3.11 and 3.12 a class without one adds O(F) every time.
 
 `x` is the dotted parts of a name such as `json.decoder.JSONDecoder`; `N` is the files and
 directories a scan of `sys.path` lists and `S` the characters of the modules' source; `t` is the
@@ -83,7 +83,7 @@ counted in these bounds.
 | `pydoc.safeimport(path, forceload=0, cache={})` | O(1) once imported; O(len(sys.modules)) with `forceload` | O(1); O(q) with `forceload` | `None` when the module itself does not exist; `ErrorDuringImport` when it fails, or when a parent package is missing. `forceload` scans `sys.modules`, removes the module and its q submodules, keeping them alive in `cache`, and imports it again; a built-in module is not removed |
 | `pydoc.importfile(path)` | O(1) plus the import | O(1) | Executes the file on every call and replaces its `sys.modules` entry |
 | `pydoc.ErrorDuringImport(filename, exc_info)` | O(1) | O(1) | Python 3.12+ takes the exception; a `(type, value, traceback)` tuple is deprecated |
-| `pydoc.getdoc(object)` | O(t) | O(t) | Without a docstring, falls back to the comments above the source: the file is read once into `linecache`, and on 3.10-3.12 a class also costs an O(F) parse of it on every call |
+| `pydoc.getdoc(object)` | O(t) | O(t) | Without a docstring, falls back to the comments above the source: the file is read once into `linecache`, and on 3.11 and 3.12 a class also costs an O(F) parse of it on every call |
 | `pydoc.splitdoc(doc)` | O(t) | O(t) | `(synopsis, rest)` when the second line is blank |
 | `pydoc.synopsis(filename, cache={})` | O(h); O(1) cached | O(h) | h = characters read before it returns: through the module docstring, or to the first statement, or to the end of a file of comments. Cached per file until its modification time increases; a `.pyc` or extension file is imported instead |
 | `pydoc.source_synopsis(file)` | O(h) | O(h) | Reads lines only as far as the docstring or the first statement; the rest of the file is not read |
@@ -226,7 +226,7 @@ on every class in its MRO to find the one that defines it, and a lookup the inte
 misses walks that class's MRO in turn, so a deep hierarchy costs O(a·d²) even when it defines
 little.
 
-On Python 3.10-3.12, a class without a docstring costs more than one with: `getdoc()` falls back to
+On Python 3.11 and 3.12, a class without a docstring costs more than one with: `getdoc()` falls back to
 the comments above the class, and finding the class in its source parses the whole file. A module
 of `C` classes without docstrings then spends O(C·F) on parsing alone. Python 3.13 locates the class from the line
 number it records.
@@ -418,7 +418,7 @@ assert 'run(path)' in text
 - Use `renderer=pydoc.plaintext` or `doc(..., output=stream)` for text you will process; it never
   starts a pager
 - Search with `-k` once and keep the result; every search reads all the source on `sys.path` again
-- Give classes docstrings in a large module that has to be documented on Python 3.10-3.12
+- Give classes docstrings in a large module that has to be documented on Python 3.11 or 3.12
 
 ❌ **Avoid**:
 

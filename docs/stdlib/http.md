@@ -235,20 +235,20 @@ what makes a lookup cheaper than a scan of the whole jar.
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `CookieJar(policy)` | O(1) | O(1) | |
-| `CookieJar.add_cookie_header(request)` | O(d·g + P + a + m·log m + m·v + c + e) | O(w + m·v) | d = stored domains, P = paths under the domains the policy accepted, a = cookies under the paths it accepted, m = those that survive `return_ok`, g = domains configured on the policy that each check scans. An unrelated domain costs one check rather than one per cookie, but an accepted path costs one check per cookie under it. The survivors are sorted by path length, then rendered into the header. The trailing c + e is the expiry sweep, which walks the whole jar - empty levels included - however little was selected, at the traversal cost under `len()`, the Python 3.10 sort included, and with that walk's O(w) memory |
+| `CookieJar.add_cookie_header(request)` | O(d·g + P + a + m·log m + m·v + c + e) | O(w + m·v) | d = stored domains, P = paths under the domains the policy accepted, a = cookies under the paths it accepted, m = those that survive `return_ok`, g = domains configured on the policy that each check scans. An unrelated domain costs one check rather than one per cookie, but an accepted path costs one check per cookie under it. The survivors are sorted by path length, then rendered into the header. The trailing c + e is the expiry sweep, which walks the whole jar - empty levels included - however little was selected, at the traversal cost under `len()`, and with that walk's O(w) memory |
 | `CookieJar.extract_cookies(response, request)` | O(n + c·(v + g)) | O(c·v) | n = the `Set-Cookie` headers' length, c = cookies in them, each checked by the policy before it is stored |
 | `CookieJar.make_cookies(response, request)` | O(n + c·v) | O(c·v) | The parsing half of `extract_cookies`, without storing |
 | `CookieJar.set_cookie(cookie)` | O(1) | O(1) | Inserts at its domain, path and name |
 | `CookieJar.set_cookie_if_ok(cookie, request)` | O(g) | O(1) | One `set_ok` check first, which under the default policy scans the configured blocked or allowed domains |
 | `CookieJar.clear(domain, path, name)` | O(1) | O(1) | One dict delete at whichever level the arguments reach - a domain, a path under it, or one name; raises KeyError when there is nothing there, and ValueError when an inner level is given without an outer one |
 | `CookieJar.clear()` | O(1) | O(1) | Drops the whole structure |
-| `CookieJar.clear_session_cookies()` | As `len()` | O(w) | Walks every cookie for the discard flag, over the same traversal, so the 3.10 sort applies here too |
+| `CookieJar.clear_session_cookies()` | As `len()` | O(w) | Walks every cookie for the discard flag, over the same traversal |
 | `CookieJar.clear_expired_cookies()` | As `len()` | O(w) | The same walk against the clock. `add_cookie_header` calls it, so every request already pays it |
 | `CookieJar.set_policy(policy)` | O(1) | O(1) | |
-| `len(jar)` | O(c + e) on Python 3.11+; O((c + e)·log w) on 3.10 | O(w) | Walks the three levels and counts; the jar keeps no count. e = levels left empty by earlier `clear()` calls, which are not pruned. The walk collects each level into a list before descending, so w, the widest level it meets, is its memory - with one domain and one path that is every cookie. Python 3.11+ copies the level's values; 3.10 sorts its keys instead, which adds the log factor and fixes the order cookies come back in |
+| `len(jar)` | O(c + e) | O(w) | Walks the three levels and counts; the jar keeps no count. e = levels left empty by earlier `clear()` calls, which are not pruned. The walk collects each level into a list before descending, so w, the widest level it meets, is its memory - with one domain and one path that is every cookie |
 | `iter(jar)` | O(1) | O(1) | A generator; the walk above happens as it is consumed |
 | `FileCookieJar(filename, delayload, policy)` | O(1) | O(1) | Opens nothing |
-| `FileCookieJar.save(filename, ignore_discard, ignore_expires)` | `len()` + O(c·v) | O(w + v) or O(w + c·v) | One line per cookie, over the same traversal - so it visits retained empty levels and pays the Python 3.10 sort even when nothing is written. `MozillaCookieJar` writes each line as it goes; `LWPCookieJar` builds the whole file in memory first |
+| `FileCookieJar.save(filename, ignore_discard, ignore_expires)` | `len()` + O(c·v) | O(w + v) or O(w + c·v) | One line per cookie, over the same traversal - so it visits retained empty levels even when nothing is written. `MozillaCookieJar` writes each line as it goes; `LWPCookieJar` builds the whole file in memory first |
 | `FileCookieJar.load(filename, ...)` | O(n + c·v) | O(c·v) | n = file size; adds to what the jar already holds |
 | `FileCookieJar.revert(filename, ...)` | O(c + e + n + c'·v) | O(c + e + c'·v) | c = cookies already held, c' = cookies in the file. The jar it holds is deep-copied first - empty levels and all, which is the e in both columns - then cleared and reloaded, and the copy stays alive while the new cookies are built, so both are held at once. On failure the copy is put back, so the old contents survive a bad file; the copy is paid in full even when the file is tiny or refused |
 | `FileCookieJar.filename`, `FileCookieJar.delayload` | O(1) | O(1) | |
@@ -324,9 +324,9 @@ assert f"{HTTPStatus.NOT_FOUND.value} {HTTPStatus.NOT_FOUND.phrase}" == '404 Not
 ```
 
 !!! note "Printing a member"
-    `print(HTTPStatus.OK)` writes `200` on Python 3.11+, where `IntEnum`
-    inherits `int.__str__`, and `HTTPStatus.OK` on Python 3.10. Use `.value`
-    or `.phrase` to get the same text on every supported version.
+    `print(HTTPStatus.OK)` writes `200`, because `IntEnum` inherits
+    `int.__str__`. Use `.phrase` for the reason phrase and `.name` for the
+    member name.
 
 ## Sending a Body Does Not Buffer It
 

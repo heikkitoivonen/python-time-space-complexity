@@ -27,11 +27,11 @@ Measurement scope:
   of `"q\\u0301"`, which is already NFC. NFD of 10,000 and 1,000,000 Hangul
   syllables, each expanding to two jamo, stays under 1,000x for the 100x
   step, against 10,000x for a quadratic. On an ASCII string 1,000x longer it
-  costs under 10x more on 3.11+, and over 100x more on 3.10, which scans.
+  costs under 10x more.
 * `is_normalized()` peaks under 1 KB on the confirmed U+00E9 run and over
   400 KB on the `"q\\u0301"` run, which falls back to building the NFC form.
   An ASCII string is answered at least 10x faster than an accented string
-  of the same 200,000 characters on 3.11+. On a run of combining marks
+  of the same 200,000 characters. On a run of combining marks
   whose classes cycle through inversions, 20x the marks costs under 5x -
   the check answers at the first inversion - and on a run of one mark,
   which falls back, under 100x, against 400x for a quadratic sort. Both
@@ -50,16 +50,16 @@ Not settled here:
 
 * The patched O(n) bound for an adversarial combining run is measured by
   `tests/test_complexity_caveats.py::TestUnicodeDataCaveats`, which the CI
-  timing job runs on each supported line's first patched release.
+  timing job runs on a patched release of each supported line.
   Distributor backports under an older version number are not detected.
 * The O(n²) bound before the patch follows from the insertion sort in
-  Modules/unicodedata.c up to 3.14.5; 20x the marks in one inverted run
-  measured about 500x on 3.14.2 and 410x on 3.10.19. No test asserts it,
-  since CI runs only patched releases.
+  Modules/unicodedata.c up to 3.14.5; 20,000 against 1,000 marks cycling
+  through 40 classes measured about 395x on 3.11.14 and 393x on 3.14.2. No
+  test asserts it, since CI runs only patched releases.
 * That `ucd_3_2_0.is_normalized()` shares the unpatched quadratic follows
   from Modules/unicodedata.c, whose quick check returns "maybe" for any
-  input under the 3.2.0 database. It measured about 750x for 20x the marks
-  on 3.14.2 and 390x on 3.10.19; no patched interpreter can show it, so
+  input under the 3.2.0 database. It measured about 387x on 3.11.14 and
+  399x on 3.14.2 for the same marks; no patched interpreter can show it, so
   only its allocation on ASCII is asserted.
 * The page-scoped audit reports `UCD`'s methods and
   `ucd_3_2_0.unidata_version` as unclassified runtime discoveries. They are
@@ -266,8 +266,7 @@ class TestNormalizeAllocatesOnlyWhenItRebuilds:
 
 
 class TestAsciiIsAnsweredFromAFlag:
-    """`normalize()` and `is_normalized()` are O(1) for ASCII on 3.11+, and
-    scan it on 3.10."""
+    """`normalize()` and `is_normalized()` are O(1) for ASCII."""
 
     SMALL = "a" * 1_000
     LARGE = "a" * 1_000_000
@@ -279,21 +278,12 @@ class TestAsciiIsAnsweredFromAFlag:
         )
 
     @pytest.mark.timing
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="the ASCII flag check is 3.11+")
     @pytest.mark.parametrize("function", [unicodedata.normalize, unicodedata.is_normalized])
     def test_ascii_length_does_not_matter(self, function: Callable[[str, str], object]) -> None:
         ratio = self.ratio(function)
         assert ratio < 10, f"1,000x the ASCII text cost {ratio:.0f}x"
 
     @pytest.mark.timing
-    @pytest.mark.skipif(sys.version_info >= (3, 11), reason="3.10 scans ASCII text")
-    @pytest.mark.parametrize("function", [unicodedata.normalize, unicodedata.is_normalized])
-    def test_ascii_is_scanned_on_3_10(self, function: Callable[[str, str], object]) -> None:
-        ratio = self.ratio(function)
-        assert ratio > 100, f"1,000x the ASCII text cost only {ratio:.0f}x"
-
-    @pytest.mark.timing
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="the ASCII flag check is 3.11+")
     def test_other_text_of_the_same_length_is_scanned(self) -> None:
         ascii_text = "a" * 200_000
         accented = "é" * 200_000

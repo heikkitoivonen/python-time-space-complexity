@@ -50,7 +50,7 @@ Measurement scope:
   a listener first, a second listener behind it receives no connection; with
   a refusing record and an unconvertible one (an IPv6 literal in an `AF_INET`
   record, which raises `gaierror`) it raises whichever came last, in both
-  orders, and on 3.11+ with two refusing records and `all_errors=True` an
+  orders, and with two refusing records and `all_errors=True` an
   `ExceptionGroup` of both.
 * `setdefaulttimeout()` reaches a socket created afterwards and not one
   created before; `setblocking(False)` and `settimeout(0.0)` read back the same.
@@ -725,21 +725,20 @@ class TestCreateConnectionTriesInOrder:
 
         assert type(caught.value) is expected
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="all_errors was added in 3.11")
     def test_all_errors_collects_every_attempt(
         self, monkeypatch: pytest.MonkeyPatch, refusing: list[tuple[str, int]]
     ) -> None:
         self.resolve_to(monkeypatch, refusing)
 
-        with pytest.raises(Exception) as caught:
+        with pytest.raises(ExceptionGroup) as caught:
             socket.create_connection(
                 ("example.test", 0),
                 timeout=5,
-                all_errors=True,  # type: ignore[call-arg]
+                all_errors=True,
             )
 
-        assert type(caught.value).__name__ == "ExceptionGroup"
-        errors = caught.value.exceptions  # type: ignore[attr-defined]
+        assert type(caught.value) is ExceptionGroup
+        errors = caught.value.exceptions
         assert len(errors) == 2
         assert all(isinstance(error, ConnectionRefusedError) for error in errors)
 

@@ -25,21 +25,21 @@ Measurement scope:
   50 x 50 of them for 50 attributes at MRO depth 50, and more than ten
   times the count at depth 2, in both renderers. In timing tests with 100
   attributes on the root class, depth 800 costs more than 8x depth 200
-  (x16.2-16.9 measured on 3.10, 3.12 and 3.14) while the output grows less
-  than 3x; at depth 200, 400 attributes cost between 2x and 8x 100
+  (x16.2-16.9 measured on 3.12 and 3.14, x12.8-15.6 on 3.11) while the output
+  grows less than 3x; at depth 200, 400 attributes cost between 2x and 8x 100
   attributes; a class with 50,000 direct subclasses costs the text renderer
   more than 5x one with none. The d² term comes from type lookups that miss the
   interpreter's 4,096-entry type cache (MCACHE_SIZE_EXP 12 in
-  Objects/typeobject.c on 3.10-3.14) and walk the MRO: both timing tests
+  CPython's internal headers on 3.11-3.14) and walk the MRO: both timing tests
   have a·d of 20,000 pairs or more, and the size at which the cache stops
   holding them is not varied.
 * `TextDoc.formattree()` over 8,000 top-level classes costs more than 24x
   its cost over 1,000, as does `HTMLDoc.formattree()` over 8,000 classes
   with two listed bases against 1,000, and `HTMLDoc.multicolumn()` over
   16,000 items against 2,000; 8x the input predicts x8 for linear and x64
-  for quadratic, and 3.10-3.14 measured x68-x88, x44-x126 and x59-x81.
+  for quadratic, and 3.11-3.14 measured x66-x108, x44-x126 and x59-x83.
 * `getdoc()` without a docstring: rendering a file module of 30 classes
-  without docstrings calls `ast.parse()` 30 times on Python 3.10-3.12 and
+  without docstrings calls `ast.parse()` 30 times on Python 3.11 and 3.12 and
   never on 3.13+; with docstrings, never on any version. Two undocumented
   functions in one file load it into `linecache` once.
 * Naming: `locate('json.decoder.JSONDecoder.decode')` calls `safeimport()`
@@ -53,8 +53,7 @@ Measurement scope:
   `ErrorDuringImport` for a missing parent package.
 * `writedoc()` and `writedocs()` write `<name>.html` into the current
   directory; with the source directory off `sys.path`, `writedocs()` raises
-  `ImportError` on 3.11+ and prints the message on 3.10, as `doc()` with
-  `output` writes or prints it.
+  `ImportError`, as `doc()` with `output` writes it.
 * Searching runs on a `sys.path` holding only a temporary directory, with
   `sys.builtin_module_names` emptied in-process so the built-in loop cannot
   import anything. Without a key, a package is imported and its plain
@@ -380,7 +379,7 @@ class TestClassRenderingIsAttributesTimesDepthSquared:
 
     @pytest.mark.timing
     def test_the_text_renderer_scans_direct_subclasses(self) -> None:
-        # Docstrings keep 3.10-3.12 from parsing this file for each class.
+        # Docstrings keep 3.11 and 3.12 from parsing this file for each class.
         lonely = type("Lonely", (), {"__doc__": "Alone."})
         popular = type("Popular", (), {"__doc__": "Liked."})
         children = [type(f"Child{i}", (popular,), {}) for i in range(50_000)]
@@ -463,7 +462,7 @@ class TestTreesAndColumnsCopyTheTextSoFar:
 
 class TestGetdocWithoutADocstring:
     """`getdoc()` falls back to the comments above an object's source: the
-    file goes into linecache once, and on 3.10-3.12 each class costs a parse
+    file goes into linecache once, and on 3.11 and 3.12 each class costs a parse
     of its whole file."""
 
     def count_parses(
@@ -670,26 +669,20 @@ class TestWritingHtmlFiles:
         self,
         tmp_path: pathlib.Path,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture[str],
     ) -> None:
         source = self.make_package(tmp_path)
         monkeypatch.chdir(tmp_path)
 
-        if sys.version_info >= (3, 11):
-            with pytest.raises(ImportError, match="No Python documentation found"):
-                pydoc.writedocs(str(source))
-        else:
+        with pytest.raises(ImportError, match="No Python documentation found"):
             pydoc.writedocs(str(source))
-            assert "No Python documentation found" in capsys.readouterr().out
         assert not list(tmp_path.glob("*.html"))
 
-    def test_doc_reports_an_unknown_name(self, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_doc_reports_an_unknown_name(self) -> None:
         output = io.StringIO()
 
         pydoc.doc("no_such_module_anywhere_here", output=output)
 
-        reported = output.getvalue() if sys.version_info >= (3, 11) else capsys.readouterr().out
-        assert "No Python documentation found" in reported
+        assert "No Python documentation found" in output.getvalue()
 
 
 class TestRenderers:

@@ -22,7 +22,7 @@ at a cost outside them.
 |-----------|------|-------|-------|
 | `gzip.compress(data, compresslevel=9, *, mtime=0)` | O(m) | O(n) | Linear at every level; the level changes the constant, not the growth. Memory follows the output, not the input |
 | `gzip.decompress(data)` | O(n + m) | O(n + m) | One member. m can be far larger than n |
-| `gzip.decompress(data)` over s concatenated members | O(s·n + m) | O(n + m) | Python 3.11+: each member after the first copies the rest of the input again; a `GzipFile` over the same bytes recopies at most one read buffer per member |
+| `gzip.decompress(data)` over s concatenated members | O(s·n + m) | O(n + m) | Each member after the first copies the rest of the input again; a `GzipFile` over the same bytes recopies at most one read buffer per member |
 
 ### GzipFile
 
@@ -79,8 +79,8 @@ assert total == 10_000_000
 ## Concatenated Members
 
 A gzip file may hold several members one after another: appending to a file adds one, and so
-does concatenating two files. `decompress()` reads them all, but from Python 3.11 it hands each
-member the rest of the input as a fresh copy, so it costs O(s·n). A `GzipFile` reads the same
+does concatenating two files. `decompress()` reads them all, but it hands each member the rest
+of the input as a fresh copy, so it costs O(s·n). A `GzipFile` reads the same
 bytes a buffer at a time and recopies at most one buffer per member.
 
 ```python

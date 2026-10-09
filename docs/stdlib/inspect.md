@@ -218,7 +218,6 @@ property or descriptor is invoked — at the price of an MRO walk in Python per 
 
 ```python
 import inspect
-import sys
 
 calls = []
 
@@ -234,11 +233,10 @@ names = [name for name, _ in inspect.getmembers(config)]  # O(m log m) + descrip
 assert 'expensive' in names
 assert calls == ['ran']  # the property was evaluated to get its value
 
-if sys.version_info >= (3, 11):
-    calls.clear()
-    static = dict(inspect.getmembers_static(config))  # O(m·c + m log m), nothing runs
-    assert calls == []
-    assert isinstance(static['expensive'], property)  # the descriptor itself
+calls.clear()
+static = dict(inspect.getmembers_static(config))  # O(m·c + m log m), nothing runs
+assert calls == []
+assert isinstance(static['expensive'], property)  # the descriptor itself
 
 # A predicate filters the result; it does not save the getattr
 methods = inspect.getmembers(config, inspect.ismethod)  # still O(m log m)

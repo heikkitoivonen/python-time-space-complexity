@@ -6,12 +6,10 @@ checks, with each built-in check O(1) in the header's length. The read is
 settled by a recording file that counts the bytes read and the `tell()` and
 `seek()` calls made through it, the order by counting wrappers around every
 check, and the fixed-prefix checks by a traced peak and a timing ratio over a
-header far longer than 32 bytes. The module exists on Python 3.10, 3.11 and
-3.12 only, so every test that touches it takes the `imghdr` fixture, which
-skips from 3.13; run them with one of those interpreters. Lib/imghdr.py
-differs between v3.10.19, v3.11.14 and v3.12.12 in the import-time
-DeprecationWarning and the raw-JPEG branch of `test_jpeg` added in 3.11, and
-otherwise only in docstrings: no bound moves.
+header far longer than 32 bytes. The module exists on Python 3.11 and 3.12
+only, so every test that touches it takes the `imghdr` fixture, which skips
+from 3.13; run them with one of those interpreters. Lib/imghdr.py differs
+between v3.11.14 and v3.12.12 only in docstrings: no bound moves.
 
 Measurement scope:
 
@@ -31,11 +29,10 @@ Measurement scope:
   through all 13 checks, and in a timing test costs under 3x a 32-byte one.
 * All 13 built-in formats are asserted by name from a minimal header, the
   two-byte TIFF and BMP signatures on text, a JFIF, Exif and an ICC-marker
-  JPEG, and the raw `FF D8 FF DB` JPEG as `None` on 3.10 and `'jpeg'` from
-  3.11.
-* The import warns on 3.11 and 3.12, not on 3.10, and raises
-  `ModuleNotFoundError` from 3.13.
-* Every fenced Python block runs in its own subprocess on 3.10 to 3.12, and a
+  JPEG, and the raw `FF D8 FF DB` JPEG as `'jpeg'`.
+* The import warns on 3.11 and 3.12, and raises `ModuleNotFoundError` from
+  3.13.
+* Every fenced Python block runs in its own subprocess on 3.11 and 3.12, and a
   mutated assertion in one of them is asserted to fail.
 
 Not settled here:
@@ -165,8 +162,8 @@ def imghdr() -> Iterator[Any]:
 
 
 class TestAvailability:
-    """`import imghdr` works on 3.10 to 3.12, warning from 3.11, and fails
-    from 3.13."""
+    """`import imghdr` works with a warning on 3.11 and 3.12, and fails from
+    3.13."""
 
     @pytest.mark.skipif(sys.version_info < (3, 13), reason="the module exists before 3.13")
     def test_importing_it_from_3_13_raises(self) -> None:
@@ -174,7 +171,7 @@ class TestAvailability:
             importlib.import_module("imghdr")
 
     @pytest.mark.skipif(sys.version_info >= (3, 13), reason="imghdr was removed in 3.13")
-    def test_importing_it_warns_from_3_11(self) -> None:
+    def test_importing_it_warns(self) -> None:
         result = subprocess.run(
             [sys.executable, "-W", "error::DeprecationWarning", "-c", "import imghdr"],
             capture_output=True,
@@ -183,10 +180,9 @@ class TestAvailability:
             stdin=subprocess.DEVNULL,
             check=False,
         )
-        assert (result.returncode != 0) == (sys.version_info >= (3, 11)), result.stderr
-        if sys.version_info >= (3, 11):
-            assert "DeprecationWarning" in result.stderr
-            assert "imghdr" in result.stderr
+        assert result.returncode != 0, result.stderr
+        assert "DeprecationWarning" in result.stderr
+        assert "imghdr" in result.stderr
 
 
 class TestWhatReadsOneHeader:
@@ -374,9 +370,8 @@ class TestFormats:
         assert imghdr.what(None, h=b"\xff\xd8\xff\xe1\x00\x10Exif\x00") == "jpeg"
         assert imghdr.what(None, h=b"\xff\xd8\xff\xe2\x0c\x58ICC_PROFILE") is None
 
-    def test_a_raw_jpeg_is_recognised_from_3_11(self, imghdr: Any) -> None:
-        expected = "jpeg" if sys.version_info >= (3, 11) else None
-        assert imghdr.what(None, h=b"\xff\xd8\xff\xdb\x00\x43\x00") == expected
+    def test_a_raw_jpeg_is_recognised(self, imghdr: Any) -> None:
+        assert imghdr.what(None, h=b"\xff\xd8\xff\xdb\x00\x43\x00") == "jpeg"
 
 
 def _blocks() -> list[tuple[int, str]]:

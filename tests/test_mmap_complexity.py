@@ -33,9 +33,8 @@ Measurement scope:
   16 MiB maps, where scanning the map would cost 256x; a 1 MiB line costs over
   64x a 1 KiB one.
 * `find()` over 1 MiB of `a` for `a`*(s-1) + `b` costs under 3x from s = 10 to
-  s = 1,000 on 3.11+, and over 20x on 3.10, where the scan is naive.
-  `rfind()` for `a`*(s/2) + `b` + `a`*(s/2) costs over 20x across the same
-  step on every version, which is the O(r·s) worst case. On random bytes
+  s = 1,000. `rfind()` for `a`*(s/2) + `b` + `a`*(s/2) costs over 20x across
+  the same step, which is the O(r·s) worst case. On random bytes
   both cost over 8x and under 64x from 64 KiB to 1 MiB, the r term, where
   quadratic growth would cost 256x.
 * `resize()` doubles a 16 MiB private anonymous map with every page touched
@@ -582,8 +581,8 @@ class TestIterationIsNotASubstringTest:
 
 
 class TestSearching:
-    """`find()` | O(r + s) on 3.11+, O(r·s) worst on 3.10; `rfind()` |
-    O(r·s) worst; both start at the position and leave it alone."""
+    """`find()` | O(r + s); `rfind()` | O(r·s) worst; both start at the
+    position and leave it alone."""
 
     @staticmethod
     def search_ns(method: str, needle: bytes) -> float:
@@ -594,22 +593,12 @@ class TestSearching:
             return best_ns(lambda: search(needle, 0), repeats=3)
 
     @pytest.mark.timing
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="naive scan on 3.10")
-    def test_find_is_linear_in_the_needle_on_311(self) -> None:
+    def test_find_is_linear_in_the_needle(self) -> None:
         short = self.search_ns("find", b"a" * 9 + b"b")
         long = self.search_ns("find", b"a" * 999 + b"b")
 
         ratio = long / short
         assert ratio < 3, f"100x the needle: {short:.0f}ns to {long:.0f}ns, x{ratio:.2f}"
-
-    @pytest.mark.timing
-    @pytest.mark.skipif(sys.version_info >= (3, 11), reason="bytes.find's search from 3.11")
-    def test_find_multiplies_the_needle_on_310(self) -> None:
-        short = self.search_ns("find", b"a" * 9 + b"b")
-        long = self.search_ns("find", b"a" * 999 + b"b")
-
-        ratio = long / short
-        assert ratio > 20, f"100x the needle: {short:.0f}ns to {long:.0f}ns, x{ratio:.2f}"
 
     @pytest.mark.timing
     def test_rfind_multiplies_the_needle_in_the_worst_case(self) -> None:

@@ -8,7 +8,7 @@ data is appended to a cooked queue, which the read methods return from.
 
 !!! warning "Removed in Python 3.13"
     Deprecated since Python 3.11 and removed in Python 3.13 by PEP 594. The examples need Python
-    3.10, 3.11 or 3.12.
+    3.11 or 3.12.
 
 `n` is the bytes one read call takes in: what it receives during the call plus what was already
 queued. `m` is the bytes passed to `write()`, `p` is the patterns passed to `expect()`, and `k` is

@@ -21,7 +21,7 @@ Measurement scope:
   deletions shift exactly n(n+1) items for two alternatives sharing n
   characters, while alternatives with no common prefix shift none. Each
   shifted item is one pointer moved, so linear parsing overhead obscures the
-  quadratic term in wall-clock timings: on 3.10 and 3.14 the shared prefix
+  quadratic term in wall-clock timings: on 3.11 and 3.14 the shared prefix
   costs 1.3x to 1.8x the unshared one at 1,000 characters and 5.8x to 16.7x
   at 32,000. A run of g `(?:ab)` groups, g = 1,000, 4,000 and 16,000, is the
   other: it shifts exactly g(g-1) items through `SubPattern` slice
@@ -47,19 +47,17 @@ Measurement scope:
 * Competing repetitions: `a*a*b` matched against 250, 1,000 and 4,000 `a`s
   costs over 8x per 4x step within one attempt. `(a+)+b` costs over 8x
   from 14 to 18 characters against a failing subject, and over 1,000x more
-  than `(a+)+$` on a subject it matches, than `a+b`, and on 3.11+ than
-  `(?>a+)+b` and `(a++)+b`. Before 3.11 the latter two are asserted to be
-  `re.error`. `a*a*b` is also asserted under 40x per 4x step, which excludes
+  than `(a+)+$` on a subject it matches, than `a+b`, than `(?>a+)+b` and
+  than `(a++)+b`. `a*a*b` is also asserted under 40x per 4x step, which excludes
   cubic growth. `(?:a|aa)+b`, one repetition over overlapping alternatives,
   costs over 5x from 16 to 22 characters.
 * Backtracking stack: a `fullmatch` of `(?:ab)*` peaks over 5x higher at
   200,000 characters than at 20,000, while `[ab]*` peaks under 10 KB at
   2,000,000.
-* The anchor, on 3.11+: `^start.*end` and `\\Astart.*end` search 100,000
+* The anchor: `^start.*end` and `\\Astart.*end` search 100,000
   non-matching characters in under 1/20 the time of `start.*end`, and 10x
   the subject costs the anchored search under 3x; with `re.MULTILINE` the
-  `^` search costs over 4x at 10x the subject. Before 3.11 the anchored
-  search costs over 4x at 10x the subject. `match()` costs under 3x at 10x
+  `^` search costs over 4x at 10x the subject. `match()` costs under 3x at 10x
   the subject. With the match at position 0 the anchored search is not
   asserted faster.
 * A `Match` is the same size for a 10- and a 1,000,000-character subject and
@@ -97,7 +95,7 @@ Measurement scope:
   at a full cache. Which entry is not on the page: from 3.12 a hit that
   reaches the 512-entry cache re-records it as most recently used, so the
   513th pattern drops a different one, while a hit served by the 256-entry
-  fast-path cache in front of it refreshes nothing; on 3.10 and 3.11 the
+  fast-path cache in front of it refreshes nothing; on 3.11 the
   oldest-inserted entry is dropped despite a recent hit.
 * `re.PatternError` is `re.error` from 3.13, and absent before; `pos`,
   `lineno` and `colno` locate the error in a multi-line pattern.
@@ -149,10 +147,6 @@ import pytest
 
 PAGE = pathlib.Path(__file__).resolve().parent.parent / "docs" / "stdlib" / "re.md"
 EXPECTED_BLOCKS = 8
-
-# Atomic groups, possessive quantifiers and the anchored early exit are 3.11+.
-ATOMIC_SUPPORTED = sys.version_info >= (3, 11)
-ANCHOR_SHORT_CIRCUITS = sys.version_info >= (3, 11)
 
 # The cache and the compiler entry point are private, so not in the type stubs.
 _re_internals: Any = re
@@ -505,7 +499,6 @@ class TestBacktracking:
         assert nested_time > flat_time * 1_000, f"nested {nested_time:.0f}, flat {flat_time:.0f}"
 
     @pytest.mark.timing
-    @pytest.mark.skipif(not ATOMIC_SUPPORTED, reason="atomic groups are Python 3.11+")
     def test_atomic_and_possessive_forms_settle_it_too(self) -> None:
         nested = re.compile(r"(a+)+b")
         atomic = re.compile(r"(?>a+)+b")
@@ -517,13 +510,6 @@ class TestBacktracking:
 
         assert nested_time > atomic_time * 1_000, f"{nested_time:.0f} vs {atomic_time:.0f}"
         assert nested_time > possessive_time * 1_000, f"{nested_time:.0f} vs {possessive_time:.0f}"
-
-    @pytest.mark.skipif(ATOMIC_SUPPORTED, reason="3.11 and later accept them")
-    def test_before_3_11_the_syntax_is_rejected(self) -> None:
-        with pytest.raises(re.error):
-            re.compile(r"(?>a+)+b")
-        with pytest.raises(re.error):
-            re.compile(r"(a++)+b")
 
 
 class TestBacktrackingStack:
@@ -551,7 +537,7 @@ class TestBacktrackingStack:
 
 
 class TestAnchors:
-    """From 3.11 a `^` or `\\A` search stops after the first attempt."""
+    """A `^` or `\\A` search stops after the first attempt."""
 
     UNANCHORED = r"start.*end"
     ANCHORED = (r"^start.*end", r"\Astart.*end")
@@ -568,7 +554,6 @@ class TestAnchors:
         assert tight > loose * 0.5, f"unanchored {loose:.0f} ns, anchored {tight:.0f} ns"
 
     @pytest.mark.timing
-    @pytest.mark.skipif(not ANCHOR_SHORT_CIRCUITS, reason="the early exit is Python 3.11+")
     def test_an_anchor_saves_the_retry_when_nothing_matches(self) -> None:
         unanchored = re.compile(self.UNANCHORED)
         haystack = "x" * 100_000
@@ -580,7 +565,6 @@ class TestAnchors:
             assert loose > tight * 20, f"{spelling}: unanchored {loose:.0f}, anchored {tight:.0f}"
 
     @pytest.mark.timing
-    @pytest.mark.skipif(not ANCHOR_SHORT_CIRCUITS, reason="the early exit is Python 3.11+")
     def test_the_anchored_search_stops_growing_with_the_subject(self) -> None:
         small = "x" * 100_000
         large = "x" * 1_000_000
@@ -593,18 +577,6 @@ class TestAnchors:
     @pytest.mark.timing
     def test_a_multiline_caret_still_retries(self) -> None:
         anchored = re.compile(self.ANCHORED[0], re.MULTILINE)
-        small = "x" * 100_000
-        large = "x" * 1_000_000
-
-        short = best_ns(lambda: anchored.search(small), inner=20)
-        long = best_ns(lambda: anchored.search(large), inner=20)
-
-        assert long > short * 4, f"100,000 chars {short:.0f} ns, 1,000,000 chars {long:.0f} ns"
-
-    @pytest.mark.timing
-    @pytest.mark.skipif(ANCHOR_SHORT_CIRCUITS, reason="3.11 and later exit early")
-    def test_before_3_11_the_anchored_search_grows_with_the_subject(self) -> None:
-        anchored = re.compile(self.ANCHORED[0])
         small = "x" * 100_000
         large = "x" * 1_000_000
 
@@ -961,7 +933,7 @@ class TestPatternCache:
     Which entry is dropped is not on the page. From 3.12 a hit that reaches
     the 512-entry cache re-records the entry as most recently used, but a hit
     served by the 256-entry fast-path cache in front of it returns without
-    touching it; on 3.10 and 3.11 no hit refreshes an entry. The two
+    touching it; on 3.11 no hit refreshes an entry. The two
     version-gated tests pin that, through a hit that reaches the main cache.
     """
 
@@ -1022,9 +994,8 @@ class TestFlagsAndExceptions:
         assert isinstance(re.I | re.M, re.RegexFlag)
         assert isinstance(re.DEBUG, re.RegexFlag)
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="NOFLAG is Python 3.11+")
     def test_noflag_is_zero(self) -> None:
-        assert getattr(re, "NOFLAG") == 0  # noqa: B009 - 3.11+, not in the 3.10 stubs
+        assert re.NOFLAG == 0
 
     def test_the_types_are_what_compile_and_match_return(self) -> None:
         pattern = re.compile("a")
@@ -1082,11 +1053,7 @@ def _run_block(
 
 
 class TestDocumentedExamples:
-    """Each block runs in its own subprocess and asserts its own result.
-
-    The block showing atomic groups guards them behind a version check, so it
-    runs on 3.10 too.
-    """
+    """Each block runs in its own subprocess and asserts its own result."""
 
     def test_the_page_has_the_expected_blocks(self) -> None:
         assert len(_blocks()) == EXPECTED_BLOCKS

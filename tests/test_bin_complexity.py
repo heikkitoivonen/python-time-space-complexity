@@ -4,7 +4,7 @@ bin() is builtin_bin in Python/bltinmodule.c: PyNumber_ToBase(x, 2), which
 calls `__index__` once through _PyNumber_Index and hands the resulting int to
 _PyLong_Format. For base 2 that is long_format_binary in Objects/longobject.c,
 which sizes the string from the digit count and writes one character per bit.
-The call chain is the same in the v3.10.19, v3.11.14, v3.12.12, v3.13.11 and
+The call chain is the same in the v3.11.14, v3.12.12, v3.13.11 and
 v3.14.2 tags, so no version is treated apart.
 
 Measurement scope:

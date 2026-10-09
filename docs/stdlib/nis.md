@@ -7,7 +7,7 @@ it makes and how much it brings back.
 
 !!! warning "Removed in Python 3.13"
     Deprecated in Python 3.11 and removed in Python 3.13 by PEP 594. The page covers the module
-    as it is on Python 3.10 to 3.12 on Unix, in an interpreter built with NIS support; the
+    as it is on Python 3.11 and 3.12 on Unix, in an interpreter built with NIS support; the
     examples also need a machine bound to an NIS domain that serves a non-empty `passwd.byname`.
 
 `n` is the entries in one map and `m` is the maps a domain serves. The bounds treat a key or value

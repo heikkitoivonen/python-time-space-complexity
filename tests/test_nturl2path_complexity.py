@@ -3,7 +3,7 @@
 The page prices both functions as O(n) in the characters of their argument,
 and O(n·c), c being the path components, on the releases that build a drive
 path one component at a time. Lib/nturl2path.py has three implementations
-across the supported range: v3.10.19, v3.11.14, v3.12.7 and v3.13.0 append
+across the supported range: v3.11.14, v3.12.7 and v3.13.0 append
 each component to a growing string when the argument has a drive letter;
 v3.12.8 and v3.13.1 replace that loop with one `replace()` and one
 `quote()` or `unquote()` over the whole tail; v3.14.0 rewrites
@@ -18,14 +18,13 @@ Measurement scope:
 * At a fixed 80,000 characters, an argument of 40,000 one-character
   components is timed against one of a single component. With a drive
   letter, the appending releases cost x305 to x3,074 more for the many
-  components across both functions on 3.10.21, 3.11.16, 3.12.7 and 3.13.0
+  components across both functions on 3.11.16, 3.11.17, 3.12.7 and 3.13.0
   (aarch64), and 3.12.14, 3.13.14 and 3.14.7 cost x1.3 to x3.9; the test
   asserts above x50 on the appending releases and below it everywhere else.
-  Without a drive letter every release measured x1.4 to x15.2: splitting
+  Without a drive letter every release measured x1.4 to x16.5: splitting
   and joining 40,000 components costs more than one, but by a constant
   factor. The appending releases are chosen by `sys.version_info`: CI runs
-  3.10.21 and 3.11.16 on that side and 3.12.14, 3.13.14 and 3.14.7 on the
-  other.
+  3.11.17 on that side and 3.12.15, 3.13.16 and 3.14.8 on the other.
 * Traced peaks over a drive path of 7-character components, 8 with the
   separator, grow between 5x and 20x from 80,000 to 800,000 characters on
   every release, so space is linear, not quadratic, in either
@@ -155,10 +154,10 @@ class TestConversions:
 
 
 class TestComponentCount:
-    """`O(n)`, and `O(n·c)` on 3.10, 3.11, 3.12.0-3.12.7 and 3.13.0 with a
+    """`O(n)`, and `O(n·c)` on 3.11, 3.12.0-3.12.7 and 3.13.0 with a
     drive letter. The length is held at 80,000 characters while the component
     count goes from 1 to 40,000, so only the c term can move the cost: the
-    appending releases pay x305 or more, the others under x16."""
+    appending releases pay x305 or more, the others under x17."""
 
     LENGTH = 80_000
 

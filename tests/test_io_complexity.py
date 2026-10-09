@@ -467,10 +467,8 @@ class TestWhatOpenBuilds:
             assert f.read(3) == b"xxx"
 
     def test_text_encoding_passes_a_name_through(self) -> None:
-        # typeshed exports it from 3.11; the function itself is there from 3.10.
-        text_encoding = io.text_encoding  # pyright: ignore[reportAttributeAccessIssue]
-        assert text_encoding("latin-1") == "latin-1"
-        assert text_encoding(None) in {"locale", "utf-8"}
+        assert io.text_encoding("latin-1") == "latin-1"
+        assert io.text_encoding(None) in {"locale", "utf-8"}
 
     @pytest.mark.skipif(sys.version_info < (3, 14), reason="128 KiB from 3.14")
     def test_the_default_buffer_is_128_kib(self, path: pathlib.Path) -> None:

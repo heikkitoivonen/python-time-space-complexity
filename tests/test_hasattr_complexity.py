@@ -17,7 +17,7 @@ every call - the lever the timing tests use. Assigning to a class or a base
 clears the version tag (type_modified); the next lookup assigns a fresh one.
 From the v3.13.0 tag assign_version_tag refuses once tp_versions_used reaches
 MAX_VERSIONS_PER_CLASS (1,000), after which nothing on that class is cached
-again; 3.10 through 3.12 have no such limit.
+again; 3.11 and 3.12 have no such limit.
 
 Observation settles the hook and TypeError rows:
 

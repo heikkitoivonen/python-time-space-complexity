@@ -23,7 +23,7 @@ Measurement scope:
 * Automatic collection: with thresholds (100, 10, 10) and the baseline heap
   frozen, a hook sums the objects in the generations each collection
   examines. Building 300,000 lists examines under 40x what building 30,000
-  does (x18 measured on 3.10 to 3.14.7; a full collection every
+  does (x18 measured on 3.11 to 3.14.7; a full collection every
   threshold0 x threshold1 x threshold2 allocations would give x100), under
   ten examinations per list, and includes at least one full collection
   (11 measured). The e/n term: building 30,000 lists under the same

@@ -8,10 +8,9 @@ two template sizes and by traced allocation; the command-line rows by timing
 and tracing `copy()` with `os.system()` replaced by a recorder, so that only
 the building is measured; where the data goes, the temporary files and the
 wait status by running real pipelines under `/bin/sh`. The module exists on
-Python 3.10, 3.11 and 3.12 only, so every test that touches it takes the
+Python 3.11 and 3.12 only, so every test that touches it takes the
 `pipes` fixture, which skips from 3.13; run them with one of those
-interpreters. Lib/pipes.py differs between v3.10.19, v3.11.14 and v3.12.12
-only in the import-time DeprecationWarning added in 3.11: no bound moves.
+interpreters. Lib/pipes.py is the same at v3.11.14 and v3.12.12.
 
 Measurement scope:
 
@@ -69,8 +68,8 @@ Measurement scope:
   before it ends: the earlier step sleeps 0.3 seconds and then creates a
   marker, and the later step sees the marker.
 * The kind constants are the six strings; `pipes.quote` is `shlex.quote`.
-* The import warns on 3.11 and 3.12, not on 3.10, and raises
-  `ModuleNotFoundError` from 3.13.
+* The import warns on 3.11 and 3.12 and raises `ModuleNotFoundError` from
+  3.13.
 * Every fenced Python block runs in its own subprocess and working directory,
   and a mutated assertion in one of them is asserted to fail.
 
@@ -88,7 +87,7 @@ Not settled here:
   are outside every bound and are not measured.
 * `/bin/sh` is what `os.system()` and `os.popen()` run on Unix; tests that
   run a pipeline skip on Windows, which has no `/bin/sh`. The rest have no
-  platform-specific subject. CI runs only the timing tests on 3.10 to 3.12,
+  platform-specific subject. CI runs only the timing tests on 3.11 and 3.12,
   and none of them starts a shell, so the pipeline tests are run by hand on
   one of those versions; they have been run on Linux, not on macOS.
 * The deprecation in 3.11 and the removal in 3.13 come from the 3.12
@@ -198,7 +197,7 @@ def write(path: pathlib.Path, text: str) -> pathlib.Path:
 
 
 class TestAvailability:
-    """`import pipes` works on 3.10 to 3.12, warning from 3.11, and fails
+    """`import pipes` works on 3.11 and 3.12, warning on both, and fails
     from 3.13."""
 
     @pytest.mark.skipif(sys.version_info < (3, 13), reason="the module exists before 3.13")
@@ -216,10 +215,9 @@ class TestAvailability:
             stdin=subprocess.DEVNULL,
             check=False,
         )
-        assert (result.returncode != 0) == (sys.version_info >= (3, 11)), result.stderr
-        if sys.version_info >= (3, 11):
-            assert "DeprecationWarning" in result.stderr
-            assert "pipes" in result.stderr
+        assert result.returncode != 0, result.stderr
+        assert "DeprecationWarning" in result.stderr
+        assert "pipes" in result.stderr
 
 
 class TestBuildingRunsNothing:

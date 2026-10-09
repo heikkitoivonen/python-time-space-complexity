@@ -6,11 +6,10 @@ exceptions and identity are settled by direct observation; the absence of a
 copy by identity and traced allocation; the two cost claims a counter cannot
 reach - that a held `get_buffer()` result makes the next write copy the
 buffer, and that a run of writes is amortized O(1) - by timing ratios. The
-module exists on Python 3.10 to 3.12 only, so every runtime test takes the
+module exists only before Python 3.13, so every runtime test takes the
 `xdrlib` fixture, which skips from 3.13; availability is asserted on every
-version. Lib/xdrlib.py differs between v3.10.19, v3.11.14 and v3.12.12 only
-by the import-time DeprecationWarning that 3.11 adds and a rewrite of the
-`unpack_list()` loop that reads the same markers.
+version. Lib/xdrlib.py differs between v3.11.14 and v3.12.12 only by a
+rewrite of the `unpack_list()` loop that reads the same markers.
 
 Measurement scope:
 
@@ -53,8 +52,8 @@ Measurement scope:
   marker of 2 raises `ConversionError`.
 * `ConversionError` subclasses `Error`, which subclasses `Exception`.
 * Importing `xdrlib` raises `ModuleNotFoundError` from 3.13; in a
-  subprocess it warns on 3.11 and 3.12 and not on 3.10.
-* Every fenced Python block runs in its own subprocess on 3.10 to 3.12, and
+  subprocess it warns on 3.11 and 3.12.
+* Every fenced Python block runs in its own subprocess on 3.11 and 3.12, and
   a mutated assertion in one of them is asserted to fail.
 
 Not settled here:
@@ -158,11 +157,8 @@ class TestAvailability:
             stdin=subprocess.DEVNULL,
             check=False,
         )
-        if sys.version_info >= (3, 11):
-            assert result.returncode != 0
-            assert "'xdrlib' is deprecated" in result.stderr
-        else:
-            assert result.returncode == 0, result.stderr
+        assert result.returncode != 0
+        assert "'xdrlib' is deprecated" in result.stderr
 
 
 class TestFixedWidthPacking:

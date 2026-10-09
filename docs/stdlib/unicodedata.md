@@ -34,8 +34,8 @@ variable; a longer string raises `TypeError`. Character names have a fixed maxim
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `unicodedata.normalize(form, unistr)` | O(n) on a patched CPython, O(n²) before; O(1) for ASCII on 3.11+ | O(n), or O(1) when returned unchanged | See the warning below for the patched releases. The input itself comes back when a quick check can confirm it is already in `form`; a string that is in `form` but contains a character the check can only call "maybe" is rebuilt |
-| `unicodedata.is_normalized(form, unistr)` | O(n); O(1) for ASCII on 3.11+ | O(1), or O(n) when the quick check is inconclusive | An inconclusive check falls back to `normalize()`, but that stays O(n) even before the patch: the quick check answers `False` at the first out-of-order combining mark, so the fallback only sees marks already in order |
+| `unicodedata.normalize(form, unistr)` | O(n) on a patched CPython, O(n²) before; O(1) for ASCII | O(n), or O(1) when returned unchanged | See the warning below for the patched releases. The input itself comes back when a quick check can confirm it is already in `form`; a string that is in `form` but contains a character the check can only call "maybe" is rebuilt |
+| `unicodedata.is_normalized(form, unistr)` | O(n); O(1) for ASCII | O(1), or O(n) when the quick check is inconclusive | An inconclusive check falls back to `normalize()`, but that stays O(n) even before the patch: the quick check answers `False` at the first out-of-order combining mark, so the fallback only sees marks already in order |
 
 ### UCD
 
@@ -135,7 +135,7 @@ assert unicodedata.normalize("NFC", maybe) is not maybe
 !!! warning "Install a security-patched Python"
     Before the CVE-2026-3276 fix, CPython insertion-sorted each run of combining marks, so
     `normalize()` took O(n + Σrᵢ²) time for runs of rᵢ marks, O(n²) for one adversarial run. The
-    fix is in Python 3.10.21, 3.11.16, 3.12.14, 3.13.14, 3.14.6 and later releases; distributors
+    fix is in Python 3.11.16, 3.12.14, 3.13.14, 3.14.6 and later releases; distributors
     may backport it while keeping an older version number.
 
 ### Checking Before Normalizing
@@ -146,7 +146,7 @@ inconclusive check falls back to building the normal form and comparing.
 ```python
 import unicodedata
 
-assert unicodedata.is_normalized("NFC", "plain ascii")  # O(1) on 3.11+
+assert unicodedata.is_normalized("NFC", "plain ascii")  # O(1)
 assert unicodedata.is_normalized("NFC", "café")         # O(n), quick check only
 assert not unicodedata.is_normalized("NFC", "cafe\u0301")
 assert unicodedata.is_normalized("NFD", "cafe\u0301")
@@ -168,7 +168,7 @@ assert old.unidata_version == "3.2.0"
 assert isinstance(old, unicodedata.UCD)
 
 text = "ascii"
-assert unicodedata.normalize("NFC", text) is text  # O(1) on 3.11+
+assert unicodedata.normalize("NFC", text) is text  # O(1)
 assert old.normalize("NFC", text) is not text      # O(n), always rebuilt
 assert old.normalize("NFC", text) == text
 

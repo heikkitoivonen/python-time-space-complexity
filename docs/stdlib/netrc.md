@@ -15,7 +15,7 @@ as the object lives.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `netrc.netrc(file)` | O(n) | O(n) | One pass over the file; long tokens, many comments and many entries all stay linear. Python 3.10: O(n·t), since each character copies the token read so far |
+| `netrc.netrc(file)` | O(n) | O(n) | One pass over the file; long tokens, many comments and many entries all stay linear |
 | `netrc.netrc()` | O(n) | O(n) | Parses `~/.netrc`, with the same bound as a path; on POSIX it also checks the file's owner and mode. A missing file raises `FileNotFoundError` |
 | `netrc.authenticators(host)` | O(1) | O(1) | Dict lookup that falls back to the `default` entry, then to `None`; returns the stored `(login, account, password)` tuple |
 | `netrc.hosts` | O(1) | O(1) | The parsed dict of host name to `(login, account, password)`; a host listed twice keeps its last entry |
@@ -138,7 +138,7 @@ with tempfile.TemporaryDirectory() as home:
 
 ### Quoting and Comments
 
-From Python 3.11, a token may be double-quoted or backslash-escaped, so a password can contain
+A token may be double-quoted or backslash-escaped, so a password can contain
 spaces, and an entry without a `password` is accepted with the missing fields as `''`. A `#`
 comment is skipped to the end of its line when it follows a non-blank line; after a blank line,
 only its first word is skipped, and the rest of the line is read as tokens.
@@ -146,7 +146,6 @@ only its first word is skipped, and the rest of the line is read as tokens.
 ```python
 import netrc
 import os
-import sys
 import tempfile
 
 def parse(text):
@@ -159,21 +158,20 @@ def parse(text):
 rc = parse('machine example.com login alice password s3cret  # work account\n')
 assert rc.authenticators('example.com')[2] == 's3cret'
 
-if sys.version_info >= (3, 11):
-    rc = parse('machine example.com login alice password "two words"\n')
-    assert rc.authenticators('example.com') == ('alice', '', 'two words')
+rc = parse('machine example.com login alice password "two words"\n')
+assert rc.authenticators('example.com') == ('alice', '', 'two words')
 
-    assert parse('machine example.com login alice\n').hosts == {
-        'example.com': ('alice', '', '')
-    }
+assert parse('machine example.com login alice\n').hosts == {
+    'example.com': ('alice', '', '')
+}
 
-    assert parse('machine a login u password p\n\n#work\n').hosts == {'a': ('u', '', 'p')}
-    try:
-        parse('machine a login u password p\n\n# the work account\n')
-    except netrc.NetrcParseError as error:
-        assert 'bad follower token' in str(error)
-    else:
-        raise AssertionError('a comment after a blank line was skipped')
+assert parse('machine a login u password p\n\n#work\n').hosts == {'a': ('u', '', 'p')}
+try:
+    parse('machine a login u password p\n\n# the work account\n')
+except netrc.NetrcParseError as error:
+    assert 'bad follower token' in str(error)
+else:
+    raise AssertionError('a comment after a blank line was skipped')
 ```
 
 ## Rebuilding the File Text

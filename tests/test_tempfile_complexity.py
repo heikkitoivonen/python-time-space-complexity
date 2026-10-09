@@ -50,12 +50,12 @@ Measurement scope:
 * `SpooledTemporaryFile.writelines()` of 1,000 lines of 10,000 bytes with a
   20,000-byte `max_size` peaks under 1 MiB, and has rolled over before the
   fourth line is drawn, on 3.12.10+, 3.13.3+ and 3.14, and
-  above the 10 MB total on 3.10, 3.11, 3.12.0-3.12.9 and 3.13.0-3.13.2.
-  The two sides are guarded on `sys.version_info` and were run on 3.10.21,
-  3.11.16, 3.12.7, 3.12.14, 3.13.11, 3.13.14, 3.14.2 and 3.14.7, which also
+  above the 10 MB total on 3.11, 3.12.0-3.12.9 and 3.13.0-3.13.2.
+  The two sides are guarded on `sys.version_info` and were run on 3.11.16,
+  3.11.17, 3.12.7, 3.12.14, 3.13.11, 3.13.14, 3.14.2 and 3.14.7, which also
   straddle the `TMP_MAX` boundary.
 * `SpooledTemporaryFile` is an `io.IOBase` with `readable()`, `seekable()`,
-  `writable()` and `read1()` on 3.11+, and not on 3.10.
+  `writable()` and `read1()`.
 * `TemporaryDirectory` cleanup over trees of 10 and 1,000 files in 1 and 10
   subdirectories is counted: one `os.unlink` per file and one `os.rmdir` per
   directory, the root included. It runs when the `with` block raises, a
@@ -640,7 +640,6 @@ class TestSpooledTemporaryFileRollsOver:
             assert spool.mode == "w+"
             assert spool.encoding
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="full io interface is 3.11+")
     def test_it_is_a_full_io_object(self, tmp_path: pathlib.Path) -> None:
         with tempfile.SpooledTemporaryFile(dir=str(tmp_path)) as spooled:
             spooled.write(b"abc")
@@ -652,12 +651,6 @@ class TestSpooledTemporaryFileRollsOver:
             assert spool.read1(2) == b"ab"
             buffer = bytearray(1)
             assert spool.readinto(buffer) == 1 and buffer == b"c"
-
-    @pytest.mark.skipif(sys.version_info >= (3, 11), reason="3.10 only")
-    def test_before_311_it_is_not_an_io_object(self) -> None:
-        with tempfile.SpooledTemporaryFile() as spool:
-            assert not isinstance(spool, io.IOBase)
-            assert not hasattr(spool, "read1")
 
 
 def build_tree(root: pathlib.Path, files: int, subdirectories: int) -> None:

@@ -10,13 +10,12 @@ list elements the match loop shifts. Behavioural rows - what is written, what
 is skipped, what raises, what the command returns - are asserted directly on
 files in a temporary directory.
 
-`lib2to3` exists on Python 3.10 to 3.12 and is gone from 3.13, so every
+`lib2to3` exists on Python 3.11 and 3.12 and is gone from 3.13, so every
 runtime test is skipped on 3.13 and later; there, only the availability
-boundary and the page's block count are checked. The package is the same on
-3.10, 3.11 and 3.12 (`Lib/lib2to3` at v3.10.19, v3.11.14 and v3.12.12) apart
-from the import warning, which is asserted on each side of the 3.11 boundary;
-the other differences, in a `tok_name` loop, a deleted loop variable and a
-dead `pass`, do not change behaviour.
+boundary and the page's block count are checked. Outside its
+bundled tests, the package is the same on 3.11 and 3.12 (`Lib/lib2to3` at
+v3.11.14 and v3.12.12) apart from a `tok_name` loop, which does not change
+behaviour.
 
 Measurement scope:
 
@@ -77,8 +76,7 @@ Measurement scope:
   `has_key`; `-j 2` converts two files. It returns 0, and 1 when a file
   does not parse or does not exist. `lib2to3.main.main()` returns the same
   status in-process.
-* Importing warns with `DeprecationWarning` on 3.11 and 3.12, and with
-  `PendingDeprecationWarning` on 3.10.
+* Importing warns with `DeprecationWarning` on 3.11 and 3.12.
 * Every fenced Python block runs in its own subprocess and working directory,
   and a mutated assertion in one of them is asserted to fail. The page's bash
   block is not run: its `2to3` lines are covered by the command-line tests
@@ -212,7 +210,7 @@ def run_2to3(*args: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
 
 
 class TestAvailability:
-    """The page's scope: present on 3.10 to 3.12, removed from 3.13."""
+    """The page's scope: present on 3.11 and 3.12, removed from 3.13."""
 
     def test_the_module_exists_only_before_313(self) -> None:
         found = importlib.util.find_spec("lib2to3") is not None
@@ -221,9 +219,7 @@ class TestAvailability:
 
     @REQUIRES_LIB2TO3
     def test_importing_warns(self) -> None:
-        category = (
-            "DeprecationWarning" if sys.version_info >= (3, 11) else "PendingDeprecationWarning"
-        )
+        category = "DeprecationWarning"
         result = subprocess.run(
             [sys.executable, "-W", f"error::{category}", "-c", "import lib2to3"],
             capture_output=True,

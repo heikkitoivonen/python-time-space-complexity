@@ -49,7 +49,7 @@ prices. System calls that take no length, such as
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `mmap.find(sub[, start[, end]])` | O(r + s) | O(1) | O(r·s) worst case on Python 3.10. Without `start`, searches from the current position, which it does not move |
+| `mmap.find(sub[, start[, end]])` | O(r + s) | O(1) | Without `start`, searches from the current position, which it does not move |
 | `mmap.rfind(sub[, start[, end]])` | O(r·s) worst | O(1) | O(r) on typical input; the same start rule as `find()` |
 
 ### Size, resizing and flushing
@@ -183,8 +183,8 @@ assert mm.closed
 
 ## Searching
 
-`find()` and `rfind()` search the mapped bytes where they are, on Python 3.11+ with the same
-algorithms as `bytes.find()` and `bytes.rfind()`. Without a `start` they begin at the current
+`find()` and `rfind()` search the mapped bytes where they are, with the same algorithms as
+`bytes.find()` and `bytes.rfind()`. Without a `start` they begin at the current
 position, not at zero. `x in mm` is not a substring test: iteration yields one byte at a time, so
 it walks the mapping byte by byte and matches only a single byte. The `re` module accepts a map directly and scans it
 without copying.

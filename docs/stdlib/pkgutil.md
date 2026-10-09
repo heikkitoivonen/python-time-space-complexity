@@ -35,9 +35,9 @@ the search bounds take the import system's finder caches as already filled.
 |-----------|------|-------|-------|
 | `pkgutil.get_importer(path_item)` | O(1) | O(1) | A `sys.path_importer_cache` hit; on a miss it tries each path hook and caches the finder it gets |
 | `pkgutil.iter_importers(fullname='')` | O(s) | O(1) | Lazy; one `get_importer()` per entry. A dotted name imports its parent package to read `__path__` |
-| `pkgutil.get_loader(module_or_name)` | O(1) imported, O(s) otherwise | O(1) | Python 3.10-3.13; an imported module's `__loader__`, otherwise `find_loader()` |
-| `pkgutil.find_loader(fullname)` | O(s) | O(1) | Python 3.10-3.13; one `importlib.util.find_spec()` search |
-| `pkgutil.ImpImporter(dirname=None)`, `pkgutil.ImpLoader(fullname, file, filename, etc)` | O(1) | O(1) | Python 3.10-3.11; deprecated emulations of the `imp` module that store their arguments |
+| `pkgutil.get_loader(module_or_name)` | O(1) imported, O(s) otherwise | O(1) | Through Python 3.13; an imported module's `__loader__`, otherwise `find_loader()` |
+| `pkgutil.find_loader(fullname)` | O(s) | O(1) | Through Python 3.13; one `importlib.util.find_spec()` search |
+| `pkgutil.ImpImporter(dirname=None)`, `pkgutil.ImpLoader(fullname, file, filename, etc)` | O(1) | O(1) | Through Python 3.11; deprecated emulations of the `imp` module that store their arguments |
 
 ### Package paths and data
 

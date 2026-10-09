@@ -51,7 +51,7 @@ Measurement scope:
   two fixed. `n=2**16,
   r=8` raises `ValueError` under the default cap and succeeds with
   `maxmem=2**27`; `n=3` raises; `dklen` defaults to 64.
-* `file_digest()` (3.11+): an 8 MB file peaks between 200 KB and 1 MB, takes
+* `file_digest()`: an 8 MB file peaks between 200 KB and 1 MB, takes
   33 `readinto()` calls, and matches `sha256()` of the bytes; after
   `seek(100)` it matches the bytes from 100. A `BytesIO` whose `bytes` the
   caller still references peaks over 8 MB on the first call and under 50 KB
@@ -66,9 +66,7 @@ Measurement scope:
 * `algorithms_guaranteed` is the 14 names on the page and a subset of
   `algorithms_available`; both are sets.
 * Every fenced Python block runs in its own subprocess and working
-  directory, and a mutated assertion in one of them is asserted to fail. The
-  two blocks that call `file_digest()` are skipped on 3.10, where it does not
-  exist, and the skip count is asserted.
+  directory, and a mutated assertion in one of them is asserted to fail.
 
 Not settled here:
 
@@ -102,7 +100,7 @@ Not settled here:
 * Whether `usedforsecurity=False` makes MD5 or SHA-1 constructible on a
   FIPS-restricted build cannot be observed here, where both construct
   without it; the test shows only that the flag leaves the digest unchanged.
-* The pure-Python `pbkdf2_hmac` fallback that 3.10 and 3.11 keep for a
+* The pure-Python `pbkdf2_hmac` fallback that 3.11 keeps for a
   build whose OpenSSL lacks PKCS5_PBKDF2_HMAC is not reachable here.
 * The measurements hold the algorithm at SHA-256 (BLAKE2b for its own rows
   and SHAKE128 for the XOF rows), the SHAKE input at 4 bytes, and the
@@ -129,7 +127,6 @@ import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "hashlib.md"
 EXPECTED_BLOCKS = 11
-FILE_DIGEST_BLOCKS = 2  # the blocks that need 3.11+, skipped on 3.10
 
 GUARANTEED = {
     "md5": (16, 64),
@@ -519,8 +516,8 @@ class TestScrypt:
 
 
 def file_digest(fileobj: Any, digest: Any) -> Any:
-    """`hashlib.file_digest()`, reached at run time: typeshed's 3.10 stubs lack it."""
-    return hashlib.file_digest(fileobj, digest)  # type: ignore[attr-defined]
+    """`hashlib.file_digest()` with untyped arguments: the tests pass objects its stubs reject."""
+    return hashlib.file_digest(fileobj, digest)
 
 
 class CountingFile:
@@ -538,7 +535,6 @@ class CountingFile:
         return True
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="file_digest() was added in 3.11")
 class TestFileDigest:
     """`file_digest(fileobj, digest)` | O(n) | O(1): one fixed buffer from the
     current position; a `BytesIO` is hashed whole from its own buffer."""
@@ -721,11 +717,7 @@ class TestDocumentedExamples:
     def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
         ran = 0
-        skipped: list[int] = []
         for line, source in _blocks():
-            if "file_digest(" in source and sys.version_info < (3, 11):
-                skipped.append(line)  # file_digest() was added in 3.11
-                continue
             ran += 1
             workdir = tmp_path / f"block{line}"
             workdir.mkdir()
@@ -733,8 +725,7 @@ class TestDocumentedExamples:
             if result.returncode != 0:
                 failures.append(f"{PAGE.name}:{line}\n{result.stderr.strip()}")
 
-        assert ran + len(skipped) == EXPECTED_BLOCKS
-        assert len(skipped) == (FILE_DIGEST_BLOCKS if sys.version_info < (3, 11) else 0), skipped
+        assert ran == EXPECTED_BLOCKS
         assert not failures, "\n\n".join(failures)
 
     def test_the_runner_notices_a_broken_assertion(self, tmp_path: pathlib.Path) -> None:

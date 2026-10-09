@@ -7,12 +7,11 @@ timing: a stream wrapper counts the bytes read and the seeks made, a sink
 records the objects it is handed and the seeks it takes, and traced
 allocation separates a copy of the frames from none by orders of magnitude.
 
-`sunau` exists on Python 3.10 to 3.12 and is gone from 3.13, so every runtime
+`sunau` exists on Python 3.11 and 3.12 and is gone from 3.13, so every runtime
 test is skipped on 3.13 and later; there, only the availability boundary and
-the page's block count are checked. `Lib/sunau.py` differs between v3.10.19,
-v3.11.14 and v3.12.12 only in the import-time DeprecationWarning added in
-3.11, the warning filter around its `audioop` imports, and `isinstance()` in
-place of a `type()` comparison for a file name.
+the page's block count are checked. `Lib/sunau.py` differs between v3.11.14
+and v3.12.12 only in `isinstance()` in place of a `type()` comparison for a
+file name.
 
 Measurement scope:
 
@@ -271,7 +270,7 @@ def stereo_writer(sink: Any, nframes: int | None = None) -> Any:
 
 
 class TestAvailability:
-    """The page's scope: present on 3.10 to 3.12, removed from 3.13."""
+    """The page's scope: present on 3.11 and 3.12, removed from 3.13."""
 
     def test_the_module_exists_only_before_313(self) -> None:
         found = importlib.util.find_spec("sunau") is not None
@@ -289,11 +288,8 @@ class TestAvailability:
             check=False,
         )
 
-        if sys.version_info >= (3, 11):
-            assert result.returncode != 0
-            assert "DeprecationWarning" in result.stderr
-        else:
-            assert result.returncode == 0, result.stderr
+        assert result.returncode != 0
+        assert "DeprecationWarning" in result.stderr
 
 
 @REQUIRES_SUNAU

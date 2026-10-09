@@ -6,20 +6,19 @@ database: `getspnam()` reads it in order until the name matches, and
 Neither bound can be timed here. The database is the host's, which a test
 cannot grow without root, and its backend is chosen by `/etc/nsswitch.conf`.
 So the bounds are read from source, and what runs is the module's interface
-and its behaviour with the test process's own access on Linux 3.10 to 3.12,
+and its behaviour with the test process's own access on Linux 3.11 and 3.12,
 the removal boundary, and the page's examples against a stand-in module. `Modules/spwdmodule.c` differs between
-v3.10.19, v3.11.14 and v3.12.12 only in the import-time DeprecationWarning
-added in 3.11 and a multiple-interpreters slot added in 3.12.
+v3.11.14 and v3.12.12 only in a multiple-interpreters slot added in 3.12.
 
 Measurement scope:
 
 * From 3.13, `import spwd` raises `ModuleNotFoundError`. On Linux, importing
-  it in a subprocess warns on 3.11 and 3.12 and not on 3.10.
-* On Linux 3.10 to 3.12, `spwd.struct_spwd` built from nine values is a
+  it in a subprocess warns on 3.11 and 3.12.
+* On Linux 3.11 and 3.12, `spwd.struct_spwd` built from nine values is a
   9-item tuple whose items at indices 0 to 8 are `sp_namp` to `sp_flag` in
   the page's order. The module's public names are `getspall`, `getspnam` and
   `struct_spwd`, the same as the stand-in's.
-* On Linux 3.10 to 3.12, `getspall()` returns a list of `struct_spwd` and
+* On Linux 3.11 and 3.12, `getspall()` returns a list of `struct_spwd` and
   does not raise, and `getspnam()` of a name no account has raises `KeyError`
   or an `OSError`. The tests run with whatever access the process has; they
   neither need nor arrange an unprivileged one. As an unprivileged user, on
@@ -167,11 +166,8 @@ class TestAvailability:
             stdin=subprocess.DEVNULL,
             check=False,
         )
-        if sys.version_info >= (3, 11):
-            assert result.returncode != 0
-            assert "'spwd' is deprecated" in result.stderr
-        else:
-            assert result.returncode == 0, result.stderr
+        assert result.returncode != 0
+        assert "'spwd' is deprecated" in result.stderr
 
 
 @needs_spwd
@@ -244,7 +240,7 @@ def _run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[st
     stand_in.mkdir()
     (stand_in / "spwd.py").write_text(STAND_IN, encoding="utf-8")
     script = cwd / "block.py"
-    # spwd is built into the interpreter on 3.10 to 3.12, where a module
+    # spwd is built into the interpreter on 3.11 and 3.12, where a module
     # first on sys.path would not shadow it, so the stand-in goes straight
     # into sys.modules.
     preamble = (

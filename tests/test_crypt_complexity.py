@@ -9,14 +9,13 @@ nothing, a raising `mksalt()` shows a string salt is passed through, equal
 hashes for words that share a prefix show where a method stops reading, and a
 traced peak shows the Python side's space.
 
-`crypt` exists on Python 3.10 to 3.12 and is gone from 3.13, so every runtime
+`crypt` exists on Python 3.11 and 3.12 and is gone from 3.13, so every runtime
 test is skipped on 3.13 and later; there, only the availability boundary and
-the page's block count are checked. `Lib/crypt.py` differs between 3.10.19,
-3.11.14 and 3.12.12 only in the deprecation warning 3.11 adds, which is
-asserted on each side of the boundary. The C call behind it comes from the C
-library, so the runtime tests are guarded to Linux, whose libxcrypt provides
-all five methods and returns failure tokens; the page's examples assume it
-too.
+the page's block count are checked. `Lib/crypt.py` does not differ between
+3.11.14 and 3.12.12, and importing it warns on both. The C call behind it
+comes from the C library, so the runtime tests are guarded to Linux, whose
+libxcrypt provides all five methods and returns failure tokens; the page's
+examples assume it too.
 
 Measurement scope:
 
@@ -51,8 +50,7 @@ Measurement scope:
 * A salt of `!!`, and a word of 512 bytes (256 two-byte characters), return
   a string starting with `*`; 511 ASCII bytes and 510 UTF-8 bytes hash.
   Hashing with a failure token as the salt does not return that token.
-* Importing warns on 3.11 and 3.12 and not on 3.10, checked in a
-  subprocess.
+* Importing warns on 3.11 and 3.12, checked in a subprocess.
 * Every fenced Python block runs in its own subprocess and working directory,
   and a mutated assertion in one of them is asserted to fail.
 
@@ -64,7 +62,7 @@ Not settled here:
   where libxcrypt returns a failure token: the module turns a NULL from
   `crypt(3)` into `OSError` (`Modules/_cryptmodule.c` at v3.12.12), and
   whether a given library returns NULL is up to it. The Windows import
-  failure is in `Lib/crypt.py`, and no supported CI job runs 3.10 to 3.12
+  failure is in `Lib/crypt.py`, and no supported CI job runs 3.11 or 3.12
   there.
 * The C library's own working memory: `Modules/_cryptmodule.c` at v3.12.12
   hands `crypt_r()` a fixed-size `struct crypt_data` on the stack, which
@@ -150,7 +148,7 @@ def assert_linear_steps(label: str, times: list[float], step: int) -> None:
 
 
 class TestAvailability:
-    """The page's scope: present on 3.10 to 3.12, removed from 3.13."""
+    """The page's scope: present on 3.11 and 3.12, removed from 3.13."""
 
     def test_the_module_exists_only_before_313(self) -> None:
         found = importlib.util.find_spec("crypt") is not None
@@ -158,7 +156,7 @@ class TestAvailability:
 
     @pytest.mark.skipif(sys.version_info >= (3, 13), reason="crypt was removed in Python 3.13")
     @pytest.mark.skipif(sys.platform == "win32", reason="crypt refuses to import on Windows")
-    def test_import_warns_from_311(self) -> None:
+    def test_import_warns(self) -> None:
         result = subprocess.run(
             [sys.executable, "-W", "error::DeprecationWarning", "-c", "import crypt"],
             capture_output=True,
@@ -167,11 +165,8 @@ class TestAvailability:
             stdin=subprocess.DEVNULL,
             check=False,
         )
-        if sys.version_info >= (3, 11):
-            assert result.returncode != 0
-            assert "DeprecationWarning" in result.stderr
-        else:
-            assert result.returncode == 0, result.stderr
+        assert result.returncode != 0
+        assert "DeprecationWarning" in result.stderr
 
 
 class TestMethods:

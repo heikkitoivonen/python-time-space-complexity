@@ -25,7 +25,7 @@ Measurement scope:
   peak allocation grows more than 20x across the range. A value growing from
   1,000 to 100,000 characters inside a fixed three-character template grows
   the peak more than 20x, which is the v term.
-* `get_identifiers()` (3.11+) holds the placeholder count while the distinct
+* `get_identifiers()` holds the placeholder count while the distinct
   names go from 1 to all of them: at 1,000 and 8,000 placeholders the
   all-distinct template costs more than 20x (quadratic predicts 64x, linear
   8x), while the one-name control and the page's `dict.fromkeys()` over
@@ -64,9 +64,8 @@ Measurement scope:
   formatted once. `+` of two interpolation-free templates whose strings grow
   from 10,000 to 1,000,000 characters peaks 20x-300x higher.
 * Every fenced Python block runs in its own subprocess. Blocks that use
-  `string.templatelib` or t-string syntax run only on 3.14+, and blocks that
-  call `is_valid()` or `get_identifiers()` only on 3.11+; the skipped count
-  is asserted per version. A mutated assertion is asserted to fail.
+  `string.templatelib` or t-string syntax run only on 3.14+; the skipped
+  count is asserted per version. A mutated assertion is asserted to fail.
 
 Not settled here:
 
@@ -101,9 +100,7 @@ import pytest
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "string.md"
 EXPECTED_BLOCKS = 12
 TEMPLATELIB_BLOCKS = 2  # blocks that need 3.14+
-IDENTIFIER_BLOCKS = 1  # blocks that need 3.11+
 
-needs_311 = pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
 needs_314 = pytest.mark.skipif(sys.version_info < (3, 14), reason="added in 3.14")
 
 
@@ -311,7 +308,6 @@ class TestSubstitutionScansEveryCall:
         assert_linear_steps(durations, "substitute")
 
 
-@needs_311
 class TestIdentifiers:
     """`is_valid()` | O(n), and `get_identifiers()` | O(n + p·u): each name is
     checked against a list of the names already found."""
@@ -726,9 +722,7 @@ def _blocks() -> list[tuple[int, str]]:
 def _minimum_version(source: str) -> tuple[int, int]:
     if "templatelib" in source:
         return (3, 14)
-    if "get_identifiers" in source or "is_valid" in source:
-        return (3, 11)
-    return (3, 10)
+    return (3, 11)
 
 
 def _run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
@@ -755,7 +749,6 @@ class TestDocumentedExamples:
         assert len(blocks) == EXPECTED_BLOCKS
         versions = [_minimum_version(source) for _, source in blocks]
         assert versions.count((3, 14)) == TEMPLATELIB_BLOCKS
-        assert versions.count((3, 11)) == IDENTIFIER_BLOCKS
 
     def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
@@ -772,9 +765,7 @@ class TestDocumentedExamples:
             if result.returncode != 0:
                 failures.append(f"{PAGE.name}:{line}\n{result.stderr.strip()}")
 
-        expected_skips = (TEMPLATELIB_BLOCKS if sys.version_info < (3, 14) else 0) + (
-            IDENTIFIER_BLOCKS if sys.version_info < (3, 11) else 0
-        )
+        expected_skips = TEMPLATELIB_BLOCKS if sys.version_info < (3, 14) else 0
         assert len(skipped) == expected_skips, skipped
         assert ran + len(skipped) == EXPECTED_BLOCKS
         assert not failures, "\n\n".join(failures)

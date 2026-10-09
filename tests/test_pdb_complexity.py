@@ -47,8 +47,8 @@ Measurement scope:
 * `break` during a stop calls `break_anywhere()` once per frame, 90 more
   times at depth 100 than at depth 10, on 3.12.9+ and 3.13.1+; on earlier
   releases it calls it for none. The boundary tags were read from CPython's
-  history; CI runs 3.12.14 and 3.13.14, so there the earlier side is exercised
-  only on 3.10 and 3.11.
+  history; CI pins later 3.12 and 3.13 patches, so there the earlier side is
+  exercised only on 3.11.
 * A breakpoint condition is evaluated each time its line runs, 16 times for
   the 16 iterations up to the one where it first holds. `disable`, `enable`,
   `ignore`, `condition` and `clear` by number are observed through the stop

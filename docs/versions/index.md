@@ -10,7 +10,7 @@ Different Python versions have made various optimizations and changes that affec
 | 3.13 | Oct 2024 | Bugfix | Free-threading (experimental) |
 | 3.12 | Oct 2023 | Security | Better specialization |
 | 3.11 | Oct 2022 | Security | Inline caching, 10-60% faster |
-| 3.10 | Oct 2021 | Security | Pattern matching |
+| 3.10 | Oct 2021 | End of life | Pattern matching |
 
 ## Quick Links
 
@@ -18,7 +18,7 @@ Different Python versions have made various optimizations and changes that affec
 - **[Python 3.13](py313.md)** - Experimental free-threading, JIT compiler
 - **[Python 3.12](py312.md)** - Comprehension inlining, type parameters
 - **[Python 3.11](py311.md)** - Significant performance improvements (inline caching)
-- **[Python 3.10](py310.md)** - Pattern matching additions
+- **[Python 3.10](py310.md)** - Pattern matching additions (end of life)
 
 ## Key Changes by Version
 
@@ -118,7 +118,7 @@ match value:
 | 3.13 | Oct 2029 |
 | 3.12 | Oct 2028 |
 | 3.11 | Oct 2027 |
-| 3.10 | Oct 2026 |
+| 3.10 | Oct 2026 (reached) |
 
 Plan upgrades before EOL.
 

@@ -27,7 +27,7 @@ most two; c = characters in the source `untokenize()` produces.
 
 From 3.12 an f-string is tokenized into its parts, `FSTRING_START`, an
 `FSTRING_MIDDLE` per run of literal text, the expression's own tokens and
-`FSTRING_END`, where 3.10 and 3.11 yield one `STRING`; 3.14 does the same for
+`FSTRING_END`, where 3.11 yields one `STRING`; 3.14 does the same for
 t-strings. That raises t for the same n.
 
 ### Encodings

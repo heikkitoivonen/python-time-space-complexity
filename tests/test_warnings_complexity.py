@@ -566,7 +566,6 @@ class TestCatchWarnings:
             assert warnings.filters != before
         assert warnings.filters is before
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="action added in 3.11")
     def test_action_installs_one_filter_on_entry(self) -> None:
         with warnings.catch_warnings():
             warnings.resetwarnings()

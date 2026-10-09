@@ -36,8 +36,7 @@ Measurement scope:
   back as 2, and `setfirstweekday(-1)` on an instance as 6.
 * The locale classes are observed through a counting `locale.setlocale`:
   an explicit locale makes no call at construction, and `locale=None` is
-  resolved there, a query of `LC_TIME` being observed from 3.11 (3.10 reads
-  the environment through `locale.getdefaultlocale()`, per Lib/calendar.py). Each `formatweekday()` and `formatmonthname()` sets `LC_TIME` to
+  resolved there, a query of `LC_TIME` being observed. Each `formatweekday()` and `formatmonthname()` sets `LC_TIME` to
   the calendar's locale exactly once and sets it back once, leaving it as it
   was, so a text or HTML month switches it eight times. `day_name`, `day_abbr`,
   `month_name` and `month_abbr` are observed through counting wrappers
@@ -517,9 +516,7 @@ class TestLocaleCalendarsSwitchLCTime:
         cal = cls()
 
         assert cal.locale is not None
-        if sys.version_info >= (3, 11):
-            # 3.10 reads the environment through locale.getdefaultlocale() instead.
-            assert (locale.LC_TIME, None) in setlocale_calls
+        assert (locale.LC_TIME, None) in setlocale_calls
 
     def test_each_name_switches_once_and_restores(
         self, setlocale_calls: list[tuple[Any, ...]]

@@ -1,16 +1,14 @@
 """Tests for docs/stdlib/distutils.md.
 
-The package exists on Python 3.10 and 3.11 only, so the in-process tests take
-the `du` fixture, which skips from 3.12; run them with one of those
-interpreters. The tests that run distutils in a subprocess check the version
-themselves. The fixture imports the standard library's copy: an environment
-can carry a site-packages `.pth` hook that substitutes another `distutils` for
-the import, so the fixture imports with only the interpreter's own finders on
-`sys.meta_path`, checks that the package came from the standard library
-directory, and puts the previous modules back afterwards. The page's examples
-run with `-S` for the same reason. Lib/distutils differs between v3.10.19 and
-v3.11.14 in the removal of `command/bdist_msi.py` and in edits that move no
-bound.
+The package exists on Python 3.11 only, so the in-process tests take the `du`
+fixture, which skips from 3.12; run them with that interpreter. The tests that
+run distutils in a subprocess check the version themselves. The fixture
+imports the standard library's copy: an environment can carry a site-packages
+`.pth` hook that substitutes another `distutils` for the import, so the fixture
+imports with only the interpreter's own finders on `sys.meta_path`, checks
+that the package came from the standard library directory, and puts the
+previous modules back afterwards. The page's examples run with `-S` for the
+same reason.
 
 Almost every row is settled by observation: a recording `spawn` stands in for
 the compiler, linker and archiver and counts their runs, a wrapped
@@ -106,9 +104,9 @@ Measurement scope:
   exit. The `distutils.sysconfig` functions are `sysconfig`'s own, and
   `get_python_inc()` and `get_python_lib()` make no `stat` call. `FileList.include_pattern()` searches every file once and
   `exclude_pattern()` deletes once per file removed.
-* The import warns on 3.10 and 3.11 and raises `ModuleNotFoundError` from 3.12
-  without site-packages. `bdist_msi` ships in 3.10 only, and neither version
-  ships `bdist_packager` or defines `sysconfig.set_python_build`.
+* The import warns on 3.11 and raises `ModuleNotFoundError` from 3.12 without
+  site-packages. 3.11 ships neither `bdist_msi` nor `bdist_packager`, and does
+  not define `sysconfig.set_python_build`.
 * Every fenced Python block runs in its own subprocess, and a mutated
   assertion in one of them is asserted to fail.
 
@@ -117,9 +115,9 @@ Not settled here:
 * The deprecation in 3.10 and the removal in 3.12 come from PEP 632.
 * `register` needs a package index, `bdist_rpm` needs `rpmbuild`, and the
   `"compress"` archive format needs the `compress` program; only the call is
-  observed. `bdist_msi` needs `msilib`, which exists on Windows only, and
-  `msvc9compiler` needs `winreg`; neither is imported on Linux, and CI runs
-  these tests on no interpreter that has them.
+  observed. `msvc9compiler` needs `winreg`, which exists on Windows only; it
+  is not imported on Linux, and CI runs these tests on no interpreter that
+  has it.
 * `check --restructuredtext` needs a reStructuredText parser that is not in
   the standard library.
 * Source-only, from Lib/distutils on v3.11.14: `Distribution(attrs)` loops
@@ -351,9 +349,8 @@ def run_python(*args: str, env: dict[str, str] | None = None) -> subprocess.Comp
 
 
 class TestAvailability:
-    """The package ships with 3.10 and 3.11, warns on import, and is gone from
-    3.12; the rows marked as absent name modules and functions that do not
-    exist."""
+    """The package ships with 3.11, warns on import, and is gone from 3.12;
+    the rows marked as absent name modules and functions that do not exist."""
 
     def test_the_package_ships_only_before_3_12(self) -> None:
         assert (STDLIB / "distutils" / "__init__.py").is_file() == HAS_DISTUTILS
@@ -372,9 +369,8 @@ class TestAvailability:
         assert "distutils" in result.stderr
 
     @pytest.mark.skipif(not HAS_DISTUTILS, reason="distutils was removed in 3.12")
-    def test_bdist_msi_ships_in_3_10_only(self) -> None:
-        shipped = (STDLIB / "distutils" / "command" / "bdist_msi.py").is_file()
-        assert shipped == (sys.version_info < (3, 11))
+    def test_bdist_msi_does_not_ship(self) -> None:
+        assert not (STDLIB / "distutils" / "command" / "bdist_msi.py").exists()
 
     def test_documented_names_that_do_not_exist(self, du: Any) -> None:
         assert not (STDLIB / "distutils" / "command" / "bdist_packager.py").exists()
@@ -1738,7 +1734,7 @@ def _run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[st
 
 class TestDocumentedExamples:
     """Each block runs in its own subprocess and asserts its own result. The
-    blocks that import distutils run on 3.10 and 3.11; the replacements block
+    blocks that import distutils run on 3.11; the replacements block
     runs everywhere."""
 
     def test_the_page_has_the_expected_blocks(self) -> None:

@@ -41,12 +41,12 @@ Measurement scope:
   any window is asked for.
 * Lib/idlelib/__init__.py, __main__.py and idle.py, and `pyshell.main()`
   apart from message formatting and a macOS Tk version warning, are the same
-  in the v3.10.19, v3.11.14, v3.12.12, v3.13.11 and v3.14.2 tags, so no
+  in the v3.11.14, v3.12.12, v3.13.11 and v3.14.2 tags, so no
   bound on the page moves inside the supported range. The helpers `main()`
   applies to the root move within a minor version - 3.14.7 imports
   `fix_scaling` and `fix_x11_paste` from `idlelib.util` - so the stand-in
   root answers their calls rather than the helpers being replaced. The
-  tests pass on 3.10.21, 3.11.16, 3.12.14, 3.13.14 and 3.14.7.
+  tests pass on 3.11.16, 3.12.14, 3.13.14 and 3.14.7.
 * Every fenced Python block runs in its own subprocess, and a mutated
   assertion in one of them is asserted to fail.
 

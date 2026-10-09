@@ -40,7 +40,7 @@ value as O(1). A parsed text run can be held as its pieces until it is first rea
 | `ET.XMLPullParser(events=None)` | O(1) | O(1) | Reports `"end"` events unless `events` names others: `"start"`, `"comment"`, `"pi"`, `"start-ns"`, `"end-ns"` |
 | `XMLPullParser.feed(data)` | O(c) | O(c) | Queues one event per piece of markup `data` completes; a parse error is queued too, and raised by `read_events()` |
 | `XMLPullParser.read_events()` | O(1) per event | O(1) | Removes events from the queue as you iterate; events you never read stay queued, and so does the tree they point into |
-| `XMLPullParser.flush()` | O(c) | O(c) | c = the bytes the parser has held back; parses them now. Python 3.13+, 3.12.3+, 3.11.9+ and 3.10.14+ |
+| `XMLPullParser.flush()` | O(c) | O(c) | c = the bytes the parser has held back; parses them now. Python 3.13+, 3.12.3+ and 3.11.9+ |
 | `XMLPullParser.close()` | O(c) | O(c) | Ends the document and queues its last events; returns `None` |
 
 ### XMLParser
@@ -109,7 +109,7 @@ elements beneath the element the search was called on.
 | `[@attrib]`, `[@attrib='value']`, `[@attrib!='value']` | O(1) per candidate | O(1) | |
 | `[tag]` | O(k) per candidate | O(1) | Scans the candidate's children |
 | `[.='text']`, `[.!='text']`, `[tag='text']`, `[tag!='text']` | O(e + n) per candidate | O(n) | Joins all the text beneath the candidate, or beneath each matching child |
-| `[position]`, `[last()]`, `[last()-1]` | O(e + k·g) | O(e) | g = distinct tags among the candidates under one parent. Builds the parent map, then scans the siblings once per parent and tag: O(e + k) when siblings share a tag, but `*[1]` over k differently tagged siblings is O(k²). Before Python 3.14.7, 3.13.15, 3.12.14, 3.11.16 and 3.10.21 the scan is once per candidate: O(e + k²) whatever the tags |
+| `[position]`, `[last()]`, `[last()-1]` | O(e + k·g) | O(e) | g = distinct tags among the candidates under one parent. Builds the parent map, then scans the siblings once per parent and tag: O(e + k) when siblings share a tag, but `*[1]` over k differently tagged siblings is O(k²). Before Python 3.14.7, 3.13.15, 3.12.14 and 3.11.16 the scan is once per candidate: O(e + k²) whatever the tags |
 
 ### ElementTree
 

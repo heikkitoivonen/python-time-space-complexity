@@ -6,8 +6,8 @@ is long_divmod -> l_divmod in Objects/longobject.c: one-digit operands take a
 fast path, larger ones schoolbook long_divrem, O(m * (n - m + 1)) for an n-bit
 dividend and an m-bit divisor (O(n + m) when m > n). From v3.12.0 (v3.12.12, v3.13.11, v3.14.2),
 l_divmod hands a divisor over 300 digits with a quotient over 150 digits to
-Lib/_pylong.py int_divmod, documented there as O(n**1.58), Karatsuba's log2(3); v3.10.19 and
-v3.11.14 have no _pylong. For floats it is float_divmod in
+Lib/_pylong.py int_divmod, documented there as O(n**1.58), Karatsuba's log2(3); v3.11.14
+has no _pylong. For floats it is float_divmod in
 Objects/floatobject.c, one fmod and a floor.
 
 Measurement scope:

@@ -116,7 +116,6 @@ the `a`s between the two repetitions before giving up.
 
 ```python
 import re
-import sys
 
 # AVOID: nested quantifiers, on input that does not match
 bad_pattern = re.compile(r'(a+)+b')
@@ -128,20 +127,18 @@ assert bad_pattern.search('a' * 8) is None  # exponential in m, harmless at this
 good_pattern = re.compile(r'a+b')
 assert good_pattern.search('a' * 24) is None  # O(m²) at worst
 
-# Python 3.11+: keep the nesting but forbid the backtracking
-if sys.version_info >= (3, 11):
-    atomic = re.compile(r'(?>a+)+b')
-    possessive = re.compile(r'(a++)+b')
-    assert atomic.search('a' * 24) is None
-    assert possessive.search('a' * 24) is None
+# BETTER: keep the nesting but forbid the backtracking
+atomic = re.compile(r'(?>a+)+b')
+possessive = re.compile(r'(a++)+b')
+assert atomic.search('a' * 24) is None
+assert possessive.search('a' * 24) is None
 ```
 
 ### Anchoring a Search
 
-A pattern that cannot match anywhere still costs a `search()` a pass over every position. From
-Python 3.11 a pattern starting with `^` (without `re.MULTILINE`) or `\A` stops after the first
-attempt, which is where anchoring saves time. Before 3.11 the retries ran anyway and failed on the
-anchor at each position. Where the match is at the start, there is nothing to save on any version.
+A pattern that cannot match anywhere still costs a `search()` a pass over every position. A
+pattern starting with `^` (without `re.MULTILINE`) or `\A` stops after the first attempt, which is
+where anchoring saves time. Where the match is at the start, there is nothing to save.
 
 ```python
 import re
@@ -149,10 +146,10 @@ import re
 unanchored = re.compile(r'start.*end')
 anchored = re.compile(r'^start.*end')
 
-# No match anywhere: from 3.11 the anchored search makes one attempt
+# No match anywhere: the anchored search makes one attempt
 haystack = 'x' * 100_000
 assert unanchored.search(haystack) is None  # O(m) - scans every position
-assert anchored.search(haystack) is None    # O(1) from 3.11, O(m) before
+assert anchored.search(haystack) is None    # O(1) - one attempt
 
 # match() is anchored on every version
 assert unanchored.match(haystack) is None   # O(1) - one attempt fails at once
@@ -303,16 +300,15 @@ assert tokens == [('name', 'x'), ('op', '='), ('num', '12'), ('op', '+'), ('name
 - Compile a pattern once and reuse the `Pattern`, rather than relying on the cache lookup in a loop
 - Use `finditer()` when the matches are consumed one at a time, so memory follows one match
 - Use `span()`, `start()` and `end()` when the positions are enough; they copy nothing
-- Anchor a pattern that must match at the start with `^` or `\A`, or call `match()`; from 3.11 a
-  failing anchored `search()` stops after one attempt, unless `^` is under `re.MULTILINE`
+- Anchor a pattern that must match at the start with `^` or `\A`, or call `match()`; a failing
+  anchored `search()` stops after one attempt, unless `^` is under `re.MULTILINE`
 - Start a pattern with something that fails fast, such as `\b`, when its failed attempts would
   otherwise run to the end of the subject
 
 ❌ **Avoid**:
 
 - Nested or competing quantifiers such as `(a+)+` and `a*a*` on input that may not match; remove
-  the nesting, or on Python 3.11+ make the inner repetition atomic, `(?>a+)+`, or possessive,
-  `(a++)+`
+  the nesting, or make the inner repetition atomic, `(?>a+)+`, or possessive, `(a++)+`
 - `search()` with a pattern like `\w+@` on long runs of word characters - quadratic in the run
 - `findall()` on a large subject when you only walk the results once
 - Keeping `Match` objects from a large subject alive longer than needed; each one holds the subject

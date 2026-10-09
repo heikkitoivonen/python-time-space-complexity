@@ -103,7 +103,7 @@ Not settled here:
   is measured at one receiver size, by pattern length alone.
 * The receiver-identity paths are read from Objects/bytesobject.c and
   Objects/stringlib/{transmogrify,split,partition,join}.h, the same from
-  v3.10.19 through v3.14.2; only the pinned interpreter is run locally. They
+  v3.11.14 through v3.14.2; only the pinned interpreter is run locally. They
   are asserted for an exact `bytes`; a subclass is checked only for `strip()`.
 * The `%` row is measured with `%s` and a `bytes` value. Formatting an `int`
   with `%d` costs what `int` to decimal costs, which the page leaves to the

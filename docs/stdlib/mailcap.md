@@ -7,7 +7,7 @@ line. Nothing is cached: each `getcaps()` call opens and parses the files again.
 
 !!! warning "Removed in Python 3.13"
     Deprecated in Python 3.11 and removed in Python 3.13 by PEP 594. The examples need
-    Python 3.10, 3.11 or 3.12.
+    Python 3.11 or 3.12.
 
 `L` is the characters across the mailcap files read, and `e` is the entries for the requested
 MIME type plus those for its `type/*` wildcard, in a dictionary `getcaps()` built. The bounds

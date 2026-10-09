@@ -10,8 +10,8 @@ observation of outputs and exceptions.
 
 Measurement scope:
 
-* Space: every encoder and decoder except the uuencode pair, with the four
-  HQX functions included on 3.10, is a `tracemalloc` peak at inputs of 200,000 and
+* Space: every encoder and decoder except the uuencode pair is a
+  `tracemalloc` peak at inputs of 200,000 and
   2,000,000 bytes; the larger peaks more than 5x the smaller, and each peak
   is at least the length of the result and under twice the input plus result
   plus 10,000 bytes, which excludes super-linear growth. `crc32()`,
@@ -50,14 +50,8 @@ Measurement scope:
   and 0x31C3 for `crc_hqx()` from 0 (CRC-CCITT, the XMODEM variant), 0x29B1
   from 0xFFFF.
 * `binascii.Error` is a `ValueError` subclass.
-* The HQX rows are guarded on `sys.version_info < (3, 11)`; their presence,
-  and the `binhex` module's, is asserted to match it on every version. On 3.10 each warns
-  `DeprecationWarning`; `a2b_hqx()` returns `(data, 0)` without the
-  terminating `:` and `(data, 1)` with it, and raises `binascii.Incomplete`
-  when a trailing character is cut; `rlecode_hqx()` leaves a run of three
-  alone, codes a run of four as three bytes, splits a run of 300 into codes of
-  at most 255, and escapes each 0x90 as two bytes, a run of five included; `rledecode_hqx()` expands 1,000 three-byte
-  codes into 255,000 bytes and raises `binascii.Incomplete` on a cut code.
+* The four HQX functions and the `binhex` module are asserted absent on every
+  supported version.
 * Every fenced Python block runs in its own subprocess, and a mutated
   assertion in one of them is asserted to fail with an `AssertionError`.
 
@@ -70,8 +64,7 @@ Not settled here:
   definitional: naming an exception class is an attribute lookup.
 * The Related Modules descriptions summarise the linked pages, whose own
   tests carry those claims.
-* Inputs are bytes: for the ASCII decoders, what their encoders produce, and
-  for `rledecode_hqx()` codes that each expand to four bytes;
+* Inputs are bytes: for the ASCII decoders, what their encoders produce;
   `str` arguments, other buffer types, and malformed input beyond the cases
   named above are not varied in size. The timing ratios are local evidence
   of the growth class only; CI re-runs them on every supported version.
@@ -88,7 +81,6 @@ import sys
 import textwrap
 import time
 import tracemalloc
-import warnings
 import zlib
 from collections.abc import Callable
 from typing import Any
@@ -146,28 +138,6 @@ LINEAR_OUTPUT: dict[str, tuple[Callable[[bytes], Any], Callable[[int], bytes]]] 
     "b2a_qp": (binascii.b2a_qp, payload),
     "a2b_qp": (binascii.a2b_qp, lambda n: binascii.b2a_qp(payload(n // 3))),
 }
-
-if sys.version_info < (3, 11):
-
-    def _quiet(name: str) -> Callable[[bytes], Any]:
-        def call(data: bytes) -> Any:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", DeprecationWarning)
-                return getattr(binascii, name)(data)
-
-        return call
-
-    LINEAR_OUTPUT.update(
-        {
-            "b2a_hqx": (_quiet("b2a_hqx"), payload),
-            "a2b_hqx": (
-                lambda data: _quiet("a2b_hqx")(data)[0],
-                lambda n: _quiet("b2a_hqx")(payload(n * 3 // 4 // 3 * 3)),
-            ),
-            "rlecode_hqx": (_quiet("rlecode_hqx"), payload),
-            "rledecode_hqx": (_quiet("rledecode_hqx"), lambda n: b"a\x90\x04" * (n // 3)),
-        }
-    )
 
 CONSTANT_SPACE: dict[str, tuple[Callable[[bytes], Any], Callable[[int], bytes]]] = {
     "crc32": (binascii.crc32, payload),
@@ -281,7 +251,6 @@ class TestBase64:
         assert binascii.a2b_base64(b"YW!J\nj") == b"abc"
         assert binascii.a2b_base64("YWJj") == b"abc"
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="strict_mode was added in 3.11")
     def test_strict_mode_rejects_them(self) -> None:
         with pytest.raises(binascii.Error, match="Only base64 data"):
             binascii.a2b_base64(b"YW!Jj", strict_mode=True)  # type: ignore[call-arg]
@@ -379,56 +348,13 @@ class TestChecksums:
         assert issubclass(binascii.Error, ValueError)
 
 
-class TestHqxFunctionsExistOnlyOn310:
-    """BinHex rows: Python 3.10 only, deprecated there."""
+class TestHqxFunctionsAreAbsent:
+    """BinHex rows: removed in Python 3.11, with the `binhex` module."""
 
-    def test_availability_matches_the_version(self) -> None:
+    def test_no_supported_version_has_them(self) -> None:
         for name in HQX_FUNCTIONS:
-            assert hasattr(binascii, name) == (sys.version_info < (3, 11)), name
-        has_binhex = importlib.util.find_spec("binhex") is not None
-        assert has_binhex == (sys.version_info < (3, 11))
-
-    @pytest.fixture
-    def hqx(self) -> Any:
-        if sys.version_info >= (3, 11):
-            pytest.skip("version: the HQX functions were removed in Python 3.11")
-        return binascii
-
-    @pytest.mark.parametrize("name", HQX_FUNCTIONS)
-    def test_each_warns(self, hqx: Any, name: str) -> None:
-        with pytest.warns(DeprecationWarning, match=name):
-            try:
-                getattr(hqx, name)(b"abc")
-            except (hqx.Error, hqx.Incomplete):
-                pass
-
-    def test_a2b_hqx_reports_whether_it_reached_the_colon(self, hqx: Any) -> None:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            encoded = hqx.b2a_hqx(b"hello world!")
-
-            assert hqx.a2b_hqx(encoded) == (b"hello world!", 0)
-            assert hqx.a2b_hqx(encoded + b":") == (b"hello world!", 1)
-            with pytest.raises(hqx.Incomplete):
-                hqx.a2b_hqx(encoded[:-1])
-
-    def test_rlecode_codes_runs_of_four_or_more(self, hqx: Any) -> None:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-
-            assert hqx.rlecode_hqx(b"aaab") == b"aaab"
-            assert hqx.rlecode_hqx(b"aaaab") == b"a\x90\x04b"
-            assert hqx.rlecode_hqx(b"a" * 300) == b"a\x90\xffa\x90\x2d"
-            assert hqx.rlecode_hqx(b"\x90") == b"\x90\x00"
-            assert hqx.rlecode_hqx(b"\x90" * 5) == b"\x90\x00" * 5
-
-    def test_rledecode_expands_each_code_up_to_255_bytes(self, hqx: Any) -> None:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-
-            assert hqx.rledecode_hqx(b"a\x90\xff" * 1_000) == b"a" * 255_000
-            with pytest.raises(hqx.Incomplete):
-                hqx.rledecode_hqx(b"a\x90")
+            assert not hasattr(binascii, name), name
+        assert importlib.util.find_spec("binhex") is None
 
 
 def _blocks() -> list[tuple[int, str]]:

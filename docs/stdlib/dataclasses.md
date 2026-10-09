@@ -108,9 +108,8 @@ assert first.tags == [] and first.tags is not second.tags
 ```
 
 !!! warning "A mutable default is rejected, not shared"
-    `tags: list = []` raises `ValueError` when the class is created. From Python 3.11 that
-    applies to any default whose class sets `__hash__` to `None`; 3.10 rejects only `list`, `dict`
-    and `set`.
+    `tags: list = []` raises `ValueError` when the class is created. That applies to any default
+    whose class sets `__hash__` to `None`, not only `list`, `dict` and `set`.
 
 ## Equality, Ordering and Hashing
 

@@ -6,8 +6,8 @@ rounds it carries. Slowness is the point - a hash that is cheap to compute is ch
 
 !!! warning "Removed in Python 3.13"
     Deprecated in Python 3.11 and removed in Python 3.13 (PEP 594). The page covers the module
-    as it is on Python 3.10 to 3.12 on Unix, and its examples run only there; from 3.11,
-    `import crypt` emits a `DeprecationWarning`. Which methods work is up to the C library:
+    as it is on Python 3.11 and 3.12 on Unix, where `import crypt` emits a `DeprecationWarning`,
+    and its examples run only there. Which methods work is up to the C library:
     `crypt.methods` lists the ones this one supports, and the examples assume Linux, where
     libxcrypt provides all five.
 

@@ -43,7 +43,7 @@ Measurement scope:
   raise `TypeError`, 2**64 raises `OverflowError`. `skipkeys=True` skips a
   non-`str` key with `sort_keys=False`. With `sort_keys=True`, mixed keys
   raise `TypeError` before 3.13.16 on the 3.13 line and before 3.14.8 on the
-  3.14 line (also on 3.10-3.12); from those patches, non-string keys are
+  3.14 line (also on 3.11 and 3.12); from those patches, non-string keys are
   skipped and the remaining keys are sorted. Both values and key order are
   checked in each successful case.
 * `UID` accepts 0 and 2**64 - 1, rejects -1 and 2**64 with `ValueError` and
@@ -487,7 +487,7 @@ class TestTypes:
     @pytest.mark.skipif(sys.version_info < (3, 13), reason="aware_datetime added in 3.13")
     @pytest.mark.parametrize("fmt", FORMATS, ids=lambda f: f.name)
     def test_aware_datetime(self, fmt: plistlib.PlistFormat) -> None:
-        utc = datetime.timezone.utc
+        utc = datetime.UTC
         plus_two = datetime.timezone(datetime.timedelta(hours=2))
         aware = datetime.datetime(2024, 1, 2, 5, 4, 5, tzinfo=plus_two)
 

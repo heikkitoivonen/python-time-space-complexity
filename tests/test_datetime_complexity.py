@@ -48,7 +48,7 @@ Measurement scope:
   a cached format at size six is recompiled; `fromisoformat()` leaves the
   cache empty. On a 19-character ISO string with the format cached,
   `strptime()` costs more than 5x `fromisoformat()`.
-* `fromisoformat()`'s n term: from 3.11, `datetime` and `time` inputs whose
+* `fromisoformat()`'s n term: `datetime` and `time` inputs whose
   fractional-second digits grow from 1,000 to 100,000 cost between 20x and
   1,000x more, with a traced peak under 1 KB at both sizes; on every version,
   `date.fromisoformat()` rejecting 1,000 and 100,000 characters costs between
@@ -66,10 +66,11 @@ Measurement scope:
   normalisation and rounding, `timezone`'s offset range and singleton, the
   `UTC` alias and the `datetime_CAPI` capsule. A naive `timestamp()` is
   observed as local time in a subprocess run under `TZ=EST5`.
-* The version notes are asserted on each side of their boundary with
-  `sys.version_info`: `fromisoformat()`'s wider grammar and `datetime.UTC` at
-  3.11, the `utcnow()` and `utcfromtimestamp()` deprecation at 3.12, and
-  `date.strptime()` and `time.strptime()` at 3.14. Building the regular
+* The version notes are asserted with `sys.version_info`: `fromisoformat()`'s
+  wider grammar and `datetime.UTC`, both 3.11, are asserted present, and the
+  `utcnow()` and `utcfromtimestamp()` deprecation at 3.12 and
+  `date.strptime()` and `time.strptime()` at 3.14 on each side of their
+  boundary. Building the regular
   expression for 5,000 and 100,000 `%%` directives costs under 60x more from
   3.12.8 and 3.13.1 and over 60x before; 3.12.7 measured about 170x and
   3.12.14 about 20x.
@@ -117,7 +118,7 @@ import time as time_module
 import tracemalloc
 import warnings
 from collections.abc import Callable, Iterator
-from datetime import date, datetime, time, timedelta, timezone, tzinfo
+from datetime import UTC, date, datetime, time, timedelta, timezone, tzinfo
 from functools import partial
 from typing import Any
 
@@ -551,7 +552,6 @@ class TestFromisoformat:
     """O(n) time and O(1) space, parsed in C."""
 
     @pytest.mark.timing
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="3.10 rejects extra digits")
     def test_time_follows_the_fractional_digits(self) -> None:
         for parse, prefix in (
             (datetime.fromisoformat, "2024-01-15T12:30:45."),
@@ -566,7 +566,6 @@ class TestFromisoformat:
                 f"{parse.__qualname__}: 100x the digits cost x{long_ns / short_ns:.1f}"
             )
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="3.10 rejects extra digits")
     def test_space_does_not_follow_the_fractional_digits(self) -> None:
         for parse, prefix in (
             (datetime.fromisoformat, "2024-01-15T12:30:45."),
@@ -685,13 +684,13 @@ class TestRowValues:
         assert monday.isocalendar().week == 3
 
     def test_time_drops_the_tzinfo_and_timetz_keeps_it(self) -> None:
-        moment = datetime(2024, 1, 15, 12, 0, tzinfo=timezone.utc)
+        moment = datetime(2024, 1, 15, 12, 0, tzinfo=UTC)
 
         assert moment.time().tzinfo is None
-        assert moment.timetz().tzinfo is timezone.utc
+        assert moment.timetz().tzinfo is UTC
 
     def test_replace_tzinfo_does_not_convert(self) -> None:
-        moment = datetime(2024, 1, 15, 12, 0, tzinfo=timezone.utc)
+        moment = datetime(2024, 1, 15, 12, 0, tzinfo=UTC)
         offset = timezone(timedelta(hours=5))
 
         assert moment.replace(tzinfo=offset).hour == 12
@@ -741,31 +740,25 @@ class TestRowValues:
         assert plus_five.dst(None) is None
         assert plus_five.tzname(None) == "PLUS5"
         assert plus_five.fromutc(utc_wall_clock).hour == 17
-        assert timezone(timedelta(0)) is timezone.utc
+        assert timezone(timedelta(0)) is timezone.utc  # noqa: UP017 - the attribute is the subject
 
     def test_constants(self) -> None:
         import datetime as module
 
         assert type(module.datetime_CAPI).__name__ == "PyCapsule"
-        if sys.version_info >= (3, 11):
-            assert module.UTC is timezone.utc
-        else:
-            assert not hasattr(module, "UTC")
+        assert module.UTC is timezone.utc  # noqa: UP017 - the alias is the subject
 
 
 class TestVersionNotes:
-    """Each note, asserted on both sides of its boundary."""
+    """Each note, asserted on both sides of its boundary where a supported
+    version falls on each side."""
 
     def test_fromisoformat_widened_in_3_11(self) -> None:
         extended = ["2024-01-15T12:30:45Z", "20240115T123045", "12:30:45.1234567"]
         parsers = [datetime.fromisoformat, datetime.fromisoformat, time.fromisoformat]
 
         for parse, text in zip(parsers, extended, strict=True):
-            if sys.version_info >= (3, 11):
-                assert parse(text) is not None
-            else:
-                with pytest.raises(ValueError):
-                    parse(text)
+            assert parse(text) is not None
 
     def test_utcnow_and_utcfromtimestamp_are_deprecated_from_3_12(self) -> None:
         if sys.version_info >= (3, 12):

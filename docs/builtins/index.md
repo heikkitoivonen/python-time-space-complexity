@@ -66,7 +66,7 @@ under Notes is what you pay to consume it.
 | [`sum()`](sum.md) | O(n) | O(1) | O(n²) if misused to concatenate strings |
 | [`min()`](min.md) | O(n) | O(1) | Must compare every item |
 | [`max()`](max.md) | O(n) | O(1) | Must compare every item |
-| [`sorted()`](sorted.md) | O(n log n) | O(n) | Timsort (≤3.10), Powersort (3.11+) |
+| [`sorted()`](sorted.md) | O(n log n) | O(n) | Powersort |
 | [`all()`](all.md) | O(n) | O(1) | Short-circuits on the first falsy item |
 | [`any()`](any.md) | O(n) | O(1) | Short-circuits on the first truthy item |
 

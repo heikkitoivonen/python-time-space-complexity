@@ -72,7 +72,7 @@ Measurement scope:
   that did nothing could not pass on a flat peak either. `remove_flag()` is
   the exception and is guarded on `sys.version_info`: it asks whether one of
   the two headers is there, and until 3.12 that question built a list of every
-  header name, so the same pair grows more than 10x on 3.10 and 3.11 and stays
+  header name, so the same pair grows more than 10x on 3.11 and stays
   under 2x from 3.12. `BabylMessage.update_visible()` is asserted across the
   same boundary, on 5 visible headers against 10 and 10,000 others, with a
   source header changed first so the measured call has something to refresh.
@@ -234,7 +234,7 @@ import pytest
 # A mailbox object is annotated `Any` where typeshed and the runtime disagree:
 # every format but `Maildir` keys its messages by integer while `Mailbox` is
 # stubbed with `str` keys, and the keyed `Maildir` flag API arrived in 3.13,
-# after the 3.10 signatures this file is checked against.
+# after the 3.11 signatures this file is checked against.
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "mailbox.md"
 EXPECTED_BLOCKS = 17
 

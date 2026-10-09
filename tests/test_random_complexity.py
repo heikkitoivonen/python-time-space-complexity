@@ -43,9 +43,8 @@ Measurement scope:
   ``tracemalloc`` peak for k=10 is the same over 20,000 and 200,000 elements,
   and about k draws are taken at k=1,000 of 10**6. ``counts=`` indexes the
   population k times, makes n - 1 additions accumulating n counts and about
-  log2(n) comparisons per value bisecting them, at n=64 and n=4,096. A dict is rejected on every supported version; a set
-  is rejected from 3.11 and warns on 3.10, where Lib/random.py copies it to a
-  tuple first.
+  log2(n) comparisons per value bisecting them, at n=64 and n=4,096. A dict
+  and a set are both rejected.
 * ``shuffle()`` keeps the list object, takes between n - 1 and 2n draws at
   n=1,000, about 8x the draws for 8x the list, and peaks under 5 KB at 20,000
   and 200,000 elements, which is O(1) extra space rather than no allocation.
@@ -121,7 +120,6 @@ import textwrap
 import threading
 import timeit
 import tracemalloc
-import warnings
 from collections.abc import Callable, Iterator, Sequence
 from typing import Any, overload
 
@@ -419,7 +417,7 @@ class TestBoundedIntegersCarryTheBitWidth:
         """The stepped row's `//` and `*` on w-bit operands.
 
         The unit-step path is shifts and an addition; a step adds a division
-        and a multiplication. 3.10 and 3.11 divide by schoolbook; from 3.12
+        and a multiplication. 3.11 divides by schoolbook; from 3.12
         `long_divmod` hands off to `_pylong.int_divmod` once the divisor
         passes 300 digits, which the wide end reaches. Comparing growth with
         the unit-step path in the same run keeps the assertion independent of
@@ -637,18 +635,11 @@ class TestSampleFollowsK:
                 f"n={size}: about {expected} comparisons, measured {CountingInt.comparisons}"
             )
 
-    def test_a_dict_is_rejected_and_a_set_from_3_11(self) -> None:
+    def test_a_dict_and_a_set_are_rejected(self) -> None:
         with pytest.raises(TypeError, match="must be a sequence"):
             random.sample({1: "a", 2: "b"}, 1)  # type: ignore[arg-type]
-
-        if sys.version_info >= (3, 11):
-            with pytest.raises(TypeError, match="must be a sequence"):
-                random.sample({1, 2, 3, 4, 5}, 2)  # type: ignore[arg-type]
-        else:
-            with warnings.catch_warnings(record=True) as caught:
-                warnings.simplefilter("always")
-                random.sample({1, 2, 3, 4, 5}, 2)  # type: ignore[arg-type]
-            assert any(issubclass(w.category, DeprecationWarning) for w in caught)
+        with pytest.raises(TypeError, match="must be a sequence"):
+            random.sample({1, 2, 3, 4, 5}, 2)  # type: ignore[arg-type]
 
 
 class TestShuffle:

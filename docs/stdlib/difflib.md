@@ -45,7 +45,7 @@ inside them.
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `difflib.Differ(linejunk=None, charjunk=None)` | O(1) | O(1) | Stores the two filters |
-| `Differ.compare(a, b)` | As `get_matching_blocks()` on the lines, plus O(r) line pairs per replaced block | O(B + c) | A generator. Each line pair is a character-level `SequenceMatcher`, screened by the quick ratios first. 3.10–3.13 compare O(r²) to O(r³) pairs per block and hold O(r·c) |
+| `Differ.compare(a, b)` | As `get_matching_blocks()` on the lines, plus O(r) line pairs per replaced block | O(B + c) | A generator. Each line pair is a character-level `SequenceMatcher`, screened by the quick ratios first. 3.11–3.13 compare O(r²) to O(r³) pairs per block and hold O(r·c) |
 
 ### HtmlDiff
 
@@ -238,7 +238,7 @@ assert '! two\n' in context and '! 2\n' in context
 `ndiff()` matches lines the same way, then looks inside each replaced block for pairs of similar
 lines to mark up character by character. Each pair is a character-level `SequenceMatcher`. From
 Python 3.14 a line is compared only with lines at a similar offset in the block, O(r) pairs; on
-3.10–3.13 every pair is compared at least once, and up to O(r³) pairs, holding O(r·c), when the
+3.11–3.13 every pair is compared at least once, and up to O(r³) pairs, holding O(r·c), when the
 lines all resemble each other.
 
 ```python

@@ -8,7 +8,7 @@ them.
 
 !!! warning "Removed in Python 3.13"
     Deprecated in Python 3.11 and removed in Python 3.13 by PEP 594. The examples need
-    Python 3.10, 3.11 or 3.12.
+    Python 3.11 or 3.12.
 
 `r` is the lines in the server's multi-line reply to one call: one per group for `list()`, one
 per article for `over()` and `xhdr()`, the article for `article()`. `d` is the bytes of an article

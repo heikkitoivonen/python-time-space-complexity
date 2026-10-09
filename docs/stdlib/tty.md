@@ -117,7 +117,7 @@ finally:
 - **Python 3.12.1+**: That list is the attributes the call replaced, and restores the terminal; on
   3.12.0 its `VMIN` and `VTIME` entries already hold the new mode's values
 - **Python 3.12.2+**: `setcbreak()` and `cfmakecbreak()` leave carriage-return translation
-  (`ICRNL`) as it was, which `setcbreak()` also does on 3.10 and 3.11; 3.12.0 and 3.12.1 clear it
+  (`ICRNL`) as it was, which `setcbreak()` also does on 3.11; 3.12.0 and 3.12.1 clear it
 
 ## Related Modules
 

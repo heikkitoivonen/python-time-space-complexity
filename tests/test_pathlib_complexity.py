@@ -10,11 +10,11 @@ size step. Most rows move at a release, so most tests branch on
 
 Measurement scope:
 
-* Construction: a 100,000-character path peaks at about 100,800 B on 3.10 and
+* Construction: a 100,000-character path peaks at about 100,300 B on 3.11 and
   at the same few hundred bytes as a 10-character one from 3.12, where the
   first `str()` builds the string (over 50 KB) and the second returns the same
-  object. Joining a 1,000,000-character segment costs x19 a 10-character one
-  on 3.10 and x27 on 3.11 by the clock, and x1.0 from 3.12. Joining onto a
+  object. Joining a 1,000,000-character segment costs x25 a 10-character one
+  on 3.11 by the clock, and x1.0 from 3.12. Joining onto a
   path grown one name at a time copies what that path holds: onto 10,000
   joined segments the peak is over 50 KB on every version. Onto one
   10,000-component string it is under 2 KB from 3.12 and over 50 KB before,
@@ -28,7 +28,7 @@ Measurement scope:
 * `relative_to()` is timed at 200 and 800 components of fixed length: over x6
   from 3.12 (x8.2 to x9.1 measured) and under x4 before (x1.7 to x2.0). Its
   space against a base of 100 and 400 components grows x12.3 on 3.12 and x3.2
-  to x4.0 on 3.10, 3.13 and 3.14; asserted over x8 on 3.12 and under x6
+  to x4.0 on 3.11, 3.13 and 3.14; asserted over x8 on 3.12 and under x6
   elsewhere.
 * `match()` on a path of 10,000 components peaks over 20 times what 10 cost
   from 3.13 (160,256 B against about 1,850 B), and about the same for both
@@ -39,8 +39,7 @@ Measurement scope:
   warns from 3.13.
 * Predicates, `stat()`, `lstat()`, `samefile()`, `owner()`, `group()`,
   `chmod()`, `unlink()` and `rmdir()` are counted at the os layer: one call
-  each, two for `samefile()`, none for `absolute()`, and no directory read. 3.10
-  reaches os through `_NormalAccessor`, which the counter patches as well. On
+  each, two for `samefile()`, none for `absolute()`, and no directory read. On
   Windows `exists()`, `is_file()`, `is_dir()` and `is_symlink()` reach native
   `nt._path_*` queries instead of `os.stat`; the counter counts each as one.
   `is_mount()` makes the same count at depth 1 and 16 except on 3.12, where
@@ -66,10 +65,10 @@ Measurement scope:
   directories peak over 1.25 times a chain of 20, and a directory of 1,600
   entries over three times one of 200.
   With the widest directory held at 100 entries and the depth at 2, 10,000
-  matches cost x52 what 100 cost on 3.10 and 3.11 and under x2 from 3.12
+  matches cost x52 what 100 cost on 3.11 and under x2 from 3.12
   (asserted over x10 and under x4). With no matches, 100 files on each of 50
-  levels cost x13.7 what 100 files at the bottom of the same chain cost on
-  3.10 and 3.11, and under x2 from 3.12 (asserted over x6 and under x4).
+  levels cost x14.6 what 100 files at the bottom of the same chain cost on
+  3.11, and under x2 from 3.12 (asserted over x6 and under x4).
 * `walk()` (3.12+) over 800 sibling directories peaks over 2.5 times 200.
   Bottom-up over a chain of 50 levels holding 100 files each peaks over eight
   times top-down (x20 to x35 measured).
@@ -284,24 +283,14 @@ def counting_syscalls() -> Iterator[SyscallCounter]:
         return wrapper
 
     wrappers = {name: make(name) for name in SYSCALL_NAMES}
-    # 3.10 reaches os through pathlib._NormalAccessor, which binds the
-    # functions as class attributes at import time; patching os alone would
-    # count nothing there.
-    accessor = getattr(pathlib, "_NormalAccessor", None)
-    saved: dict[str, Any] = {}
     for name, wrapper in wrappers.items():
         setattr(os, name, wrapper)
-        if accessor is not None and accessor.__dict__.get(name) is real[name]:
-            saved[name] = accessor.__dict__[name]
-            setattr(accessor, name, staticmethod(wrapper))
     try:
         with counting_native_predicates(counter):
             yield counter
     finally:
         for name, func in real.items():
             setattr(os, name, func)
-        for name, func in saved.items():
-            setattr(accessor, name, func)
 
 
 def drain(iterator: Any) -> None:
@@ -518,7 +507,7 @@ class TestJoiningCopiesTheSegments:
 
     @pytest.mark.timing
     def test_a_long_right_operand_is_parsed_only_before_312(self) -> None:
-        """x19 on 3.10 and x27 on 3.11 for 100,000x the segment; x1.0 from 3.12.
+        """x25 on 3.11 for 100,000x the segment; x1.0 from 3.12.
 
         Timed, because a segment with no separator splits into the same string
         object, so allocation cannot separate the versions.
@@ -824,7 +813,7 @@ class TestOneSyscallPerPredicate:
 
     @POSIX_ONLY
     def test_is_mount_is_constant_except_on_312(self, tmp_path: pathlib.Path) -> None:
-        """6 calls at any depth on 3.10 and 3.11, 2 on 3.13 and 3.14; on 3.12
+        """6 calls at any depth on 3.11, 2 on 3.13 and 3.14; on 3.12
         os.path.ismount resolves the parent, one lstat per component."""
         shallow = tmp_path / "d"
         shallow.mkdir()
@@ -1099,7 +1088,7 @@ class TestRecursiveGlobSpace:
     @LONG_PATHS
     @pytest.mark.parametrize("spelling", ["rglob", "glob"])
     def test_the_peak_grows_with_the_depth(self, tmp_path: pathlib.Path, spelling: str) -> None:
-        """32x the depth at a breadth of one: x171 on 3.10 and x2.1 on 3.14.
+        """32x the depth at a breadth of one: x112 on 3.11 and x2.0 on 3.14.
 
         From 3.12 the depth reaches the peak through the length of the path
         being carried, which is what P counts.
@@ -1439,7 +1428,7 @@ def _blocks() -> list[tuple[int, str]]:
 def _needs(source: str) -> tuple[int, int]:
     """The newest release any API in the block needs."""
     versions = [version for marker, (version, _) in LATER_MARKERS.items() if marker in source]
-    return max(versions, default=(3, 10))
+    return max(versions, default=(3, 11))
 
 
 def _run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:

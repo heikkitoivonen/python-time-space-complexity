@@ -101,11 +101,10 @@ Measurement scope:
   with equal bytes that is gone afterwards.
 * A namespace package's `MultiplexedPath.joinpath()` over portions holding
   10 and 2,000 children costs between 20x and 4,000x in a timing test,
-  which admits the O(k log k) sort from 3.12, the O(k) walk of 3.11 and,
-  at these sizes, the O(k²) list scan of 3.10, whose constant is small; the
-  three are separated by reading Lib/importlib/readers.py and
-  Lib/importlib/resources/readers.py, not by the ratio, as is the early
-  stop at the first match that 3.10 and 3.11 take and 3.12's sort forgoes:
+  which admits the O(k log k) sort from 3.12 and the O(k) walk of 3.11; the
+  two are separated by reading Lib/importlib/resources/readers.py, not by
+  the ratio, as is the early stop at the first match that 3.11 takes and
+  3.12's sort forgoes:
   the timed target always sits in the second portion. Every test builds
   exactly two portions, so the r term, a listing per portion, empty or
   not, is read from the same files and not varied. `iterdir()` merges the portions
@@ -114,10 +113,8 @@ Measurement scope:
   sorted, and before it every name of the first portion precedes every name
   of the second. The default `Traversable.joinpath()` (3.12+)
   calls `iterdir()` once on each directory a segment passes through. The
-  functional API returns what `files().joinpath()` does and, from 3.11,
-  calls `files()` once per call, so two `read_text()` calls resolve the
-  anchor twice; 3.10 resolves the package by another route and is not
-  counted. `contents()` is a list before 3.13 and an iterator from it, and warns
+  functional API returns what `files().joinpath()` does and calls `files()`
+  once per call, so two `read_text()` calls resolve the anchor twice. `contents()` is a list before 3.13 and an iterator from it, and warns
   `DeprecationWarning` on 3.11+, and `TraversableResources` resolves
   `open_resource()`, `is_resource()` and `contents()` through `files()`
   while `resource_path()` raises `FileNotFoundError`.
@@ -126,15 +123,14 @@ Measurement scope:
   once each; `dist.files`, `dist.entry_points` and `dist.origin` twice for
   two accesses on one object. `Distribution.at()` reads nothing. `distributions()` calls
   `os.listdir` once per path entry the first time it is consumed, not at
-  all the second time, again after `importlib.invalidate_caches()` from
-  3.11 and `MetadataPathFinder.invalidate_caches()` on 3.10,
+  all the second time, again after `importlib.invalidate_caches()`,
   and again, without it, once a new `.dist-info` directory has changed the
   entry's mtime;
   that the cache behind this holds 128 path entries is the `lru_cache` on
   `FastPath.__new__` in Lib/importlib/metadata/__init__.py, not exercised.
 * `entry_points(group=...)` reads `entry_points.txt` once per distribution:
   sites of 5 and 50 fake distributions differ by exactly 45 reads. That
-  3.10 and 3.11 sort the entry points by group first is read from
+  3.11 sorts the entry points by group first is read from
   Lib/importlib/metadata/__init__.py's `SelectableGroups.load()`, not timed.
   That `set_data()` writes its buffer straight through a temporary file is
   read from `_write_atomic` in Lib/importlib/_bootstrap_external.py.
@@ -143,7 +139,7 @@ Measurement scope:
   early-exit scan would find in O(1), and `[0]` raises `KeyError` from 3.12
   and warns before. `packages_distributions()` reads `top_level.txt` and
   not `RECORD` for a distribution that has one, and `RECORD` for one that
-  does not from 3.11; 3.10 reads only `top_level.txt`.
+  does not.
 * `Distribution.files` returns only entries whose file exists on 3.12+,
   calling `Path.exists()` once per entry, and every entry before 3.12.
   `metadata['Version']` over 100 and 3,000 headers costs between 5x and
@@ -151,15 +147,15 @@ Measurement scope:
   separates the linear scan from the quadratic one and that from a cubic.
 * Version boundaries are asserted by presence: `find_loader()`,
   `abc.Finder` and the `util` decorators exist below 3.12,
-  `resources.abc` and `NamespaceLoader` from 3.11, `abc.Traversable` below
+  `resources.abc` and `NamespaceLoader`, `abc.Traversable` below
   3.14, `Distribution.origin` and `AppleFrameworkLoader` from 3.13,
   `_incompatible_extension_module_restrictions` from 3.12, `entry_points()`
   with no selector returns a `dict` below 3.12, `files()` on a plain module
   raises `TypeError` below 3.12, `Anchor` exists from 3.12, `EntryPoints`
-  is a `list` below 3.12 and a `tuple` from it, `EntryPoint` indexes silently
-  on 3.10 and with a warning on 3.11 and 3.12, the functional API warns from
-  3.11 until 3.12.10, `contents()` then again from 3.13, several path names
-  reach the functional API in 3.13 and raise `TypeError` before, and
+  is a `list` below 3.12 and a `tuple` from it, `EntryPoint` indexes with a
+  warning on 3.11 and 3.12, the functional API warns until 3.12.10,
+  `contents()` then again from 3.13, several path names reach the
+  functional API in 3.13 and raise `TypeError` before, and
   `DEBUG_BYTECODE_SUFFIXES` and `SourceLoader.path_mtime()` warn from
   3.14.
 * Every fenced Python block runs in its own subprocess and working
@@ -249,11 +245,7 @@ EXPECTED_BLOCKS = 15
 
 bootstrap_external: Any = importlib.import_module("importlib._bootstrap_external")
 metadata_path_finder: Any = importlib.metadata.MetadataPathFinder
-resources_abc: Any = (
-    importlib.import_module("importlib.resources.abc")
-    if sys.version_info >= (3, 11)
-    else importlib.abc
-)
+resources_abc: Any = importlib.import_module("importlib.resources.abc")
 
 
 def best_ns(func: Callable[[], Any], repeats: int = 5) -> float:
@@ -1467,25 +1459,23 @@ class TestResources:
         sys.path.insert(0, str(tmp_path))
         resources = importlib.resources
         resolved: list[Any] = []
-        if sys.version_info >= (3, 11):
-            common: Any = importlib.import_module("importlib.resources._common")
-            functional: Any = sys.modules[resources.read_text.__module__]
-            files = common.files
+        common: Any = importlib.import_module("importlib.resources._common")
+        functional: Any = sys.modules[resources.read_text.__module__]
+        files = common.files
 
-            def counting(anchor: Any) -> Any:
-                resolved.append(anchor)
-                return files(anchor)
+        def counting(anchor: Any) -> Any:
+            resolved.append(anchor)
+            return files(anchor)
 
-            monkeypatch.setattr(common, "files", counting)
-            if functional is not common and hasattr(functional, "files"):
-                monkeypatch.setattr(functional, "files", counting)
+        monkeypatch.setattr(common, "files", counting)
+        if functional is not common and hasattr(functional, "files"):
+            monkeypatch.setattr(functional, "files", counting)
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
             assert resources.read_text("func_pkg", "data.txt", encoding="utf-8") == "payload"
             assert resources.read_text("func_pkg", "data.txt", encoding="utf-8") == "payload"
-            if sys.version_info >= (3, 11):
-                assert resolved == ["func_pkg", "func_pkg"]
+            assert resolved == ["func_pkg", "func_pkg"]
             assert resources.read_binary("func_pkg", "data.txt") == b"payload"
             with resources.open_text("func_pkg", "data.txt", encoding="utf-8") as text:
                 assert text.read() == "payload"
@@ -1495,7 +1485,7 @@ class TestResources:
                 assert path == tmp_path / "func_pkg" / "data.txt"
             assert resources.is_resource("func_pkg", "data.txt")
             assert not resources.is_resource("func_pkg", "absent.txt")
-        if (3, 11) <= sys.version_info < (3, 12, 10) or sys.version_info >= (3, 13):
+        if sys.version_info < (3, 12, 10) or sys.version_info >= (3, 13):
             with pytest.warns(DeprecationWarning):
                 contents = resources.contents("func_pkg")
         else:
@@ -1685,10 +1675,7 @@ class TestMetadataLookups:
         assert "alpha" in [dist.metadata["Name"] for dist in importlib.metadata.distributions()]
         assert listed.count(str(site)) == 1
 
-        if sys.version_info >= (3, 11):
-            importlib.invalidate_caches()
-        else:
-            metadata_path_finder().invalidate_caches()
+        importlib.invalidate_caches()
         list(importlib.metadata.distributions())
         assert listed.count(str(site)) == 2
 
@@ -1902,12 +1889,8 @@ class TestDistributionFiles:
         assert mapping["declared_pkg"] == ["declared"]
         assert ("declared-1.0.dist-info", "top_level.txt") in reads
         assert ("declared-1.0.dist-info", "RECORD") not in reads
-        if sys.version_info >= (3, 11):
-            assert mapping["inferred_pkg"] == ["inferred"]
-            assert ("inferred-1.0.dist-info", "RECORD") in reads
-        else:
-            assert "inferred_pkg" not in mapping
-            assert ("inferred-1.0.dist-info", "RECORD") not in reads
+        assert mapping["inferred_pkg"] == ["inferred"]
+        assert ("inferred-1.0.dist-info", "RECORD") in reads
 
 
 class TestPackageMetadataScans:
@@ -1966,12 +1949,8 @@ class TestVersionBoundaries:
                 restriction.__enter__()
 
     def test_names_added_in_311_and_313_and_removed_in_314(self) -> None:
-        try:
-            has_resources_abc = importlib.util.find_spec("importlib.resources.abc") is not None
-        except ModuleNotFoundError:
-            has_resources_abc = False
-        assert has_resources_abc is (sys.version_info >= (3, 11))
-        assert hasattr(importlib.machinery, "NamespaceLoader") is (sys.version_info >= (3, 11))
+        assert importlib.util.find_spec("importlib.resources.abc") is not None
+        assert hasattr(importlib.machinery, "NamespaceLoader")
         assert hasattr(importlib.abc, "Traversable") is (sys.version_info < (3, 14))
         assert hasattr(importlib.abc, "ResourceReader") is (sys.version_info < (3, 14))
         assert hasattr(importlib.metadata.Distribution, "origin") is (sys.version_info >= (3, 13))
@@ -1999,11 +1978,9 @@ class TestVersionBoundaries:
         if sys.version_info >= (3, 13):
             with pytest.raises(TypeError):
                 entry[0]  # type: ignore[index]
-        elif sys.version_info >= (3, 11):
+        else:
             with pytest.warns(DeprecationWarning):
                 assert entry[0] == "n"  # type: ignore[index]
-        else:
-            assert entry[0] == "n"  # type: ignore[index]
 
     def test_files_on_a_plain_module_before_312(self, tmp_path: pathlib.Path) -> None:
         write_module(tmp_path, "plain_anchor", "")
@@ -2020,7 +1997,7 @@ class TestVersionBoundaries:
             warnings.simplefilter("always")
             importlib.resources.is_resource("json", "decoder.py")
         deprecated = [w for w in caught if issubclass(w.category, DeprecationWarning)]
-        assert bool(deprecated) is ((3, 11) <= sys.version_info < (3, 12, 10))
+        assert bool(deprecated) is (sys.version_info < (3, 12, 10))
 
     def test_several_path_names_from_313(self, tmp_path: pathlib.Path) -> None:
         (tmp_path / "nested_pkg" / "sub").mkdir(parents=True)

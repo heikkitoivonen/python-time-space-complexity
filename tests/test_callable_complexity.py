@@ -5,8 +5,8 @@ PyCallable_Check(obj). In Objects/object.c that is
 `Py_TYPE(x)->tp_call != NULL`: one read of a slot on the object's type, with no
 attribute lookup. The slot is filled when a class or one of its bases defines
 `__call__`, and updated when `__call__` is later assigned to or deleted from the
-class. The function is the same in the v3.10.19, v3.11.14, v3.12.12, v3.13.11
-and v3.14.2 tags, so no version is treated apart.
+class. The function is the same in the v3.11.14, v3.12.12, v3.13.11 and v3.14.2
+tags, so no version is treated apart.
 
 Measurement scope:
 

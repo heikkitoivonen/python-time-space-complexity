@@ -35,8 +35,8 @@ The bounds that carry more than one term:
   Breadth alone behaves the same on every supported version: at a fixed depth,
   4x the siblings costs about 4x the peak (x3.57 on 3.11, x3.89 on 3.14).
   Depth's contribution to the peak is the part that changed - gh-89727
-  replaced the recursive _walk() with an explicit stack in 3.12, so 3.10 and
-  3.11 spend a generator frame per level and raise RecursionError on a tree
+  replaced the recursive _walk() with an explicit stack in 3.12, so 3.11
+  spends a generator frame per level and raises RecursionError on a tree
   2,000 deep where 3.12, 3.13 and 3.14 walk it. From 3.12 the depth term in
   the peak is the path strings, not the frames.
 * os.makedirs is O(n·L) in space for n components and a path of length L. The
@@ -64,12 +64,12 @@ two-component argument reaching a 12-deep target through one link costs 17, and
 through a chain of eight links costs 38 - and those two resolve to the same
 path, which is what rules the result out as the bound. Its O(k·R) string work
 and O((j + 1)·R) space, and the per-substitution rebuild in expandvars before
-3.14.1, 3.13.10, 3.12.13, 3.11.15 and 3.10.20, are measured in
+3.14.1, 3.13.10, 3.12.13 and 3.11.15, are measured in
 tests/test_posixpath_complexity.py: on POSIX os.path is posixpath, which is
 asserted here.
 os.path.ismount inherits that through 3.12, where it always resolves the
 parent with realpath() before comparing: 5 lstat calls for a shallow path
-against 14 for one ten deep on 3.12, and 7 for the shallow case on 3.10. From
+against 14 for one ten deep on 3.12, and 7 against 17 on 3.11.17. From
 3.13 it lstats the parent directly and keeps realpath() as the fallback, which
 holds it at two whatever the depth. The other filesystem entries in that table
 are os.path.abspath at one getcwd for a relative path and os.path.samefile at
@@ -347,7 +347,7 @@ class TestCountingHarness:
 
 
 # gh-89727 rewrote _walk() around an explicit stack; the commit first ships in
-# v3.12.0. Both 3.10 and 3.11 still recurse.
+# v3.12.0. 3.11 still recurses.
 WALK_IS_ITERATIVE = sys.version_info >= (3, 12)
 
 
@@ -492,8 +492,7 @@ class TestWalkSpaceNeedsBothTerms:
             assert spread == 0, f"an explicit stack should call scandir from one depth: {spread}"
         else:
             assert spread >= depth - 1, (
-                f"3.10 and 3.11 recurse once per level, so the spread should "
-                f"track the depth: {spread}"
+                f"3.11 recurses once per level, so the spread should track the depth: {spread}"
             )
 
     @pytest.mark.timing
@@ -776,9 +775,8 @@ class TestMakedirsRecurses:
         only frames predicts no change. The frames are a fixed cost in the peak,
         so a shallower tree shows the component term more clearly: at depth 40,
         1 against 80 characters measures 4,633 B against 71,134 B (x15.4) on
-        3.14, where depth 100 with 1 against 20 gives only x7.1 - and less than
-        that on 3.10, whose frames are larger. Depth 40 by 81 characters also
-        stays inside PATH_MAX, which 100 by 41 does not.
+        3.14, where depth 100 with 1 against 20 gives only x7.1. Depth 40 by 81
+        characters also stays inside PATH_MAX, which 100 by 41 does not.
         """
         peaks = []
         for length in (1, 80):
@@ -986,14 +984,12 @@ class TestPathOperationsAreStringWork:
         On POSIX the whole function is `startswith` on the argument. A peak
         measurement cannot settle that - a scan that allocates nothing would
         pass one - so the control here is an actual O(L) pass over the very
-        same string: `str.replace`, which is what Windows 3.10 does to
-        the separators. isabs costs about 115ns whether the path is two
+        same string: `str.replace` over the separators. isabs costs about 115ns whether the path is two
         characters or two million; the O(L) control costs some 590x that on
         the long one.
 
-        Windows 3.10 is therefore O(L); ntpath runs on every platform, and
-        tests/test_ntpath_complexity.py observes which versions rewrite the
-        whole path.
+        ntpath runs on every platform, and tests/test_ntpath_complexity.py
+        observes that its isabs() does not rewrite the whole path either.
         """
         short, long = "/a", "/" + "a" * 2_000_000
 
@@ -1097,8 +1093,7 @@ class TestPathOperationsAreStringWork:
         local, which str does in place and bytes cannot. 8,000, 32,000 and
         128,000 one-character arguments: each 4x step predicts 4x if linear
         and 16x if quadratic. Measured with both modules on Windows: bytes
-        x8.3 to x11 then x15 to x20 on 3.14, and x6.8 to x7.3 then x10 to
-        x13 on 3.10; str x2.0 to x4.7 per step. Argument length was not
+        x8.3 to x11 then x15 to x20 on 3.14; str x2.0 to x4.7 per step. Argument length was not
         varied.
         """
 
@@ -1128,9 +1123,9 @@ class TestPathOperationsAreStringWork:
 
         Through 3.12 the parent is always passed through realpath(), which
         lstats once per component of what it resolves: 5 calls for a shallow
-        path against 14 for one ten deep on 3.12, and 7 against the same
-        shallow case on 3.10. From 3.13 the parent is lstat'ed directly and
-        realpath() is only the fallback, which holds it at two either way.
+        path against 14 for one ten deep on 3.12, and 7 against 17 on 3.11.17.
+        From 3.13 the parent is lstat'ed directly and realpath() is only the
+        fallback, which holds it at two either way.
         """
         shallow = tmp_path / "sub"
         shallow.mkdir()

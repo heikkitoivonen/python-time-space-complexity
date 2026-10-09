@@ -81,7 +81,6 @@ Not settled here:
   on Windows; no test here exercises them.
 * `log_exception()`'s O(f) and `demo_app()`'s O(e log e) are read from source;
   only the frame cap and the one-line-per-entry output are observed.
-* `wsgiref.types` exists from 3.11; the test is skipped on 3.10.
 * Header name and value lengths, environ value lengths and request bodies are
   not varied; the page prices them as O(1) or leaves them to the application.
 """
@@ -952,7 +951,6 @@ class TestValidatorChecksEachRequest:
         assert peaks[1] > peaks[0] * 20, f"1,000x the response headers: {peaks}"
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="wsgiref.types is 3.11+")
 class TestTypesAreStatic:
     """`wsgiref.types` holds protocols and aliases for type checkers only."""
 

@@ -70,8 +70,8 @@ Not settled here:
   debugger prompt.
 * Scanning a source line is priced at O(1), a cost-model assumption: a
   module with a few very long lines is outside the n terms.
-* `DocTestCase` takes its saved copy of the globals at construction on 3.10
-  and in `setUp()` from 3.11; only the restored result is asserted.
+* `DocTestCase` takes its saved copy of the globals in `setUp()`; only the
+  restored result is asserted.
 * `DocTestCase`, `DocFileCase`, `DocFileTest`, `SkipDocTestCase`,
   `DocTestRunner.merge`, `debug_script` and the `_colorize` names doctest
   imports (`ANSIColors`, `can_colorize`) are outside the official API

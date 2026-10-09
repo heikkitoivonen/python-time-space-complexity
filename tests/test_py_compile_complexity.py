@@ -55,7 +55,7 @@ Not settled here:
   O(1) by the page's cost model and are not varied.
 * Import-time cost of each invalidation mode is outside this module and is
   not measured; only the behaviour of the check is.
-* Lib/py_compile.py is unchanged in behaviour from 3.10 through 3.14, so no
+* Lib/py_compile.py is unchanged in behaviour from 3.11 through 3.14, so no
   test is version-gated.
 """
 

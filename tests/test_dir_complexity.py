@@ -8,8 +8,8 @@ object.__dir__ (Objects/typeobject.c) copies the instance `__dict__` and calls
 merge_class_dict on `__class__`, which updates from the class `__dict__` and
 recurses into every entry of `__bases__` with no visited set; type.__dir__ calls
 merge_class_dict on the class alone. That code is the same in behaviour in the
-v3.10.19, v3.11.14, v3.12.12, v3.13.11 and v3.14.2 tags, so no version is
-treated apart.
+v3.11.14, v3.12.12, v3.13.11 and v3.14.2 tags, so no version is treated
+apart.
 
 Measurement scope:
 

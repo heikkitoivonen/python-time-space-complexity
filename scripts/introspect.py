@@ -48,13 +48,11 @@ def get_stdlib_modules() -> list[str]:
     Only single-underscore implementation modules such as ``_thread`` are left out;
     dunder modules such as ``__future__`` stay.
     """
-    if hasattr(sys, "stdlib_module_names"):
-        return sorted(
-            name
-            for name in sys.stdlib_module_names
-            if not (name.startswith("_") and not name.startswith("__"))
-        )
-    raise RuntimeError("Python 3.10+ required for sys.stdlib_module_names")
+    return sorted(
+        name
+        for name in sys.stdlib_module_names
+        if not (name.startswith("_") and not name.startswith("__"))
+    )
 
 
 def is_public(name: str) -> bool:

@@ -454,7 +454,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
 - `next(path.iterdir())` to test whether a large directory is empty - it reads the whole directory
 - `relative_to()` on deep paths in a hot loop on 3.12+, where it is quadratic in the depth
-- Iterating `rglob()` over a big tree on 3.10 and 3.11 in the belief that it saves memory - it keeps every match
+- Iterating `rglob()` over a big tree on 3.11 in the belief that it saves memory - it keeps every match
 - `read_text()` on a file too large to hold; open it and read it in chunks
 
 ## Version Notes

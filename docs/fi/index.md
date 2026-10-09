@@ -1,5 +1,5 @@
 ---
-source_sha: a6420f60430b8218f2a6e14ea6d7dddb274b0d9fbf9affa7a90744e24e8b4a43
+source_sha: 820e00694858fe62e65db7b6bf1626fd70706ad5e93b5d99a554161c563e5a09
 translated: machine
 ---
 
@@ -56,7 +56,7 @@ Tarkempi analyysi löytyy osiosta [Listat](builtins/list.md).
 
 ## Kattavuus
 
-- **Python-versiot**: 3.10-3.14
+- **Python-versiot**: 3.11-3.14
 - **Toteutukset**: CPython, PyPy, Jython, IronPython
 - **Operaatiot**: yli 2 200 sisäänrakennettua ja standardikirjaston operaatiota
 - **Päivitykset**: päivitetään säännöllisesti uusien Python-julkaisujen myötä

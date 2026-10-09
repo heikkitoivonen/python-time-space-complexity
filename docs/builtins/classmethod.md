@@ -229,7 +229,7 @@ assert Vector.from_dict({"x": 3, "y": 4}).to_list() == [3, 4]
 
 - Assigning a class attribute on every call in a hot path - each assignment costs the class and its subclasses their cached lookups, and on 3.13+ can stop the class being cached at all
 - Hardcoding the class name in a factory, which builds the base class for every subclass
-- Wrapping `property` in `classmethod` - it computes a value on 3.10 to 3.12 only
+- Wrapping `property` in `classmethod` - it computes a value on 3.11 and 3.12 only
 
 ## Version Notes
 

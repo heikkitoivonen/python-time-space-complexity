@@ -3,15 +3,13 @@
 The page prices every function by the bytes in its fragment: C loops that
 read the buffer in place and return numbers or new `bytes` objects, linear
 in the fragment except for `getsample()` (O(1)), `findfit()`
-(O((n - m + 1)·m)) and `ratecv()` (O(n + o)). The module exists on
-Python 3.10, 3.11 and 3.12 only, so every runtime test takes the `audioop`
-fixture, which skips from 3.13; run them with one of those interpreters. CI's
-timing jobs run on every supported version, so the timing tests below run there
-on 3.10 to 3.12; its full-suite jobs use the newest Python, where only the
-availability tests run. Modules/audioop.c differs between v3.10.19, v3.11.14
-and v3.12.12 only in the import-time DeprecationWarning (3.11), shift
-expressions rewritten as multiplications and added assertions (3.12): no bound
-moves. Sizes and space are settled by observation - output lengths and a
+(O((n - m + 1)·m)) and `ratecv()` (O(n + o)). Of the supported
+versions the module exists on Python 3.11 and 3.12 only, so every runtime test
+takes the `audioop` fixture, which skips from 3.13; run them with one of those
+interpreters. CI runs the suite, timing tests included, on every supported
+version, so these tests run there on 3.11 and 3.12. Modules/audioop.c differs
+between v3.11.14 and v3.12.12 only in shift expressions rewritten as
+multiplications and added assertions: no bound moves. Sizes and space are settled by observation - output lengths and a
 `tracemalloc` peak - and growth classes by timing ratios.
 
 Measurement scope:
@@ -58,9 +56,9 @@ Measurement scope:
   `add()` and `findfactor()` on unequal lengths, `findfit()` with the longer
   reference, `findmax()` with a window longer than the fragment, and
   `getsample()` past the end; it subclasses `Exception`.
-* The import warns on 3.11 and 3.12, not on 3.10, and raises
-  `ModuleNotFoundError` from 3.13.
-* Every fenced Python block runs in its own subprocess on 3.10 to 3.12.
+* The import warns on 3.11 and 3.12, and raises `ModuleNotFoundError` from
+  3.13.
+* Every fenced Python block runs in its own subprocess on 3.11 and 3.12.
 
 Not settled here:
 
@@ -179,8 +177,8 @@ def _samples(values: list[int]) -> bytes:
 
 
 class TestAvailability:
-    """`import audioop` works on 3.10 to 3.12, warning from 3.11, and fails
-    from 3.13."""
+    """`import audioop` works with a warning on 3.11 and 3.12, and fails from
+    3.13."""
 
     @pytest.mark.skipif(sys.version_info < (3, 13), reason="the module exists before 3.13")
     def test_importing_it_from_3_13_raises(self) -> None:
@@ -188,7 +186,7 @@ class TestAvailability:
             importlib.import_module("audioop")
 
     @pytest.mark.skipif(sys.version_info >= (3, 13), reason="audioop was removed in 3.13")
-    def test_importing_it_warns_from_3_11(self) -> None:
+    def test_importing_it_warns(self) -> None:
         result = subprocess.run(
             [sys.executable, "-W", "error::DeprecationWarning", "-c", "import audioop"],
             capture_output=True,
@@ -197,10 +195,9 @@ class TestAvailability:
             stdin=subprocess.DEVNULL,
             check=False,
         )
-        assert (result.returncode != 0) == (sys.version_info >= (3, 11)), result.stderr
-        if sys.version_info >= (3, 11):
-            assert "DeprecationWarning" in result.stderr
-            assert "audioop" in result.stderr
+        assert result.returncode != 0, result.stderr
+        assert "DeprecationWarning" in result.stderr
+        assert "audioop" in result.stderr
 
 
 class TestAnalysisReadsInPlace:

@@ -1,5 +1,5 @@
 ---
-source_sha: a6420f60430b8218f2a6e14ea6d7dddb274b0d9fbf9affa7a90744e24e8b4a43
+source_sha: 820e00694858fe62e65db7b6bf1626fd70706ad5e93b5d99a554161c563e5a09
 translated: machine
 ---
 
@@ -56,7 +56,7 @@ Python の操作の計算量に関する総合ガイドへようこそ。本サ�
 
 ## 収録範囲
 
-- **Python バージョン**：3.10-3.14
+- **Python バージョン**：3.11-3.14
 - **実装**：CPython、PyPy、Jython、IronPython
 - **操作**：組み込みと標準ライブラリを合わせて 2,200 以上
 - **更新**：Python の新しいリリースに合わせて定期的に更新

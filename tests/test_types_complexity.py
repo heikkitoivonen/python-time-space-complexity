@@ -16,7 +16,7 @@ Measurement scope:
   `_socket.CAPI` on 3.13+.
 * `isinstance(obj, types.FunctionType)` is timed on an instance whose MRO has
   3,001 entries against a plain `object()`; the deep miss costs more than 5x
-  (x45 on 3.14, x31 on 3.10 locally).
+  (x45 on 3.14, x43 on 3.11 locally).
 * `FunctionType()` is asserted to share its code, globals, defaults and
   closure by identity, and to peak under 2 KB with 20,000 closure cells; a
   timing test puts 20,000 cells over 10x one cell (x157 on 3.14).
@@ -53,16 +53,15 @@ Measurement scope:
   and raise on a conflict. `resolve_bases()` returns a 100,000-base tuple by
   identity yet peaks over 500 KB, and calls each `__mro_entries__` once with
   the whole tuple. Timing tests put 30,000 bases that each expand to two, and
-  30,000 that each resolve to none, over 100x the time of 1,000 (x276 to x673
-  locally on 3.10 and 3.14), where a linear pass would give 30x and a
+  30,000 that each resolve to none, over 100x the time of 1,000 (x372 to x447
+  locally on 3.11 and 3.14), where a linear pass would give 30x and a
   quadratic one 900x. `get_original_bases()` returns the stored
   tuple by identity on 3.12+.
 * `coroutine()` returns a generator function itself with a new, flagged code
   object, a coroutine function itself with its code untouched, and wraps
   anything else. Its peak for a 10,000-statement generator function is over
-  100x that for a 10-statement one on 3.11+ (327 KB against 522 bytes on
-  3.14), and under 4x on 3.10, which shares the bytecode (384 bytes against
-  800). `DynamicClassAttribute` is observed to answer from `fget` on an
+  100x that for a 10-statement one (327 KB against 522 bytes on 3.14).
+  `DynamicClassAttribute` is observed to answer from `fget` on an
   instance and from the metaclass's `__getattr__` on the class, and to
   return itself on the class when the getter is abstract.
 * Every fenced Python block runs in its own subprocess, and a mutated
@@ -847,10 +846,7 @@ class TestCoroutineAdapters:
 
         small, large = peak_for(10), peak_for(10_000)
 
-        if sys.version_info >= (3, 11):
-            assert large > small * 100, f"10 against 10,000 statements: {small}, {large}"
-        else:
-            assert large < small * 4, f"3.10 shares the bytecode: {small}, {large}"
+        assert large > small * 100, f"10 against 10,000 statements: {small}, {large}"
 
     def test_dynamic_class_attribute_routes_class_access(self) -> None:
         class Meta(type):

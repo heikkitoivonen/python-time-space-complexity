@@ -32,7 +32,7 @@ Measurement scope:
 Not settled here:
 
 * The O(1) bounds are definitional: the body reads no argument, file or
-  environment, and Lib/this.py is identical in the v3.10.19, v3.11.14,
+  environment, and Lib/this.py is identical in the v3.11.14,
   v3.12.12, v3.13.11 and v3.14.2 tags, so the text and the work do not vary
   inside the supported range. No timing test would add to that.
 * Finding and loading the module file is the import system's cost and is

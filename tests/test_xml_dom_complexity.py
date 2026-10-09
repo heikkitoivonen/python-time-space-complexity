@@ -31,7 +31,7 @@ Measurement scope:
   one read produced. `getEvent()` returns `None` at the end and iteration
   stops before `END_DOCUMENT`, a string is
   opened as a file name, `SAX2DOM` attaches every node, `reset()` and
-  `clear()` are observed, and indexing is asserted gone on 3.11+.
+  `clear()` are observed, and indexing is asserted gone.
 * Child lists, timed: `insertBefore()`, `removeChild()` and `replaceChild()`
   against the last child cost more than 20x as much among 100,000 children
   as among 1,000; `appendChild()` undone by popping the child list is their
@@ -482,7 +482,6 @@ class TestPulldomStreams:
         assert events.parser is None and events.stream is None  # type: ignore[attr-defined]
         assert not hasattr(events, "pulldom")
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="removed in 3.11")
     def test_the_stream_cannot_be_indexed(self) -> None:
         assert not hasattr(pulldom.DOMEventStream, "__getitem__")
 

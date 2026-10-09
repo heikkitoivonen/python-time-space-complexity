@@ -2,8 +2,8 @@
 
 The page prices the bytes `read()`, `write()` and `writeall()` move and
 counts every other call as a fixed number of system calls; waiting for the
-device is outside every bound. The module exists on Python 3.10 to 3.12, and
-the uv-installed 3.10.21, 3.11.16 and 3.12.14 builds have it, but this machine
+device is outside every bound. The module exists on Python 3.11 and 3.12, and
+the uv-installed 3.11.17 and 3.12.14 builds have it, but this machine
 has no OSS device, and `open()` raises unless its file answers the
 `SNDCTL_DSP_GETFMTS` ioctl. So an audio device object cannot be made here,
 and everything about one is read from `Modules/ossaudiodev.c`. A mixer can be
@@ -12,14 +12,14 @@ the module checks before it reaches the device is run against the real module
 through that. Tests touching the real module take the `ossaudiodev` fixture,
 which skips from 3.13 and off Linux and FreeBSD; run them with one of those
 interpreters. The C file
-differs between v3.10.19, v3.11.14 and v3.12.12 in the import-time
-DeprecationWarning added in 3.11, in `setparameters()` parsing `strict` as a
-truth value from 3.12 rather than an `int`, and in changes that move no bound.
+differs between v3.11.14 and v3.12.12 in `setparameters()` parsing `strict`
+as a truth value from 3.12 rather than an `int`, and in changes that move no
+bound.
 
 Measurement scope:
 
-* The import warns on 3.11 and 3.12, not on 3.10, and raises
-  `ModuleNotFoundError` from 3.13.
+* The import warns on 3.11 and 3.12 and raises `ModuleNotFoundError` from
+  3.13.
 * `open()`: a mode other than `'r'`, `'w'` or `'rw'` raises `OSSAudioError`
   even when the device does not exist, so the mode is checked first; a
   missing device raises `FileNotFoundError` naming it; with one argument the
@@ -42,12 +42,12 @@ Measurement scope:
   `SOUND_MIXER_*` and `SNDCTL_*` names are `int`s.
 * Every fenced Python block runs in its own subprocess and working directory
   with a stand-in `ossaudiodev` put in `sys.modules` before it runs, since
-  3.10 to 3.12 build the real one in and would import it ahead of anything on
+  3.11 and 3.12 build the real one in and would import it ahead of anything on
   `sys.path`. A mutated assertion in one block, and dropping the scaling of
   `obuffree()` to bytes in another, are each asserted to make it fail; the
   stand-in's buffer holds 4,096 bytes, exactly the chunk that block writes,
   so an unscaled comparison skips the write, which a check appended to the
-  block detects. On 3.10 to 3.12 the stand-in is
+  block detects. On 3.11 and 3.12 the stand-in is
   checked against the real module: every name it defines exists there, with
   the same value for the constants; its two device classes' methods exist on
   the real `oss_audio_device` and `oss_mixer_device`; and its mode and
@@ -283,7 +283,7 @@ def _real_type(name: str) -> type:
 
 
 class TestAvailability:
-    """`import ossaudiodev` works on 3.10 to 3.12, warning from 3.11, and fails
+    """`import ossaudiodev` works on 3.11 and 3.12, warning on both, and fails
     from 3.13."""
 
     @pytest.mark.skipif(sys.version_info < (3, 13), reason="the module exists before 3.13")
@@ -303,10 +303,9 @@ class TestAvailability:
             stdin=subprocess.DEVNULL,
             check=False,
         )
-        assert (result.returncode != 0) == (sys.version_info >= (3, 11)), result.stderr
-        if sys.version_info >= (3, 11):
-            assert "DeprecationWarning" in result.stderr
-            assert "ossaudiodev" in result.stderr
+        assert result.returncode != 0, result.stderr
+        assert "DeprecationWarning" in result.stderr
+        assert "ossaudiodev" in result.stderr
 
 
 class TestOpen:
@@ -478,7 +477,7 @@ def _load_stand_in(tmp_path: pathlib.Path) -> Any:
 
 
 class TestTheStandInFollowsTheModule:
-    """The examples run against a stand-in. On 3.10 to 3.12 its names,
+    """The examples run against a stand-in. On 3.11 and 3.12 its names,
     constant values, device methods and error messages are checked against
     the real module, so a block cannot pass by calling something the module
     lacks."""

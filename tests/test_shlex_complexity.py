@@ -44,7 +44,7 @@ Measurement scope:
   three-character arguments each grow by under 30x per 10x step: linear
   predicts 10x and quadratic 100x. Only time is measured; their space bounds
   are read from Lib/shlex.py.
-* `split(None)` raises `ValueError` from 3.12, and on 3.10 and 3.11 warns with
+* `split(None)` raises `ValueError` from 3.12, and on 3.11 warns with
   `DeprecationWarning` and reads `sys.stdin`; the test is guarded on
   `sys.version_info`.
 * Every fenced Python block runs in its own subprocess, and a mutated

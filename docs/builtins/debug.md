@@ -293,7 +293,7 @@ else:
 
 ## Version Notes
 
-- **Python 3.14+**: `del x.__debug__` is a `SyntaxError`; 3.10 through 3.13 compile it, and it then deletes an attribute of that name like any other. Assigning to one has always been refused
+- **Python 3.14+**: `del x.__debug__` is a `SyntaxError`; earlier versions compile it, and it then deletes an attribute of that name like any other. Assigning to one has always been refused
 - **Python 3.13+**: `ast.parse(source, optimize=1)` replaces the name with a `Constant` node
 - **All Python 3**: `None`, `True`, `False` and `__debug__` are the four names that cannot be rebound; `Ellipsis` and `NotImplemented` are ordinary builtins that can be
 

@@ -40,9 +40,9 @@ well as with their length. A system call counts as O(1), as it does on the [os p
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `ntpath.normpath(path)` | O(L) | O(L) | On Windows from 3.11 `nt._path_normpath()`, one pass. On Windows 3.10, and on every version elsewhere, a Python loop that deletes list items in place: O(L²) for a path of many `.` or `..` components |
+| `ntpath.normpath(path)` | O(L) | O(L) | On Windows `nt._path_normpath()`, one pass. Elsewhere a Python loop that deletes list items in place: O(L²) for a path of many `.` or `..` components |
 | `ntpath.normcase(path)` | O(L) | O(L) | Lower-cases and turns `/` into `\`; through `LCMapStringEx` on Windows, `str.lower()` elsewhere |
-| `ntpath.isabs(path)` | O(1) | O(1) | Reads the first three characters from 3.11; 3.10 rewrites the separators of the whole path first, O(L). From 3.13 a rooted path with no drive, such as `\x`, is not absolute |
+| `ntpath.isabs(path)` | O(1) | O(1) | Reads the first three characters. From 3.13 a rooted path with no drive, such as `\x`, is not absolute |
 | `ntpath.isreserved(path)` | O(L) | O(L) | 3.13+; checks each component's name and characters, without the filesystem |
 | `ntpath.expandvars(path)` | O(L + V) | O(L + V) | `%name%`, `$name` and `${name}`; an unknown name is left as it is |
 | `ntpath.expanduser(path)` | O(L + H) | O(L + H) | The home directory comes from `USERPROFILE`, or `HOMEDRIVE` and `HOMEPATH`; `~user` is guessed as a sibling of it, with no account lookup |
@@ -51,12 +51,12 @@ well as with their length. A system call counts as O(1), as it does on the [os p
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `ntpath.abspath(path)` | O(L + C) | O(L + C) | Windows: `normpath()`, then one `nt._getfullpathname()` (on 3.10 the call first, then `normpath()`). Elsewhere: `os.getcwd()` joined on for a relative path, then the Python `normpath()`, with its quadratic case |
-| `ntpath.relpath(path, start=os.curdir)` | O(L + S + C) | O(L + S + C) | An `abspath()` of each argument; raises `ValueError` for two different drives. Where `normpath()` is Python (Windows 3.10, and every version elsewhere) it runs over each argument, with its quadratic case |
-| `ntpath.realpath(path)`, Windows, a path it can open | O(L + C + F) | O(L + C + F) | Two `nt._getfinalpathname()` calls, however many components the path has and through as many links as Windows follows in one open; there is no lstat per component. On 3.10 the `normpath()` it starts with is O(L²) for many `.` or `..` components |
-| `ntpath.realpath(path)`, Windows, `m` trailing components it cannot open | O(m·(L + C) + F) | O(L + C + F) | One `nt._getfinalpathname()` and one `nt.readlink()` per such component, walking up until a prefix opens; the result is that prefix resolved, with the tail joined on. None of the components may be a link Windows will not resolve (next row). 3.10's first `normpath()` as above |
-| `ntpath.realpath(path)`, Windows, through a link Windows will not resolve | O(m·(L + C) + F + W) | O(L + C + F + W) | A link to a missing target, a loop, or a chain longer than Windows follows in one open. The walk up stops at the link, and `realpath()` follows it in Python: one `nt.readlink()` per link, every path it reaches kept in a set so that a loop ends. The result is the last target reached, not resolved further, with the tail joined on. On 3.10 each relative symlink's target is also normalised by the Python `normpath()`, quadratic in that path's length for many `.` or `..` components |
-| `ntpath.realpath(path, strict=True)`, Windows | O(L + C + F) | O(L + C + F) | No walk: the first component that fails to open raises. `strict=ntpath.ALLOW_MISSING` walks a missing tail as above and raises for any other error. 3.10's first `normpath()` as above |
+| `ntpath.abspath(path)` | O(L + C) | O(L + C) | Windows: `normpath()`, then one `nt._getfullpathname()`. Elsewhere: `os.getcwd()` joined on for a relative path, then the Python `normpath()`, with its quadratic case |
+| `ntpath.relpath(path, start=os.curdir)` | O(L + S + C) | O(L + S + C) | An `abspath()` of each argument; raises `ValueError` for two different drives. Where `normpath()` is Python (off Windows) it runs over each argument, with its quadratic case |
+| `ntpath.realpath(path)`, Windows, a path it can open | O(L + C + F) | O(L + C + F) | Two `nt._getfinalpathname()` calls, however many components the path has and through as many links as Windows follows in one open; there is no lstat per component |
+| `ntpath.realpath(path)`, Windows, `m` trailing components it cannot open | O(m·(L + C) + F) | O(L + C + F) | One `nt._getfinalpathname()` and one `nt.readlink()` per such component, walking up until a prefix opens; the result is that prefix resolved, with the tail joined on. None of the components may be a link Windows will not resolve (next row) |
+| `ntpath.realpath(path)`, Windows, through a link Windows will not resolve | O(m·(L + C) + F + W) | O(L + C + F + W) | A link to a missing target, a loop, or a chain longer than Windows follows in one open. The walk up stops at the link, and `realpath()` follows it in Python: one `nt.readlink()` per link, every path it reaches kept in a set so that a loop ends. The result is the last target reached, not resolved further, with the tail joined on |
+| `ntpath.realpath(path, strict=True)`, Windows | O(L + C + F) | O(L + C + F) | No walk: the first component that fails to open raises. `strict=ntpath.ALLOW_MISSING` walks a missing tail as above and raises for any other error |
 | `ntpath.realpath(path)`, elsewhere | O(L + C) | O(L + C) | It is `abspath()`, with the Python `normpath()`'s quadratic case: no link is resolved and the filesystem is not asked |
 | `ntpath.ismount(path)` | O(L + C) | O(L + C) | Windows: an `abspath()`, then one `nt._getvolumepathname()` unless the path is a drive root or share root; no `realpath()`, on every supported version. Elsewhere: an `abspath()`, with the Python `normpath()`'s quadratic case, then those two roots answer `True` and every other path `False`, without the filesystem |
 | `ntpath.isdevdrive(path)` | O(L + C) | O(L + C) | 3.12+. Windows: an `abspath()`, then one volume query, `False` if it fails. Elsewhere: O(1), always `False` |
@@ -78,7 +78,7 @@ well as with their length. A system call counts as O(1), as it does on the [os p
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `ntpath.sep`, `ntpath.altsep`, `ntpath.curdir`, `ntpath.pardir`, `ntpath.extsep`, `ntpath.pathsep`, `ntpath.defpath`, `ntpath.devnull` | O(1) | O(1) | `'\\'`, `'/'`, `'.'`, `'..'`, `'.'`, `';'`, `'.;C:\\bin'` and `'nul'`, on every platform |
-| `ntpath.supports_unicode_filenames` | O(1) | O(1) | `True` from 3.12; on 3.10 and 3.11 it is `True` on Windows and `False` elsewhere |
+| `ntpath.supports_unicode_filenames` | O(1) | O(1) | `True` from 3.12; on 3.11 it is `True` on Windows and `False` elsewhere |
 | `ntpath.ALLOW_MISSING` | O(1) | O(1) | The `strict=` value for `realpath()` that tolerates a missing tail only |
 
 ## Windows and Everywhere Else
@@ -105,11 +105,11 @@ assert ntpath.isabs(r"C:\x") and not ntpath.isabs("x")  # O(1)
 
 ## Normalising a Path
 
-`normpath()` on Windows from 3.11 is `nt._path_normpath()`, one pass in C. Where `nt` is not
-there - on Windows 3.10, or `ntpath` imported on Linux or macOS - it is a Python loop that deletes
-each `.` and each `..` pair from a list as it goes, and a path made of many of them costs O(L²).
-`abspath()`, `relpath()`, `realpath()` and `ismount()` run that loop over their argument off
-Windows, and `relpath()` and `realpath()` do on Windows 3.10, so they are quadratic there too.
+`normpath()` on Windows is `nt._path_normpath()`, one pass in C. Where `nt` is not there -
+`ntpath` imported on Linux or macOS - it is a Python loop that deletes each `.` and each `..` pair
+from a list as it goes, and a path made of many of them costs O(L²). `abspath()`, `relpath()`,
+`realpath()` and `ismount()` run that loop over their argument off Windows, so they are quadratic
+there too.
 
 ```python
 import ntpath
@@ -215,9 +215,8 @@ else:
 
 ❌ **Avoid**:
 
-- `normpath()` on long untrusted paths where it runs as Python (Windows 3.10, or any version off
-  Windows), and the functions that pass it their argument there: a path of many `.` or `..`
-  components is quadratic
+- `normpath()` on long untrusted paths where it runs as Python (off Windows), and the functions
+  that pass it their argument there: a path of many `.` or `..` components is quadratic
 - `realpath()` on a path whose long tail does not exist yet, which costs a call per missing
   component; resolve the existing prefix and join the rest
 - `realpath()` through dangling links or long chains of them, where it reads every link in the

@@ -45,7 +45,7 @@ Measurement scope:
   with a `Completer` bound method that completes names from `__main__`, and a
   child on a pseudo-terminal completes `math.sq` to `math.sqrt(` through
   readline with the page's Tab binding.
-* Soft keywords are asserted completed on 3.11+ and not on 3.10.
+* Soft keywords are asserted completed.
 * Every fenced Python block runs in its own subprocess, and a mutated
   assertion in one of them is asserted to fail.
 
@@ -131,10 +131,8 @@ def peak_bytes(func: Callable[[], Any]) -> int:
 
 
 def keywords_offered() -> list[str]:
-    """The keyword list `global_matches()` walks on this version."""
-    if sys.version_info >= (3, 11):
-        return keyword.kwlist + keyword.softkwlist
-    return list(keyword.kwlist)
+    """The keyword list `global_matches()` walks."""
+    return [*keyword.kwlist, *keyword.softkwlist]
 
 
 def all_states(completer: rlcompleter.Completer, text: str) -> list[str]:
@@ -317,13 +315,8 @@ class TestGlobalMatchesScansEachNameOnce:
         assert completer.global_matches("on") == ["one("]
         assert completer.global_matches("non") == ["nonlocal ", "none()"]
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="soft keywords arrive in 3.11")
     def test_soft_keywords_are_completed(self) -> None:
         assert rlcompleter.Completer({}).complete("matc", 0) == "match "
-
-    @pytest.mark.skipif(sys.version_info >= (3, 11), reason="3.10 offers kwlist only")
-    def test_soft_keywords_are_not_completed_on_3_10(self) -> None:
-        assert rlcompleter.Completer({}).complete("matc", 0) is None
 
 
 class TestAttributeCompletion:

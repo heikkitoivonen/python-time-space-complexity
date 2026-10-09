@@ -85,7 +85,7 @@ what a call allocates, its result included, but not its input.
 ### One Pass or a Sorted Copy
 
 `mean()`, `fmean()`, `geometric_mean()` and the variance family keep running sums and never hold
-the data, so a generator over a large source costs O(1) memory on Python 3.11+. The median family
+the data, so a generator over a large source costs O(1) memory. The median family
 and `quantiles()` sort a copy first, so they hold all n values whatever you pass.
 
 ```python
@@ -299,7 +299,7 @@ assert outliers == [12.5]
 ✅ **Do**:
 
 - Pass a generator to `mean()`, `fmean()` or `variance()` when the data does not fit in memory;
-  on Python 3.11+ they hold running sums, not values
+  they hold running sums, not values
 - Use `fmean()` when a float result is enough; it skips the exact arithmetic `mean()` does
 - Sort once and pass the sorted list when you need several of `median()`, `median_low()`,
   `median_high()` and `quantiles()`

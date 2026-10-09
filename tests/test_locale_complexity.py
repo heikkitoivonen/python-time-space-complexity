@@ -28,10 +28,9 @@ Measurement scope:
   `-X utf8=0` and a counting `setlocale`: UTF-8 mode returns UTF-8 with no
   call, `do_setlocale=False` makes none, and `do_setlocale=True` without UTF-8
   mode sets `LC_CTYPE` and restores it, except on Windows, where it makes no
-  call either. `getencoding()` makes no call
-  (3.11+). `getdefaultlocale()` leaves every category unchanged; it warns
-  `DeprecationWarning` on 3.11, 3.12, 3.13.0-3.13.14 and 3.14.0-3.14.6,
-  but not on 3.10, 3.13.15+ or 3.14.7+.
+  call either. `getencoding()` makes no call. `getdefaultlocale()` leaves
+  every category unchanged; it warns `DeprecationWarning` on 3.11, 3.12,
+  3.13.0-3.13.14 and 3.14.0-3.14.6, but not on 3.13.15+ or 3.14.7+.
 * On Windows, setting `'POSIX'` raises `locale.Error` and leaves the category
   as it was, and `locale` has no `LC_MESSAGES`.
 * `localeconv()` returns a new dictionary on each call, with the same keys in
@@ -410,7 +409,7 @@ class TestEncodingQueries:
     def test_utf8_mode_answers_without_touching_the_locale(self) -> None:
         output = _encoding_probe(utf8=1, do_setlocale=True)
 
-        assert [line.lower() for line in output] == ["utf-8"]  # "UTF-8" on 3.10
+        assert output == ["utf-8"]
 
     def test_do_setlocale_false_makes_no_call(self) -> None:
         output = _encoding_probe(utf8=0, do_setlocale=False)
@@ -434,7 +433,6 @@ class TestEncodingQueries:
 
         assert len(output) == 1, output
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
     def test_getencoding_makes_no_setlocale_call(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def refuse(*args: Any) -> str:
             raise AssertionError(f"setlocale{args} was called")
@@ -442,7 +440,7 @@ class TestEncodingQueries:
         monkeypatch.setattr(locale, "setlocale", refuse)
         monkeypatch.setattr(locale, "_setlocale", refuse)
 
-        assert isinstance(locale.getencoding(), str)  # type: ignore[attr-defined]
+        assert isinstance(locale.getencoding(), str)
 
     def test_getdefaultlocale_changes_nothing(self) -> None:
         before = locale.setlocale(locale.LC_ALL)
@@ -455,7 +453,7 @@ class TestEncodingQueries:
         assert locale.setlocale(locale.LC_ALL) == before
         deprecated = [w for w in caught if issubclass(w.category, DeprecationWarning)]
         version = sys.version_info
-        warns = (3, 11) <= version < (3, 13, 15) or (3, 14) <= version < (3, 14, 7)
+        warns = version < (3, 13, 15) or (3, 14) <= version < (3, 14, 7)
         assert bool(deprecated) == warns
 
 

@@ -31,12 +31,11 @@ Measurement scope:
   round trip keeps `restored[0] is restored[1]`. A list containing itself
   round-trips with identity on versions 3 to `marshal.version` and raises
   `ValueError` on version 2.
-* Sets, Python 3.11+: `{8, 0}` and `{0, 8}` iterate in different orders and
-  dump to identical bytes, and `{1, 256}` is written with 256 first, the
-  order of the elements' serialized forms rather than their values. On 3.10
-  the two orders dump differently. A chain of frozensets each holding the
-  previous one, 8 against 14 levels, costs over 16x more on 3.11+ where the
-  output grows under 2x; on 3.10 the same pair costs under 8x.
+* Sets: `{8, 0}` and `{0, 8}` iterate in different orders and dump to
+  identical bytes, and `{1, 256}` is written with 256 first, the order of the
+  elements' serialized forms rather than their values. A chain of frozensets
+  each holding the previous one, 8 against 14 levels, costs over 16x more
+  where the output grows under 2x.
 * The nesting limit is observed on `dumps()` of nested lists and on `loads()`
   of a hand-built nested list, under a raised `sys.setrecursionlimit()`: 900
   levels pass everywhere, and the exact boundary - 2,000 levels pass, 2,001
@@ -95,7 +94,7 @@ import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "marshal.md"
 EXPECTED_BLOCKS = 6
-# Typeshed's 3.10 signatures have no allow_code and accept only marshallable values.
+# Typeshed's 3.11 signatures have no allow_code and accept only marshallable values.
 UNTYPED: Any = marshal
 
 
@@ -328,17 +327,15 @@ class TestSharedObjects:
 
 
 class TestSetOrder:
-    """Python 3.11+ writes set elements sorted by their serialized form."""
+    """Set elements are written sorted by their serialized form."""
 
     def test_the_two_sets_iterate_differently(self) -> None:
         assert list({8, 0}) != list({0, 8})
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="set order is sorted from 3.11")
     def test_equal_sets_give_identical_bytes(self) -> None:
         assert marshal.dumps({8, 0}) == marshal.dumps({0, 8})
         assert marshal.dumps(frozenset({8, 0})) == marshal.dumps(frozenset({0, 8}))
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="set order is sorted from 3.11")
     def test_the_order_is_by_serialized_form(self) -> None:
         data = marshal.dumps({1, 256})
         one = data.index(marshal.dumps(1)[1:])
@@ -347,12 +344,7 @@ class TestSetOrder:
         assert marshal.dumps(256) < marshal.dumps(1)
         assert two_fifty_six < one
 
-    @pytest.mark.skipif(sys.version_info >= (3, 11), reason="set order is sorted from 3.11")
-    def test_iteration_order_before_3_11(self) -> None:
-        assert marshal.dumps({8, 0}) != marshal.dumps({0, 8})
-
     @pytest.mark.timing
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="set order is sorted from 3.11")
     def test_nested_sets_double_per_level(self) -> None:
         shallow, deep = nested_frozensets(8), nested_frozensets(14)
 
@@ -361,15 +353,6 @@ class TestSetOrder:
 
         assert size_step < 2, f"output grew {size_step:.1f}x"
         assert time_step > 16, f"6 more levels cost {time_step:.1f}x"
-
-    @pytest.mark.timing
-    @pytest.mark.skipif(sys.version_info >= (3, 11), reason="set order is sorted from 3.11")
-    def test_nested_sets_are_linear_before_3_11(self) -> None:
-        shallow, deep = nested_frozensets(8), nested_frozensets(14)
-
-        time_step = best_ns(lambda: marshal.dumps(deep)) / best_ns(lambda: marshal.dumps(shallow))
-
-        assert time_step < 8, f"6 more levels cost {time_step:.1f}x"
 
 
 class TestNestingLimit:

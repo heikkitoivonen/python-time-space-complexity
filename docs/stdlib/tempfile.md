@@ -47,7 +47,7 @@ first use in the process.
 |-----------|------|-------|-------|
 | `tempfile.SpooledTemporaryFile(max_size=0, mode='w+b', buffering=-1, encoding=None, newline=None, suffix=None, prefix=None, dir=None, *, errors=None)` | O(1) | O(1) | Starts as an in-memory buffer and creates no file |
 | `SpooledTemporaryFile.write(s)` | O(k) | O(k) in memory, O(1) once rolled over | The write that takes the position past `max_size` also pays `rollover()`, once; `max_size=0` never rolls over on its own |
-| `SpooledTemporaryFile.writelines(lines)` | O(n) | O(s + k) for a positive `max_size`, O(n) for `max_size=0` | k = the longest line. Rolls over as soon as a line crosses `max_size`; 3.10, 3.11, 3.12.0-3.12.9 and 3.13.0-3.13.2 hold the whole iterable in memory first, O(n) |
+| `SpooledTemporaryFile.writelines(lines)` | O(n) | O(s + k) for a positive `max_size`, O(n) for `max_size=0` | k = the longest line. Rolls over as soon as a line crosses `max_size`; 3.11, 3.12.0-3.12.9 and 3.13.0-3.13.2 hold the whole iterable in memory first, O(n) |
 | `SpooledTemporaryFile.rollover()` | O(r + n) | O(1) | Creates a `TemporaryFile`, copies the n held bytes to it and frees the in-memory buffer; does nothing once rolled over |
 | `SpooledTemporaryFile.fileno()` | O(r + n) first call, then O(1) | O(1) | Needs a real descriptor, so it forces `rollover()` |
 | `SpooledTemporaryFile.truncate(size=None)` | O(r + n) if `size > max_size`, else O(1) | O(1) | A size past `max_size` forces `rollover()` first |

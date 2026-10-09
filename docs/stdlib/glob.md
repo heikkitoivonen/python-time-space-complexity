@@ -76,13 +76,12 @@ with tempfile.TemporaryDirectory() as folder:
 
 ### Hidden Names Are Excluded
 
-`*`, `?` and `**` do not match a leading dot. Since Python 3.11 `include_hidden=True` turns that
-off; before it, the only way in is to write the dot into the pattern.
+`*`, `?` and `**` do not match a leading dot. `include_hidden=True` turns that off, and so does
+writing the dot into the pattern.
 
 ```python
 import glob
 import os
-import sys
 import tempfile
 
 with tempfile.TemporaryDirectory() as folder:
@@ -96,9 +95,8 @@ with tempfile.TemporaryDirectory() as folder:
     dotted = glob.glob(os.path.join(folder, '.*.py'))
     assert [os.path.basename(p) for p in dotted] == ['.hidden.py']
 
-    if sys.version_info >= (3, 11):
-        both = glob.glob(os.path.join(folder, '*.py'), include_hidden=True)
-        assert len(both) == 2
+    both = glob.glob(os.path.join(folder, '*.py'), include_hidden=True)
+    assert len(both) == 2
 ```
 
 ## Iterator vs List

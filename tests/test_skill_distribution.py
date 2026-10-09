@@ -68,7 +68,7 @@ def test_archive_is_reproducible_and_usable_outside_checkout(
     assert (installed / "LICENSE.txt").read_bytes() == (ROOT / "LICENSE.txt").read_bytes()
     manifest = json.loads((installed / "manifest.json").read_text())
     assert manifest["source_revision"] == "a" * 40
-    assert manifest["supported_python"] == ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    assert manifest["supported_python"] == ["3.11", "3.12", "3.13", "3.14"]
 
 
 @pytest.mark.parametrize("mutation", ["delete", "corrupt", "extra"])
@@ -179,7 +179,7 @@ def test_skill_workflow_preserves_lockfile_without_local_uv_config(tmp_path: Pat
     env.pop("UV_PROJECT_ENVIRONMENT", None)
     env.pop("VIRTUAL_ENV", None)
     (tmp_path / "pyproject.toml").write_text(
-        '[project]\nname = "release-lock-probe"\nversion = "0.0.0"\nrequires-python = ">=3.10"\n'
+        '[project]\nname = "release-lock-probe"\nversion = "0.0.0"\nrequires-python = ">=3.11"\n'
     )
 
     def run_uv(*args: str, environment: dict[str, str]) -> None:

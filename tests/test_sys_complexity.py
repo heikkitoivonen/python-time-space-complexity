@@ -17,10 +17,10 @@ Measurement scope:
 
 * `sys._getframe(d)`: depth 100 against depth 1,000, 20,000 calls each,
   asserting the deeper walk costs more than four times the shallower one.
-* `sys.setrecursionlimit(n)` is O(t) in the thread count from 3.11, where it
-  writes through to every thread state (`Py_SetRecursionLimit` in
-  Python/ceval.c): flat on 3.10 at 5.0e-08s from 1 thread to 400, and
-  3.4e-08s to 4.9e-07s across the same range on 3.14.
+* `sys.setrecursionlimit(n)` is O(t) in the thread count, since it writes
+  through to every thread state (`Py_SetRecursionLimit` in Python/ceval.c):
+  4.7e-08s to 2.1e-06s from 1 thread to 400 on 3.11.17, and 3.4e-08s to
+  4.9e-07s across the same range on 3.14.
 * `sys.intern(s)`: 2,000 fresh strings of 1,000 characters against 2,000 of
   100,000, in a subprocess, asserting a factor of ten. Re-interning the same
   two lengths is asserted flat within a factor of two, and `sys._is_interned`
@@ -38,7 +38,8 @@ Measurement scope:
   alongside are what carry the O(b) and O(1) in the rows.
 * `sys.settrace(fn)`: installing and removing a tracer while a frame of 110
   bytes of bytecode is live against one of 98,998, 100 calls per sample and
-  the best of five. Flat on 3.10 and 3.11 - 1.3e-07s against 1.3e-07s - and
+  the best of five. Flat on 3.11 - 1.2e-07s against 1.2e-07s on 3.11.17,
+  where the two frames are 76 and 59,516 bytes - and
   7.3e-06s against 7.3e-04s on 3.12, 6.6e-06s against 6.0e-04s on 3.13,
   7.0e-06s against 6.2e-04s on 3.14. `sys.setprofile` measures the same way,
   4.1e-06s against 3.0e-04s on 3.14, and is covered by the same row.
@@ -50,7 +51,7 @@ Measurement scope:
   the smaller.
 * `sys.intern` retention: 500 strings of 20,000 characters interned and
   dropped in a fresh interpreter retains 10.0 MB on 3.12.5 and 3.12.6 and
-  0.0 MB on 3.10, 3.11, 3.12.7, 3.12.14, 3.13 and 3.14. The immortal window is a patch range, not a
+  0.0 MB on 3.11, 3.12.7, 3.12.14, 3.13 and 3.14. The immortal window is a patch range, not a
   minor release: gh-113993 landed in 3.12.7.
 * The rest is counted rather than timed: hooks fired, `find_spec` calls,
   `__sizeof__` calls, traceback frames printed, `firstiter` calls, entries in
@@ -243,7 +244,6 @@ class TestExceptionState:
     def test_outside_a_handler_there_is_nothing_to_report(self) -> None:
         assert sys.exc_info() == (None, None, None)
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="sys.exception() is Python 3.11+")
     def test_exception_returns_the_value_without_the_tuple(self) -> None:
         try:
             raise ValueError("boom")
@@ -474,14 +474,13 @@ class TestExceptionReporting:
 
         assert len(long) - len(short) == 9_990, "the message is copied through verbatim"
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="__notes__ are Python 3.11+")
     def test_notes_are_part_of_the_same_term(self) -> None:
         """The m in the row is what the exception renders to, not only its
         `str()`: a note is printed too, with the traceback unchanged.
         """
 
         def report_for(note: str | None) -> str:
-            error: Any = ValueError("boom")  # add_note() is not in typeshed's 3.10
+            error = ValueError("boom")
             if note is not None:
                 error.add_note(note)
             captured = io.StringIO()
@@ -676,13 +675,8 @@ class TestRecursionLimit:
             sys.setrecursionlimit(1)
 
     @pytest.mark.timing
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="3.10 sets one interpreter-wide value")
     def test_setting_the_limit_costs_one_pass_over_the_threads(self) -> None:
-        """`Py_SetRecursionLimit` loops over thread states.
-
-        On 3.10 this is flat, which is why the test does not run there: the
-        loop was introduced with the per-thread limit in 3.11.
-        """
+        """`Py_SetRecursionLimit` loops over thread states."""
         limit = sys.getrecursionlimit()
         alone = per_call(lambda: sys.setrecursionlimit(limit), 20_000)
 
@@ -691,22 +685,6 @@ class TestRecursionLimit:
 
         assert crowded > alone * 3, (
             f"300 more thread states should cost more to write through: "
-            f"alone {alone:.2e}s, crowded {crowded:.2e}s"
-        )
-
-    @pytest.mark.timing
-    @pytest.mark.skipif(
-        sys.version_info >= (3, 11), reason="3.11 and later write through to each thread"
-    )
-    def test_before_3_11_the_limit_was_one_field(self) -> None:
-        limit = sys.getrecursionlimit()
-        alone = per_call(lambda: sys.setrecursionlimit(limit), 20_000)
-
-        with ParkedThreads(300):
-            crowded = per_call(lambda: sys.setrecursionlimit(limit), 20_000)
-
-        assert crowded < alone * 3, (
-            f"3.10 writes one interpreter field, so threads should not matter: "
             f"alone {alone:.2e}s, crowded {crowded:.2e}s"
         )
 
@@ -878,7 +856,7 @@ class TestIntern:
         """The retention, measured on every supported version.
 
         `getunicodeinternedsize()` arrived in 3.12, so the count test above
-        cannot see 3.10 or 3.11. Traced allocation can: intern a payload,
+        cannot see 3.11. Traced allocation can: intern a payload,
         drop every reference to it, and see whether the memory comes back.
         It runs in a fresh interpreter because the 500 insertions can resize
         the process-wide intern table, and that table's size depends on how
@@ -1283,7 +1261,7 @@ class TestTracing:
         return short_code, long_code, float(small), float(large)
 
     @pytest.mark.timing
-    @pytest.mark.skipif(sys.version_info < (3, 12), reason="3.10 and 3.11 just store a function")
+    @pytest.mark.skipif(sys.version_info < (3, 12), reason="3.11 just stores a function")
     def test_installing_a_tracer_instruments_the_stack_from_3_12(self) -> None:
         """The corrected row. `_PyEval_SetTrace` in Python/legacy_tracing.c
         calls `set_monitoring_trace_events`, which instruments the code
@@ -1305,7 +1283,7 @@ class TestTracing:
         short_code, long_code, quick, slow = self._install_cost()
 
         assert slow < quick * 3, (
-            f"3.10 and 3.11 store one function, so the stack should not matter: "
+            f"3.11 stores one function, so the stack should not matter: "
             f"{short_code} bytes {quick:.2e}s, {long_code} bytes {slow:.2e}s"
         )
 
@@ -1316,9 +1294,8 @@ class TestTracing:
         Tracing is suspended while a trace function runs, so a plain call made
         from inside one is not traced. The control below is that plain call:
         it produces no events, and the `call_tracing()` call beside it does -
-        on 3.10, 3.12, 3.13 and 3.14. The whole 3.11 line, 3.11.0 to 3.11.16,
-        leaves it untraced, so the two ends of the supported range agree with
-        each other and not with the middle.
+        on 3.12, 3.13 and 3.14. The whole 3.11 line, 3.11.0 to 3.11.17,
+        leaves it untraced.
         """
         plain: list[str] = []
         through_call_tracing: list[str] = []

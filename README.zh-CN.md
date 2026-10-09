@@ -1,4 +1,4 @@
-<!-- source_sha: ac89df1d97a23d22010210448aceecb9349b94d1e389d63af38c6018cdb950f1 -->
+<!-- source_sha: 0cdef5816a099ea96efa48c5cb4e1a668c3a5b208d7f9fdaa5e16f027c014457 -->
 <!-- translated: machine -->
 
 [English](README.md) | **简体中文**
@@ -7,7 +7,7 @@
 
 [![Lint / Format](https://img.shields.io/github/actions/workflow/status/heikkitoivonen/python-time-space-complexity/deploy.yml?label=lint%20%2F%20format)](https://github.com/heikkitoivonen/python-time-space-complexity/actions/workflows/deploy.yml)
 [![Type Check](https://img.shields.io/github/actions/workflow/status/heikkitoivonen/python-time-space-complexity/deploy.yml?label=type%20check)](https://github.com/heikkitoivonen/python-time-space-complexity/actions/workflows/deploy.yml)
-[![Python](https://img.shields.io/badge/python-3.10%20to%203.14-blue)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.11%20to%203.14-blue)](https://www.python.org/)
 [![License](https://img.shields.io/github/license/heikkitoivonen/python-time-space-complexity)](LICENSE.txt)
 [![Docs](https://img.shields.io/badge/docs-pythoncomplexity.com-brightgreen)](https://pythoncomplexity.com)
 
@@ -18,7 +18,7 @@
 本项目提供以下内容的详细算法复杂度文档：
 - **Python 内置类型**：`list`、`dict`、`set`、`str` 等
 - **标准库模块**：`collections`、`heapq`、`bisect`、`annotationlib`、`compression.zstd` 等
-- **Python 版本**：3.10–3.14（包含新的 3.14 特性）
+- **Python 版本**：3.11–3.14（包含新的 3.14 特性）
 - **替代实现**：CPython、PyPy、Jython、IronPython
 
 ## 特性
@@ -39,7 +39,7 @@
 ## 快速开始
 
 ### 环境要求
-- Python 3.10+（推荐 3.14）
+- Python 3.11+（推荐 3.14）
 - [uv](https://github.com/astral-sh/uv) - 快速的 Python 包管理器
 - Git
 
@@ -248,7 +248,7 @@ git push origin feature/add-missing-complexity
 ## 代码质量标准
 
 ### 代码检查与格式化
-- **ruff** 用于代码检查（行长度：100 字符，Python 3.10+ 兼容）
+- **ruff** 用于代码检查（行长度：100 字符，Python 3.11+ 兼容）
 - **pyright** 用于静态类型检查
 - **pytest** 用于测试
 
@@ -335,8 +335,7 @@ dq.appendleft(item)
 
 ### Python 版本性能
 ```
-Python 3.10     ← Baseline
-Python 3.11     ← +10-60% improvements (inline caching!)
+Python 3.11     ← Baseline (inline caching)
 Python 3.12     ← +5-10% improvements
 Python 3.13     ← Similar (experimental free-threading)
 Python 3.14     ← Better GC pauses, new heapq max-heap

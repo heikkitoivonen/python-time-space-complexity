@@ -42,8 +42,8 @@ Measurement scope:
   generator, which is not advanced.
 * `is_` and `is_not` do not call `__eq__`; `and_` and `or_` are bitwise
   (`and_(2, 1) == 0`); `index` rejects a `float`; `concat` and `iconcat`
-  reject a non-sequence left operand; `call` (3.11+) and `is_none` and
-  `is_not_none` (3.14+) are guarded on `sys.version_info`.
+  reject a non-sequence left operand; `call` forwards its arguments; `is_none`
+  and `is_not_none` (3.14+) are guarded on `sys.version_info`.
 * Every fenced Python block runs in its own subprocess, and a mutated
   assertion in one of them is asserted to fail.
 
@@ -433,10 +433,9 @@ class TestMethodcallerAndCall:
         with pytest.raises(AttributeError):
             operator.methodcaller("missing")(1)
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
     def test_call(self) -> None:
-        assert operator.call(divmod, 7, 2) == (3, 1)  # type: ignore[attr-defined]
-        assert operator.call(dict, a=1) == {"a": 1}  # type: ignore[attr-defined]
+        assert operator.call(divmod, 7, 2) == (3, 1)
+        assert operator.call(dict, a=1) == {"a": 1}
 
 
 PROFILE_SCRIPT = """

@@ -16,8 +16,7 @@ Measurement scope:
   decompressor first, and each reads a fixed-size buffer. `'r:gz'` reads under
   64 KiB of a 2,000-member compressed archive. `is_tarfile()` reads under
   400 KiB of a 3 MB archive and returns `False`
-  for 1,400 bytes of text; it restores a file object's position on 3.11+ and
-  leaves it moved on 3.10. Appending (`'a'`) to an archive of 200 members of
+  for 1,400 bytes of text; it restores a file object's position. Appending (`'a'`) to an archive of 200 members of
   64 KiB reads every header, at least 200 x 512 bytes and under 2% of the
   archive, and a following `getmembers()` reads nothing more and returns all
   200.
@@ -59,7 +58,7 @@ Measurement scope:
   level 0 and raised at level 1. `extraction_filter` set on an instance is
   called when a call passes none. With neither, extracting `../escape.txt`
   raises `OutsideDestinationError` on 3.14+, warns and writes it on 3.12 and
-  3.13, and writes it silently on 3.10 and 3.11.
+  3.13, and writes it silently on 3.11.
 * The three filters are asserted by what they reject and rewrite: `..`
   escapes, absolute and escaping links and device files for `data_filter`;
   high and group/other write bits for `tar_filter`, which keeps ownership and
@@ -304,19 +303,11 @@ class TestOpeningReadsOneHeader:
         assert source.read_bytes < 400 * 1024
         assert not tarfile.is_tarfile(io.BytesIO(b"not an archive" * 100))
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="position restored from 3.11")
     def test_is_tarfile_restores_the_position(self) -> None:
         source = io.BytesIO(self.ARCHIVE)
 
         assert tarfile.is_tarfile(source)
         assert source.tell() == 0
-
-    @pytest.mark.skipif(sys.version_info >= (3, 11), reason="3.10 behaviour")
-    def test_is_tarfile_moves_the_position_on_310(self) -> None:
-        source = io.BytesIO(self.ARCHIVE)
-
-        assert tarfile.is_tarfile(source)
-        assert source.tell() != 0
 
     def test_closing_pads_to_a_record_and_ends_in_two_zero_blocks(self) -> None:
         for count in range(1, 25):
@@ -718,7 +709,7 @@ class TestErrorHandling:
                 tar.extractall(tmp_path / "dest")
         assert (tmp_path / "escape.txt").read_bytes() == b"ok"
 
-    @pytest.mark.skipif(sys.version_info >= (3, 12), reason="3.10 and 3.11 behaviour")
+    @pytest.mark.skipif(sys.version_info >= (3, 12), reason="3.11 behaviour")
     def test_the_default_trusts_silently(self, tmp_path: pathlib.Path) -> None:
         (tmp_path / "dest").mkdir()
         with tarfile.open(fileobj=self.archive("../escape.txt")) as tar:

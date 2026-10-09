@@ -15,17 +15,14 @@ Measurement scope:
   four shapes: many one-line machine entries, one long unquoted password, one
   long double-quoted password, and many comment lines ahead of one entry. Each
   10x step must cost between 2x and 30x, where a linear parse predicts 10x and
-  a quadratic one 100x. The two long-password shapes run on 3.11+ only.
+  a quadratic one 100x.
 * The token term is then isolated at a fixed n of 400,000 characters: one
   400,000-character password against short machine entries whose longest
-  token is under ten characters. On 3.11+ the long token must cost under 2x
-  the entries. On 3.10, whose shlex-based lexer copies the token on every
-  character, a password of 400,000 characters must cost more than 24x one of
-  50,000 (linear predicts 8x, O(n·t) 64x; x50 to x55 on 3.10.21, where 3.14.7
-  takes x7.6 to x8.3).
+  token is under ten characters. The long token must cost under 2x the
+  entries.
 * A `tracemalloc` peak over a 500,000-character password is over 500 KB and
   under 30 times the peak for a 50,000-character one (quadratic predicts
-  100x; x3.2 on 3.14.7, x6.6 on 3.12.14 and x8.1 on 3.10.21), so the space
+  100x; x3.2 on 3.14.8, x6.6 on 3.12.14 and 3.11.17), so the space
   follows the file and is not quadratic in it.
 * `authenticators()` over 100,000 hosts is a dict subclass that counts
   `__contains__` and `__getitem__`: a hit is one of each, a miss that falls
@@ -35,19 +32,16 @@ Measurement scope:
 * `repr()` is timed on 1,000, 10,000 and 100,000 entries under the same 30x
   bound per 10x step, and its text is asserted exactly for one entry, with an
   empty account omitted and a comment dropped. A password with a space,
-  quoted in the file, is written unquoted and does not parse back (3.11+).
+  quoted in the file, is written unquoted and does not parse back.
 * The `~/.netrc` check (POSIX): a 0o644 file is rejected by `netrc()` and
   accepted by path; a 0o600 file is accepted; a patched `os.getuid` that does
-  not match the owner is rejected; the `anonymous` login is exempt on 3.11+.
+  not match the owner is rejected; the `anonymous` login is exempt.
   With no `~/.netrc`, `netrc()` raises `FileNotFoundError`.
-* Version-gated on 3.11: quoted and escaped tokens, an entry without a
-  password, `''` for missing fields, a `macdef` without its terminating blank
-  line raising, and the comment rule: a multi-word comment on the line after an
-  entry is skipped, while after a blank line a one-word comment is skipped and
-  a multi-word one raises. On 3.10 the same inputs are asserted to take the
-  3.10 path: an entry without a password raises, a missing account is `None`,
-  the unterminated `macdef` is kept, and the comment after a blank line is
-  skipped.
+* Quoted and escaped tokens, an entry without a password, `''` for missing
+  fields, a `macdef` without its terminating blank line raising, and the
+  comment rule: a multi-word comment on the line after an entry is skipped,
+  while after a blank line a one-word comment is skipped and a multi-word one
+  raises.
 * `NetrcParseError` carries `msg`, `filename` and `lineno` for a syntax error.
 * Every fenced Python block runs in its own subprocess with `HOME` pointed at
   a temporary directory, and a mutated assertion in one of them is asserted to
@@ -87,8 +81,6 @@ PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "netrc.md"
 EXPECTED_BLOCKS = 7
 
 posix_only = pytest.mark.skipif(os.name != "posix", reason="the check runs on POSIX only")
-since_311 = pytest.mark.skipif(sys.version_info < (3, 11), reason="3.11 rewrote the lexer")
-before_311 = pytest.mark.skipif(sys.version_info >= (3, 11), reason="3.10 parser")
 
 
 def best_ns(func: Callable[[], Any], repeats: int = 3) -> float:
@@ -145,21 +137,11 @@ SHAPES: dict[str, Callable[[int], str]] = {
 }
 
 
-TOKEN_SHAPES = ("long token", "quoted token")
-
-
 class TestParsingIsLinear:
-    """`netrc.netrc(file)` | O(n) | O(n): one pass, whatever the file's shape;
-    on 3.10, O(n·t) for a longest token of t characters."""
+    """`netrc.netrc(file)` | O(n) | O(n): one pass, whatever the file's shape."""
 
     @pytest.mark.timing
-    @pytest.mark.parametrize(
-        "shape",
-        [
-            pytest.param(shape, marks=since_311) if shape in TOKEN_SHAPES else shape
-            for shape in SHAPES
-        ],
-    )
+    @pytest.mark.parametrize("shape", list(SHAPES))
     def test_ten_times_the_file_costs_about_ten_times(
         self, shape: str, tmp_path: pathlib.Path
     ) -> None:
@@ -189,30 +171,16 @@ class TestParsingIsLinear:
         return token_ns / entries_ns
 
     @pytest.mark.timing
-    @since_311
     def test_one_long_token_costs_what_short_ones_do(self) -> None:
         ratio = self.token_against_entries()
 
         assert ratio < 2, f"one long token cost x{ratio:.1f} the short entries at equal n"
-
-    @pytest.mark.timing
-    @before_311
-    def test_one_long_token_is_quadratic_on_310(self, tmp_path: pathlib.Path) -> None:
-        short = str(write(tmp_path, SHAPES["long token"](50_000), "short"))
-        long = str(write(tmp_path, SHAPES["long token"](400_000), "long"))
-        netrc.netrc(short)
-        netrc.netrc(long)  # warm the page cache and the code objects
-
-        ratio = best_ns(lambda: netrc.netrc(long)) / best_ns(lambda: netrc.netrc(short))
-
-        assert ratio > 24, f"8x the token cost x{ratio:.1f}; linear predicts 8x, O(n·t) 64x"
 
     def test_every_shape_parses(self, tmp_path: pathlib.Path) -> None:
         assert len(parse(tmp_path, SHAPES["machines"](10_000)).hosts) > 250
         assert parse(tmp_path, SHAPES["long token"](1_000)).hosts["h"][2] == "x" * 1_000
         assert parse(tmp_path, SHAPES["comments"](10_000)).hosts["h"][2] == "p"
 
-    @since_311
     def test_a_quoted_token_parses(self, tmp_path: pathlib.Path) -> None:
         assert parse(tmp_path, SHAPES["quoted token"](1_000)).hosts["h"][2] == "x" * 1_000
 
@@ -308,7 +276,6 @@ class TestReprRebuildsTheText:
 
         assert repr(rc) == "machine h\n\tlogin u\n\taccount a\n\tpassword p\nmacdef m\nline\n\n"
 
-    @since_311
     def test_a_token_with_whitespace_does_not_round_trip(self, tmp_path: pathlib.Path) -> None:
         rc = parse(tmp_path, 'machine h login u password "two words"\n')
         assert rc.hosts["h"][2] == "two words"
@@ -379,7 +346,6 @@ class TestTheHomeNetrcCheck:
             netrc.netrc()
 
     @posix_only
-    @since_311
     def test_the_anonymous_login_is_exempt(self, home: pathlib.Path) -> None:
         write(home, "machine h login anonymous password guest\n", ".netrc").chmod(0o644)
 
@@ -387,24 +353,20 @@ class TestTheHomeNetrcCheck:
 
 
 class TestVersionedSyntax:
-    """The 3.11 lexer: quoting, optional passwords, `''` fields, terminated
-    macros and the comment rule; the same inputs on the 3.10 parser."""
+    """The lexer: quoting, optional passwords, `''` fields, terminated macros
+    and the comment rule."""
 
-    @since_311
     def test_quotes_and_escapes_join_words(self, tmp_path: pathlib.Path) -> None:
         assert parse(tmp_path, 'machine h login u password "a b"\n').hosts["h"][2] == "a b"
         assert parse(tmp_path, "machine h login u password a\\ b\n").hosts["h"][2] == "a b"
 
-    @since_311
     def test_an_entry_needs_no_password(self, tmp_path: pathlib.Path) -> None:
         assert parse(tmp_path, "machine h login u\n").hosts == {"h": ("u", "", "")}
 
-    @since_311
     def test_an_unterminated_macro_raises(self, tmp_path: pathlib.Path) -> None:
         with pytest.raises(netrc.NetrcParseError, match="null line"):
             parse(tmp_path, "macdef m\nline\n")
 
-    @since_311
     def test_a_comment_after_an_entry_line_is_skipped(self, tmp_path: pathlib.Path) -> None:
         rc = parse(
             tmp_path,
@@ -413,7 +375,6 @@ class TestVersionedSyntax:
 
         assert sorted(rc.hosts) == ["a", "b"]
 
-    @since_311
     def test_after_a_blank_line_only_the_first_word_is_skipped(
         self, tmp_path: pathlib.Path
     ) -> None:
@@ -422,15 +383,6 @@ class TestVersionedSyntax:
         assert parse(tmp_path, entry + "#work\n").hosts == {"a": ("u", "", "p")}
         with pytest.raises(netrc.NetrcParseError, match="bad follower token 'the'"):
             parse(tmp_path, entry + "# the work account\n")
-
-    @before_311
-    def test_the_310_parser(self, tmp_path: pathlib.Path) -> None:
-        with pytest.raises(netrc.NetrcParseError, match="malformed"):
-            parse(tmp_path, "machine h login u\n")
-        assert parse(tmp_path, "machine h login u password p\n").hosts == {"h": ("u", None, "p")}
-        assert parse(tmp_path, "macdef m\nline\n").macros == {"m": ["line\n"]}
-        rc = parse(tmp_path, "machine a login u password p\n\n# the work account\n")
-        assert rc.hosts == {"a": ("u", None, "p")}
 
 
 class TestNetrcParseError:

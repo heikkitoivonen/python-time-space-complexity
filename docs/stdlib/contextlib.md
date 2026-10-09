@@ -355,7 +355,7 @@ import io
 import os
 import sys
 import tempfile
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import chdir, redirect_stderr, redirect_stdout
 
 buffer = io.StringIO()
 original = sys.stdout
@@ -369,14 +369,11 @@ with redirect_stderr(errors):  # O(1)
     sys.stderr.write("warning\n")
 assert errors.getvalue() == "warning\n"
 
-if sys.version_info >= (3, 11):
-    from contextlib import chdir
-
-    start = os.getcwd()
-    with tempfile.TemporaryDirectory() as target:
-        with chdir(target):  # O(1) - one os.chdir() each way
-            assert os.path.samefile(os.getcwd(), target)
-        assert os.getcwd() == start
+start = os.getcwd()
+with tempfile.TemporaryDirectory() as target:
+    with chdir(target):  # O(1) - one os.chdir() each way
+        assert os.path.samefile(os.getcwd(), target)
+    assert os.getcwd() == start
 ```
 
 ## Common Patterns

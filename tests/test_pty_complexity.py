@@ -27,8 +27,8 @@ Measurement scope:
   at a time and does not accumulate the stream.
   The default 1024-byte reader is used, which is the scope the row states; a
   callback that returns larger blocks is not varied. The bound holds on every
-  supported version: 3.10 writes each chunk on as it arrives, and 3.11+
-  buffers behind a fixed high-water mark.
+  supported version: releases before 3.11.4 write each chunk on as it
+  arrives, and 3.11.4+ buffers behind a fixed high-water mark.
 * `spawn()` blocking for at least the child's lifetime is settled by returning
   a non-zero exit status from a child that sleeps before exiting: the status is
   the child's, so the call did not return before the child did. A descendant

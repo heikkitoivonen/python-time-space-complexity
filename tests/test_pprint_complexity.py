@@ -46,8 +46,7 @@ Measurement scope:
   whose first item is a cycle, and `PrettyPrinter(depth=1).isreadable()`
   renders leaves three levels down.
 * A `PrettyPrinter` built with `stream=None` writes to the `sys.stdout` of its
-  construction, not of the call; from 3.11 it writes nothing when that is
-  `None`, and on 3.10 it raises `AttributeError`.
+  construction, not of the call, and writes nothing when that is `None`.
 * A chain nested half the recursion limit deep raises `RecursionError` from
   `saferepr()` and `pformat()` and not from `repr()`.
 * Every fenced Python block runs in its own subprocess, and a mutated
@@ -56,7 +55,7 @@ Measurement scope:
 Not settled here:
 
 * `PrettyPrinter()` is O(1) by source: the constructor validates and stores
-  its arguments (Lib/pprint.py, 3.10 to 3.14) and formats nothing. The
+  its arguments (Lib/pprint.py, 3.11 to 3.14) and formats nothing. The
   timing above compares it with formatting at one size; it does not vary
   the arguments.
 * That each sort is O(k log k) is `sorted()`'s bound; the tests count how many
@@ -403,19 +402,11 @@ class TestPrettyPrinter:
         assert first.getvalue() == "[1]\n"
         assert second.getvalue() == ""
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="3.11 stopped writing to None")
     def test_nothing_is_written_when_stdout_is_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(sys, "stdout", None)
 
         pprint.pprint([1])
         pprint.PrettyPrinter().pprint([1])
-
-    @pytest.mark.skipif(sys.version_info >= (3, 11), reason="3.10 still writes to None")
-    def test_310_raises_when_stdout_is_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(sys, "stdout", None)
-
-        with pytest.raises(AttributeError):
-            pprint.pprint([1])
 
     def test_format_is_called_again_for_each_broken_level(self) -> None:
         calls: list[Any] = []

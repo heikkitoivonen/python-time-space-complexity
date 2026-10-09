@@ -21,7 +21,7 @@ filter's path resolution: each grows with the length of one member's name, not w
 | `tarfile.open(name, 'a')` | O(n) | O(n) | Appending walks every header to find the end of the archive, and keeps them |
 | `tarfile.open(..., stream=True)` | O(1) | O(1) | Python 3.13+: headers are not cached, so iterating holds one at a time and `getmembers()` returns an empty list |
 | `tarfile.TarFile(name=None, mode='r', fileobj=None, format=DEFAULT_FORMAT, ...)` | O(1) | O(1) | Uncompressed only; `open()` picks the compression and calls it |
-| `tarfile.is_tarfile(name)` | O(1) | O(1) | Opens the archive and reads its first header; Python 3.11+ restores a file object's position |
+| `tarfile.is_tarfile(name)` | O(1) | O(1) | Opens the archive and reads its first header, and restores a file object's position |
 | `TarFile.close()` | O(1) | O(1) | Writing modes append two zero blocks and pad the archive to a multiple of 10,240 bytes |
 
 ### TarFile Reading

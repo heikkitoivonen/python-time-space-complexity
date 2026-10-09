@@ -3,13 +3,10 @@
 The page prices the server by the bytes a channel holds and copies: a command
 line is joined and dispatched once, a message is collected in pieces and
 joined, unstuffed and handed over once, and `data_size_limit` caps what one
-message can hold. The module exists on Python 3.10 and 3.11 only, so every
-runtime test takes the `smtpd` fixture, which skips from 3.12; availability
-itself is asserted on every version. CI runs only the timing tests on 3.10
-and 3.11, so the rest are run by hand on one of those versions. Lib/smtpd.py
-differs between v3.10.19 and v3.11.14 only in `MailmanProxy`, which 3.11
-removes, and in how the import-time DeprecationWarning is raised; the
-interpreters run here, 3.10.21 and 3.11.16, carry the same file as those tags.
+message can hold. The module exists on Python 3.11 only, so every runtime test
+takes the `smtpd` fixture, which skips from 3.12; availability itself is
+asserted on every version. The interpreter run here, 3.11.17, carries the same
+Lib/smtpd.py as v3.11.14.
 Channels are built on `socket.socketpair()` with a private map, so a test
 chooses exactly what arrives; the end-to-end tests run a real `smtplib`
 client, or a real upstream server, in a thread on 127.0.0.1.
@@ -69,17 +66,13 @@ Measurement scope:
 * `DebuggingServer.process_message()` prints each line of `bytes` data as its
   `repr()`, with the `X-Peer` header before the first blank line, and none
   when there is no blank line.
-* `MailmanProxy`, on 3.10 only: building one warns, `enable_SMTPUTF8=True`
-  raises `ValueError`, and `process_message()` raises `TypeError` given the
-  keyword arguments and otherwise `ModuleNotFoundError`, since this
-  project's environment does not install the package it imports. On 3.11
-  the name is gone.
+* `MailmanProxy` is not defined.
 * The constants: `DATA_SIZE_DEFAULT` is 33554432 and the default for both
   classes, `COMMAND` and `DATA` are 0 and 1, `command_size_limit` is 512, and
   `DEBUGSTREAM` is a `Devnull` until a stream is assigned, which then gets
   the channel's trace.
-* The import warns on 3.10 and 3.11 and raises `ModuleNotFoundError` from 3.12.
-* Every fenced Python block runs in its own subprocess on 3.10 and 3.11, and a
+* The import warns on 3.11 and raises `ModuleNotFoundError` from 3.12.
+* Every fenced Python block runs in its own subprocess on 3.11, and a
   mutated assertion in one of them is asserted to fail.
 
 Not settled here:
@@ -96,19 +89,14 @@ Not settled here:
   message plus `smtplib.SMTP.sendmail()`; the network round trips and the
   upstream server's work are outside the bound. `DebuggingServer`'s O(n) is
   read from source.
-* `MailmanProxy.process_message()` imports a package Python does not ship;
-  the O(n + p²) with it installed is read from Lib/smtpd.py at v3.10.19,
-  where each list recipient is removed from `rcpttos` with `list.remove()`,
-  and excludes the work of the package's own functions.
 * The resolver lookups `getaddrinfo()` and `getfqdn()` make, and the kernel's
   cost for each socket call, are outside every bound. The examples rely on a
   small send over a Linux `AF_UNIX` socket pair being read back in one
   `recv()`; they have been run on Linux only.
 * The deprecation in 3.6 and the removal in 3.12 come from the 3.11
   documentation and PEP 594; that the import warning starts at 3.10 is read
-  from Lib/smtpd.py at v3.9.0 and v3.10.0, since 3.9 is not supported, and
-  `MailmanProxy`'s removal in 3.11 from v3.11.0.
-* The page-scoped audit, run on 3.10 and 3.11, reports no missing names. Its
+  from Lib/smtpd.py at v3.9.0 and v3.10.0, neither of them supported.
+* The page-scoped audit, run on 3.11, reports no missing names. Its
   classification list holds the channel methods and limits the page prices,
   and these, which the page leaves out: the command-line entry point
   (`usage()`, `parseargs()`, `Options` and its attributes), the `Devnull`
@@ -310,8 +298,7 @@ def collector(smtpd: Any) -> type:
 
 
 class TestAvailability:
-    """`import smtpd` works on 3.10 and 3.11, warning on both, and fails from
-    3.12."""
+    """`import smtpd` works on 3.11, warning, and fails from 3.12."""
 
     @pytest.mark.skipif(sys.version_info < (3, 12), reason="the module exists before 3.12")
     def test_importing_it_from_3_12_raises(self) -> None:
@@ -862,28 +849,10 @@ class TestDebuggingServer:
 
 
 class TestMailmanProxy:
-    """`MailmanProxy` exists on 3.10 only, takes no keyword arguments in
-    `process_message()`, and imports a package Python does not ship."""
+    """`MailmanProxy` was removed in 3.11."""
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="MailmanProxy exists on 3.10")
     def test_it_is_gone_from_3_11(self, smtpd: Any) -> None:
         assert not hasattr(smtpd, "MailmanProxy")
-
-    @pytest.mark.skipif(sys.version_info >= (3, 11), reason="MailmanProxy was removed in 3.11")
-    def test_it_warns_refuses_utf8_and_needs_its_package(self, smtpd: Any) -> None:
-        assert issubclass(smtpd.MailmanProxy, smtpd.PureProxy)
-        with pytest.warns(DeprecationWarning, match="MailmanProxy"):
-            proxy = smtpd.MailmanProxy(("127.0.0.1", 0), ("127.0.0.1", 9), map={}, decode_data=True)
-        peer = ("192.0.2.7", 1)
-        try:
-            with pytest.raises(TypeError):
-                proxy.process_message(peer, "a", ["b"], b"hi", mail_options=[], rcpt_options=[])
-            with pytest.raises(ModuleNotFoundError):
-                proxy.process_message(peer, "a@x.org", ["b@x.org"], "hi")
-        finally:
-            proxy.close()
-        with pytest.warns(DeprecationWarning), pytest.raises(ValueError, match="SMTPUTF8"):
-            smtpd.MailmanProxy(("127.0.0.1", 0), ("127.0.0.1", 9), map={}, enable_SMTPUTF8=True)
 
 
 class TestConstants:

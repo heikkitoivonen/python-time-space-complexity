@@ -31,7 +31,7 @@ Measurement scope:
 * the `Expensive` example: `__bool__` takes all three items of [0, 0, 0] from
   the iterator and `Efficient` takes none;
 * `bool(NotImplemented)`: TypeError on 3.14+, True with a DeprecationWarning
-  on 3.10 to 3.13, each guarded on `sys.version_info`;
+  on 3.11 to 3.13, each guarded on `sys.version_info`;
 * every stated example value, and every fenced block runs in a subprocess.
 
 Not settled here:

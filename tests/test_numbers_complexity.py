@@ -70,7 +70,7 @@ Not settled here:
 * `Rational.__float__()` is measured on terms of equal size with a finite
   quotient; a quotient that overflows or underflows, and terms of very
   different sizes, are not varied.
-* Lib/numbers.py is unchanged in behaviour from 3.10 to 3.14, so the page has
+* Lib/numbers.py is unchanged in behaviour from 3.11 to 3.14, so the page has
   no version-bounded row.
 """
 

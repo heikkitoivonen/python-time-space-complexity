@@ -16,16 +16,16 @@ Measurement scope:
   again on a successful parse of a set-like container; the traced peak grows
   between 30x and 300x from 1,000 to 100,000 choices (measured about 100x).
   Redeclaring the newest of 10,000 options under `conflict_handler='resolve'`
-  costs more than 8x redeclaring it among 100 (measured 17x to 41x on
-  3.10-3.14).
+  costs more than 8x redeclaring it among 100 (measured 22x to 52x on
+  3.11-3.14).
 * Behind a `metavar`, a counting container shows the usage line iterating no
   choices, and help iterating all of them: for a plain help string before
   3.14, and from 3.14 only for one containing `%`, which is then also expanded
   when the argument is added. `nargs=REMAINDER` is asserted to accept a value
   outside `choices`.
 * `parse_args([])`, `get_default()` of an unknown name and `set_defaults()`
-  grow more than 20x from 100 to 10,000 declared options (measured 75x to
-  170x on 3.10-3.14), which is the O(a) term; the defaults of every declared
+  grow more than 20x from 100 to 10,000 declared options (measured 57x to
+  290x on 3.11-3.14), which is the O(a) term; the defaults of every declared
   argument are asserted present on the namespace.
 * Each string beginning with `-` that is not an exact spelling costs a scan of
   the option spellings: on a parser of 2,000 options, 200 abbreviations,

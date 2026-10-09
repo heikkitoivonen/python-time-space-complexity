@@ -71,7 +71,7 @@ Measurement scope:
   `BytesIO` nor `setup()` copies it.
 * The predefined servers are asserted to combine the mix-in and the server
   class; `ForkingUnixStreamServer` and `ForkingUnixDatagramServer` to exist
-  from 3.12 and not before; `allow_reuse_port` to exist from 3.11 and to set
+  from 3.12 and not before; `allow_reuse_port` to exist and to set
   `SO_REUSEPORT`; a `UnixStreamServer`'s socket file to survive
   `server_close()`.
 * Every fenced Python block runs in its own subprocess, and a mutated
@@ -965,11 +965,9 @@ class TestServerFamilies:
             present = hasattr(socketserver, f"Forking{name}Server")
             assert present == (sys.version_info >= (3, 12))
 
-    def test_allow_reuse_port_arrives_in_311(self) -> None:
-        present = hasattr(socketserver.TCPServer, "allow_reuse_port")
-        assert present == (sys.version_info >= (3, 11))
+    def test_allow_reuse_port_exists(self) -> None:
+        assert hasattr(socketserver.TCPServer, "allow_reuse_port")
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
     @pytest.mark.skipif(not hasattr(socket, "SO_REUSEPORT"), reason="needs SO_REUSEPORT")
     def test_allow_reuse_port_sets_the_option(self) -> None:
         class Reusing(socketserver.TCPServer):

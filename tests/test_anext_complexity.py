@@ -1,7 +1,7 @@
 """Tests for docs/builtins/anext.md.
 
 anext() is builtin_anext_impl in Python/bltinmodule.c, the same in effect
-from 3.10 to 3.14: it reads the ``am_anext`` slot of the argument's type (TypeError
+from 3.11 to 3.14: it reads the ``am_anext`` slot of the argument's type (TypeError
 before anything else when the slot is missing), calls it once, and returns
 the awaitable that comes back. For an async generator that awaitable is an
 ``async_generator_asend``; for an ``async def __anext__`` it is a coroutine

@@ -40,14 +40,14 @@ hashing as O(1).
 | `sys._current_frames()` | O(t) | O(t) | One entry per live thread |
 | `sys._current_exceptions()` | O(t) | O(t) | One entry per live thread as well: a thread handling nothing maps to `None` rather than being left out. Python 3.12+ stores the exception; earlier versions store an `exc_info()` triple |
 | `sys.getrecursionlimit()` | O(1) | O(1) | Reads one interpreter field |
-| `sys.setrecursionlimit(limit)` | O(t) | O(1) | Writes through to every thread state from Python 3.11; a limit below the current depth raises `RecursionError` |
+| `sys.setrecursionlimit(limit)` | O(t) | O(1) | Writes through to every thread state; a limit below the current depth raises `RecursionError` |
 | `sys.getswitchinterval()`, `sys.setswitchinterval(interval)` | O(1) | O(1) | One field each |
 
 ### Tracing, profiling and auditing
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `sys.settrace(function)`, `sys.setprofile(function)` | O(f + C) | O(C) | From Python 3.12 these run on the `sys.monitoring` machinery, so installing one pauses every thread and instruments the code objects on their stacks; on 3.10 and 3.11 it is O(1). Either way the bill that matters comes afterwards, one call per traced event |
+| `sys.settrace(function)`, `sys.setprofile(function)` | O(f + C) | O(C) | From Python 3.12 these run on the `sys.monitoring` machinery, so installing one pauses every thread and instruments the code objects on their stacks; on 3.11 it is O(1). Either way the bill that matters comes afterwards, one call per traced event |
 | `sys.gettrace()`, `sys.getprofile()` | O(1) | O(1) | Reads the installed function back |
 | `sys.call_tracing(func, args)` | O(1) plus `func` | O(1) | Saves and restores the tracing state around one call, so a trace function can re-enter itself; on Python 3.11 the call runs untraced instead |
 | `sys.audit(event, *args)` | O(h) | O(1) | Hooks are called in the order they were added, until one of them raises - that exception propagates and the rest are skipped |
@@ -537,7 +537,7 @@ assert text.rstrip().endswith('ValueError: boom')
   the same entries inserted one at a time
 - Use `sys.stdlib_module_names` for a membership test and `sys.builtin_module_names` only when
   you need the tuple itself
-- Prefer `sys.exception()` to `sys.exc_info()` on Python 3.11+ when you only want the exception
+- Prefer `sys.exception()` to `sys.exc_info()` when you only want the exception
 - Scope `sys.monitoring` with `set_local_events()` where one code object is what you are after
 
 ❌ **Avoid**:

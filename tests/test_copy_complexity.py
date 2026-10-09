@@ -61,7 +61,7 @@ Measurement scope:
 
 Not settled here:
 
-* O(v + e) for `deepcopy()` is read from Lib/copy.py on 3.10 to 3.14: one
+* O(v + e) for `deepcopy()` is read from Lib/copy.py on 3.11 to 3.14: one
   dispatch per reference, at most one memo lookup each, one copy per memoized
   object, no other loop. The
   timing tests vary list counts only; dicts, tuples and instances follow the

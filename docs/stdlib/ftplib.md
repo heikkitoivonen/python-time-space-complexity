@@ -73,7 +73,7 @@ work are outside every bound.
 | `FTP_TLS.prot_p()` | O(r) | O(r) | Sends `PBSZ 0` and `PROT P`; from then on every data connection is wrapped in TLS, one handshake per transfer |
 | `FTP_TLS.prot_c()` | O(r) | O(r) | Data connections go back to clear text, which is the default |
 | `FTP_TLS.ccc()` | O(r) | O(r) | Returns the control connection to clear text |
-| `FTP_TLS.ssl_version` | O(1) | O(1) | Python 3.10 and 3.11 only |
+| `FTP_TLS.ssl_version` | O(1) | O(1) | Python 3.11 only; removed in 3.12 |
 
 ### Exceptions
 

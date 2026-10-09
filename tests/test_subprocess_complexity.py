@@ -9,7 +9,7 @@ every stream set to ``DEVNULL``, and wraps the parent's ends in file
 objects before ``_execute_child``. On POSIX that lists the arguments,
 prepends ``/bin/sh -c`` under ``shell=True``, and either ``os.posix_spawn``
 - for a full path without ``preexec_fn``, ``pass_fds``, ``cwd`` or the id
-arguments, and only with ``close_fds=False`` before 3.14; on 3.10 to 3.12
+arguments, and only with ``close_fds=False`` before 3.14; on 3.11 and 3.12
 ``_posix_spawn`` substitutes ``os.environ`` for ``env=None`` and the C
 call encodes it, where 3.13 passes ``environ`` through - or
 ``_posixsubprocess.fork_exec``: the latter encodes each ``env`` entry
@@ -52,7 +52,7 @@ Observation settles every row that has something to observe:
   hides it, and a key containing ``=`` raises ValueError; a counting
   mapping installed as ``os.environ`` is never iterated by a
   ``close_fds=True`` spawn, and by a ``close_fds=False`` full-path spawn
-  only on 3.10 to 3.12 where ``posix_spawn`` is in use; a pipe end made
+  only on 3.11 and 3.12 where ``posix_spawn`` is in use; a pipe end made
   inheritable is closed in the child by default, open with
   ``close_fds=False`` and open under ``pass_fds`` with the default, and a
   non-inheritable one is closed even with ``close_fds=False``;
@@ -98,8 +98,9 @@ Observation settles every row that has something to observe:
 * three streams set to ``DEVNULL`` open ``os.devnull`` once; ``STDOUT``
   puts stderr's bytes in the stdout pipe; the two exceptions subclass
   SubprocessError and their ``stdout`` reads and writes ``output``;
-* ``Popen()`` accepts ``pipesize`` on every supported version and
-  ``process_group``, as ``getoutput()`` accepts ``encoding``, from 3.11.
+* ``Popen()`` accepts ``pipesize`` and ``process_group``, and
+  ``getoutput()`` and ``getstatusoutput()`` accept ``encoding`` and
+  ``errors``, on every supported version.
 
 The one stopwatch test spawns ``true`` through a 15000-directory ``PATH``
 against a two-directory one, and by absolute path through the long one;
@@ -114,7 +115,7 @@ kernel and libc have it, otherwise one close per descriptor - observed on
 one descriptor; the count of output decodes, one by reading; Windows,
 where ``CreateProcess`` replaces the spawn, ``list2cmdline`` builds the
 command line, ``STARTUPINFO`` and the flags exist, the ``cmd.exe`` search
-of 3.10.11, 3.11.3 and 3.12 and the 3.13 flags apply, and
+of 3.11.3 and 3.12 and the 3.13 flags apply, and
 ``communicate()`` uses threads. TestStartupinfoRow runs only there: it
 checks the attributes are the keyword arguments, that two redirected spawns
 leave the caller's ``STARTUPINFO`` unchanged, and that a child reaches an
@@ -581,11 +582,11 @@ class TestPopenRow:
         with pytest.raises(ValueError, match="illegal environment variable name"):
             subprocess.Popen([PY, "-c", "pass"], env={"A=B": "1"})
 
-    def test_an_inherited_environment_is_encoded_only_by_3_10_to_3_12_through_posix_spawn(
+    def test_an_inherited_environment_is_encoded_only_by_3_11_and_3_12_through_posix_spawn(
         self,
     ) -> None:
         """The posix_spawn path needs a full path and, before 3.14, close_fds=False;
-        3.10 to 3.12 substitute os.environ for None there and os.posix_spawn encodes
+        3.11 and 3.12 substitute os.environ for None there and os.posix_spawn encodes
         it, 3.13 and later hand the process environment through in C, and the fork
         path, which the default close_fds=True takes before 3.14, never reads it."""
         real = os.environ
@@ -1154,12 +1155,11 @@ class TestVersionNotes:
         popen = inspect.signature(subprocess.Popen).parameters
         getoutput = inspect.signature(subprocess.getoutput).parameters
         getstatusoutput = inspect.signature(subprocess.getstatusoutput).parameters
-        from_3_11 = sys.version_info >= (3, 11)
 
         assert "pipesize" in popen
-        assert ("process_group" in popen) is from_3_11
-        assert ("encoding" in getoutput and "errors" in getoutput) is from_3_11
-        assert ("encoding" in getstatusoutput and "errors" in getstatusoutput) is from_3_11
+        assert "process_group" in popen
+        assert "encoding" in getoutput and "errors" in getoutput
+        assert "encoding" in getstatusoutput and "errors" in getstatusoutput
 
 
 def _blocks() -> list[tuple[int, str]]:

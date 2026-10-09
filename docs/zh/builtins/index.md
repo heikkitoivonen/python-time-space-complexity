@@ -1,5 +1,5 @@
 ---
-source_sha: 8e07af8827b8e86ae179772d25d167205aad2599d6674a810c0b88cb20293804
+source_sha: f3db4b76a11dd29a44444ad2b7e74a777af6e2a2bcef12e2b00708cccc27f881
 translated: machine
 ---
 
@@ -68,7 +68,7 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 | [`sum()`](sum.md) | O(n) | O(1) | 若误用于拼接字符串则为 O(n²) |
 | [`min()`](min.md) | O(n) | O(1) | 必须比较每个元素 |
 | [`max()`](max.md) | O(n) | O(1) | 必须比较每个元素 |
-| [`sorted()`](sorted.md) | O(n log n) | O(n) | Timsort（≤3.10）、Powersort（3.11+） |
+| [`sorted()`](sorted.md) | O(n log n) | O(n) | Powersort |
 | [`all()`](all.md) | O(n) | O(1) | 遇到第一个假值即短路 |
 | [`any()`](any.md) | O(n) | O(1) | 遇到第一个真值即短路 |
 

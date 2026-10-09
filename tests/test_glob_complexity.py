@@ -10,12 +10,12 @@ the matches returned. Flat-directory and recursive memory are measured separatel
 * A single-directory `iglob()` uses O(e) space. Building the iterator
   peaks at about 1.5 KB, but its *first* step peaks at 1.2-1.3 MB over 20,000
   entries: each directory is read whole into a list of names before any of its
-  matches are yielded. The peak rises x17.1 on 3.10 and x19.2 on 3.14 for 20x
+  matches are yielded. The peak rises x19.5 on 3.11.17 and x19.1 on 3.14.8 for 20x
   the entries.
 
 * Recursive `**/*.py` walks at depths 5 and 80 have maximum directory width
-  21 and exactly one match. Both APIs peak around 11-12 KB and 140 KB on
-  Python 3.10 and 3.14. Setup and pattern-cache warm-up are outside the
+  21 and exactly one match. Both APIs peak around 11-12 KB and 140-156 KB
+  on Python 3.11.17 and 3.14.8. Setup and pattern-cache warm-up are outside the
   measurement. Directory components keep their lengths, but full path lengths
   necessarily grow with depth, so this does not establish a growth exponent.
 * Weak references to the lists returned by `_listdir` observe exactly the
@@ -24,14 +24,14 @@ the matches returned. Flat-directory and recursive memory are measured separatel
   This distinguishes retained listings from path-string allocation alone.
 
 The recursive storage explanation follows `_rlistdir` in released CPython
-3.10 through 3.14: suspended loops retain `names` and partial paths while
+3.11 through 3.14: suspended loops retain `names` and partial paths while
 recursing. The O(e) and O(e + m) rows are scoped to one directory; no recursive
 byte bound is inferred from counting directory entries as fixed-size objects.
-https://github.com/python/cpython/blob/3.10/Lib/glob.py
+https://github.com/python/cpython/blob/3.11/Lib/glob.py
 https://github.com/python/cpython/blob/3.14/Lib/glob.py
 
 The rest is observation. Hidden names are excluded from `*` unless
-`include_hidden=True` (3.11+) or the dot is written into the pattern; `escape()`
+`include_hidden=True` or the dot is written into the pattern; `escape()`
 wraps metacharacters in character classes; `glob0()` never matches a pattern
 while `glob1()` lists a directory; a `**` walk descends through directory
 symlinks, so one file can be reported under two paths.
@@ -41,8 +41,8 @@ warn there and stay silent before it, so the page's version note cannot drift
 from the interpreter.
 https://github.com/python/cpython/blob/3.13/Lib/glob.py
 
-What `iterator.close()` releases differs by version: 3.10, 3.11, 3.13 and
-3.14 drop the ancestor listings, while 3.12.3 keeps all eight even after a
+What `iterator.close()` releases differs by version: 3.11, 3.13 and 3.14
+drop the ancestor listings, while 3.12.3 keeps all eight even after a
 `gc.collect()`. The claim above does not rest on it, so the tests assert
 release during the walk instead of after it.
 
@@ -51,7 +51,7 @@ Not settled here:
 * What a symlink loop costs. That it follows links is asserted; letting a walk
   loop is not something to leave in a test suite.
 * `dir_fd`, and `root_dir` beyond one round trip.
-* `glob.translate()` on 3.10 through 3.12, where it does not exist. Its row is
+* `glob.translate()` on 3.11 and 3.12, where it does not exist. Its row is
   version-marked and the coverage check allows it to be absent.
 
 Axes not varied: case sensitivity (the tests run on a case-sensitive
@@ -283,12 +283,8 @@ class TestHiddenNames:
 
         assert [os.path.basename(path) for path in found] == [".hidden.py"]
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="include_hidden is 3.11+")
     def test_include_hidden_turns_the_rule_off(self, folder: pathlib.Path) -> None:
-        found = glob.glob(
-            str(folder / "*.py"),
-            include_hidden=True,  # pyright: ignore[reportCallIssue]
-        )
+        found = glob.glob(str(folder / "*.py"), include_hidden=True)
 
         assert sorted(os.path.basename(path) for path in found) == [".hidden.py", "visible.py"]
 

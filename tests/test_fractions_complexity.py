@@ -641,7 +641,6 @@ class TestConversions:
 class TestVersionNotes:
     """Each Version Notes entry, on the versions that have it."""
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
     def test_underscores_in_strings(self) -> None:
         assert Fraction("1_000") == 1000
         assert Fraction("1_0/2_0") == Fraction(1, 2)

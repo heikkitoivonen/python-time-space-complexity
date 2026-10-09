@@ -4,21 +4,21 @@
 Sphinx object inventory. Each entry records a documented name, kind, and source
 link. The metadata records the documentation release and the input SHA-256.
 
-Snapshots are included for every supported minor version: Python 3.10, 3.11,
-3.12, 3.13, and 3.14. The running interpreter selects its matching snapshot;
+Snapshots are included for every supported minor version: Python 3.11, 3.12,
+3.13, and 3.14. The running interpreter selects its matching snapshot;
 APIs added or removed in another minor version do not enter its inventory.
 
 To audit a specific supported version without changing the project environment:
 
 ```sh
-uv run --no-project --python 3.10 python scripts/audit_documentation.py
+uv run --no-project --python 3.11 python scripts/audit_documentation.py
 ```
 
-Replace `3.10` with the desired minor or exact patch version. The report identifies
+Replace `3.11` with the desired minor or exact patch version. The report identifies
 the interpreter and platform used; optional and platform-specific modules may
 remain unavailable.
 Inspection subprocesses disable site-package loading so installed packages cannot
-replace standard-library modules such as `distutils` on Python 3.10 and 3.11.
+replace standard-library modules such as `distutils` on Python 3.11.
 
 The audit ranks only missing, runtime-available APIs in this inventory. It keeps
 unclassified runtime discoveries in a separate report section; `__all__` is

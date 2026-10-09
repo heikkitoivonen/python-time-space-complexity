@@ -21,9 +21,7 @@ Measurement scope:
   asserted to unbind the name at the end of the block. That call is timed at
   depths 1 and 5,000 *after the handler exits*, where dropping the last
   reference to a 5,000-entry traceback costs more than 100x, which is why the
-  page prices it O(d) rather than O(1). Called from inside the handler the
-  same measurement is flat on 3.10 and not on 3.11+, so the test takes the
-  one position that holds across the supported range. A bare `raise` in a
+  page prices it O(d) rather than O(1). A bare `raise` in a
   handler four frames deep is asserted to leave 6 entries where `raise error`
   leaves 7, which is the page's reason to prefer the bare form.
 * An `except` tuple is asserted to reject a non-exception entry that sits
@@ -55,8 +53,7 @@ Measurement scope:
   is `OSError` itself there. `characters_written` is
   asserted missing on a fresh `BlockingIOError` and settable afterwards.
   `socket.timeout` is asserted to be `TimeoutError` on every supported
-  version and `asyncio.TimeoutError` only from 3.11, which is the boundary
-  the page's two alias entries turn on.
+  version, and so is `asyncio.TimeoutError`.
 * `ReferenceError` is asserted to come from a dead `weakref.proxy` and not
   from a dead `weakref.ref`, which returns `None` instead.
 * `TabError` is asserted to come only from inconsistent tabs and spaces:
@@ -64,7 +61,7 @@ Measurement scope:
   `TabError`, which is the distinction a plain `IndentationError` example
   cannot make. `SyntaxError` positions are asserted on `lineno`, `offset`,
   `text` and `filename`; `end_offset` is asserted only to be at or after
-  `offset`, because it moved by one between 3.10 and 3.14.
+  `offset`, because it moved by one between 3.11 and 3.14.
 * `split()` and `subgroup()` are given a recording predicate and asserted to
   visit all five nodes of a three-leaf tree, the group itself included, in
   document order. All three - split, a matching subgroup and a subgroup that
@@ -97,7 +94,7 @@ Measurement scope:
   public exception class the running interpreter has, each exactly once. That
   is what keeps the tree from drifting as releases add classes. The set of
   classes outside `Exception` is asserted exhaustively against the
-  interpreter, so `BaseExceptionGroup` joining them in 3.11 cannot be missed.
+  interpreter, so a class joining them cannot be missed.
 * Formatting is asserted to cost more than the display shows: a
   `RecursionError` yields over 200 `extract_tb()` entries and renders to
   fewer lines than it has frames, with the fold marker present, and
@@ -169,12 +166,6 @@ import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "builtins" / "exceptions.md"
 EXPECTED_BLOCKS = 21
-
-# The group classes are Python 3.11 builtins. Naming them directly would not
-# lint or type-check against the 3.10 floor this project supports, so the
-# tests that need them reach them through `builtins`.
-GROUP: Any = getattr(builtins, "ExceptionGroup", None)
-BASE_GROUP: Any = getattr(builtins, "BaseExceptionGroup", None)
 
 
 def best_ns(func: Callable[[], Any], repeats: int = 7, inner: int = 1) -> float:
@@ -302,10 +293,7 @@ class TestPropagationCostsTheFrames:
     def test_dropping_the_last_traceback_reference_costs_the_frames(self) -> None:
         """The free happens inside the call, so it is O(d), not O(1).
 
-        Measured after the handler has exited. Inside one, the thread's
-        exception state still references the traceback on Python 3.10, so the
-        call drops nothing and the free is deferred to the end of the block;
-        from 3.11 it is the last reference either way.
+        Measured after the handler has exited.
         """
 
         def capture(depth: int) -> BaseException:
@@ -600,12 +588,12 @@ class TestOSErrorSplitsItsState:
         assert issubclass(TimeoutError, OSError)
         assert issubclass(ConnectionResetError, ConnectionError)
 
-    def test_the_timeout_aliases_landed_in_different_releases(self) -> None:
+    def test_the_timeout_aliases_are_the_builtin(self) -> None:
         import asyncio
         import socket
 
         assert socket.timeout is TimeoutError
-        assert (asyncio.TimeoutError is TimeoutError) == (sys.version_info >= (3, 11))
+        assert asyncio.TimeoutError is TimeoutError
 
 
 class TestAFailedDecodeCopiesItsInput:
@@ -891,7 +879,6 @@ class TestChaining:
         assert links == 21, f"a 20-deep nest produced {links} linked exceptions"
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="add_note() is Python 3.11+")
 class TestNotes:
     """`add_note()` | O(1) amortized | O(1), with `__notes__` O(p)."""
 
@@ -929,7 +916,6 @@ class TestNotes:
         )
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="exception groups are Python 3.11+")
 class TestExceptionGroups:
     """Construction is O(m) in direct children; the walks are O(n) worst case.
 
@@ -941,8 +927,8 @@ class TestExceptionGroups:
     @staticmethod
     def _tree() -> tuple[BaseException, BaseException, Any]:
         first = ValueError("v1")
-        inner = GROUP("inner", [TypeError("t"), ValueError("v2")])
-        return first, inner, GROUP("outer", [first, inner])
+        inner = ExceptionGroup("inner", [TypeError("t"), ValueError("v2")])
+        return first, inner, ExceptionGroup("outer", [first, inner])
 
     def test_the_children_are_held_by_reference(self) -> None:
         first, inner, group = self._tree()
@@ -969,7 +955,7 @@ class TestExceptionGroups:
             "ValueError",
         ]
         assert len(matched.exceptions) == 2
-        assert isinstance(rest, GROUP)
+        assert isinstance(rest, ExceptionGroup)
 
     def test_subgroup_walks_the_same_nodes(self) -> None:
         _, _, group = self._tree()
@@ -1024,11 +1010,11 @@ class TestExceptionGroups:
     def _annotated(groups: int, notes: int) -> Any:
         """A spine of `groups` nested groups, each annotated and each holding a
         matching and a non-matching leaf, so every one has to be rebuilt."""
-        node: Any = GROUP("leaf", [ValueError("v"), TypeError("t")])
+        node: Any = ExceptionGroup("leaf", [ValueError("v"), TypeError("t")])
         for index in range(notes):
             node.add_note(f"n{index}")
         for level in range(groups - 1):
-            node = GROUP(f"g{level}", [node, ValueError("v"), TypeError("t")])
+            node = ExceptionGroup(f"g{level}", [node, ValueError("v"), TypeError("t")])
             for index in range(notes):
                 node.add_note(f"n{index}")
         return node
@@ -1081,8 +1067,8 @@ class TestExceptionGroups:
             try:
                 raise KeyError("root")
             except KeyError:
-                raise GROUP("outer", [ValueError("v")]) from cause
-        except BASE_GROUP as group:
+                raise ExceptionGroup("outer", [ValueError("v")]) from cause
+        except BaseExceptionGroup as group:
             derived = group.derive([KeyError("k")])
             matched, _ = group.split(ValueError)
             sub_only = group.subgroup(ValueError)
@@ -1102,18 +1088,18 @@ class TestExceptionGroups:
                 assert rebuilt.__cause__ is cause
 
     def test_the_class_follows_the_leaves(self) -> None:
-        assert type(BASE_GROUP("g", [ValueError("v")])) is GROUP
-        assert type(BASE_GROUP("g", [KeyboardInterrupt()])) is BASE_GROUP
+        assert type(BaseExceptionGroup("g", [ValueError("v")])) is ExceptionGroup
+        assert type(BaseExceptionGroup("g", [KeyboardInterrupt()])) is BaseExceptionGroup
         with pytest.raises(TypeError):
-            GROUP("g", [KeyboardInterrupt()])
+            ExceptionGroup("g", [KeyboardInterrupt()])  # pyright: ignore[reportArgumentType]
 
     @pytest.mark.timing
     def test_construction_follows_the_direct_child_count(self) -> None:
         small = [ValueError(index) for index in range(100)]
         large = [ValueError(index) for index in range(100_000)]
 
-        small_ns = best_ns(lambda: GROUP("g", small), inner=200)
-        large_ns = best_ns(lambda: GROUP("g", large), inner=5)
+        small_ns = best_ns(lambda: ExceptionGroup("g", small), inner=200)
+        large_ns = best_ns(lambda: ExceptionGroup("g", large), inner=5)
 
         assert large_ns > small_ns * 100, (
             f"1,000x the direct children cost {large_ns / small_ns:.1f}x: "
@@ -1123,11 +1109,11 @@ class TestExceptionGroups:
     @pytest.mark.timing
     def test_construction_does_not_follow_the_leaves_below_a_child(self) -> None:
         """m, not n: an already-built subtree is nested without being walked."""
-        shallow = GROUP("shallow", [ValueError(index) for index in range(10)])
-        deep = GROUP("deep", [ValueError(index) for index in range(100_000)])
+        shallow = ExceptionGroup("shallow", [ValueError(index) for index in range(10)])
+        deep = ExceptionGroup("deep", [ValueError(index) for index in range(100_000)])
 
-        shallow_ns = best_ns(lambda: GROUP("g", [shallow, shallow]), inner=2_000)
-        deep_ns = best_ns(lambda: GROUP("g", [deep, deep]), inner=2_000)
+        shallow_ns = best_ns(lambda: ExceptionGroup("g", [shallow, shallow]), inner=2_000)
+        deep_ns = best_ns(lambda: ExceptionGroup("g", [deep, deep]), inner=2_000)
 
         assert deep_ns < shallow_ns * 2, (
             f"two 100,000-leaf children cost {deep_ns / shallow_ns:.1f}x two 10-leaf ones: "
@@ -1212,11 +1198,10 @@ class TestReadingATraceback:
         assert len(rendered.splitlines()) < len(frames)
 
     @pytest.mark.timing
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="exception groups are Python 3.11+")
     def test_formatting_a_group_costs_more_as_its_children_multiply(self) -> None:
         """A group with nothing raised still pays for its children."""
-        small: Any = GROUP("g", [ValueError(index) for index in range(10)])
-        large: Any = GROUP("g", [ValueError(index) for index in range(10_000)])
+        small: Any = ExceptionGroup("g", [ValueError(index) for index in range(10)])
+        large: Any = ExceptionGroup("g", [ValueError(index) for index in range(10_000)])
 
         assert small.__traceback__ is None and small.__context__ is None
 
@@ -1257,8 +1242,7 @@ class TestReadingATraceback:
             assert exc_type is ZeroDivisionError
             assert exc_value is not None
             assert exc_traceback is exc_value.__traceback__
-            if sys.version_info >= (3, 11):
-                assert getattr(sys, "exception")() is exc_value  # noqa: B009 - 3.11+
+            assert sys.exception() is exc_value
 
         assert sys.exc_info() == (None, None, None)
 
@@ -1327,9 +1311,12 @@ class TestTheHierarchy:
         )
 
     def test_the_classes_outside_exception(self) -> None:
-        outside: list[type[BaseException]] = [SystemExit, KeyboardInterrupt, GeneratorExit]
-        if sys.version_info >= (3, 11):
-            outside.append(BASE_GROUP)
+        outside: list[type[BaseException]] = [
+            SystemExit,
+            KeyboardInterrupt,
+            GeneratorExit,
+            BaseExceptionGroup,
+        ]
 
         for cls in outside:
             assert issubclass(cls, BaseException)

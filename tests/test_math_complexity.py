@@ -41,8 +41,8 @@ Measurement scope:
   `prod([1] * m)`, whose result stays one digit, costs more than 20x for 100x
   the factors (10,000 to 1,000,000), and a wide first factor followed by
   10,000 ones costs more than 20x for 100x its width (1,000 to 100,000 bits;
-  x111 on aarch64 3.10 and 3.14), since each step multiplies the whole
-  running product: the m·d term.
+  x113 to x120 on 3.11.17 and x98 to x104 on 3.14.8, aarch64), since each
+  step multiplies the whole running product: the m·d term.
 * `gcd()` is O(w·s). At a fixed 2,000-bit narrow operand, the wide one at
   100,000, 1,000,000 and 10,000,000 bits costs about 10x per step (x9.98 and
   x10.5 on aarch64 3.14), each step asserted above 5x where O(s²) predicts

@@ -4,7 +4,7 @@ abs() is PyNumber_Absolute: one call to the operand type's `nb_absolute` slot,
 so every bound on the page is the operand type's. For `int` that slot is
 long_abs in Objects/longobject.c, which returns a non-negative exact int as
 itself and otherwise copies the digits (long_neg for a negative operand,
-_PyLong_Copy for a subclass). The same three-line function is in the v3.10.0,
+_PyLong_Copy for a subclass). The same three-line function is in the
 v3.11.0, v3.12.0 and v3.13.0 tags and on the 3.14 branch, so no version is
 treated apart.
 

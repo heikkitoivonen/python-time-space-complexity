@@ -138,7 +138,7 @@ Measurement scope:
   `exc_info`, and leaves `exc_text` on the record. `DatagramHandler`
   makes an unconnected datagram socket and sends one datagram per record.
 * `SysLogHandler` with a missing Unix socket path constructs without error
-  and has `createSocket()` exactly from 3.11; on Windows the same address
+  and has `createSocket()`; on Windows the same address
   raises `AttributeError` naming `AF_UNIX`;
   `encodePriority('user', 'info')` is 14; `mapPriority()` maps an unknown
   name to `warning`; `emit()` sends `<14>` + ident + message + NUL in one
@@ -1626,10 +1626,9 @@ class TestLevels:
     def test_an_unknown_level_answers_with_a_string(self) -> None:
         assert logging.getLevelName(99) == "Level 99"
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="getLevelNamesMapping is 3.11+")
     def test_the_mapping_is_a_fresh_dict(self) -> None:
-        first = logging.getLevelNamesMapping()  # type: ignore[attr-defined]
-        second = logging.getLevelNamesMapping()  # type: ignore[attr-defined]
+        first = logging.getLevelNamesMapping()
+        second = logging.getLevelNamesMapping()
 
         assert first == second
         assert first is not second
@@ -2370,7 +2369,7 @@ class TestSysLogHandler:
         handler = logging.handlers.SysLogHandler(address=str(tmp_path / "missing.sock"))
         try:
             assert handler.unixsocket is True
-            assert hasattr(handler, "createSocket") is (sys.version_info >= (3, 11))
+            assert hasattr(handler, "createSocket")
         finally:
             handler.close()
 

@@ -7,7 +7,7 @@ keeping only a read position.
 
 !!! warning "Removed in Python 3.13"
     Deprecated in Python 3.11 and removed in Python 3.13 by PEP 594. The page covers the module
-    as it is on Python 3.10 to 3.12. `struct` with a `>` format packs the fixed-width types on
+    as it is on Python 3.11 and 3.12. `struct` with a `>` format packs the fixed-width types on
     every version.
 
 `n` is the bytes in the buffer a `Packer` has built or an `Unpacker` reads, `m` is the length of

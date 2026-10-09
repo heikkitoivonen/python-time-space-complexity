@@ -48,7 +48,7 @@ Measurement scope:
   before any finder is consulted, `__spec__.parent` resolves the anchor on its
   own, `__package__` is preferred over a `__spec__.parent` that disagrees (and
   that disagreement raises `DeprecationWarning` from 3.12 and `ImportWarning`
-  on 3.10 and 3.11), and globals carrying only `__name__` resolve behind an
+  on 3.11), and globals carrying only `__name__` resolve behind an
   `ImportWarning`. Every one of those globals is supplied by the test rather
   than by a module, which is the page's claim that `level` needs a suitable
   dict and not a particular caller. That it must be a `dict` and not any
@@ -101,9 +101,9 @@ Not settled here:
   call is read from `_PyEval_ImportName` in Python/ceval.c. Both paths end in
   the same C function, so no observation distinguishes them; only the
   replaced case, where a Python call does happen, is asserted here.
-* The 3.10 and 3.11 `ImportWarning` for a `__package__` that disagrees with
-  `__spec__.parent` is asserted by a version-gated branch that only CI on
-  those interpreters executes.
+* The 3.11 `ImportWarning` for a `__package__` that disagrees with
+  `__spec__.parent` is asserted by a version-gated branch that only a 3.11
+  interpreter executes.
 * An attribute check that *succeeds* is invisible to a module-level
   `__getattr__`, which runs only on failure. What is asserted is one recorded
   check per name the package lacks, and no import when the name is already an

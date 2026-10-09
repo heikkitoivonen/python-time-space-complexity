@@ -126,7 +126,7 @@ EXPECTED_BLOCKS = 8
 
 
 def api(name: str) -> Any:
-    """An asyncio name typeshed does not offer at the 3.10 floor pyright checks."""
+    """An asyncio name typeshed does not offer at the 3.11 floor pyright checks."""
     return getattr(asyncio, name)
 
 
@@ -480,8 +480,7 @@ class TestGatherAndWaitAreLinear:
 
         assert asyncio.run(main()) == (1, 3)
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="coroutines allowed before 3.11")
-    def test_wait_refuses_a_bare_coroutine_from_311(self) -> None:
+    def test_wait_refuses_a_bare_coroutine(self) -> None:
         """Why wait's n is counted rather than timed the way gather's is."""
 
         async def main() -> None:
@@ -556,7 +555,6 @@ class TestGatherAndWaitAreLinear:
         assert not hasattr(asyncio.as_completed([]), "__aiter__")
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
 class TestTaskGroup:
     """The TaskGroup rows: O(1) per task, O(n) at exit."""
 
@@ -568,7 +566,7 @@ class TestTaskGroup:
                 await asyncio.sleep(0)
                 done.append(i)
 
-            async with api("TaskGroup")() as group:
+            async with asyncio.TaskGroup() as group:
                 for i in range(5):
                     group.create_task(work(i))
             return sorted(done)
@@ -591,7 +589,7 @@ class TestTaskGroup:
                 raise ValueError("no")
 
             try:
-                async with api("TaskGroup")() as group:
+                async with asyncio.TaskGroup() as group:
                     group.create_task(sibling())
                     group.create_task(boom())
             except BaseException as exc:  # noqa: BLE001 - the type is the assertion
@@ -762,10 +760,9 @@ class TestBroadcastsTouchEveryWaiter:
 
         asyncio.run(main())
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
     def test_the_last_arrival_releases_the_whole_barrier(self) -> None:
         async def main() -> tuple[list[int], int, int]:
-            barrier = api("Barrier")(3)
+            barrier = asyncio.Barrier(3)
             indexes: list[int] = []
 
             async def arrive() -> None:
@@ -784,7 +781,6 @@ class TestBroadcastsTouchEveryWaiter:
         assert waiting == 2
         assert parties == 3
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
     def test_a_barrier_cycles_and_both_broadcasts_land(self) -> None:
         """The row's two O(w) points: the filling arrival and the last departure.
 
@@ -794,7 +790,7 @@ class TestBroadcastsTouchEveryWaiter:
         """
 
         async def main() -> list[int]:
-            barrier = api("Barrier")(3)
+            barrier = asyncio.Barrier(3)
             rounds: list[int] = []
 
             async def participant() -> None:
@@ -809,17 +805,16 @@ class TestBroadcastsTouchEveryWaiter:
         assert rounds.count(0) == 3, "the first cycle did not release all three"
         assert rounds.count(1) == 3, "the barrier did not drain into a second cycle"
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
     def test_abort_breaks_the_barrier_for_every_waiter(self) -> None:
         async def main() -> tuple[int, bool]:
-            barrier = api("Barrier")(4)
+            barrier = asyncio.Barrier(4)
             broken = 0
 
             async def arrive() -> None:
                 nonlocal broken
                 try:
                     await barrier.wait()
-                except api("BrokenBarrierError"):
+                except asyncio.BrokenBarrierError:
                     broken += 1
 
             tasks = [asyncio.create_task(arrive()) for _ in range(3)]
@@ -1334,7 +1329,6 @@ class TestCancellationIsARequest:
         assert issubclass(asyncio.CancelledError, BaseException)
         assert not issubclass(asyncio.CancelledError, Exception)
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
     def test_cancelling_and_uncancel_track_one_counter(self) -> None:
         async def main() -> tuple[int, int, int]:
             async def work() -> None:
@@ -1567,10 +1561,9 @@ class TestTimeouts:
 
         assert asyncio.run(main()) == 7
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
     def test_the_timeout_context_manager_reports_that_it_expired(self) -> None:
         async def main() -> bool:
-            handle = api("timeout")(0.01)
+            handle = asyncio.timeout(0.01)
             with pytest.raises(TimeoutError):
                 async with handle:
                     await asyncio.sleep(10)
@@ -1578,7 +1571,6 @@ class TestTimeouts:
 
         assert asyncio.run(main()) is True
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
     def test_reschedule_replaces_the_pending_timer(self) -> None:
         """Waiting past the *original* deadline is what shows the timer moved.
 
@@ -1588,10 +1580,12 @@ class TestTimeouts:
         """
 
         async def main() -> tuple[bool, bool]:
-            async with api("timeout")(0.01) as handle:
+            async with asyncio.timeout(0.01) as handle:
                 first = handle.when()
                 handle.reschedule(asyncio.get_running_loop().time() + 10)
-                moved = handle.when() > first
+                second = handle.when()
+                assert first is not None and second is not None
+                moved = second > first
                 await asyncio.sleep(0.05)
             return moved, handle.expired()
 
@@ -1599,12 +1593,11 @@ class TestTimeouts:
         assert moved is True
         assert expired is False, "the original 0.01s deadline still fired"
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
     def test_timeout_at_takes_an_absolute_deadline(self) -> None:
         async def main() -> bool:
             loop = asyncio.get_running_loop()
             deadline = loop.time() + 0.01
-            handle = api("timeout_at")(deadline)
+            handle = asyncio.timeout_at(deadline)
             with pytest.raises(TimeoutError):
                 async with handle:
                     await asyncio.sleep(10)
@@ -1612,7 +1605,6 @@ class TestTimeouts:
 
         assert asyncio.run(main()) is True
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="alias since 3.11")
     def test_asyncio_timeout_error_is_the_builtin(self) -> None:
         assert asyncio.TimeoutError is TimeoutError
 
@@ -1857,11 +1849,10 @@ class TestStreams:
 class TestVersionBoundaries:
     """The Version Notes section, one assertion per boundary that moves."""
 
-    def test_the_311_additions_match_the_running_version(self) -> None:
-        expected = sys.version_info >= (3, 11)
+    def test_the_311_additions_are_present(self) -> None:
         for name in ("TaskGroup", "timeout", "timeout_at", "Runner", "Barrier"):
-            assert hasattr(asyncio, name) is expected, name
-        assert hasattr(asyncio.Task, "uncancel") is expected
+            assert hasattr(asyncio, name), name
+        assert hasattr(asyncio.Task, "uncancel")
 
     def test_the_312_additions_match_the_running_version(self) -> None:
         expected = sys.version_info >= (3, 12)
@@ -1993,12 +1984,11 @@ class TestLoopReferences:
     def test_event_loop_is_a_loop_class(self) -> None:
         assert issubclass(api("EventLoop"), asyncio.AbstractEventLoop)
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
     def test_the_runner_reuses_one_loop_across_runs(self) -> None:
         async def which() -> Any:
             return asyncio.get_running_loop()
 
-        with api("Runner")() as runner:
+        with asyncio.Runner() as runner:
             first = runner.run(which())
             second = runner.run(which())
             assert first is second

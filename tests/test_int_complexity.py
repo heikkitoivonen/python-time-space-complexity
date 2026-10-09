@@ -30,7 +30,7 @@ Measured on one aarch64 machine under CPython 3.14.7:
   remainder and costs x4.0;
 * division of a 200,000-bit value by a 100,000-bit one against 4x both: x8.9
   on 3.14, the divide-and-conquer shape, against the schoolbook figure on
-  3.10 recorded in TestHugeDivision;
+  3.11 recorded in TestHugeDivision;
 * true division with both operands 1M then 4M bits: x4.9;
 * negation of a 1M-bit value allocates 133 KB at peak and 533 KB for 4M
   bits: a copy, so `-x` and `abs(-x)` are linear in the width;
@@ -60,14 +60,14 @@ Measured on one aarch64 machine under CPython 3.14.7:
   1,000-bit value into 125,000, 1,250,000 and 12,500,000 bytes is batched
   20 calls per sample. Each 10x length step must cost between 3x and 30x,
   separating linear from constant and quadratic at a fixed value width;
-* `str`, `repr` and `f"{x}"` of 250 then 4,000 decimal digits: x217-x275 on
-  3.10.21 and 3.14.7, against a floor of x64 between linear's x16 and
+* `str`, `repr` and `f"{x}"` of 250 then 4,000 decimal digits: x227-x295 on
+  3.11.17 and 3.14.8, against a floor of x64 between linear's x16 and
   quadratic's x256; quadratic on every version because 4,000 digits is under
-  the 3.12 fast path's 1,000-digit (30-bit) threshold; 20,000 then 80,000 digits: x8.5 on 3.14.7 and x15.8 on 3.10.21;
+  the 3.12 fast path's 1,000-digit (30-bit) threshold; 20,000 then 80,000 digits: x8.5 on 3.14.7 and x16.3 on 3.11.17;
 * `int(str)` in base 16 for 100,000 then 400,000 characters: x4.2, and base
   2: x4.1; base 3 for 5,000 then 20,000: x15.7, base 36: x16.8, base 10 for
   1,000 then 4,000: x15.7; base 10 for 20,000 then 80,000: x9.0 on 3.14.7
-  and x16.3 on 3.10.21.
+  and x16.7 on 3.11.17.
 
 The thresholds themselves - 70 digits for Karatsuba and 140 for squaring, 300 and 150 digits for
 divide-and-conquer division, 1,000 digits for `str`, 6,000 characters for
@@ -329,7 +329,7 @@ class TestSchoolbookDivision:
 class TestHugeDivision:
     """Above both thresholds, 3.12 hands division to a divide-and-conquer
     algorithm in _pylong; before that it is schoolbook all the way up.
-    Measured for this test's sizes: x8.9 on 3.14.7 and x16.0 on 3.10.21."""
+    Measured for this test's sizes: x8.9 on 3.14.7 and x16.6 on 3.11.17."""
 
     @pytest.mark.timing
     def test_growth_for_four_times_both_operands(self) -> None:

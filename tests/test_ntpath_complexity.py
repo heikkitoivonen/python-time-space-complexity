@@ -48,9 +48,8 @@ Measurement scope:
   characters), and are not in the test.
 * `join()` of bytes: 8,000, 32,000 and 128,000 one-character arguments
   cost over 8x on the second 4x step and over 48x across both (x8.3 to x11
-  then x17 to x20 on 3.14, x6.0 to x6.8 then x12.6 to x14 on 3.10 under x64
-  emulation), where str arguments at the same sizes cost under 8x per step
-  (x2.3 to x4.7). Bytes
+  then x17 to x20 on 3.14), where str arguments at the same sizes cost under
+  8x per step (x2.3 to x4.7). Bytes
   has no in-place concatenation, so `result_path = result_path + p_path`
   copies the result so far per argument; the str form of that statement
   grows in place. Argument length was not varied. The other functions
@@ -58,10 +57,9 @@ Measurement scope:
   their row already prices, not by repeated concatenation, which is read
   from Lib/ntpath.py.
 * `isabs()` is given a 10,003-character str subclass recording the length
-  of every string `replace()` is called on: from 3.11 nothing is recorded,
-  because it slices three characters first, and on 3.10 the whole length
-  is, in both implementations. `isabs(r"\\x")` is True before 3.13 and
-  False from it.
+  of every string `replace()` is called on: nothing is recorded, in both
+  implementations, because it slices three characters first.
+  `isabs(r"\\x")` is True before 3.13 and False from it.
 * `normcase` lower-cases and turns `/` into `\\` in both implementations;
   `ntpath` holds `_LCMapStringEx` exactly on Windows, where `_winapi`
   supplies it (the fallback has it there too, since it does not come from
@@ -76,12 +74,13 @@ Measurement scope:
   components (5,000 to 80,000) costs `nt._path_normpath` under 80x (x16 to
   x17 on 3.14, where quadratic predicts 256x). 32x the components (1,500 to
   48,000) costs the Python fallback over 100x, both for a run of `.`
-  components (x377 on 3.10, x990 to x1040 on 3.13 and 3.14) and for n names
+  components (x990 to x1040 on 3.13 and 3.14; x918 to x985 on 3.11.17 on
+  Linux aarch64) and for n names
   followed by n `..` (x145 to x340), where linear predicts 32x. The fallback
   test runs on every platform. The C helper was timed on the `.` shape only.
 * `abspath()` on Windows makes one `_getfullpathname()` call and no
-  `os.getcwd()`, after `normpath()` from 3.11 and before it on 3.10, and
-  returns the working directory joined to the argument. The fallback makes
+  `os.getcwd()`, after `normpath()`, and returns the working directory
+  joined to the argument. The fallback makes
   one `os.getcwd()` for a relative path and none for `C:\\...`, no stat or
   lstat, and one call to its Python `normpath()` each time. `relpath()`
   makes two `abspath()` calls in both implementations and raises
@@ -91,13 +90,11 @@ Measurement scope:
   argument, `C:\\a` and 50 `\\.` components, to `normpath()`, observed by a
   wrapper that records its arguments. In timing tests 16x the components
   (1,500 to 24,000) cost the fallback's `relpath`, `realpath` and `ismount`
-  over 64x (x275 to x286 on 3.14, x87 to x103 on 3.10), where linear
-  predicts 16x and quadratic 256x. On Windows
-  `relpath()`, `realpath()` and `realpath(strict=True)` pass the raw
-  argument to `normpath()` on every version, and it is Python on 3.10
-  only. `ismount()` on Windows 3.10 hands `normpath()` only the result of
-  `_getfullpathname()`, with no `.` components left, and from 3.11 the raw
-  argument to the C helper, so its Windows row carries no quadratic case.
+  over 64x (x275 to x286 on 3.14; x234 to x248 on 3.11.17 on Linux
+  aarch64), where linear predicts 16x and quadratic 256x. On Windows
+  `relpath()`, `realpath()`, `realpath(strict=True)` and `ismount()` pass
+  the raw argument to `normpath()`, which is the C helper there, so their
+  Windows rows carry no quadratic case.
 * `realpath()` on Windows is counted on a 1-level and a 20-level directory
   and through a chain of five junctions: two `_getfinalpathname()` calls
   each, no `readlink()` and no `os.lstat()`. With 1, 10 and 40 missing
@@ -132,9 +129,9 @@ Measurement scope:
   the non-strict calls, and raises PermissionError where the stub refuses
   access. `ALLOW_MISSING` is genericpath's object.
 * `realpath()` starts with `normpath()` of the whole argument, on every
-  version and with `strict=True` too; timed on a path of `.` components, 16x the components (3,000 to
-  48,000) cost over 64x on 3.10 (x139 to x197 under x64 emulation) and
-  under 80x from 3.11 (x2 to x3 on 3.11 and 3.14). The per-call string
+  version and with `strict=True` too; timed on a path of `.` components,
+  16x the components (3,000 to 48,000) cost under 80x (x2 to x3 on 3.11 and
+  3.14). The per-call string
   work, and so the L + C factor, is read from Lib/ntpath.py rather than
   measured. The fallback's `realpath()` is one `abspath()` call, strict or
   not, with no stat, lstat or readlink.
@@ -162,8 +159,8 @@ Measurement scope:
   assertion in one of them is asserted to fail. The two blocks that resolve
   against a Windows filesystem (`realpath()` and `ismount()` of real paths)
   run only on Windows and are counted as skipped elsewhere.
-* The tests were run on 3.10.21, 3.11.16, 3.12.14, 3.13.15 and 3.14.7 on
-  Windows 11 ARM64 (3.10 under x64 emulation); their version guards are
+* The tests were run on 3.11.16, 3.12.14, 3.13.15 and 3.14.7 on Windows 11
+  ARM64; their version guards are
   read from the diffs of Lib/ntpath.py and Lib/genericpath.py between those
   tags.
 
@@ -176,10 +173,6 @@ Not settled here:
   (`_path_splitroot_ex`, `_getfullpathname`, `_getvolumepathname`) are read
   from Modules/posixmodule.c; `splitdrive` timed on 3.13 and 3.14 exercises
   `_path_splitroot_ex` but only on a drive-letter path.
-* On 3.10, a path `_getfullpathname()` rejects (longer than 32,767
-  characters, or containing NUL) makes `abspath()`, and so `ismount()`,
-  fall back to the Python `normpath()` over the joined path, with its
-  quadratic case; the page does not price that failure path.
 * The fallback run on Windows is the same code as `ntpath` on Linux and
   macOS, except where it looks outside `nt`: `normcase` uses `_winapi` when
   that imports, and on 3.12 `isjunction` lstats when `stat_result` has
@@ -298,8 +291,8 @@ def _dotted(components: int) -> str:
 
 
 class TestWhereEachImplementationRuns:
-    """On Windows `ntpath` binds C helpers from `nt`; elsewhere, and before
-    the helper existed, the Python fallback runs."""
+    """On Windows `ntpath` binds C helpers from `nt`; elsewhere the Python
+    fallback runs."""
 
     def test_the_fallback_binds_python_everywhere_it_could_differ(self, fallback: Any) -> None:
         assert fallback.normpath.__module__ == "ntpath_fallback"
@@ -462,19 +455,16 @@ class _Probe(str):
 
 
 class TestIsabsReadsThePrefix:
-    """`ntpath.isabs(path)` | O(1) from 3.11, O(L) on 3.10."""
+    """`ntpath.isabs(path)` | O(1)."""
 
-    def test_only_3_10_rewrites_the_whole_path(self, fallback: Any) -> None:
+    def test_it_never_rewrites_the_whole_path(self, fallback: Any) -> None:
         probe = _Probe("C:\\" + "a" * 10_000)
         for module in (ntpath, fallback):
             _Probe.replaced.clear()
             assert module.isabs(probe)
-            if sys.version_info >= (3, 11):
-                # Slicing a str subclass gives a plain str, so replace() on
-                # the three-character prefix never reaches the probe.
-                assert _Probe.replaced == []
-            else:
-                assert len(probe) in _Probe.replaced
+            # Slicing a str subclass gives a plain str, so replace() on the
+            # three-character prefix never reaches the probe.
+            assert _Probe.replaced == []
 
     def test_a_rooted_path_without_a_drive_is_absolute_before_3_13(self) -> None:
         assert ntpath.isabs(r"\x") == (sys.version_info < (3, 13))
@@ -535,25 +525,21 @@ FALLBACK_SHAPES = {
 
 
 class TestNormpath:
-    """`ntpath.normpath(path)` | O(L) through `nt._path_normpath()` from 3.11;
-    O(L²) as the Python fallback for a path of many `.` or `..` components."""
+    """`ntpath.normpath(path)` | O(L) through `nt._path_normpath()`; O(L²) as
+    the Python fallback for a path of many `.` or `..` components."""
 
     @WINDOWS
-    def test_it_is_the_c_helper_from_3_11(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_it_is_the_c_helper(self, monkeypatch: pytest.MonkeyPatch) -> None:
         if sys.version_info >= (3, 12):
             assert ntpath.normpath is nt._path_normpath
-        elif sys.version_info >= (3, 11):
+        else:
             counter = Counter(nt._path_normpath)
             monkeypatch.setattr(ntpath, "_path_normpath", counter)
             assert ntpath.normpath("a/./b") == "a\\b"
             assert counter.calls == 1
-        else:
-            assert not hasattr(nt, "_path_normpath")
-            assert ntpath.normpath.__module__ == "ntpath"
 
     @WINDOWS
     @pytest.mark.timing
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="nt._path_normpath is 3.11+")
     def test_the_c_helper_is_linear(self) -> None:
         small_path, large_path = _dotted(5_000), _dotted(80_000)
         small = best_ns(lambda: nt._path_normpath(small_path), inner=20)
@@ -634,8 +620,8 @@ class TestNormpathCallers:
     def test_on_windows_relpath_and_realpath_normalise_the_argument(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Every version passes the raw argument to `normpath()`, which is
-        the Python loop on 3.10 and C from 3.11 (TestNormpath)."""
+        """Each passes the raw argument to `normpath()`, which is C on
+        Windows (TestNormpath)."""
         realpath: Any = ntpath.realpath  # typeshed lacks strict= on this platform
         root = realpath(tmp_path)
         path = root + "\\." * 50
@@ -658,21 +644,15 @@ class TestNormpathCallers:
     def test_on_windows_ismount_never_gives_the_python_loop_the_dots(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """On 3.10 `abspath()`, and so `ismount()`, calls `_getfullpathname()`
-        first and hands `normpath()` its already normalised result; from 3.11
-        the raw argument goes to the C `normpath()`. Either way the quadratic
-        loop never sees the `.` components."""
+        """`abspath()`, and so `ismount()`, hands the raw argument to the C
+        `normpath()`, so the quadratic loop never sees the `.` components."""
         recorder = _Recorder(ntpath.normpath)
         monkeypatch.setattr(ntpath, "normpath", recorder)
         path = str(tmp_path) + "\\." * 50
 
         assert ntpath.ismount(path) is False
         assert recorder.seen, "ismount() did not reach normpath()"
-        if sys.version_info < (3, 11):
-            # The 100 characters of `\.` are gone before normpath() runs.
-            assert all(len(seen) == len(str(tmp_path)) for seen in recorder.seen), recorder.seen
-        else:
-            assert recorder.seen[0] == path
+        assert recorder.seen[0] == path
 
 
 class TestJoiningBytes:
@@ -732,10 +712,7 @@ class TestAbspath:
 
         assert result == ntpath.join(str(tmp_path), "file.txt")
         assert full.calls == 1 and counters["getcwd"].calls == 0
-        if sys.version_info >= (3, 11):
-            assert order == ["normpath", "getfullpathname"]
-        else:
-            assert order == ["getfullpathname", "normpath"]
+        assert order == ["normpath", "getfullpathname"]
 
     def test_elsewhere_it_joins_the_working_directory(
         self, fallback: Any, monkeypatch: pytest.MonkeyPatch
@@ -1045,7 +1022,7 @@ class TestRealpath:
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """realpath() starts with `normpath()` of the whole argument, which is
-        the Python loop on 3.10 and the C helper from 3.11."""
+        the C helper."""
         monkeypatch.chdir(tmp_path)
         counter = Counter(ntpath.normpath)
         monkeypatch.setattr(ntpath, "normpath", counter)
@@ -1057,25 +1034,20 @@ class TestRealpath:
         assert ntpath.normcase(result) == ntpath.normcase(
             ntpath.join(ntpath.realpath(tmp_path), "a")
         )
-        if sys.version_info < (3, 11):
-            assert not hasattr(nt, "_path_normpath")
 
     @pytest.mark.timing
-    def test_on_3_10_its_normpath_is_quadratic(
+    def test_its_normpath_is_linear(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """16x the `.` components: over 64x the time on 3.10, under 80x from
-        3.11, where the normalisation is C and the two calls are fixed."""
+        """16x the `.` components: under 80x the time, where the
+        normalisation is C and the two calls are fixed."""
         monkeypatch.chdir(tmp_path)
         small_path, large_path = _dotted(3_000), _dotted(48_000)
         small = best_ns(lambda: ntpath.realpath(small_path), repeats=15)
         large = best_ns(lambda: ntpath.realpath(large_path), repeats=3)
 
         ratio = large / small
-        if sys.version_info < (3, 11):
-            assert ratio > 64, f"16x the components cost x{ratio:.1f} on 3.10"
-        else:
-            assert ratio < 80, f"16x the components cost x{ratio:.1f}"
+        assert ratio < 80, f"16x the components cost x{ratio:.1f}"
 
 
 class TestRealpathElsewhere:

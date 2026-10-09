@@ -143,7 +143,6 @@ Not settled here:
 * `Decimal.from_number()`, `decimal.IEEEContext()` and
   `decimal.IEEE_CONTEXT_MAX_BITS` exist from 3.14 only, so their tests are
   guarded on `sys.version_info` and do not run on the rest of the matrix.
-  The same holds for `localcontext()`'s keyword attributes, which are 3.11+.
 * Space is settled by traced peaks in three places: `quantize()` shrinking a
   200,000-digit coefficient to three digits peaks under 4 KB where rendering
   the same operand peaks over 100 KB, and `Decimal(str)` and `float()` each
@@ -1351,9 +1350,8 @@ class TestContext:
             assert getcontext().prec == before + 7
         assert getcontext().prec == before
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="kwargs are 3.11+")
     def test_localcontext_takes_attributes_as_keywords(self) -> None:
-        with cast("Any", localcontext)(prec=7) as ctx:
+        with localcontext(prec=7) as ctx:
             assert ctx.prec == 7
             assert getcontext().prec == 7
 

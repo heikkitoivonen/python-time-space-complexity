@@ -38,7 +38,7 @@ Measurement scope:
 * `python -m tabnanny` on a file with a problem prints it and exits 0; with
   `-q` it prints only the path, and with `-v` it names the line.
 * On 3.12+ a missing file, a syntax error and 100 levels of indentation each
-  raise `SystemExit(1)` from `check()`; on 3.10 and 3.11 each returns `None`,
+  raise `SystemExit(1)` from `check()`; on 3.11 each returns `None`,
   and the message printed to stderr there is not asserted.
   On 3.12+ a tab followed by eight spaces is reported with the tokenizer's
   message, and `compile()` raises `TabError` for it. An indent pair that

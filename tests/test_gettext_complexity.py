@@ -23,9 +23,9 @@ Measurement scope:
   16,000 distinct languages that expand to one candidate each, with
   `os.path.exists()` answering False, so the filesystem probes are stubbed out
   and the quadratic deduplication term dominates:
-  every 4x step costs more than 8x (linear 4x, quadratic 16x; measured x12.9
-  to x15.7 on 3.10 to 3.14) and the 16x span more than 64x (linear 16x,
-  quadratic 256x; measured x175 to x208).
+  every 4x step costs more than 8x (linear 4x, quadratic 16x; measured x11.9
+  to x17.4 on 3.11.17 and 3.14.8) and the 16x span more than 64x (linear 16x,
+  quadratic 256x; measured x165 to x231).
 * `translation()` returns a new object per call sharing the parsed catalog
   and `info()` dictionary; a file rewritten after the first call is not
   reread; a different `class_` parses it again; with no file it raises
@@ -73,8 +73,7 @@ Not settled here:
   page leaves it out; `GNUTranslations.LE_MAGIC`, `BE_MAGIC`, `CONTEXT` and
   `VERSIONS` are class constants the page does not price.
 * The removals in 3.11 are a Version Notes entry. No supported interpreter
-  after 3.10 has the removed names, and 3.10's deprecated forms are not
-  exercised.
+  has the removed names, so they are not exercised.
 """
 
 from __future__ import annotations

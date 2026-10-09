@@ -5,8 +5,8 @@ field list on every lookup by name. The scans are settled by counting
 comparisons: field names are replaced by a `str` subclass whose `__eq__`
 counts, which Python calls whichever side of `==` it is on. Memory is settled
 by `tracemalloc` peaks, the quadratic paths by comparison counts and by timing
-at a fixed line length, and the remaining rows by observation. The module
-exists on Python 3.10 to 3.12, so every test that touches it takes the `cgi`
+at a fixed line length, and the remaining rows by observation. Of the
+supported versions the module exists on 3.11 and 3.12, so every test that touches it takes the `cgi`
 fixture, which skips from 3.13; run them with a 3.12 interpreter.
 
 Measurement scope:
@@ -49,8 +49,8 @@ Measurement scope:
   `test()` runs in a subprocess given a dictionary for `environ`: the form it
   prints comes from the process's own environment, the environment it prints
   from the dictionary, and it leaves `maxlen` at 50.
-* Importing the module on 3.10 emits no `DeprecationWarning`, on 3.11 and
-  3.12 it does, and from 3.13 it raises `ModuleNotFoundError`.
+* Importing the module on 3.11 and 3.12 emits a `DeprecationWarning`, and
+  from 3.13 it raises `ModuleNotFoundError`.
 * Every fenced Python block runs in its own subprocess. On 3.12 and earlier
   all of them pass; from 3.13 the ones importing `cgi` are asserted to fail
   with `ModuleNotFoundError` and the rest to pass. A mutated assertion in one
@@ -210,16 +210,7 @@ def _count_names(form: Any) -> None:
 class TestImport:
     """Version Notes: a warning on import from 3.11, removed in 3.13."""
 
-    @pytest.mark.skipif(sys.version_info >= (3, 11), reason="version: warns from Python 3.11")
-    def test_importing_it_on_3_10_does_not_warn(self) -> None:
-        sys.modules.pop("cgi", None)
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", DeprecationWarning)
-            importlib.import_module("cgi")
-
-    @pytest.mark.skipif(
-        not (3, 11) <= sys.version_info < (3, 13), reason="version: warns on 3.11 and 3.12"
-    )
+    @pytest.mark.skipif(REMOVED, reason="version: removed in Python 3.13")
     def test_importing_it_warns(self) -> None:
         sys.modules.pop("cgi", None)
         with pytest.warns(DeprecationWarning, match="cgi"):

@@ -32,7 +32,7 @@ Measurement scope:
   4,300, and to print that integer once `sys.set_int_max_str_digits(0)` lifts
   the limit; `genops()` reads the same pickle. A shared `memo` dict is
   asserted to carry an entry from one pickle to the next pickle a `Pickler`
-  wrote. A pickle that stores into memo key 0 twice raises on 3.10 to 3.13 and
+  wrote. A pickle that stores into memo key 0 twice raises on 3.11 to 3.13 and
   disassembles on 3.14+, guarded on `sys.version_info`.
 * `optimize()` is asserted to drop every `MEMOIZE` from a pickle with no
   shared object, to keep one store and one `BINGET` for an object referenced

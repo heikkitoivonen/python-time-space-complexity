@@ -75,10 +75,8 @@ Measurement scope:
   raises and leaves `session` behind.
 * The jar walk (`deepvalues`) collects each level before descending, so its
   memory is the widest level it meets - with one domain and one path that is
-  every cookie. Counted at 20 cookies under one path. How it collects differs
-  in the middle of the range: 3.11+ copies the level's values, 3.10 builds a
-  sorted list of its keys, so 3.10 also yields cookies in sorted order. The
-  tests watch both accessors rather than assuming either.
+  every cookie. Counted at 20 cookies under one path, through a
+  watched `values()`, which is how it reaches each level.
 * `LWPCookieJar` keeps a cookie's port and comment; `MozillaCookieJar` drops
   both. Round-tripped and compared for the port and the comment separately.
 * `getresponse()` skips only `100 Continue`. A `103 Early Hints` ends the loop
@@ -100,7 +98,7 @@ Measurement scope:
   matcher to show it scans the configured domains.
 
 Source evidence: Lib/http/{__init__,client,server,cookies,cookiejar}.py on the
-released CPython 3.10 through 3.14 branches. In client.py, `_MAXLINE` is 65536
+released CPython 3.11 through 3.14 branches. In client.py, `_MAXLINE` is 65536
 and `_MAXHEADERS` is 100; `send` loops `data.read(self.blocksize)` for a
 readable; `_send_output` joins the buffer and sends once. In cookies.py,
 `__parse_string` fills `parsed_items` and applies it only after the loop
@@ -109,7 +107,7 @@ per domain and `_cookie_attrs` sorts by path length; `blocked_domains` returns
 `self._blocked_domains` without copying. In server.py, `list_directory` calls
 `os.path.isdir` and `os.path.islink` per entry and `translate_path` drops
 components that are not plain names.
-https://github.com/python/cpython/blob/3.10/Lib/http/client.py
+https://github.com/python/cpython/blob/3.11/Lib/http/client.py
 https://github.com/python/cpython/blob/3.14/Lib/http/client.py
 https://github.com/python/cpython/blob/3.14/Lib/http/cookiejar.py
 https://github.com/python/cpython/blob/3.14/Lib/http/server.py
@@ -184,7 +182,7 @@ PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "http.md"
 EXPECTED_BLOCKS = 6
 
 # The first patch release of each minor whose Morsel rejects control characters.
-MORSEL_CONTROL_CHECK = {(3, 10): 20, (3, 11): 15, (3, 12): 13, (3, 13): 12, (3, 14): 3}
+MORSEL_CONTROL_CHECK = {(3, 11): 15, (3, 12): 13, (3, 13): 12, (3, 14): 3}
 
 
 class FakeSocket:
@@ -268,14 +266,12 @@ class TestHTTPStatus:
         assert http.HTTPStatus.NOT_FOUND == 404
         assert isinstance(http.HTTPStatus.NOT_FOUND, int)
 
-    def test_str_writes_the_code_only_from_3_11(self) -> None:
-        """The page's admonition: 3.10 prints the member, 3.11+ the number."""
-        printed = str(http.HTTPStatus.OK)
-
-        if sys.version_info >= (3, 11):
-            assert printed == "200"
-        else:
-            assert printed == "HTTPStatus.OK"
+    def test_str_writes_the_code(self) -> None:
+        """The page's admonition: `str()` gives the number, `.phrase` the
+        reason phrase and `.name` the member name."""
+        assert str(http.HTTPStatus.OK) == "200"
+        assert http.HTTPStatus.OK.phrase == "OK"
+        assert http.HTTPStatus.OK.name == "OK"
 
     @pytest.mark.skipif(sys.version_info < (3, 12), reason="category properties are 3.12+")
     def test_the_category_properties_are_range_checks(self) -> None:
@@ -297,16 +293,12 @@ class TestHTTPStatus:
 class TestHTTPMethod:
     """`HTTPMethod` | O(1) | O(1) | Python 3.11+."""
 
-    def test_it_exists_only_from_3_11(self) -> None:
-        assert hasattr(http, "HTTPMethod") == (sys.version_info >= (3, 11))
-
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="HTTPMethod is 3.11+")
     def test_lookup_by_value_returns_the_existing_member(self) -> None:
-        method = getattr(http, "HTTPMethod")  # noqa: B009 - typeshed 3.11+
+        method = http.HTTPMethod
 
         assert method("GET") is method.GET
         assert method.GET == "GET"
-        assert isinstance(getattr(method.GET, "description"), str)  # noqa: B009 - 3.11+
+        assert isinstance(method.GET.description, str)
 
 
 class TestParseHeaders:
@@ -1754,7 +1746,7 @@ class TestCodexReviewFindings:
     @pytest.mark.skipif(
         sys.version_info[2] < MORSEL_CONTROL_CHECK.get(sys.version_info[:2], 0),
         reason="version: Morsel's control-character check arrived in "
-        "3.10.20, 3.11.15, 3.12.13, 3.13.12 and 3.14.3",
+        "3.11.15, 3.12.13, 3.13.12 and 3.14.3",
     )
     def test_morsel_set_validates_the_name_and_keeps_the_value(self) -> None:
         """O(len(key) + v) time: the values are checked, then stored by reference."""
@@ -1841,8 +1833,7 @@ class TestCodexReviewFindings:
     def test_iterating_a_jar_defers_the_walk(self) -> None:
         """`iter(jar)` | O(1) | Nothing is visited before the first next().
 
-        The walk reaches a level through `values()` on 3.11+ and through
-        `keys()` on 3.10, which sorts them, so both are watched.
+        The walk reaches a level through `values()`, which is watched.
         """
         jar = http.cookiejar.CookieJar()
         jar.set_cookie(stored_cookie(".x.example.com", "/", "n"))
@@ -1851,11 +1842,6 @@ class TestCodexReviewFindings:
         class Watched(dict):  # type: ignore[type-arg]
             def values(self) -> Any:
                 collected = list(super().values())
-                visited.append(len(collected))
-                return collected
-
-            def keys(self) -> Any:
-                collected = list(super().keys())
                 visited.append(len(collected))
                 return collected
 
@@ -1942,9 +1928,9 @@ class TestCodexReviewFindings:
     def test_too_many_interim_responses_raise_where_the_cap_exists(self) -> None:
         """Gated on the constant, not a version: the cap arrived by backport.
 
-        Of the pinned patches the project tests, 3.10.21, 3.11.16, 3.12.14 and
-        3.14.7 have `_MAXINTERIMRESPONSES`; 3.13.14 does not. A version tuple
-        would assert the wrong thing in the middle of the range.
+        Whether a release has `_MAXINTERIMRESPONSES` depends on its patch
+        level, not its minor line, so a version tuple would assert the wrong
+        thing in the middle of the range.
         """
         cap = getattr(http.client, "_MAXINTERIMRESPONSES", None)  # patch-release cap
         if cap is None:
@@ -2011,8 +1997,8 @@ class TestCodexReviewFindings:
     def test_the_jar_walk_materializes_each_level(self) -> None:
         """The w in the space column: a level is collected whole before descending.
 
-        3.11+ copies the level's values; 3.10 sorts its keys instead. Either
-        way the list built is as wide as the level, which is the w term.
+        The walk copies the level's values into a list as wide as the level,
+        which is the w term.
         """
         jar = http.cookiejar.CookieJar()
         for index in range(20):
@@ -2022,11 +2008,6 @@ class TestCodexReviewFindings:
         class Watched(dict):  # type: ignore[type-arg]
             def values(self) -> Any:
                 collected = list(super().values())
-                widths.append(len(collected))
-                return collected
-
-            def keys(self) -> Any:
-                collected = list(super().keys())
                 widths.append(len(collected))
                 return collected
 

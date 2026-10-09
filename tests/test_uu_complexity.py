@@ -6,11 +6,10 @@ writes one line per read, and `decode()` reads a line at a time through the
 settled by observation - a recording stream counts every read and write,
 `tell()` shows where reading stopped, and a traced peak that stays under a
 fixed ceiling, and does not double, while the input grows a hundredfold
-separates O(1) from O(n). The module exists on
-Python 3.10 to 3.12 only, so every runtime test takes the `uu` fixture, which
+separates O(1) from O(n). The module exists
+only before Python 3.13, so every runtime test takes the `uu` fixture, which
 skips from 3.13; availability is asserted on every version. Lib/uu.py is the
-same file at v3.10.19, v3.11.14 and v3.12.12 apart from the import-time
-DeprecationWarning that 3.11 adds.
+same file at v3.11.14 and v3.12.12.
 
 Measurement scope:
 
@@ -51,9 +50,9 @@ Measurement scope:
   within its length raises `binascii.Error`.
   `uu.Error` is an `Exception` subclass.
 * Importing `uu` raises `ModuleNotFoundError` from 3.13; in a subprocess it
-  warns on 3.11 and 3.12 and not on 3.10.
+  warns on 3.11 and 3.12.
 * Every fenced Python block runs in its own subprocess and working directory
-  on 3.10 to 3.12, and a mutated assertion in one of them is asserted to fail.
+  on 3.11 and 3.12, and a mutated assertion in one of them is asserted to fail.
 
 Not settled here:
 
@@ -65,11 +64,11 @@ Not settled here:
   measurements use one byte pattern per size; data content does not change
   the code path, and the header name is held short.
 * `decode()`'s refusal of a name starting with a separator or containing
-  `../` is in v3.10.12 and v3.11.4 onwards and in every 3.12 release (`git
-  tag --contains` on the backports of gh-99889); earlier patch releases are
-  not installed here. On Windows `os.sep` is `\\` and `os.altsep` adds `/`,
+  `../` is in v3.11.4 onwards and in every 3.12 release (`git tag
+  --contains` on the backports of gh-99889); earlier patch releases are not
+  installed here. On Windows `os.sep` is `\\` and `os.altsep` adds `/`,
   and a drive-qualified name such as `C:x` is not refused; the tests run on
-  Linux, the only platform CI runs 3.10 to 3.12 on.
+  Linux, the only platform CI runs 3.11 and 3.12 on.
 * The deprecation in 3.11 and removal in 3.13 come from the 3.12
   documentation and PEP 594.
 * API coverage: the audit on 3.14, where `uu` is gone, checks no names for
@@ -187,11 +186,8 @@ class TestAvailability:
             stdin=subprocess.DEVNULL,
             check=False,
         )
-        if sys.version_info >= (3, 11):
-            assert result.returncode != 0
-            assert "'uu' is deprecated" in result.stderr
-        else:
-            assert result.returncode == 0, result.stderr
+        assert result.returncode != 0
+        assert "'uu' is deprecated" in result.stderr
 
 
 class TestEncodeStreams:

@@ -354,19 +354,19 @@ network, or a cache in front of either.
 | `os.path.dirname(path)` | O(L) | O(L) | |
 | `os.path.basename(path)` | O(L) | O(L) | |
 | `os.path.splitext(path)` | O(L) | O(L) | |
-| `os.path.normpath(path)` | O(L) | O(L) | Windows 3.10 has no C implementation: O(L²) for a path of many `.` or `..` components, see [ntpath](ntpath.md) |
-| `os.path.isabs(path)` | O(1) | O(1) | Inspects the prefix only; Windows 3.10 rewrites separators across the whole path first, making it O(L) there |
+| `os.path.normpath(path)` | O(L) | O(L) | |
+| `os.path.isabs(path)` | O(1) | O(1) | Inspects the prefix only |
 | `os.path.normcase(path)` | O(L) | O(L) | O(1) on POSIX, which returns the argument unchanged; Windows case-folds it |
 | `os.path.splitdrive(path)` | O(L) | O(L) | O(1) on POSIX, which returns the argument as the tail; a Windows UNC prefix is scanned and sliced |
 | `os.path.splitroot(path)` | O(L) | O(L) | 3.12+; same shape as `splitdrive()` |
 | `os.path.isreserved(path)` | O(L) | O(L) | Splits the path into components; Windows, 3.13+ |
-| `os.path.relpath(path, start)` | O(L + S + C) | O(L + S + C) | S = length of `start`; one `getcwd()` per relative argument, so two when both are. Windows 3.10 first runs each argument through its Python `normpath()`, with that row's quadratic case, see [ntpath](ntpath.md) |
+| `os.path.relpath(path, start)` | O(L + S + C) | O(L + S + C) | S = length of `start`; one `getcwd()` per relative argument, so two when both are |
 | `os.path.commonpath(paths)` | O(B) | O(B) | B = total length of every path given |
 | `os.path.commonprefix(paths)` | O(B) | O(B) | Character-wise, so it can end mid-component |
-| `os.path.expandvars(path)` | O(L + s) | O(L + s) | s = total length of the values substituted in. POSIX releases before 3.14.1, 3.13.10, 3.12.13, 3.11.15 and 3.10.20 rebuild the path for each substitution: O(e·(L + s)) for e substitutions, see [posixpath](posixpath.md) |
+| `os.path.expandvars(path)` | O(L + s) | O(L + s) | s = total length of the values substituted in. POSIX releases before 3.14.1, 3.13.10, 3.12.13 and 3.11.15 rebuild the path for each substitution: O(e·(L + s)) for e substitutions, see [posixpath](posixpath.md) |
 | `os.path.expanduser(path)` | O(L + H) | O(L + H) | H = the home directory spliced in; `~user`, and a bare `~` with no `HOME` set, consult the password database at whatever that backend costs |
 | `os.path.abspath(path)` | O(L + C) | O(L + C) | C = length of the working directory, which a relative path is prefixed with after one `getcwd()` |
-| `os.path.realpath(path)` | O(k·R) | O((j + 1)·R) | POSIX: R = the path text walked, the argument (rooted at the working directory if relative) plus every symlink target spliced into it, k = its components and j = the symlinks followed; one lstat per component, and each component builds the resolved path so far as a new string, see [posixpath](posixpath.md). Windows: no walk for a path it can open, O(L + C + F) with F the result's length; each trailing component it cannot open (missing, access denied) adds O(L + C); a link Windows will not resolve (a missing target, a loop, a chain longer than one open follows) is read one `readlink()` per link, adding O(W) with W the length of every path reached that way; and on 3.10 a path of many `.` or `..` components adds O(L²); see [ntpath](ntpath.md) |
+| `os.path.realpath(path)` | O(k·R) | O((j + 1)·R) | POSIX: R = the path text walked, the argument (rooted at the working directory if relative) plus every symlink target spliced into it, k = its components and j = the symlinks followed; one lstat per component, and each component builds the resolved path so far as a new string, see [posixpath](posixpath.md). Windows: no walk for a path it can open, O(L + C + F) with F the result's length; each trailing component it cannot open (missing, access denied) adds O(L + C); a link Windows will not resolve (a missing target, a loop, a chain longer than one open follows) is read one `readlink()` per link, adding O(W) with W the length of every path reached that way; see [ntpath](ntpath.md) |
 | `os.path.samefile(p1, p2)` | O(1) | O(1) | Two stat calls |
 | `os.path.sameopenfile(fd1, fd2)` | O(1) | O(1) | |
 | `os.path.samestat(s1, s2)` | O(1) | O(1) | Compares two `stat_result` objects |

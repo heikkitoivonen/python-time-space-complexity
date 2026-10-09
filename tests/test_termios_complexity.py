@@ -44,17 +44,15 @@ Measurement scope:
   asserted to be still waiting 0.5 s after 100 bytes were written, and to
   return within 5 s once the master reads them; `tcsendbreak(fd, 0)` to take
   at least 0.3 s. Those two run only on macOS, in the macOS CI job.
-* `tcgetwinsize()` and `tcsetwinsize()` (3.11+, guarded on
-  `sys.version_info`) round-trip `(rows, columns)`, and the master reports
-  what was set on the slave; on 3.10 the two names are asserted absent.
+* `tcgetwinsize()` and `tcsetwinsize()` round-trip `(rows, columns)`, and
+  the master reports what was set on the slave.
 * `termios.error` is an `Exception` subclass raised by `tcgetattr()` on a
   pipe with the arguments `(ENOTTY, os.strerror(ENOTTY))`.
 * An attribute change made by a child process, which then exits, is still in
   force on the pseudo-terminal afterwards.
 * Every fenced Python block runs in its own subprocess with its own
   pseudo-terminal pair, and a mutated assertion in one of them is asserted to
-  fail. The window-size block needs 3.11 and is skipped, with that reason, on
-  3.10.
+  fail.
 
 Not settled here:
 
@@ -104,7 +102,6 @@ import termios  # noqa: E402  (after the platform guard)
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "termios.md"
 EXPECTED_BLOCKS = 7
-WINDOW_SIZE_BLOCK = "termios.tcsetwinsize(slave, (24, 80))"
 
 
 def readable(fd: int, timeout: float) -> bool:
@@ -457,19 +454,13 @@ class TestQueueControl:
 class TestWindowSize:
     """`tcgetwinsize` and `tcsetwinsize` | O(1) | O(1) | Python 3.11+."""
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
     def test_a_size_round_trips_and_both_ends_see_it(self, pair: tuple[int, int]) -> None:
         master, slave = pair
 
-        termios.tcsetwinsize(slave, (24, 80))  # type: ignore[attr-defined]
+        termios.tcsetwinsize(slave, (24, 80))
 
-        assert termios.tcgetwinsize(slave) == (24, 80)  # type: ignore[attr-defined]
-        assert termios.tcgetwinsize(master) == (24, 80)  # type: ignore[attr-defined]
-
-    @pytest.mark.skipif(sys.version_info >= (3, 11), reason="present from 3.11")
-    def test_absent_before_311(self) -> None:
-        assert not hasattr(termios, "tcgetwinsize")
-        assert not hasattr(termios, "tcsetwinsize")
+        assert termios.tcgetwinsize(slave) == (24, 80)
+        assert termios.tcgetwinsize(master) == (24, 80)
 
 
 class TestErrors:
@@ -523,18 +514,15 @@ def _run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[st
 
 class TestDocumentedExamples:
     """Each block runs in its own subprocess on its own pseudo-terminal pair,
-    and asserts its own result. The window-size block needs Python 3.11."""
+    and asserts its own result."""
 
     def test_the_page_has_the_expected_blocks(self) -> None:
         assert len(_blocks()) == EXPECTED_BLOCKS
-        assert sum(WINDOW_SIZE_BLOCK in source for _, source in _blocks()) == 1
 
     def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
         ran = 0
         for line, source in _blocks():
-            if WINDOW_SIZE_BLOCK in source and sys.version_info < (3, 11):
-                continue  # tcsetwinsize() and tcgetwinsize() were added in 3.11
             ran += 1
             workdir = tmp_path / f"block{line}"
             workdir.mkdir()
@@ -542,7 +530,7 @@ class TestDocumentedExamples:
             if result.returncode != 0:
                 failures.append(f"{PAGE.name}:{line}\n{result.stderr.strip()}")
 
-        assert ran == EXPECTED_BLOCKS - (sys.version_info < (3, 11))
+        assert ran == EXPECTED_BLOCKS
         assert not failures, "\n\n".join(failures)
 
     def test_the_runner_notices_a_broken_assertion(self, tmp_path: pathlib.Path) -> None:

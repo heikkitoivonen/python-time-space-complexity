@@ -35,7 +35,7 @@ Measurement scope:
 * `SND_ASYNC` with `SND_MEMORY` raises RuntimeError("Cannot play
   asynchronously from memory"), with or without `SND_LOOP`, before
   PlaySoundW is reached; the check is the same in PC/winsound.c from
-  v3.10.21 to v3.14.7 and was run on 3.10 to 3.14.
+  v3.11.14 to v3.14.7 and was run on 3.11 to 3.14.
 * `SND_FILENAME` reads the whole file. A synchronous play of 0.2 s of
   audio padded to a 50,000,000-byte file, the padding before the audio or
   after it, reads over 45 MB and leaves private bytes over 40 MB above

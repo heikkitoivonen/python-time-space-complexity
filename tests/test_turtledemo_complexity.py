@@ -94,8 +94,8 @@ Measurement scope:
   1,024 turtles; `two_canvases`, started from the viewer on a stand-in `TK`,
   creates one Tk root and two canvases, and the viewer's STOP destroys
   neither and clears neither.
-* Lib/turtledemo differs across v3.10.19, v3.11.14, v3.12.12, v3.13.11 and
-  v3.14.2 only in docstrings, the viewer's menus and layout, and `clock`,
+* Lib/turtledemo differs across v3.11.14, v3.12.12, v3.13.11 and v3.14.2
+  only in docstrings, the viewer's menus and layout, and `clock`,
   which from 3.12 rewrites the date only when the day changes; none of those
   moves a bound here.
 * Every fenced Python block runs in its own subprocess on the recording
@@ -462,7 +462,7 @@ def headless_viewer(screen: DemoScreen) -> Any:
     window.start_btn, window.stop_btn, window.clear_btn = Widget(), Widget(), Widget()
     window.output_lbl = Widget()
     window.screen = screen
-    window.canvas = window.scanvas = screen.canvas  # `scanvas` on 3.10
+    window.canvas = screen.canvas
     window.dirty = False
     window.exitflag = False
     return window

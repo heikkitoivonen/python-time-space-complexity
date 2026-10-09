@@ -48,7 +48,7 @@ Measurement scope:
 Not settled here:
 
 * `bytes(count)` is zero-filled by `calloc` (Objects/bytesobject.c,
-  _PyBytes_FromSize, v3.10.19 through v3.14.2). For a large count the
+  _PyBytes_FromSize, v3.11.14 through v3.14.2). For a large count the
   allocator can hand over pages the operating system has already zeroed, and
   on Linux a count of 10,000,000 then costs no more than one of 1,000,000. So
   the time of that row is asserted only from above (a hundredfold count under

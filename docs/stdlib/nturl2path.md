@@ -18,8 +18,8 @@ its separators.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `nturl2path.url2pathname(url)` | O(n) | O(n) | Accepts a colon or the older pipe after a drive letter, and decodes `%XX` escapes. O(n·c) on 3.10, 3.11, 3.12.0-3.12.7 and 3.13.0 when the URL has a drive letter |
-| `nturl2path.pathname2url(p)` | O(n) | O(n) | A drive path becomes `///C:/...`, with an empty authority, and unsafe characters become `%XX` escapes. O(n·c) on 3.10, 3.11, 3.12.0-3.12.7 and 3.13.0 when the path has a drive letter |
+| `nturl2path.url2pathname(url)` | O(n) | O(n) | Accepts a colon or the older pipe after a drive letter, and decodes `%XX` escapes. O(n·c) on 3.11, 3.12.0-3.12.7 and 3.13.0 when the URL has a drive letter |
+| `nturl2path.pathname2url(p)` | O(n) | O(n) | A drive path becomes `///C:/...`, with an empty authority, and unsafe characters become `%XX` escapes. O(n·c) on 3.11, 3.12.0-3.12.7 and 3.13.0 when the path has a drive letter |
 
 ## Converting Paths
 

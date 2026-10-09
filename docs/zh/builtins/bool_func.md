@@ -1,5 +1,5 @@
 ---
-source_sha: ad95cb242f5e6951b808e6e7ab7ff7d86f11a196210e1d2e406ba286915af9cd
+source_sha: 71959353c83f40146dd469943c3b369f5ac0dcafe8558f9f9a73a68b01520c4d
 translated: machine
 ---
 
@@ -387,7 +387,7 @@ if divisor != 0:     # O(1)
 
 - **Python 2.x**：使用 `__nonzero__()` 而非 `__bool__()`
 - **Python 3.x**：使用 `__bool__()` 方法
-- **Python 3.14+**：`bool(NotImplemented)` 会引发 `TypeError`；3.10 至 3.13 返回 `True` 并发出 `DeprecationWarning`
+- **Python 3.14+**：`bool(NotImplemented)` 会引发 `TypeError`；3.11 至 3.13 返回 `True` 并发出 `DeprecationWarning`
 - **所有版本**：假值保持一致（None、False、0、""、[]、{} 等）
 
 ## 相关函数

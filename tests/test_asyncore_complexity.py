@@ -3,13 +3,10 @@
 The page prices the module by the pass: every pass of `loop()` asks every
 channel whether it wants to read or write and builds its `select()` or `poll()`
 request from scratch, and `dispatcher_with_send` copies its output buffer on
-every append and every partial send. The module exists on Python 3.10 and 3.11
-only, so every runtime test takes the `asyncore` fixture, which skips from
-3.12; run them with a 3.10 or 3.11 environment. CI's full-suite jobs use the
-newest supported Python and its 3.10 and 3.11 jobs run only timing tests, so
-those tests run locally only. Availability and the asyncio comparison run
-everywhere. The released Lib/asyncore.py differs between v3.10.19 and v3.11.14
-only in how its import-time DeprecationWarning is raised. Everything is settled
+every append and every partial send. Of the supported
+versions the module exists on Python 3.11 only, so every runtime test takes the
+`asyncore` fixture, which skips from 3.12, and CI's 3.11 job is where they run.
+Availability and the asyncio comparison run everywhere. Everything is settled
 by observation: counting predicates, recording sockets, identity and length
 of the output buffer, and the map's contents. Channels are built on
 `socket.socketpair()` with a private map unless a test is about the global one.
@@ -61,15 +58,15 @@ Measurement scope:
   50 passes while calling `select()` on each; on Linux `DefaultSelector` is
   `EpollSelector`.
 * Every fenced Python block runs in its own subprocess. The four that import
-  `asyncore` run on 3.10 and 3.11 only; the `asyncio` one runs everywhere and
+  `asyncore` run on 3.11 only; the `asyncio` one runs everywhere and
   carries the runner's mutation check.
 
 Not settled here:
 
 * The deprecation in 3.6 and the removal in 3.12 come from the 3.11
-  documentation and PEP 594. The import warning is asserted on 3.10 and 3.11;
+  documentation and PEP 594. The import warning is asserted on 3.11;
   that it starts at 3.10 is read from Lib/asyncore.py at v3.9.0 and v3.10.0,
-  since 3.9 is not supported. `ModuleNotFoundError` from 3.12 is asserted.
+  since neither version is supported. `ModuleNotFoundError` from 3.12 is asserted.
 * The O(c) space of a pass and of `close_all()` is read from Lib/asyncore.py:
   each copies the map's items into a list and builds descriptor lists or a
   `poll` object over them. The O(u + n) and O(u) bounds of
@@ -160,7 +157,7 @@ class FakeSocket:
 
 
 class TestAvailability:
-    """`import asyncore` works on 3.10 and 3.11 and fails from 3.12."""
+    """`import asyncore` works on 3.11 and fails from 3.12."""
 
     @pytest.mark.skipif(sys.version_info < (3, 12), reason="the module exists before 3.12")
     def test_importing_it_from_3_12_raises(self) -> None:
@@ -744,7 +741,7 @@ def _run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[st
 
 class TestDocumentedExamples:
     """Each block runs in its own subprocess and asserts its own result. The
-    blocks that import `asyncore` need 3.10 or 3.11."""
+    blocks that import `asyncore` need 3.11."""
 
     def test_the_page_has_the_expected_blocks(self) -> None:
         blocks = _blocks()

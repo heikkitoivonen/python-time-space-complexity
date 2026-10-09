@@ -2,10 +2,10 @@
 
 The `sre_compile` module turns a regular expression into the list of integer codes the C matcher
 runs, and wraps that list in a `Pattern`. Given a string it parses it first with
-[sre_parse](sre_parse.md); given a parse tree it compiles the tree as it is. On Python 3.10 it is
-the compiler [re](re.md) itself imports. From Python 3.11 it is a deprecated alias: importing it
-issues a `DeprecationWarning` and copies the names of the private `re._compiler` module. The
-module has never been documented, so it carries no stability guarantee.
+[sre_parse](sre_parse.md); given a parse tree it compiles the tree as it is. From Python 3.11 it
+is a deprecated alias: importing it issues a `DeprecationWarning` and copies the names of the
+private `re._compiler` module that [re](re.md) itself uses. The module has never been documented,
+so it carries no stability guarantee.
 
 Nothing here is cached. `re.compile()` looks a pattern up in its cache before it compiles
 anything; `sre_compile.compile()` parses and compiles on every call.
@@ -38,22 +38,17 @@ ranges.
 
 From Python 3.11 the module's names are copied from `re._compiler` when it is first imported. They
 are the same objects, but `re` looks them up in its own module, so rebinding one here changes
-nothing `re` does. On Python 3.10 `re` calls through this module, and a rebinding reaches it.
+nothing `re` does.
 
 ```python
-import re
-import sys
+import re._compiler
 import warnings
 
 with warnings.catch_warnings():
     warnings.simplefilter('ignore', DeprecationWarning)
     import sre_compile
 
-if sys.version_info >= (3, 11):
-    import re._compiler
-    assert sre_compile.compile is re._compiler.compile  # O(1) - the same function
-else:
-    assert re.sre_compile is sre_compile  # 3.10: the module re imports
+assert sre_compile.compile is re._compiler.compile  # O(1) - the same function
 ```
 
 ## Compiling Without the Cache
@@ -134,8 +129,7 @@ assert astral.match('\U0001f600')
 
 - `sre_compile.compile()` in a loop over the same pattern - unlike `re.compile()`, it redoes all
   the work each time
-- New code that imports the module on Python 3.11+ - it warns, and nothing in it is promised to
-  stay
+- New code that imports the module - it warns, and nothing in it is promised to stay
 - Wide character-class ranges below U+10000 in a pattern compiled often; each range costs the code
   points it spans
 

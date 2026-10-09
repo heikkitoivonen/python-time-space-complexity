@@ -147,7 +147,7 @@ Not settled here:
   depends on the allocator and operating system, including whether pages
   are returned or retained for reuse. The page includes this in its
   worst-case bounds; it does not require every release to scale with n.
-  Objects/bytearrayobject.c (v3.10.19 through v3.14.2) implements `clear()`
+  Objects/bytearrayobject.c (v3.11.14 through v3.14.2) implements `clear()`
   by resizing to zero: one reallocation, or an allocation and free when the
   start offset has moved, with no bytes copied. A resize to one byte copies
   at most one byte in that path. Portable timing cannot establish the
@@ -635,7 +635,7 @@ class TestFrontDeletionAdvancesTheStart:
         tracer or profiler has been installed in the process, and it lands in
         the peak of whichever call runs that code object first: for
         `delete_prefix` that is 72 bytes on 3.12, 64 on 3.13 and 128 on 3.14,
-        none of it the deletion's. 3.10 and 3.11 attach nothing.
+        none of it the deletion's. 3.11 attaches nothing.
         """
         data = bytearray(LARGE)
 

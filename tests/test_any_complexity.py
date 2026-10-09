@@ -2,7 +2,7 @@
 
 any() is builtin_any in Python/bltinmodule.c: it takes one iterator, calls its
 `tp_iternext` once per item and PyObject_IsTrue on each item, and returns True
-at the first truthy one. The function is the same in the v3.10.0, v3.11.0,
+at the first truthy one. The function is the same in the v3.11.0,
 v3.12.0, v3.13.0 and v3.14.0 tags, so no version is treated apart. From 3.14
 the compiler also inlines `any(<generator expression>)` into a loop when the
 name `any` resolves to the builtin at run time (maybe_optimize_function_call

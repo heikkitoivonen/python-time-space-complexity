@@ -32,8 +32,8 @@ Measurement scope:
   non-ASCII label. A timing test runs `nameprep()` on `"a"` followed by
   1,000 and 16,000 pairs of U+0315 U+0300, combining marks NFKC must
   reorder, and asserts the 16x input costs under x64, between the x16 of a
-  linear pass and the x256 of a quadratic one; about x16 was measured on
-  3.10 and 3.14. That excludes quadratic growth for this input family over
+  linear pass and the x256 of a quadratic one; about x17 was measured on
+  3.11.17 and 3.14.8. That excludes quadratic growth for this input family over
   this interval; it does not separate O(n) from O(n log n), and other
   reordering shapes are not measured. It runs only on releases carrying the
   CVE-2026-3276 fix (see `tests/patched_python.py`): without it, NFKC
@@ -46,7 +46,7 @@ Not settled here:
 * That each call is O(1) is definitional once the input is one character:
   every function does a bounded amount of work on it, NFKC in `map_table_b2()`
   included, which normalizes one character's folding and decomposition (18
-  characters for U+FDFA), per Lib/stringprep.py, identical across 3.10 to
+  characters for U+FDFA), per Lib/stringprep.py, identical across 3.11 to
   3.14. No timing test is run on a single call.
 * The page claims Unicode 3.2 only for category and bidirectional lookups;
   full mapping conformance is not tested.

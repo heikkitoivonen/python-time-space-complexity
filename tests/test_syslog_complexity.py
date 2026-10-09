@@ -37,7 +37,7 @@ Measurement scope:
   set to `LOG_UPTO(LOG_INFO)`. An ASCII message does not grow: its UTF-8 is
   its own storage.
 * On 3.12+, a message containing a null character raises `ValueError` before
-  any audit event. On 3.10 and 3.11, the event's message is the text before
+  any audit event. On 3.11, the event's message is the text before
   the null character.
 * LOG_FTP and the five Apple facilities are absent before 3.13. From 3.13, on
   Linux (glibc) `LOG_FTP` and `LOG_AUTHPRIV` exist and the Apple facilities
@@ -73,7 +73,7 @@ Not settled here:
   C library's state for the whole process, are read from
   Modules/syslogmodule.c (`S_ident_o` is its only object) and setlogmask(3).
 * That `syslog()` does not reopen a log that is open is read from
-  Modules/syslogmodule.c (the `S_log_open` flag, v3.10.19 to v3.14.2): with
+  Modules/syslogmodule.c (the `S_log_open` flag, v3.11.14 to v3.14.2): with
   the log open, the hook stops `syslog()` before the point where it would
   open the log.
 * Module state is per process, so `closelog()`'s reset is observed only in

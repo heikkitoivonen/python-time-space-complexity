@@ -36,7 +36,7 @@ Measurement scope:
   breakpoint in another file, a function called after the first stop raises
   none, and the frame the stop happened in raises between 2n and 2n + 10 for
   n iterations of a two-line loop. With the breakpoint in another function of the loop's own file,
-  3.14+ delivers one line event and 3.10-3.13 more than the iteration count.
+  3.14+ delivers one line event and 3.11-3.13 more than the iteration count.
   On 3.14 `backend='monitoring'` delivers the same small number, under 50,
   for both loop lengths.
 * `set_trace()` at recursion depths 10 and 100 sets `f_trace` on every frame
@@ -55,7 +55,7 @@ Measurement scope:
   b of 10 and 1,000, returns an error string for a line past the end, and
   leaves the whole file in `linecache`. On 3.12.9+ and 3.13.1+, with
   `enterframe` set, it calls `break_anywhere()` once per frame, 90 more times
-  at depth 100 than at depth 10; on 3.10, 3.11, 3.12.0-3.12.8 and 3.13.0 it
+  at depth 100 than at depth 10; on 3.11, 3.12.0-3.12.8 and 3.13.0 it
   calls it for none.
 * `clear_break()` over k breakpoints at one line removes them from lists of
   length k, k - 1, ... 1, for k of 5 and 50. `deleteMe()` calls `remove()`

@@ -28,8 +28,9 @@ Measurement scope:
   and non-standard tables are asserted by guesses. On 3.14+ an undotted
   extension is asserted to emit `DeprecationWarning`.
 * `MimeTypes()` calls `add_type()` once per built-in entry (asserted to be
-  between 100 and 400; 150 on 3.10), counted against the sizes of a fresh
-  instance's two tables, then once per extension in the files passed to it.
+  between 100 and 400; 158 on 3.11.17 and 207 on 3.14.8), counted against the
+  sizes of a fresh instance's two tables, then once per extension in the files
+  passed to it.
   `init()` does the same, plus once per extension in every existing
   `knownfiles` entry: a counting `add_type` records exactly the built-in count
   plus 2,000 for a 1,000-line file of two extensions a line. A recording
@@ -51,8 +52,8 @@ Measurement scope:
   once per line and once more at the end. Comments and blank lines add
   nothing.
 * On Linux, `read_windows_registry()` adds nothing to either table.
-* The 3.11+ query-string behaviour and the 3.13+ `guess_file_type()` are
-  guarded on `sys.version_info`, both sides of the 3.11 boundary asserted.
+* `guess_type()` is asserted to ignore a URL's query string and fragment.
+  The 3.13+ `guess_file_type()` is guarded on `sys.version_info`.
 * Every fenced Python block runs in its own subprocess, and a mutated
   assertion in one of them is asserted to fail.
 
@@ -269,18 +270,11 @@ class TestAGuessFollowsTheName:
     def test_a_data_url_carries_its_own_type(self) -> None:
         assert mimetypes.MimeTypes().guess_type("data:text/csv;base64,YSxi") == ("text/csv", None)
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="urlparse from 3.11")
     def test_a_query_string_is_not_part_of_the_extension(self) -> None:
         db = mimetypes.MimeTypes()
 
         assert db.guess_type("https://example.com/logo.png?v=2") == ("image/png", None)
         assert db.guess_type("https://example.com/logo.png#top") == ("image/png", None)
-
-    @pytest.mark.skipif(sys.version_info >= (3, 11), reason="3.10 keeps the query")
-    def test_before_311_the_query_string_defeats_the_guess(self) -> None:
-        db = mimetypes.MimeTypes()
-
-        assert db.guess_type("https://example.com/logo.png?v=2") == (None, None)
 
 
 class TestReverseLookupCopiesTheList:

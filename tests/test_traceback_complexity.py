@@ -25,7 +25,7 @@ Measurement scope:
   passed, a negative one giving no frames where `limit=-3` gives three.
 * `format_exception()` on a three-link chain prints one `File` line per frame
   of all three tracebacks, and one per link with `limit=1`; `chain=False`
-  prints the outer one only, and on 3.11+ still prints a group's members.
+  prints the outer one only, and still prints a group's members.
   `format_exception_only()` on a 900-frame traceback peaks under 2x its peak
   on a three-frame one; on an exception whose cause has a 900-frame traceback
   it peaks more than 50 bytes higher per extra frame than with a three-frame
@@ -41,7 +41,7 @@ Measurement scope:
   200,000-line source file peaks more than 20x apart, and from a warm cache
   under 2x apart.
 * `capture_locals=True` calls `repr()` once per local and stores the result.
-* On 3.11+, frames that run after 10 and after 20,000 generated statements:
+* Frames that run after 10 and after 20,000 generated statements:
   `extract_tb()` of a raise there costs more than 50x as much for the long
   one, and `extract_stack(limit=1)` from a generator suspended there more
   than 10x.
@@ -50,7 +50,7 @@ Measurement scope:
   is dropped while a `TracebackException` of it is kept. `clear_frames()` on a
   traceback whose first frame is still executing leaves that frame's locals
   readable.
-* On 3.11+, a group of 100 members formatted with `max_group_width=5` has
+* A group of 100 members formatted with `max_group_width=5` has
   100 extracted `exceptions` and prints `and 95 more exceptions`; groups
   nested 12 deep with `max_group_depth=3` are extracted all the way down and
   print the `max_group_depth` marker. `TracebackException.print()` over a
@@ -68,14 +68,14 @@ Measurement scope:
 * The remaining rows are asserted by result: `format_tb()` equal to the
   formatted `extract_tb()`, `format_list()` and `print_list()` on tuples and
   `FrameSummary` objects, `from_list()` keeping `FrameSummary` objects by
-  identity, `format_frame_summary()` returning `None` to drop a frame (3.11+),
-  position fields present on traceback frames and `None` on stack frames
-  (3.11+), `print_last()` raising `ValueError` without a last exception and
+  identity, `format_frame_summary()` returning `None` to drop a frame,
+  position fields present on traceback frames and `None` on stack frames,
+  `print_last()` raising `ValueError` without a last exception and
   printing one set by hand, the `SyntaxError` fields, `exc_type_str` and the
   `exc_type` deprecation (3.13+), and `show_group` (3.13+).
 * Every fenced Python block runs in its own subprocess, and a mutated
-  assertion in one of them is asserted to fail. The exception-group block
-  needs 3.11 and the suggestion block 3.12; each is skipped below that.
+  assertion in one of them is asserted to fail. The suggestion block needs
+  3.12 and is skipped below that.
 
 Not settled here:
 
@@ -87,9 +87,6 @@ Not settled here:
   Below the candidate cap, 3.12 runs a pure-Python edit distance per name and
   3.13+ a C one; the cost per name is bounded by the capped name length and
   is not varied.
-* On 3.10, a traceback frame's line number is stored when the exception is
-  raised and `extract_stack()` reads `f_lineno`; the location-table scan
-  there is read from Objects/codeobject.c, not measured.
 * The O(d) term of a suggestion is Lib/traceback.py following `tb_next` to
   the last frame for a `NameError`, and for an `AttributeError` to check
   whether the object is that frame's `self`; traceback depth is not varied
@@ -107,7 +104,6 @@ Not settled here:
 
 from __future__ import annotations
 
-import builtins
 import gc
 import io
 import linecache
@@ -127,8 +123,7 @@ from typing import Any
 
 import pytest
 
-# Version-dependent names, typed loosely so the 3.10 type check accepts them.
-GROUP: Any = getattr(builtins, "ExceptionGroup", None)
+# Typed loosely so the type check accepts the attributes newer than 3.11.
 TracebackException: Any = traceback.TracebackException
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "traceback.md"
@@ -137,7 +132,6 @@ EXPECTED_BLOCKS = 9
 # Blocks that need a newer interpreter than the oldest supported one, keyed by
 # a line only they contain.
 MINIMUM_VERSION = {
-    "group = ExceptionGroup(": (3, 11),
     "Did you mean: 'timeout'?": (3, 12),
 }
 
@@ -473,9 +467,8 @@ class TestFormatting:
         assert "KeyError" not in text and "ValueError" not in text
         assert text.endswith("RuntimeError: c\n")
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="exception groups arrive in 3.11")
     def test_chain_false_still_formats_group_members(self) -> None:
-        group = GROUP("batch", [ValueError("member")])
+        group = ExceptionGroup("batch", [ValueError("member")])
 
         text = "".join(traceback.format_exception(group, chain=False))
 
@@ -661,7 +654,6 @@ class TestStackSummary:
 
         assert len(outputs[0]) == len(outputs[1]) == 7
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
     def test_format_frame_summary_returning_none_drops_the_frame(self) -> None:
         class OnlyRecurse(traceback.StackSummary):
             def format_frame_summary(self, frame_summary: Any, **kwargs: Any) -> Any:
@@ -682,7 +674,6 @@ class TestStackSummary:
         assert isinstance(frame.lineno, int)
         assert frame.locals is None
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
     def test_positions_come_from_tracebacks_not_stacks(self) -> None:
         from_traceback: Any = traceback.extract_tb(deep_error(3).__traceback__)[-1]
         from_stack: Any = traceback.extract_stack()[-1]
@@ -730,7 +721,6 @@ class TestSourceFiles:
         assert warm_peaks[1] < warm_peaks[0] * 2, f"warm reads peaked at {warm_peaks}"
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="position tables arrive in 3.11")
 class TestPositionTable:
     """A traceback frame's position lookup scans its code object's position
     table up to the instruction that raised, and a stack frame's `f_lineno`
@@ -806,7 +796,6 @@ class TestTracebackException:
         assert isinstance(summary.__context__.__cause__, traceback.TracebackException)
         assert summary.__suppress_context__ is False
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="notes arrive in 3.11")
     def test_it_captures_the_notes(self) -> None:
         error: Any = deep_error(3)
         error.add_note("while loading")
@@ -822,7 +811,6 @@ class TestTracebackException:
         assert "KeyError" not in "".join(summary.format(chain=False))
         assert "KeyError" in "".join(summary.format())
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
     def test_print_holds_one_traceback_at_a_time(self) -> None:
         def link(index: int) -> None:
             if index == 0:
@@ -840,9 +828,8 @@ class TestTracebackException:
 
         assert printed * 3 < listed, f"print peaked at {printed}, list(format()) at {listed}"
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="exception groups arrive in 3.11")
     def test_max_group_width_caps_the_output_not_the_extraction(self) -> None:
-        group = GROUP("batch", [ValueError(i) for i in range(100)])
+        group = ExceptionGroup("batch", [ValueError(i) for i in range(100)])
 
         summary = TracebackException.from_exception(group, max_group_width=5)
         text = "".join(summary.format())
@@ -850,11 +837,10 @@ class TestTracebackException:
         assert summary.exceptions is not None and len(summary.exceptions) == 100
         assert "and 95 more exceptions" in text
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="exception groups arrive in 3.11")
     def test_max_group_depth_caps_the_output_not_the_extraction(self) -> None:
         group: Any = ValueError("leaf")
         for level in range(12):
-            group = GROUP(f"level {level}", [group])
+            group = ExceptionGroup(f"level {level}", [group])
 
         summary = TracebackException.from_exception(group, max_group_depth=3)
         depth = 0
@@ -868,7 +854,7 @@ class TestTracebackException:
 
     @pytest.mark.skipif(sys.version_info < (3, 13), reason="added in 3.13")
     def test_show_group_formats_the_members(self) -> None:
-        group = GROUP("batch", [ValueError("one"), KeyError("two")])
+        group = ExceptionGroup("batch", [ValueError("one"), KeyError("two")])
 
         plain = traceback.format_exception_only(group)
         shown = traceback.format_exception_only(group, show_group=True)  # type: ignore[call-arg]
@@ -979,7 +965,7 @@ def _too_new(source: str) -> tuple[int, int] | None:
 
 class TestDocumentedExamples:
     """Each block runs in its own subprocess and asserts its own result; the
-    exception-group block needs 3.11 and the suggestion block 3.12."""
+    suggestion block needs 3.12."""
 
     def test_the_page_has_the_expected_blocks(self) -> None:
         blocks = _blocks()

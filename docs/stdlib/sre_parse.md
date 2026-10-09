@@ -1,12 +1,12 @@
 # sre_parse Module Complexity
 
 The `sre_parse` module turns a regular-expression string into the intermediate tree that
-[sre_compile](sre_compile.md) translates into matcher code. On Python 3.10 it is the parser
-[re](re.md) itself imports. From Python 3.11 it is a deprecated alias: importing it issues a
-`DeprecationWarning` and copies the names of the private `re._parser` module, which is what `re`
-uses. The module has never been documented, so it carries no stability guarantee - signatures and
-return shapes change between releases (see [Version Notes](#version-notes)). For the cost of
-compiling and matching through the public API, see [re](re.md).
+[sre_compile](sre_compile.md) translates into matcher code. From Python 3.11 it is a deprecated
+alias: importing it issues a `DeprecationWarning` and copies the names of the private `re._parser`
+module, which is what [re](re.md) uses. The module has never been documented, so it carries no
+stability guarantee - signatures and return shapes change between releases (see
+[Version Notes](#version-notes)). For the cost of compiling and matching through the public API,
+see [re](re.md).
 
 `n` is the characters in a pattern, `t` the characters in a replacement template, `r` the
 characters in an expanded replacement, `w` the items in a parse tree (each literal, repeat, group,
@@ -23,8 +23,8 @@ O(1).
 | `import sre_parse` | O(1) | O(1) | Python 3.11+: warns on the first import only; the names are the same objects as `re._parser`'s |
 | `sre_parse.parse(str, flags=0, state=None)` | O(n) | O(n) | O(n²) when a group's alternatives share a long common prefix, or when a long run of non-capturing groups such as `(?:ab)(?:cd)` sits at one level; O(n·d) when non-capturing groups nest d deep, since each level copies what it holds. Returns a `SubPattern`; nothing is cached |
 | `sre_parse.fix_flags(src, flags)` | O(1) | O(1) | Adds `SRE_FLAG_UNICODE` for a `str` pattern without `ASCII`; raises `ValueError` for flags the pattern type cannot take |
-| `sre_parse.parse_template(source, pattern)` | O(t) | O(t) | `pattern` is a compiled `Pattern`. Python 3.12+ returns a list alternating literals and group numbers; 3.10-3.11 name the argument `state` and return a `(groups, literals)` pair |
-| `sre_parse.expand_template(template, match)` | O(t + r) | O(t + r) | Python 3.10-3.11 only; fills a `parse_template()` result from a match |
+| `sre_parse.parse_template(source, pattern)` | O(t) | O(t) | `pattern` is a compiled `Pattern`. Python 3.12+ returns a list alternating literals and group numbers; 3.11 names the argument `state` and returns a `(groups, literals)` pair |
+| `sre_parse.expand_template(template, match)` | O(t + r) | O(t + r) | Python 3.11 only; fills a `parse_template()` result from a match |
 
 ### State
 
@@ -69,30 +69,25 @@ O(1).
 | `sre_parse.ESCAPES`, `sre_parse.CATEGORIES` | O(1) | O(1) | Dicts from an escape such as `\n` or `\d` to its parse-tree item |
 | `sre_parse.FLAGS`, `sre_parse.TYPE_FLAGS`, `sre_parse.GLOBAL_FLAGS` | O(1) | O(1) | Inline flag letters and the flag groups they are checked against |
 | `sre_parse.MAXWIDTH` | O(1) | O(1) | Python 3.11+; the cap on the widths `getwidth()` reports |
-| `sre_parse.Verbose` | O(1) | O(1) | Python 3.10 only; raised internally to restart the parse when `(?x)` turns up |
 | `sre_parse.error`, `sre_parse.PatternError` | O(1) | O(1) | The class `re.error` names; `PatternError` is Python 3.13+ |
 | Opcode and flag constants | O(1) | O(1) | Re-exported from [sre_constants](sre_constants.md) |
 
 ## Importing a Deprecated Alias
 
-On Python 3.11+ the module is a thin copy of `re._parser`, so everything it holds is the object
+The module is a thin copy of `re._parser`, so everything it holds is the object
 `re` uses. The warning fires once per process, on the import that loads the module; later imports
 find it in `sys.modules` and stay silent.
 
 ```python
-import sys
+import re._parser
 import warnings
 
 with warnings.catch_warnings(record=True) as caught:
     warnings.simplefilter('always')
     import sre_parse  # O(1)
 
-if sys.version_info >= (3, 11):
-    import re._parser
-    assert [w.category for w in caught] == [DeprecationWarning]
-    assert sre_parse.parse is re._parser.parse  # the same function, not a copy
-else:
-    assert caught == []  # 3.10: the real parser, which does not warn
+assert [w.category for w in caught] == [DeprecationWarning]
+assert sre_parse.parse is re._parser.parse  # the same function, not a copy
 ```
 
 ## Parsing a Pattern
@@ -184,9 +179,9 @@ else:
 
 ❌ **Avoid**:
 
-- New code that imports the module on Python 3.11+ - it warns, and the tree it returns is an
-  internal format with no compatibility promise
-- Rebinding a name in the module to intercept `re` - from Python 3.11 `re` never looks there
+- New code that imports the module - it warns, and the tree it returns is an internal format with
+  no compatibility promise
+- Rebinding a name in the module to intercept `re` - `re` never looks there
 - A long alternation whose alternatives share a long prefix, or a long run of `(?:...)` groups
   side by side - both parse in O(n²)
 - Wrapping a long pattern in many layers of `(?:...)` - each layer copies it again
@@ -194,7 +189,8 @@ else:
 ## Version Notes
 
 - **Python 3.11+**: A deprecated alias for `re._parser`; importing it issues a `DeprecationWarning`,
-  and `re` no longer imports it
+  and `re` no longer imports it; `MAXWIDTH` and `Tokenizer.checkgroupname()` are added and the
+  internal `Verbose` exception is removed
 - **Python 3.12+**: `parse_template()` returns a flat list of literals and group numbers, and
   `expand_template()` is gone
 - **Python 3.13+**: `PatternError` is the exception's name, and the inline `t` flag is no longer

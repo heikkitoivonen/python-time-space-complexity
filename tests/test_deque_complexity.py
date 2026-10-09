@@ -10,7 +10,7 @@ deque compares only with another deque (`deque_richcompare` returns
 NotImplemented otherwise), that `+` copies the left operand and extends it
 with the right, which must be a deque, that `+=` is `extend()`, and that
 `*` and `*=` reduce their repeat count to what `maxlen` can hold. None of
-that has moved between the v3.10.0 tag and the 3.14 branch.
+that has moved between the v3.11.0 tag and the 3.14 branch.
 
 The O(1) rows for the ends and for `len()` are timed here alongside
 the positional, scanning and allocation checks.

@@ -42,7 +42,7 @@ Not settled here:
 * The O(f) upper bounds for `_asdict()`, `_replace()`, `repr()` and
   positional construction, and the O(n) of `_make()`, are read from
   Lib/collections/__init__.py, whose `namedtuple()` changes no bound across
-  3.10-3.14; the tests show the f-sized result each successful call builds,
+  3.11-3.14; the tests show the f-sized result each successful call builds,
   which is the lower bound.
 * Comparison, hashing and unpacking are the tuple's own operations, and
   `copy.copy()` rebuilds the instance through `__getnewargs__`; their O(f)

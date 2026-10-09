@@ -48,21 +48,12 @@ output at most a fixed multiple of n long; the checksums return an `int` in O(1)
 | `binascii.crc32(data[, value])` | O(n) | O(1) | Unsigned 32-bit result; pass the previous result as `value` to continue a checksum over the next chunk |
 | `binascii.crc_hqx(data, value)` | O(n) | O(1) | 16-bit CRC-CCITT; `value` is required and is the previous result, or 0 to start |
 
-### BinHex functions
-
-| Operation | Time | Space | Notes |
-|-----------|------|-------|-------|
-| `binascii.a2b_hqx(string)` | O(n) | O(n) | Python 3.10 only; returns `(data, done)`, where `done` says the terminating `:` was reached |
-| `binascii.b2a_hqx(data)` | O(n) | O(n) | Python 3.10 only |
-| `binascii.rlecode_hqx(data)` | O(n) | O(n) | Python 3.10 only; replaces runs of four or more equal bytes with three-byte codes of up to 255 bytes each, and escapes each `0x90` marker byte as two bytes |
-| `binascii.rledecode_hqx(data)` | O(n) | O(n) | Python 3.10 only; each three-byte code expands to up to 255 bytes, so the output can be far longer than the input |
-
 ### Exceptions
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `binascii.Error` | O(1) | O(1) | A `ValueError` subclass, raised for malformed or over-long input |
-| `binascii.Incomplete` | O(1) | O(1) | Raised only by the Python 3.10 `a2b_hqx()` and `rledecode_hqx()`, on truncated input |
+| `binascii.Incomplete` | O(1) | O(1) | Raised by no function; the removed `a2b_hqx()` and `rledecode_hqx()` raised it on truncated input |
 
 ## Hex Encoding
 
@@ -94,7 +85,6 @@ else:
 
 ```python
 import binascii
-import sys
 
 encoded = binascii.b2a_base64(b'abc')  # O(n)
 assert encoded == b'YWJj\n'
@@ -104,13 +94,12 @@ assert binascii.b2a_base64(b'x' * 300).count(b'\n') == 1  # one line, however lo
 assert binascii.a2b_base64(encoded) == b'abc'  # O(n)
 assert binascii.a2b_base64(b'YW!J\nj') == b'abc'  # '!' and the newline are skipped
 
-if sys.version_info >= (3, 11):  # strict_mode is Python 3.11+
-    try:
-        binascii.a2b_base64(b'YW!Jj', strict_mode=True)
-    except binascii.Error as error:
-        assert 'Only base64 data' in str(error)
-    else:
-        raise AssertionError('strict mode accepted a non-base64 character')
+try:
+    binascii.a2b_base64(b'YW!Jj', strict_mode=True)
+except binascii.Error as error:
+    assert 'Only base64 data' in str(error)
+else:
+    raise AssertionError('strict mode accepted a non-base64 character')
 ```
 
 ## Quoted-printable Encoding

@@ -9,7 +9,7 @@ compensation from the v3.12.0 tag; the exact-`complex` path exists on 3.14
 only. Every other type, and every fast path once it drops out, goes through
 PyNumber_Add and rebinds the result, so the previous total is freed as the
 next replaces it. A `str`, `bytes` or `bytearray` start is rejected before the
-loop, and the message names ''.join(). The release branches from v3.10.0 to
+loop, and the message names ''.join(). The release branches from v3.11.0 to
 3.14 differ only in which fast paths exist, never in the bound.
 
 Observation settles most rows:
@@ -24,7 +24,7 @@ Observation settles most rows:
   a fresh list rather than extending the old one;
 * `sum(1 for _ in data)` iterates `data` a second time, where `len()` does
   not;
-* on 3.12 and later `sum([0.1] * 10)` is exactly 1.0, and on 3.10 and 3.11 it
+* on 3.12 and later `sum([0.1] * 10)` is exactly 1.0, and on 3.11 it
   is 0.9999999999999999; `[1e16, 1.0] + [1e-16] * 10000 + [-1e16]` sums to
   1.0 from 3.12 and to 0.0 before, where `math.fsum` gives 1.000000000001 on
   every version, which is the page's claim that fsum keeps exact partial sums

@@ -7,8 +7,8 @@ to command through the shell's pipes and temporary files, so the Python process 
 it reads or writes itself.
 
 !!! warning "Removed in Python 3.13"
-    Deprecated in Python 3.11 and removed in Python 3.13 by PEP 594. The page covers Python 3.10
-    to 3.12 on Unix; the examples need one of those versions and a POSIX `/bin/sh`.
+    Deprecated in Python 3.11 and removed in Python 3.13 by PEP 594. The page covers Python 3.11
+    and 3.12 on Unix; the examples need one of those versions and a POSIX `/bin/sh`.
 
 `n` is the steps in a template, `b` is the characters read or written through the object `open()`
 returns, and `k` is the characters of the string given to `quote()`. Commands and file names are

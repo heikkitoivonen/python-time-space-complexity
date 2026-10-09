@@ -44,8 +44,8 @@ that binds one getter per registered converter; the three built-in converters ma
 | `ConfigParser.remove_section(section)` | O(1) | O(1) | Returns whether the section existed |
 | `ConfigParser.popitem()` | O(s) | O(s) | Lists every section to take the first; DEFAULT is never removed |
 | `ConfigParser.clear()` | O(s²) | O(s) | One `popitem()` per section; DEFAULT's options stay |
-| `ConfigParser.readfp(fp, filename=None)` | O(c + t) | O(c) | Python 3.10 and 3.11 only; use `read_file()` |
-| `configparser.SafeConfigParser(...)` | O(d) | O(d) | Python 3.10 and 3.11 only; a deprecated alias of `ConfigParser` |
+| `ConfigParser.readfp(fp, filename=None)` | O(c + t) | O(c) | Python 3.11 only; use `read_file()` |
+| `configparser.SafeConfigParser(...)` | O(d) | O(d) | Python 3.11 only; a deprecated alias of `ConfigParser` |
 
 ### Mapping Access and SectionProxy
 
@@ -76,7 +76,7 @@ that binds one getter per registered converter; the three built-in converters ma
 | `configparser.ExtendedInterpolation()` | O(1) | O(1) | `${name}` or `${section:name}`, `$$` for a dollar sign |
 | Expanding a `BasicInterpolation` value | O(v·(r + 1) + w) | O(v + w + r) | Each reference or escape copies the rest of the value, so many in one value are quadratic |
 | Expanding an `ExtendedInterpolation` value | O(v·(r + 1) + w) + O(o + d) per nested reference | O(v + w + r + o + d) | A referenced value that itself contains `$` first copies its section's options, with DEFAULT's |
-| `configparser.LegacyInterpolation()` | O(1) | O(1) | Python 3.10 to 3.12 only; deprecated |
+| `configparser.LegacyInterpolation()` | O(1) | O(1) | Python 3.11 and 3.12 only; deprecated |
 
 ### Converters and Customization
 

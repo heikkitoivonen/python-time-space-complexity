@@ -11,11 +11,9 @@ Measurement scope:
 
 * The deprecation is observed in a fresh interpreter importing the module
   twice under `warnings.simplefilter('always')`: one `DeprecationWarning` from
-  the first import and none from the second on 3.11+, none from either on
-  3.10. Every non-dunder name of `re._parser` is asserted to be the same
-  object in the alias on 3.11+; on 3.10 the module is `re.sre_parse`.
-  Rebinding `sre_parse.parse` is asserted not to reach `re.compile()` on 3.11+
-  and to reach it on 3.10.
+  the first import and none from the second. Every non-dunder name of
+  `re._parser` is asserted to be the same object in the alias. Rebinding
+  `sre_parse.parse` is asserted not to reach `re.compile()`.
 * `parse()` over `x[ab]c*` repeated 100, 1,000 and 10,000 times, fastest of
   seven with the collector paused: each 10x step costs between 4x and 40x,
   admitting linear growth and excluding quadratic (100x). The two O(n²) shapes are settled by counting pointer
@@ -28,7 +26,7 @@ Measurement scope:
   exactly d·L items through slice assignment; capturing groups copy none.
 * `getwidth()` returns the same tuple object on a second call, stores a
   width on each nested `SubPattern`, ignores an item appended after the
-  first, and (3.11+) reports `MAXWIDTH` as the upper width of `a*`;
+  first, and reports `MAXWIDTH` as the upper width of `a*`;
   `SubPattern(state, data)` holds `data` itself; a slice is a new
   `SubPattern` whose list is a copy. `dump()` prints exactly what `re.DEBUG`
   prints before its code listing, and indents each of its six lines for five
@@ -38,20 +36,20 @@ Measurement scope:
   tokenizer's `decoded_string` is the Latin-1 decoding. `getwhile()` stops at
   its count and at the first character outside the set; `getuntil()` returns
   what precedes the terminator; `error()` returns an `re.error` without
-  raising, carrying the line and column of the position; `checkgroupname()` (3.11+) rejects a non-identifier.
+  raising, carrying the line and column of the position; `checkgroupname()` rejects a non-identifier.
 * `parse_template()` is asserted to take exactly t + 2 tokenizer steps on a
   plain template of 10,000 characters, and to return a flat list on 3.12+ and
-  a `(groups, literals)` pair, expandable by `expand_template()`, on 3.10 and
-  3.11. `fix_flags()` is asserted to add `SRE_FLAG_UNICODE` to a `str`
+  a `(groups, literals)` pair, expandable by `expand_template()`, on 3.11.
+  `fix_flags()` is asserted to add `SRE_FLAG_UNICODE` to a `str`
   pattern and to raise `ValueError` for `LOCALE` with `str` and `UNICODE`
   with `bytes`. `State` bookkeeping is observed through `groups`,
   `opengroup()`, `closegroup()` and `checkgroup()`; `opengroup()` raises
   for a repeated name and, with the module's `MAXGROUPS` patched to 3, for
   the third group opened.
-* The constants' types, the version-bounded names (`Verbose` on 3.10 only,
-  `MAXWIDTH` and `Tokenizer.checkgroupname` on 3.11+, `PatternError` on
-  3.13+, `expand_template` on 3.10 and 3.11) and the re-exported opcodes are
-  asserted by presence and identity.
+* The constants' types, the version-bounded names (`PatternError` on 3.13+,
+  `expand_template` on 3.11 only), the presence of `MAXWIDTH` and
+  `Tokenizer.checkgroupname`, the absence of `Verbose`, and the re-exported
+  opcodes are asserted by presence and identity.
 * Every fenced Python block runs in its own subprocess, and a mutated
   assertion in one of them is asserted to fail.
 
@@ -61,18 +59,17 @@ Not settled here:
   literals, classes, repeats, capturing groups and prefix-free alternations
   are measured; lookarounds, conditionals and backreferences are not varied.
 * `parse_template()`'s O(t) rests on the counted tokenizer steps plus a
-  reading of Lib/re/_parser.py (Lib/sre_parse.py on 3.10): each step appends
+  reading of Lib/re/_parser.py: each step appends
   to a list and the pieces are joined once. `expand_template()`'s O(t + r)
   is read from the same file; it copies the literal list and joins the
   result.
 * `closegroup()`'s O(w), `insert()`'s and `del`'s O(w), `dump()`'s O(w·d),
   and the O(d) recursion of `getwidth()` and `dump()` are read from the
   source, not measured; `dump()` output is compared, not timed.
-  `error()`'s O(n), with a short `msg`, is read from `error.__init__` in Lib/re/_constants.py
-  (Lib/sre_constants.py on 3.10), which counts the newlines before the
-  position; it is not timed.
+  `error()`'s O(n), with a short `msg`, is read from `error.__init__` in Lib/re/_constants.py,
+  which counts the newlines before the position; it is not timed.
 * The module is undocumented; which names it exposes is taken from the
-  released sources of 3.10 to 3.14, not from a documented contract.
+  released sources of 3.11 to 3.14, not from a documented contract.
 """
 
 from __future__ import annotations
@@ -133,8 +130,8 @@ def peak_bytes(func: Callable[[], Any]) -> int:
 
 
 def parser_module() -> Any:
-    """The module `re` parses with: `re._parser` on 3.11+, this one on 3.10."""
-    return getattr(re, "_parser", None) or sre_parse
+    """The module `re` parses with."""
+    return importlib.import_module("re._parser")
 
 
 def run_python(source: str) -> subprocess.CompletedProcess[str]:
@@ -165,12 +162,8 @@ class TestTheModuleIsADeprecatedAlias:
             "print(counts)\n"
         )
         assert result.returncode == 0, result.stderr
-        if sys.version_info >= (3, 11):
-            assert result.stdout.strip() == "[['DeprecationWarning'], []]"
-        else:
-            assert result.stdout.strip() == "[[], []]"
+        assert result.stdout.strip() == "[['DeprecationWarning'], []]"
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="re._parser is 3.11+")
     def test_every_name_is_the_parser_s_own_object(self) -> None:
         parser = importlib.import_module("re._parser")
         names = [name for name in vars(parser) if not name.startswith("__")]
@@ -179,14 +172,7 @@ class TestTheModuleIsADeprecatedAlias:
         for name in names:
             assert getattr(sre_parse, name) is getattr(parser, name), name
 
-    @pytest.mark.skipif(sys.version_info >= (3, 11), reason="3.10 is the implementation")
-    def test_on_3_10_it_is_the_module_re_imports(self) -> None:
-        internals: Any = re
-        assert internals.sre_parse is sre_parse
-
-    def test_rebinding_parse_here_reaches_re_only_on_3_10(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_rebinding_parse_here_does_not_reach_re(self, monkeypatch: pytest.MonkeyPatch) -> None:
         seen: list[Any] = []
         original = sre_parse.parse
 
@@ -199,7 +185,7 @@ class TestTheModuleIsADeprecatedAlias:
         re.compile("rebinding-probe")
         re.purge()
 
-        assert seen == ([] if sys.version_info >= (3, 11) else ["rebinding-probe"])
+        assert seen == []
 
 
 class TestParsingIsLinearInTheOrdinaryCase:
@@ -349,7 +335,6 @@ class TestSubPattern:
         tree.getwidth()
         assert body.width[0] == 1 and inner.width == (2, 2)
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="MAXWIDTH is 3.11+")
     def test_maxwidth_caps_the_reported_width(self) -> None:
         assert sre_parse.parse("a*").getwidth() == (0, sre_parse.MAXWIDTH)
 
@@ -487,7 +472,6 @@ class TestTokenizer:
         assert isinstance(error, re.error)
         assert error.pattern == "abc"
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="Python 3.11+")
     def test_checkgroupname_rejects_a_non_identifier(self) -> None:
         tokens = sre_parse.Tokenizer("x")
         extra = (0,) if sys.version_info < (3, 12) else ()
@@ -498,7 +482,7 @@ class TestTokenizer:
 
 
 class TestTemplatesAndFlags:
-    """`parse_template()` | O(t); `expand_template()` on 3.10 and 3.11;
+    """`parse_template()` | O(t); `expand_template()` on 3.11;
     `fix_flags()` | O(1)."""
 
     def test_parse_template_takes_one_tokenizer_step_per_character(
@@ -526,7 +510,7 @@ class TestTemplatesAndFlags:
         assert template == ["", 2, "-", 1, ""]
         assert not hasattr(sre_parse, "expand_template")
 
-    @pytest.mark.skipif(sys.version_info >= (3, 12), reason="the pair form is 3.10-3.11")
+    @pytest.mark.skipif(sys.version_info >= (3, 12), reason="the pair form is 3.11 only")
     def test_the_result_is_a_pair_before_3_12(self) -> None:
         pattern = re.compile(r"(\w+) (\w+)")
         template = sre_parse.parse_template(r"\2-\1", pattern)
@@ -567,9 +551,9 @@ class TestConstantsAndExceptions:
         assert isinstance(sre_parse.GLOBAL_FLAGS, int)
 
     def test_the_version_bounded_names(self) -> None:
-        assert hasattr(sre_parse, "Verbose") == (sys.version_info < (3, 11))
-        assert hasattr(sre_parse, "MAXWIDTH") == (sys.version_info >= (3, 11))
-        assert hasattr(sre_parse.Tokenizer, "checkgroupname") == (sys.version_info >= (3, 11))
+        assert not hasattr(sre_parse, "Verbose")
+        assert hasattr(sre_parse, "MAXWIDTH")
+        assert hasattr(sre_parse.Tokenizer, "checkgroupname")
         assert hasattr(sre_parse, "expand_template") == (sys.version_info < (3, 12))
         assert hasattr(sre_parse, "PatternError") == (sys.version_info >= (3, 13))
         assert ("t" in sre_parse.FLAGS) == (sys.version_info < (3, 13))

@@ -7,7 +7,7 @@ is read only when you ask for it, and nothing is buffered between calls.
 
 !!! warning "Removed in Python 3.13"
     Deprecated in Python 3.11 and removed in Python 3.13 by PEP 594. The examples need
-    Python 3.10, 3.11 or 3.12.
+    Python 3.11 or 3.12.
 
 `c` is the bytes in a chunk's body, `r` is the bytes of the body not yet read, `k` is the bytes
 one `read()` returns, and `n` is the chunks in a file. A `seek()` or `tell()` on the underlying

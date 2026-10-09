@@ -513,12 +513,10 @@ class TestWriting:
         handle.close()
         assert archive.namelist() == ["member"]
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="ZipFile.mkdir is 3.11+")
     def test_mkdir_adds_an_empty_directory_entry(self) -> None:
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w") as archive:
-            maker: Any = archive
-            maker.mkdir("folder")
+            archive.mkdir("folder")
 
         info = zipfile.ZipFile(buffer).getinfo("folder/")
         assert info.is_dir() and info.file_size == 0
@@ -811,7 +809,6 @@ class TestPathIndexesOnce:
         parent: Any = (root / "d2" / "f12.txt").parent
         assert parent.at == "d2/"
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="stem and suffixes are 3.11+")
     def test_name_parts(self) -> None:
         member: Any = zipfile.Path(zipfile.ZipFile(io.BytesIO(archive_bytes(20))), "d2/f12.txt")
 

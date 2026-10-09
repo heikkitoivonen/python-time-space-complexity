@@ -14,14 +14,14 @@ Measurement scope:
 * The j·t term: `findlabels()` on a function of 500 `if x == i: return i`
   branches against one of 8,000 (16x the code, each branch one target) must
   grow more than 40x, where a linear walk predicts 16x and a quadratic one
-  256x; 78x to 136x was measured on 3.10 to 3.14. The control is 1,250
+  256x; 69x to 130x was measured on 3.11.17 and 3.14.8. The control is 1,250
   against 20,000 lines of `x = x + 1`, with no targets, which must grow less
   than 40x and measured 16x to 17x on 3.14.
 * The per-instruction target lookup: 10, 100 and 1,000 branches followed by
   100 straight lines. `findlabels()` returns the real targets as int
-  subclasses with counting equality and unchanged hashes. Every instruction
-  beyond the last target compares against every target on 3.10, and against
-  none on 3.11+, where their hashes differ. The jump-target flags must match
+  subclasses with counting equality and unchanged hashes. No instruction
+  beyond the last target compares against any target, since their hashes
+  differ. The jump-target flags must match
   an uninstrumented pass. Target collection and formatting are not timed.
 * Laziness: draining `get_instructions()` over a one-line function of about
   40,000 code units without keeping the instructions peaks under 50 KB, and
@@ -55,7 +55,7 @@ Measurement scope:
 Not settled here:
 
 * Whether jump targets are collected at the `get_instructions()` call (3.13+)
-  or at the first `next()` (3.10-3.12). The page claims only that they are
+  or at the first `next()` (3.11 and 3.12). The page claims only that they are
   collected before the first instruction, which is what is asserted.
 
 * Treating the formatting of one constant or name as O(1) is a cost-model
@@ -246,12 +246,12 @@ class TestJumpTargetsAreQuadratic:
 
 
 class TestTargetLookupPerInstruction:
-    """Version Notes: from 3.11 each instruction's offset is looked up in a hash table
-    of targets; on 3.10 it scans the list, O(n·t). Counting comparisons for
-    offsets beyond every target separates the two without a stopwatch."""
+    """Version Notes: each instruction's offset is looked up in a hash table of
+    targets rather than compared against each. Counting comparisons for offsets
+    beyond every target shows it without a stopwatch."""
 
     @pytest.mark.parametrize("count", [10, 100, 1000])
-    def test_only_3_10_compares_tail_offsets_against_every_target(
+    def test_tail_offsets_compare_against_no_target(
         self, monkeypatch: pytest.MonkeyPatch, count: int
     ) -> None:
         code = branches(count, tail=100)
@@ -284,10 +284,7 @@ class TestTargetLookupPerInstruction:
         assert [instruction.is_jump_target for instruction in actual] == [
             instruction.is_jump_target for instruction in expected
         ]
-        if sys.version_info < (3, 11):
-            assert comparisons == tail_count * count
-        else:
-            assert comparisons == 0
+        assert comparisons == 0
 
 
 class TestIterationIsLazy:
@@ -454,9 +451,8 @@ class TestInstructionFields:
         for field in ("arg", "argval", "argrepr", "starts_line", "is_jump_target"):
             assert hasattr(first, field)
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="Positions is Python 3.11+")
     def test_positions_arrive_in_3_11(self) -> None:
-        positions_type: Any = vars(dis)["Positions"]
+        positions_type: Any = dis.Positions
         instructions: list[Any] = list(dis.get_instructions(OUTER))
         positioned = [i for i in instructions if i.positions.lineno is not None]
         assert positioned

@@ -57,7 +57,7 @@ Measurement scope:
   structure; from 3.13 it is asserted to warn `DeprecationWarning`.
 * `byref()` is asserted to return something that is not a `_Pointer`, and
   the byte-order classes by the bytes they produce. `CField` attributes
-  (3.14+), `_align_` (3.13+), the endian unions (3.11+), `c_time_t` (3.12+)
+  (3.14+), `_align_` (3.13+), `c_time_t` (3.12+)
   and the complex types (3.14+) are guarded on `sys.version_info` or
   `hasattr`.
 * `find_library()` is observed, on Linux, to start at least one subprocess
@@ -711,12 +711,11 @@ class TestByteOrder:
 
         assert bytes(Header(0x0102)) == b"\x02\x01"
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
     def test_endian_unions(self) -> None:
-        class Big(ctypes.BigEndianUnion):  # type: ignore[name-defined, misc]
+        class Big(ctypes.BigEndianUnion):
             _fields_ = [("value", ctypes.c_uint16)]
 
-        class Little(ctypes.LittleEndianUnion):  # type: ignore[name-defined, misc]
+        class Little(ctypes.LittleEndianUnion):
             _fields_ = [("value", ctypes.c_uint16)]
 
         assert bytes(Big(0x0102)) == b"\x01\x02"

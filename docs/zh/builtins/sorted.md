@@ -1,5 +1,5 @@
 ---
-source_sha: ec504b5b92c746504f94fdd152feeacc24d552795359d63db896da03d453d2ff
+source_sha: 05b11fd8990c3ab03bcbd6e22ff231408e64e183e7aae4c19e514643e201fd9a
 translated: machine
 ---
 
@@ -23,7 +23,7 @@ n 为元素个数；一次比较按 O(1) 计，键本身的大小不计入空间
 ### 简单排序
 
 ```python
-# O(n log n) - Timsort (≤3.10) or Powersort (3.11+)
+# O(n log n) - Powersort
 numbers = [3, 1, 4, 1, 5, 9, 2, 6]
 result = sorted(numbers)
 # [1, 1, 2, 3, 4, 5, 6, 9]
@@ -114,7 +114,7 @@ result = sorted(coords, key=lambda c: c[1])
 ### 工作原理
 
 ```
-Python sorts with Timsort (through 3.10) or Powersort (3.11+): a merge sort
+Python sorts with Powersort (Timsort with a new merge policy from 3.11): a merge sort
 that starts from the runs already present in the input.
 1. Scan for natural runs - ascending, or descending, which are reversed in place
 2. Extend short runs to 32-64 elements with binary insertion sort

@@ -221,7 +221,7 @@ destination.
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `logging.handlers.SysLogHandler(address=('localhost', SYSLOG_UDP_PORT), facility=LOG_USER, socktype=None, timeout=None)` | one `createSocket()` | O(1) | A `str` address is a Unix socket, connected now, silently if it fails; Windows has no Unix sockets and raises `AttributeError` for one. A host tuple costs a `getaddrinfo()` and, for a stream socket, a connect. `timeout` is Python 3.14+ |
-| `SysLogHandler.createSocket()` | as above | O(1) | Python 3.11+; called again from `emit()` whenever there is no socket. On 3.10 the constructor does the same work inline and `emit()` reconnects only a Unix socket |
+| `SysLogHandler.createSocket()` | as above | O(1) | Python 3.11+; called again from `emit()` whenever there is no socket |
 | `SysLogHandler.encodePriority(facility, priority)`, `SysLogHandler.mapPriority(levelName)` | O(1) | O(1) | Dict lookups; an unknown level name maps to `'warning'` |
 | `SysLogHandler.emit(record)` | O(k) plus one send | O(k) | Formats, prefixes `ident` and the priority, encodes as UTF-8 and appends a NUL when `append_nul`; one send per record, and a failed Unix-socket send reconnects and retries once |
 | `SysLogHandler.close()` | O(1) | O(1) | Closes the socket |
@@ -499,7 +499,6 @@ assert not scoped.filter(logging.makeLogRecord({'name': 'ancestor.examples'}))
 
 ```python
 import logging
-import sys
 
 assert logging.DEBUG < logging.INFO < logging.WARNING < logging.ERROR < logging.CRITICAL
 assert logging.WARN == logging.WARNING and logging.FATAL == logging.CRITICAL
@@ -512,9 +511,8 @@ assert logging.getLevelName('NOTICE') == 25
 # An unknown level answers with a string rather than raising
 assert logging.getLevelName(99) == 'Level 99'
 
-if sys.version_info >= (3, 11):
-    mapping = logging.getLevelNamesMapping()   # O(v) - a fresh dict
-    assert mapping['INFO'] == logging.INFO
+mapping = logging.getLevelNamesMapping()   # O(v) - a fresh dict
+assert mapping['INFO'] == logging.INFO
 ```
 
 ## Adapters

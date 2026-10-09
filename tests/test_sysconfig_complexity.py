@@ -35,14 +35,14 @@ Measurement scope:
   sorted tuple containing `posix_prefix` and `nt`; `get_python_version()` is
   `MAJOR.MINOR` from `sys.version_info`; `get_default_scheme()` and
   `get_preferred_scheme('prefix')` are `'venv'` when `sys.prefix` differs from
-  `sys.base_prefix` on 3.11+ and never on 3.10; `_get_preferred_schemes()`
+  `sys.base_prefix`; `_get_preferred_schemes()`
   has the keys `prefix`, `home` and `user`. `is_python_build()` is asserted
   to call `os.path.isfile()` at most twice. `get_platform()` is asserted to
   start with `linux-` on Linux.
 * With `sys.prefix` moved, `get_config_vars()` returns a new dictionary whose
   `base` is the moved one on 3.12.8+ and 3.13.1+, and the same dictionary
   before those releases.
-* `get_config_var('SO')` is `None` on 3.11+ and equals `EXT_SUFFIX` on 3.10.
+* `get_config_var('SO')` is `None`.
 * Every fenced Python block runs in its own subprocess, so no block sees
   another's first-call load, and a mutated assertion in one of them is
   asserted to fail.
@@ -82,7 +82,6 @@ import sysconfig
 import textwrap
 import time
 import tracemalloc
-import warnings
 from collections.abc import Callable, Iterator
 from typing import Any
 
@@ -386,13 +385,13 @@ class TestSchemesAndConstants:
         assert sysconfig.get_default_scheme() in names
 
     @pytest.mark.parametrize("in_venv", [True, False])
-    def test_the_default_scheme_is_venv_only_inside_one_on_311(
+    def test_the_default_scheme_is_venv_only_inside_one(
         self, in_venv: bool, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         prefix = sys.base_prefix + ("-venv" if in_venv else "")
         monkeypatch.setattr(sys, "prefix", prefix)
 
-        expected_venv = in_venv and sys.version_info >= (3, 11)
+        expected_venv = in_venv
 
         assert (sysconfig.get_default_scheme() == "venv") is expected_venv
         assert (sysconfig.get_preferred_scheme("prefix") == "venv") is expected_venv
@@ -427,18 +426,9 @@ class TestSchemesAndConstants:
 class TestTheSoVariable:
     """Version Notes: `get_config_var('SO')` is `None` on 3.11+."""
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="SO exists on 3.10")
     def test_so_is_gone(self) -> None:
         assert sysconfig.get_config_var("SO") is None
         assert sysconfig.get_config_var("EXT_SUFFIX")
-
-    @pytest.mark.skipif(sys.version_info >= (3, 11), reason="SO is gone from 3.11")
-    def test_so_is_ext_suffix_on_310(self) -> None:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            so = sysconfig.get_config_var("SO")
-
-        assert so == sysconfig.get_config_var("EXT_SUFFIX")
 
 
 def _blocks() -> list[tuple[int, str]]:

@@ -1,5 +1,5 @@
 ---
-source_sha: 8e07af8827b8e86ae179772d25d167205aad2599d6674a810c0b88cb20293804
+source_sha: f3db4b76a11dd29a44444ad2b7e74a777af6e2a2bcef12e2b00708cccc27f881
 translated: machine
 ---
 
@@ -67,7 +67,7 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 | [`sum()`](sum.md) | O(n) | O(1) | 文字列の連結に誤用すると O(n²) |
 | [`min()`](min.md) | O(n) | O(1) | すべての要素を比較する必要がある |
 | [`max()`](max.md) | O(n) | O(1) | すべての要素を比較する必要がある |
-| [`sorted()`](sorted.md) | O(n log n) | O(n) | Timsort（≤3.10）、Powersort（3.11+） |
+| [`sorted()`](sorted.md) | O(n log n) | O(n) | Powersort |
 | [`all()`](all.md) | O(n) | O(1) | 最初の偽の要素で短絡する |
 | [`any()`](any.md) | O(n) | O(1) | 最初の真の要素で短絡する |
 

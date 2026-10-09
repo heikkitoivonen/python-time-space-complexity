@@ -32,7 +32,7 @@ are all type variables, include it.
 | `typing.assert_type(val, typ)`, `typing.reveal_type(val)` | O(1) | O(1) | Python 3.11+; both return the value, `reveal_type` also writes its type's name to stderr |
 | `typing.assert_never(arg)` | O(r) | O(r) | Python 3.11+; always raises. r = length of `repr(arg)`, built in full before the message is cut short |
 | `typing.evaluate_forward_ref(forward_ref, *, owner=None, globals=None, locals=None, type_params=None, format=None)` | O(e + t) | O(e + t) | Python 3.14+; e = the cost of evaluating the expression, t = the size of the type it resolves to, which is walked to resolve nested forward references |
-| `typing.no_type_check(arg)` | O(a log a) | O(a) | Visits every name `dir()` lists for a class, inherited ones included, and recurses into nested classes; on 3.10 only the class's own attributes |
+| `typing.no_type_check(arg)` | O(a log a) | O(a) | Visits every name `dir()` lists for a class, inherited ones included, and recurses into nested classes |
 | `typing.no_type_check_decorator(decorator)` | O(1) | O(1) | Wraps `decorator`; deprecated since 3.13 |
 
 ### Building parameterized types
@@ -83,7 +83,7 @@ keeps only recent subscriptions, which is why identity is not guaranteed.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `typing.overload(func)` | O(1) | O(1) | Returns a stub that raises if called; from 3.11 also registers the variant for `get_overloads` |
+| `typing.overload(func)` | O(1) | O(1) | Returns a stub that raises if called, and registers the variant for `get_overloads` |
 | `typing.final(f)`, `typing.override(m)` | O(1) | O(1) | Sets one attribute; `override` is 3.12+ |
 | `typing.runtime_checkable(cls)` | O(1) before 3.12.2; O(m) from 3.12.2 | O(1) before 3.12.2; O(m) from 3.12.2 | From 3.12.2 it records which members are not methods |
 | `typing.dataclass_transform(...)` | O(1) | O(1) | Python 3.11+; records its arguments for the type checker |
@@ -154,7 +154,7 @@ assert set(get_args(Union[int, str])) == {int, str}      # O(1) to read back
 
 ## Runtime Protocol Checks
 
-`runtime_checkable` lets `isinstance()` work against a `Protocol`. On 3.10 and 3.11 every check
+`runtime_checkable` lets `isinstance()` work against a `Protocol`. On 3.11 every check
 walks the protocol's m members. From 3.12, a class that has already passed is answered from a
 cache in O(1); a check that fails, or a protocol with data members, still reads up to m
 attributes of the instance each time.
@@ -203,7 +203,7 @@ assert isinstance(Box(), Sized2D)  # O(m) on every version
 
 ## Annotations and Definition Time
 
-An annotation is an expression. On 3.10 through 3.13 it is evaluated when the `def` or `class`
+An annotation is an expression. On 3.11 through 3.13 it is evaluated when the `def` or `class`
 statement runs, so every hint is paid for at import. From 3.14 annotations are evaluated lazily,
 on the first read of `__annotations__`, and the result is kept.
 
@@ -334,7 +334,7 @@ assert fields_of(Row) is fields_of(Row)  # O(1) after the first call
 
 ❌ **Avoid**:
 
-- Repeated protocol checks in a hot loop when they must read members: on 3.10–3.11 always, and on
+- Repeated protocol checks in a hot loop when they must read members: on 3.11 always, and on
   newer versions for failing checks and data-member protocols
 - Treating a runtime protocol check as a signature check; it only looks for the names
 - `get_type_hints()` on a request path: it re-evaluates string hints and copies every namespace on

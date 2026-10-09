@@ -78,10 +78,10 @@ Not settled here:
   there, and CI's Windows runners install `tzdata`, so the zone-loading tests
   run on it. The test that walks the system database skips on Windows, which
   has none under `TZPATH`.
-* Implementation diffs between v3.10.19 and v3.14.2 touch the packaged-database
-  access (`open_binary()`/`open_text()` on 3.10, `files()` from 3.11) and
-  argument validation, not the search or the cache; the tests replace all
-  three access functions so they run on every supported version.
+* Implementation diffs between v3.11.14 and v3.14.2 touch the packaged-database
+  access and argument validation, not the search or the cache; every version
+  reaches the packaged database through `importlib.resources.files()`, which
+  the tests replace.
 """
 
 from __future__ import annotations
@@ -104,7 +104,7 @@ import tracemalloc
 import weakref
 import zoneinfo
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from datetime import time as dt_time
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -130,8 +130,8 @@ TEN_KEYS = (
     "Asia/Kolkata", "Asia/Shanghai", "Australia/Sydney", "America/Chicago", "America/Denver",
 )  # fmt: skip
 
-PACKAGE_READERS = ("files", "open_text", "open_binary")
-"""How zoneinfo reaches the packaged database: files() from 3.11, the other two on 3.10."""
+PACKAGE_READERS = ("files",)
+"""How zoneinfo reaches the packaged database."""
 
 
 def hide_packaged_database(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -248,7 +248,7 @@ class TestTheCTypeIsWhatUsersGet:
                     dt = datetime(year, month, 1, 12)
                     assert c_zone.utcoffset(dt) == py_zone.utcoffset(dt), (key, dt)
                     assert c_zone.tzname(dt) == py_zone.tzname(dt), (key, dt)
-                    in_utc = dt.replace(tzinfo=timezone.utc)
+                    in_utc = dt.replace(tzinfo=UTC)
                     c_local = in_utc.astimezone(c_zone).replace(tzinfo=None)
                     py_local = in_utc.astimezone(py_zone).replace(tzinfo=None)
                     assert c_local == py_local, (key, dt)
@@ -268,7 +268,7 @@ class TestLoadingParsesEachTransitionOnce:
         assert transitions(MANY) > 100
         tokyo = _zoneinfo.ZoneInfo.no_cache(FEW)
         new_york = _zoneinfo.ZoneInfo.no_cache(MANY)
-        inside = INSIDE.replace(tzinfo=timezone.utc).timestamp()
+        inside = INSIDE.replace(tzinfo=UTC).timestamp()
         assert tokyo._trans_utc[-1] < inside
         assert new_york._trans_utc[0] < inside < new_york._trans_utc[-1]
 
@@ -471,7 +471,7 @@ class TestLookupsBisectTheTransitions:
     def test_fromutc_is_logarithmic_too(self) -> None:
         zone = counting_zone(MANY)
         t = transitions(MANY)
-        in_utc = INSIDE.replace(tzinfo=timezone.utc)
+        in_utc = INSIDE.replace(tzinfo=UTC)
 
         count = comparisons(lambda: in_utc.astimezone(zone))
 
@@ -481,11 +481,11 @@ class TestLookupsBisectTheTransitions:
         t = 100_000
         zone = counting(_zoneinfo.ZoneInfo.from_file(io.BytesIO(synthetic_tzif(t))))
         inside = datetime(1910, 1, 1, 12)
-        assert zone._trans_utc[0] < inside.replace(tzinfo=timezone.utc).timestamp()
-        assert inside.replace(tzinfo=timezone.utc).timestamp() < zone._trans_utc[-1]
+        assert zone._trans_utc[0] < inside.replace(tzinfo=UTC).timestamp()
+        assert inside.replace(tzinfo=UTC).timestamp() < zone._trans_utc[-1]
 
         local = comparisons(lambda: zone.utcoffset(inside.replace(tzinfo=zone)))
-        from_utc = comparisons(lambda: inside.replace(tzinfo=timezone.utc).astimezone(zone))
+        from_utc = comparisons(lambda: inside.replace(tzinfo=UTC).astimezone(zone))
 
         assert 3 <= local <= 2 * t.bit_length() + 3, f"{local} comparisons for t={t}"
         assert 3 <= from_utc <= 2 * t.bit_length() + 3, f"{from_utc} comparisons for t={t}"
@@ -493,7 +493,7 @@ class TestLookupsBisectTheTransitions:
     def test_a_zone_to_zone_conversion_pays_for_both_lookups(self) -> None:
         source, destination = counting_zone(MANY), counting_zone("Europe/London")
         local = INSIDE.replace(tzinfo=source)
-        in_utc = INSIDE.replace(tzinfo=timezone.utc)
+        in_utc = INSIDE.replace(tzinfo=UTC)
 
         source_only = comparisons(lambda: source.utcoffset(local))
         destination_only = comparisons(lambda: in_utc.astimezone(destination))
@@ -510,7 +510,7 @@ class TestLookupsBisectTheTransitions:
         zone = counting_zone(MANY)
         early = datetime(1800, 7, 1, 12, tzinfo=zone)
         assert comparisons(lambda: zone.utcoffset(early)) <= 2
-        assert comparisons(lambda: datetime(1800, 7, 1, tzinfo=timezone.utc).astimezone(zone)) <= 2
+        assert comparisons(lambda: datetime(1800, 7, 1, tzinfo=UTC).astimezone(zone)) <= 2
 
     def test_past_the_table_the_footer_rule_costs_a_constant(self) -> None:
         zone = counting_zone(MANY)
@@ -518,7 +518,7 @@ class TestLookupsBisectTheTransitions:
         far = datetime(2100, 7, 1, 12, tzinfo=zone)
         assert comparisons(lambda: zone.utcoffset(far)) == 2
         assert comparisons(lambda: zone.tzname(far)) == 2
-        assert comparisons(lambda: datetime(2100, 7, 1, tzinfo=timezone.utc).astimezone(zone)) == 2
+        assert comparisons(lambda: datetime(2100, 7, 1, tzinfo=UTC).astimezone(zone)) == 2
 
     def test_constructing_a_datetime_looks_nothing_up(self) -> None:
         zone = counting_zone(MANY)
@@ -534,7 +534,7 @@ class TestLookupsBisectTheTransitions:
     def test_a_zone_without_transitions_has_no_table(self) -> None:
         zone = counting_zone(FIXED)
         assert comparisons(lambda: zone.utcoffset(datetime(2024, 1, 1, tzinfo=zone))) == 0
-        assert comparisons(lambda: datetime(2024, 1, 1, tzinfo=timezone.utc).astimezone(zone)) == 0
+        assert comparisons(lambda: datetime(2024, 1, 1, tzinfo=UTC).astimezone(zone)) == 0
         assert ZoneInfo(FIXED).utcoffset(datetime(2024, 1, 1)) == timedelta(0)
         assert dt_time(12, tzinfo=ZoneInfo(FIXED)).utcoffset() == timedelta(0)
         assert dt_time(12, tzinfo=ZoneInfo(MANY)).utcoffset() is None
@@ -627,12 +627,6 @@ class TestAvailableTimezonesOpensFiles:
                 return io.StringIO("Packaged/Zone\n\n")
 
         monkeypatch.setattr(importlib.resources, "files", lambda package: FakePackage())
-        monkeypatch.setattr(
-            importlib.resources,
-            "open_text",
-            lambda *args, **kwargs: FakePackage().open(),
-            raising=False,
-        )
         (tmp_path / "Packaged").mkdir()
         (tmp_path / "Packaged" / "Zone").write_bytes(b"would be opened if unknown")
         zoneinfo.reset_tzpath([str(tmp_path)])

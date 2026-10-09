@@ -7,7 +7,7 @@ format. The built-in checks read nothing more of the image, and the file name pl
 
 !!! warning "Removed in Python 3.13"
     Deprecated in Python 3.11 and removed in Python 3.13 by PEP 594. The examples need
-    Python 3.10, 3.11 or 3.12.
+    Python 3.11 or 3.12.
 
 `t` is the checks in `imghdr.tests`, 13 built in. Each built-in check compares a fixed-length
 prefix of the header, so it is O(1) however long a header you pass; a check you append costs
@@ -65,11 +65,10 @@ assert imghdr.what(None, h=b'not an image') is None
 
 The checks run in list order and the first match wins. Some signatures are only two bytes
 (`'tiff'` for `II` or `MM`, `'bmp'` for `BM`), so text that happens to start with them is
-reported as an image. JPEG is recognised by `JFIF` or `Exif` at bytes 6 to 9, or from Python
-3.11 by a file starting `FF D8 FF DB`; a JPEG with neither returns `None`.
+reported as an image. JPEG is recognised by `JFIF` or `Exif` at bytes 6 to 9, or by a file
+starting `FF D8 FF DB`; a JPEG with neither returns `None`.
 
 ```python
-import sys
 import warnings
 
 with warnings.catch_warnings():
@@ -85,7 +84,7 @@ raw = b'\xff\xd8\xff\xdb\x00\x43\x00'
 
 assert imghdr.what(None, h=jfif) == 'jpeg'
 assert imghdr.what(None, h=icc) is None  # a JPEG, but not one imghdr knows
-assert imghdr.what(None, h=raw) == ('jpeg' if sys.version_info >= (3, 11) else None)
+assert imghdr.what(None, h=raw) == 'jpeg'
 ```
 
 ## Adding a Format

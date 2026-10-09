@@ -35,7 +35,7 @@ Measurement scope:
   `datedow` stays under 10 KB. A timing test runs it on 100,000, 1,000,000 and
   10,000,000 bytes: each 10x step costs between 4x and 30x, where a constant
   would give about 1x and a quadratic about 100x.
-* Lib/antigravity.py is identical in the v3.10.19, v3.11.14, v3.12.12,
+* Lib/antigravity.py is identical in the v3.11.14, v3.12.12,
   v3.13.9 and v3.14.0 tags, so no bound on the page moves inside the
   supported range.
 * Every fenced Python block runs in its own subprocess with the quiet

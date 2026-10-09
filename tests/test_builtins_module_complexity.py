@@ -16,7 +16,7 @@ Measurement scope:
   whose `__builtins__` is a custom dict. 20,000 lookups cost under 5x as much
   with 1,000,000 extra globals, and again with 1,000,000 extra builtins, as
   with 10 of each. Counting the standard names, a scan would cost over
-  5,000x as much in either case. Measured on 3.10 and
+  5,000x as much in either case. Measured on 3.11.17 and
   3.14, where both ratios were under 2.
 * Shadowing and fall-through are observed: a module global of the same name
   is found before the built-in, and deleting it lets the built-in through; a

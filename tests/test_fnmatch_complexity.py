@@ -20,20 +20,18 @@ Measurement scope:
 * A matched 1,000,000-character name peaks under 10,000 traced bytes in
   `fnmatchcase()` and, on POSIX, `fnmatch()`; `posixpath.normcase(s)` returns
   `s` itself. Against a 100,001-character name, `*a` repeated 500 times peaks
-  within 1,000 bytes of `*a` twice on 3.11+, and more than 5,000 bytes above it
-  on 3.10, whose translation captures a group per interior star. With `os.path` swapped for `ntpath`, `fnmatch()` ignores case
-  and normalizes both arguments, and `filter()` normalizes the pattern once
-  and each of 50 names once; under `posixpath` it normalizes the pattern only.
+  within 1,000 bytes of `*a` twice. With `os.path` swapped for `ntpath`,
+  `fnmatch()` ignores case and normalizes both arguments, and `filter()`
+  normalizes the pattern once and each of 50 names once; under `posixpath` it
+  normalizes the pattern only.
 * A fresh pattern is compiled exactly once across `fnmatchcase()` twice,
   `fnmatch()`, `filter()` and, on 3.14+, `filterfalse()`. `translate()`
   compiles nothing and does not fill the cache. A pattern survives 32,767
-  (3.11+) or 255 (3.10) newer distinct patterns and is compiled again after
-  32,768 or 256, which is the cache size. Of two patterns, the one used
-  last survives 32,767 (or 255) newer patterns and the other is compiled
-  again, so
-  eviction is least recently used, not first in; the counting `re.compile`
-  returns a placeholder for the filler patterns, so only translation is paid
-  for them.
+  newer distinct patterns and is compiled again after 32,768, which is the
+  cache size. Of two patterns, the one used last survives 32,767 newer
+  patterns and the other is compiled again, so eviction is least recently
+  used, not first in; the counting `re.compile` returns a placeholder for the
+  filler patterns, so only translation is paid for them.
 * The first use of a pattern - `translate()` and compilation, through
   `fnmatchcase()` with a pattern not yet cached - and `translate()` alone,
   on literal patterns of 1,000 and 100,000 characters: more than 10x and
@@ -80,7 +78,7 @@ import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "fnmatch.md"
 EXPECTED_BLOCKS = 9
-CACHE_SIZE = 256 if sys.version_info < (3, 11) else 32_768
+CACHE_SIZE = 32_768
 
 
 def best_ns(func: Callable[[], Any], repeats: int = 7, inner: int = 1) -> float:
@@ -179,7 +177,7 @@ class TestMatchingIsLinearInTheName:
 
 class TestMatchingHoldsNothingPerName:
     """On POSIX `normcase` returns its argument and a match allocates nothing
-    in proportion to the name; only on 3.10 does it grow with the stars."""
+    in proportion to the name or to the stars."""
 
     def test_posix_normcase_returns_its_argument(self) -> None:
         name = "Report.TXT"
@@ -200,7 +198,7 @@ class TestMatchingHoldsNothingPerName:
 
         assert peak_bytes(lambda: fnmatch.fnmatchcase(name, "*.txt")) < 10_000
 
-    def test_space_follows_interior_stars_only_on_3_10(self) -> None:
+    def test_space_does_not_follow_interior_stars(self) -> None:
         name = "xa" * 50_000 + "b"
         few, many = "*a" * 2 + "*b", "*a" * 500 + "*b"
         assert fnmatch.fnmatchcase(name, few)
@@ -209,10 +207,7 @@ class TestMatchingHoldsNothingPerName:
         few_peak = peak_bytes(lambda: fnmatch.fnmatchcase(name, few))
         many_peak = peak_bytes(lambda: fnmatch.fnmatchcase(name, many))
 
-        if sys.version_info < (3, 11):
-            assert many_peak > few_peak + 5_000, f"{few_peak} vs {many_peak} bytes"
-        else:
-            assert many_peak < few_peak + 1_000, f"{few_peak} vs {many_peak} bytes"
+        assert many_peak < few_peak + 1_000, f"{few_peak} vs {many_peak} bytes"
 
 
 class TestFnmatchNormalizesCase:
@@ -361,8 +356,8 @@ class TestTranslateIsLinear:
 
 
 class TestFilterHoldsOnlyTheResult:
-    """`filter()` is O(k·n·p) time and O(r) space on POSIX 3.11+ (plus O(p)
-    on 3.10), reading `names` once."""
+    """`filter()` is O(k·n·p) time and O(r) space on POSIX, reading `names`
+    once."""
 
     def test_a_generator_is_read_once_in_order(self) -> None:
         taken: list[str] = []

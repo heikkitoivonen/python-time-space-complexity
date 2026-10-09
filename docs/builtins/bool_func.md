@@ -383,7 +383,7 @@ if divisor != 0:     # O(1)
 
 - **Python 2.x**: Works with `__nonzero__()` instead of `__bool__()`
 - **Python 3.x**: Uses `__bool__()` method
-- **Python 3.14+**: `bool(NotImplemented)` raises `TypeError`; 3.10 to 3.13 return `True` with a `DeprecationWarning`
+- **Python 3.14+**: `bool(NotImplemented)` raises `TypeError`; 3.11 to 3.13 return `True` with a `DeprecationWarning`
 - **All versions**: Falsy values consistent (None, False, 0, "", [], {}, etc.)
 
 ## Related Functions

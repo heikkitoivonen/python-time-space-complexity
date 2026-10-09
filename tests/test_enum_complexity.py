@@ -10,13 +10,12 @@ one per member, with no tolerance. Views and caches are settled by identity.
 Measurement scope:
 
 * Building: an `Enum` of 100 and of 400 counting-`int` values makes exactly
-  n(n - 1)/2 comparisons on 3.10 and from 3.13.1, and none on 3.11 to 3.13.0.
+  n(n - 1)/2 comparisons from 3.13.1, and none on 3.11 to 3.13.0.
   The same sizes with counting-`list` values make exactly n(n - 1)/2 on every
   version. A class built through `__prepare__` with 50 `auto()` members hands
   `_generate_next_value_` 50 distinct lists of 0 to 49 values, 1,225 in all;
   the functional API with a list of 50 names does the same. An `_order_` of
-  100 and of 400 counting-`str` names makes at least n(n + 1)/2 comparisons
-  from 3.11 and at most 2n on 3.10.
+  100 and of 400 counting-`str` names makes at least n(n + 1)/2 comparisons.
 * `C(value)` makes at most one comparison for a hashable value at 10 and
   1,000 members, first member or last. An unhashable value at 10 and 100
   members makes index + 1 comparisons to find a member and between n and 2n
@@ -37,13 +36,12 @@ Measurement scope:
   `dir()` is sorted and lists a canonical name but not its alias.
 * Flags: `a | b` returns the same object twice, and the class's value map
   grows by one for a new combination and not for a repeat; 1,000 distinct
-  `IntFlag` values grow it by at least 1,000. On 3.11+ `~flag` is stored on
+  `IntFlag` values grow it by at least 1,000. `~flag` is stored on
   the operand, `len(flag)` answers with the class's member iterator replaced
   by one that raises, and iteration yields the b members set, in definition
   order for a class defined out of value order. `~flag` of a value holding
   every member, at 20 and 60 single-bit members with a counting `__eq__`,
-  makes exactly n(n - 1)/2 comparisons on each of two calls on 3.10, and
-  none from 3.11.
+  makes no comparison on either of two calls.
 * `verify(CONTINUOUS)` on a two-member `Enum` valued 0 and r: the traced peak
   grows more than 5x from r = 100,000 to r = 1,000,000. It runs serially, so
   xdist's I/O thread cannot add to the peak.
@@ -62,17 +60,14 @@ Measurement scope:
 Not settled here:
 
 * The O(n) cost of making a new flag combination for the first time is read
-  from Lib/enum.py: `_decompose()` walks the canonical members on 3.10, and
-  from 3.11 `Flag._missing_()` walks the bits set plus, when the value covers
-  a multi-bit alias, every member. Only the caching is observed.
+  from Lib/enum.py: `Flag._missing_()` walks the bits set plus, when the
+  value covers a multi-bit alias, every member. Only the caching is observed.
 * `~flag`'s first call is priced from the same source; its cache is observed.
-* The default `_generate_next_value_()` sorts the values it is handed from
-  3.11 and walks back from the last one on 3.10; that the sort is linear
-  when they ascend is Timsort's, not measured here.
-* On 3.10 a first-time combination sorts the members it contains
-  (`_decompose()`), and from 3.11 iterating a flag defined out of value order
-  sorts the members set (`_iter_member_by_def_()`); both log factors are read
-  from Lib/enum.py, and only the iteration order is observed.
+* The default `_generate_next_value_()` sorts the values it is handed; that
+  the sort is linear when they ascend is Timsort's, not measured here.
+* Iterating a flag defined out of value order sorts the members set
+  (`_iter_member_by_def_()`); the log factor is read from Lib/enum.py, and
+  only the iteration order is observed.
 * `dir(C)` is O(n log n) because `dir()` sorts; only that every member name is
   in it is asserted.
 * `verify(UNIQUE)` and `verify(NAMED_FLAGS)` being O(n) is read from
@@ -111,7 +106,7 @@ import pytest
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "enum.md"
 EXPECTED_BLOCKS = 8
 
-# The module as Any, so 3.11+ names type-check against pyright's 3.10 floor.
+# The module as Any, so names newer than pyright's 3.11 floor type-check.
 ENUM: Any = enum
 
 
@@ -186,14 +181,14 @@ def counting_lists(size: int) -> Any:
     return Enum(f"L{size}", {f"M{index}": CountingList([index]) for index in range(size)})
 
 
-QUADRATIC_BUILD = sys.version_info < (3, 11) or sys.version_info >= (3, 13, 1)
+QUADRATIC_BUILD = sys.version_info >= (3, 13, 1)
 
 
 class TestBuildingChecksEachValueAgainstTheEarlierOnes:
     """`class C(enum.Enum)` and the functional API | O(n²) | O(n).
 
-    Each value is checked against the ones before it: by a list scan on 3.10
-    and from 3.13.1, by the value dictionary on 3.11 to 3.13.0, and by a scan
+    Each value is checked against the ones before it: by a list scan from
+    3.13.1, by the value dictionary on 3.11 to 3.13.0, and by a scan
     on every version when the value is unhashable. Counting comparisons
     separates n²/2 from n with no tolerance.
     """
@@ -262,12 +257,8 @@ class TestBuildingChecksEachValueAgainstTheEarlierOnes:
 
         comparisons = counted(lambda: meta("Ordered", (Enum,), namespace))
 
-        if sys.version_info >= (3, 11):
-            assert comparisons >= size * (size + 1) // 2
-        else:
-            assert comparisons <= 2 * size
+        assert comparisons >= size * (size + 1) // 2
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="EnumType is the 3.11+ name")
     def test_enum_meta_is_the_same_metaclass(self) -> None:
         assert ENUM.EnumType is enum.EnumMeta is type(Enum)
 
@@ -523,13 +514,11 @@ class TestFlags:
         assert (combined & self.Permission.READ) is self.Permission.READ
         assert bool(combined) and not bool(self.Permission(0))
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="sized and iterable from 3.11")
     def test_iteration_yields_the_bits_set(self) -> None:
         combined: Any = self.Permission.READ | self.Permission.EXECUTE
 
         assert [member.name for member in combined] == ["READ", "EXECUTE"]
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="sized and iterable from 3.11")
     def test_len_counts_bits_without_iterating(self, monkeypatch: pytest.MonkeyPatch) -> None:
         cls: Any = Flag("Sized", "A B C D")
         combined = cls.A | cls.C | cls.D
@@ -540,14 +529,6 @@ class TestFlags:
         monkeypatch.setattr(cls, "_iter_member_", refuse)
         assert len(combined) == 3
 
-    @pytest.mark.skipif(sys.version_info >= (3, 11), reason="sized and iterable from 3.11")
-    def test_a_combination_has_no_length_before_311(self) -> None:
-        combined: Any = self.Permission.READ | self.Permission.WRITE
-
-        with pytest.raises(TypeError):
-            len(combined)
-
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="sized and iterable from 3.11")
     def test_members_defined_out_of_order_iterate_in_definition_order(self) -> None:
         class Backwards(Flag):
             B = 2
@@ -557,7 +538,7 @@ class TestFlags:
         assert [member.name for member in combined] == ["B", "A"]
 
     @pytest.mark.parametrize("size", [20, 60])
-    def test_inversion_compares_members_pairwise_on_every_call_on_310(self, size: int) -> None:
+    def test_inversion_makes_no_pairwise_comparison(self, size: int) -> None:
         class Base(Flag):
             def __eq__(self, other: object) -> bool:
                 Counter.calls += 1
@@ -570,12 +551,8 @@ class TestFlags:
 
         first, second = counted(lambda: ~full), counted(lambda: ~full)
 
-        if sys.version_info >= (3, 11):
-            assert first == second == 0
-        else:
-            assert first == second == size * (size - 1) // 2
+        assert first == second == 0
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
     def test_numeric_repr_formats_unnamed_bits(self) -> None:
         class Kept(IntFlag):
             A = 1
@@ -584,7 +561,6 @@ class TestFlags:
         assert Kept._numeric_repr_ is not None
         assert repr(Kept(9)).endswith("A|8: 9>")
 
-    @pytest.mark.skipif(sys.version_info < (3, 11), reason="cached from 3.11")
     def test_inversion_is_stored_on_the_operand(self) -> None:
         cls: Any = Flag("Inverted", "A B C")
 
@@ -669,7 +645,6 @@ class TestAddingAliases:
         assert cls(CountingList([-1])) is cls.M0
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
 class TestClassBodyHelpers:
     """`member()`, `nonmember()`, `enum.property`, `_ignore_` and `_order_`."""
 
@@ -705,7 +680,6 @@ class TestClassBodyHelpers:
                 B = 2
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
 class TestVerify:
     """`verify(*checks)` | O(n + r) | O(n + r); `CONTINUOUS` walks the span."""
 
@@ -768,7 +742,6 @@ class TestUnique:
         assert unique(numbered(10, "U")) is not None
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
 class TestGlobalHelpers:
     @pytest.mark.parametrize("count", [10, 100])
     def test_global_enum_exports_every_member(
@@ -810,7 +783,6 @@ class TestGlobalHelpers:
         assert ENUM.pickle_by_global_name(member, 2) == "M2"
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="added in 3.11")
 class TestBitHelpers:
     @pytest.mark.parametrize("bits", [1, 8, 32])
     def test_show_flag_values_returns_the_bits_set(self, bits: int) -> None:

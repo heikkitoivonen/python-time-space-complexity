@@ -30,7 +30,7 @@ the entries in a zip archive.
 |-----------|------|-------|-------|
 | `importlib.import_module(name, package=None)` | O(1) | O(1) | Loaded module: a `sys.modules` lookup, and the same object every time. Not loaded: a find, O(t + p·s), and a load, O(n + m), for each missing parent package and then the module |
 | `importlib.reload(module)` | O(t + p·s + n + m) | O(n + m) | Finds the spec again and runs the body in the existing namespace; modules it imports are not re-run |
-| `importlib.invalidate_caches()` | O(t + c) | O(c) | Every meta path finder, then every path entry finder in `sys.path_importer_cache`, and from Python 3.11 the `importlib.metadata` listings; the next search through each directory relists it, O(e) |
+| `importlib.invalidate_caches()` | O(t + c) | O(c) | Every meta path finder, then every path entry finder in `sys.path_importer_cache`, and the `importlib.metadata` listings; the next search through each directory relists it, O(e) |
 | `importlib.__import__(name, globals=None, locals=None, fromlist=(), level=0)` | O(1) | O(1) | A pure-Python implementation of the built-in `__import__()`, which is the function the `import` statement calls; the same miss cost as `import_module()`, but a dotted name returns the head of that name - the top-level package for an absolute import, the first component under the anchor for a relative one - unless `fromlist` is non-empty. Then one attribute check per `fromlist` name, an import of each one the package lacks, and `'*'` expands to the package's `__all__`; a module without `__path__` skips the list entirely |
 
 ### importlib.util
@@ -110,8 +110,8 @@ the entries in a zip archive.
 |-----------|------|-------|-------|
 | `importlib.resources.files(anchor=None)` | O(1) | O(1) | A file-system package; a `str` anchor is imported first, and a namespace package resolves and checks each of its portions. A zip archive is opened and its central directory read, O(z), on every call, and the first probe of the result indexes the names, O(z), once. No anchor (Python 3.12+) walks the whole call stack, O(D), to find the caller's module |
 | `importlib.resources.as_file(traversable)` | O(1) | O(1) | A real file is yielded as the same object; a resource inside a zip is copied to a temporary file, O(n), and from Python 3.12 a directory copied whole |
-| `Traversable.joinpath(*descendants)` | O(1) | O(1) | For a file-system path. A namespace package's `MultiplexedPath` lists its portions, empty or not, for a segment that spans them, and joins as a plain path once a segment resolves to one directory: at worst O(r + k²) on Python 3.10, which de-duplicates names with a list scan, and O(r + k) on 3.11, both stopping at the first match; O(r + k log k) from 3.12, where the protocol default it now uses sorts every portion to merge them |
-| `Traversable.iterdir()` | O(k) | O(k) | A namespace package lists every portion, empty or not, and merges them: O(r + k²) on Python 3.10, O(r + k) on 3.11 and O(r + k log k) from 3.12, which sorts them; a zip archive filters every entry, O(z) |
+| `Traversable.joinpath(*descendants)` | O(1) | O(1) | For a file-system path. A namespace package's `MultiplexedPath` lists its portions, empty or not, for a segment that spans them, and joins as a plain path once a segment resolves to one directory: at worst O(r + k) on Python 3.11, which stops at the first match; O(r + k log k) from 3.12, where the protocol default it now uses sorts every portion to merge them |
+| `Traversable.iterdir()` | O(k) | O(k) | A namespace package lists every portion, empty or not, and merges them: O(r + k) on Python 3.11 and O(r + k log k) from 3.12, which sorts them; a zip archive filters every entry, O(z) |
 | `Traversable.read_bytes()`, `Traversable.read_text(encoding=None)` | O(n) | O(n) | The whole resource |
 | `Traversable.open(mode='r', *args, **kwargs)`, `Traversable.is_dir()`, `Traversable.is_file()`, `Traversable.name` | O(1) | O(1) | One `stat()` or archive lookup |
 | `importlib.resources.read_text(anchor, *path_names, encoding='utf-8', errors='strict')`, `importlib.resources.read_binary(anchor, *path_names)`, `importlib.resources.open_text(anchor, *path_names, encoding='utf-8', errors='strict')`, `importlib.resources.open_binary(anchor, *path_names)`, `importlib.resources.path(anchor, *path_names)`, `importlib.resources.is_resource(anchor, *path_names)` | O(n) | O(n) | `files()` and `joinpath()` again on every call, then the operation; the `open*()` and `is_resource()` forms are O(1) after that |
@@ -135,8 +135,8 @@ the entries in a zip archive.
 | `importlib.metadata.distribution(distribution_name)`, `Distribution.from_name(name)` | O(p) | O(1) | A dictionary probe per path entry until the first match, on the same cached listings; no metadata is read |
 | `importlib.metadata.version(distribution_name)`, `importlib.metadata.metadata(distribution_name)`, `importlib.metadata.requires(distribution_name)` | O(p + h) | O(h) | Find, then read and parse the whole `METADATA` file |
 | `importlib.metadata.files(distribution_name)` | O(p + F) | O(F) | `RECORD` parsed, and from Python 3.12 one `stat()` per listed file, with the missing ones dropped |
-| `importlib.metadata.entry_points(**params)` | O(p + d + E) | O(d + E) | Reads the `entry_points.txt` of every distinctly named distribution, whatever the selection; the filter runs afterwards over all of them, after a sort by group on Python 3.10 and 3.11, O(E log E) |
-| `importlib.metadata.packages_distributions()` | O(p + d + q·h + F) | O(d + q + h + F) | `top_level.txt` per distribution, or from Python 3.11 its `RECORD` where that is missing, with a `stat()` per file from 3.12; the `METADATA` name is parsed again for every name declared |
+| `importlib.metadata.entry_points(**params)` | O(p + d + E) | O(d + E) | Reads the `entry_points.txt` of every distinctly named distribution, whatever the selection; the filter runs afterwards over all of them, after a sort by group on Python 3.11, O(E log E) |
+| `importlib.metadata.packages_distributions()` | O(p + d + q·h + F) | O(d + q + h + F) | `top_level.txt` per distribution, or its `RECORD` where that is missing, with a `stat()` per file from 3.12; the `METADATA` name is parsed again for every name declared |
 | `importlib.metadata.Distribution` | O(1) | O(1) | Abstract; `Distribution.at(path)` wraps a path without reading it |
 | `Distribution.metadata`, `Distribution.name`, `Distribution.version`, `Distribution.requires` | O(h) | O(h) | Read and parsed from the file on every access; nothing is kept on the object. `requires` falls back to an egg-info `requires.txt`, linear in its lines |
 | `Distribution.origin` | O(n) | O(n) | Parses `direct_url.json` on every access, or `None` without one; Python 3.13+ |
@@ -163,7 +163,7 @@ the entries in a zip archive.
 | `importlib.metadata.DistributionFinder`, `DistributionFinder.Context(**kwargs)`, `Context.name`, `Context.path` | O(1) | O(1) | `path` defaults to `sys.path` |
 | `DistributionFinder.find_distributions(context)` | Defined by the subclass | Defined by the subclass | Abstract |
 | `importlib.metadata.MetadataPathFinder.find_distributions(context)` | O(p + d) | O(d) | The `sys.meta_path` finder behind `distributions()` |
-| `MetadataPathFinder.invalidate_caches()` | O(1) | O(1) | Drops every cached directory listing; `importlib.invalidate_caches()` calls it from Python 3.11 |
+| `MetadataPathFinder.invalidate_caches()` | O(1) | O(1) | Drops every cached directory listing; `importlib.invalidate_caches()` calls it |
 | `importlib.metadata.PathDistribution(path)`, `PathDistribution.read_text(filename)`, `PathDistribution.locate_file(path)` | O(1) | O(1) | The file-system `Distribution`; `read_text()` is O(n) |
 
 ## Importing by Name
@@ -503,9 +503,9 @@ with importlib.resources.as_file(resource) as path:  # O(1) - no copy
 
 For a namespace package, `files()` returns a `MultiplexedPath` over every portion. It has no
 directory of its own, so `joinpath()` lists and merges its portions for a segment that spans them,
-where a regular package pays O(1): at worst O(r + k²) on Python 3.10, whose de-duplication scans a
-list, and O(r + k) on 3.11, both stopping at the first match, and O(r + k log k) from 3.12, which
-sorts every portion first. A segment that resolves to one directory joins the rest as a plain path.
+where a regular package pays O(1): at worst O(r + k) on Python 3.11, which stops at the first
+match, and O(r + k log k) from 3.12, which sorts every portion first. A segment that resolves to
+one directory joins the rest as a plain path.
 
 ```python
 import importlib

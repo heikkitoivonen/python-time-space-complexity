@@ -24,8 +24,8 @@ Measurement scope:
   character reference and a comment: each 10x step costs between 4x and 30x.
   Single `feed()` calls on 2,000 and 20,000 repetitions of `<`, `&`, `&#1`,
   `</`, `<!`, `<?`, `<!--`, `<![CDATA[`, `<!DOCTYPE `, `<a ` and ` x="`, with
-  `convert_charrefs` both ways, cost between 3x and 11x per 10x on 3.10.21,
-  3.13.14 and 3.14.7 when probed; the test keeps `<`, `&#1` and `<!--`, both
+  `convert_charrefs` both ways, cost between 3x and 12x per 10x on 3.11.17,
+  3.13.14 and 3.14.8 when probed; the test keeps `<`, `&#1` and `<!--`, both
   ways, and asserts under 30x, which excludes a quadratic.
 * The held tail is observed through `rawdata`, the parser's unparsed buffer:
   after a 30,000-paragraph document cut inside a tag, it holds that tag and
@@ -33,10 +33,10 @@ Measurement scope:
   it; text ending in a cut-off reference is held until `close()` parses it.
 * Chunked feeding of one open construct: an attribute value fed ten
   characters per call, 20,000 against 200,000 characters. Releases from
-  3.10.21, 3.11.16, 3.12.14, 3.13.15 and 3.14.7 wait for the held text to
+  3.11.16, 3.12.14, 3.13.15 and 3.14.7 wait for the held text to
   double before rescanning: 10x costs under 30x (about 10x measured). Earlier
   releases rescan on every call: 10x costs over 40x (about 90x measured on
-  3.10.20, 3.12.13, 3.13.14 and 3.14.6). Which side a release is on was read
+  3.12.13, 3.13.14 and 3.14.6). Which side a release is on was read
   from the `_parse_threshold` field in each release's Lib/html/parser.py.
 * Handler calls are recorded by a subclass: one start tag per tag, text with
   references arriving unsplit with `convert_charrefs=True` and split at each reference
@@ -103,7 +103,7 @@ EXPECTED_BLOCKS = 10
 
 # The first release in each minor line whose feed() waits for held text to
 # double before rescanning it.
-_BATCHED_FEED_FROM = {(3, 10): 21, (3, 11): 16, (3, 12): 14, (3, 13): 15, (3, 14): 7}
+_BATCHED_FEED_FROM = {(3, 11): 16, (3, 12): 14, (3, 13): 15, (3, 14): 7}
 BATCHED_FEED = sys.version_info.micro >= _BATCHED_FEED_FROM.get(sys.version_info[:2], 0)
 
 

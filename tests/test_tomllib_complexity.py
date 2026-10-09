@@ -86,8 +86,6 @@ from typing import Any
 
 import pytest
 
-if sys.version_info < (3, 11):
-    pytest.skip("version: tomllib is new in Python 3.11", allow_module_level=True)
 tomllib: Any = importlib.import_module("tomllib")
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "tomllib.md"

@@ -1,6 +1,6 @@
 """Evidence for the type() table and examples in docs/builtins/type_func.md.
 
-Released CPython 3.10--3.14 Objects/typeobject.c implements type.mro through
+Released CPython 3.11--3.14 Objects/typeobject.c implements type.mro through
 mro_implementation and pmerge. Single inheritance copies the base's MRO.
 For multiple inheritance, at most h output steps try b candidate heads, each
 against b tails of at most h entries: O(b²h²) time. The merge borrows the base

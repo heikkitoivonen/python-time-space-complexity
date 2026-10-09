@@ -27,7 +27,7 @@ Measurement scope:
   when `opmap` gains pseudo-instructions numbered from 256 and
   `INSTRUMENTED_*` opcodes.
 * `hasarg` and `hasexc` exist from 3.12 and `hasjump` from 3.13, and are
-  absent before; on 3.13+ `hasjrel is hasjump`. `hasjabs` is empty on 3.11+.
+  absent before; on 3.13+ `hasjrel is hasjump`. `hasjabs` is empty.
 * `stack_effect(BUILD_TUPLE, n)` is `1 - n` for n of 0, 3 and 2**30, and a
   timing test bounds the 2**30 call under 3x the n = 1 call, where a cost
   linear in `oparg` would be a billion times larger. For every opcode in
@@ -44,12 +44,12 @@ Not settled here:
 
 * That opcode numbers, names and the contents of the `has*` lists change
   between releases needs two interpreters in one test. On the supported
-  range `LOAD_CONST` is 100 on 3.10 to 3.12, 83 on 3.13 and 82 on 3.14, and
+  range `LOAD_CONST` is 100 on 3.11 and 3.12, 83 on 3.13 and 82 on 3.14, and
   `HAVE_ARGUMENT` is 90, 44 and 43 over the same releases.
 * Treating every table as O(1) to read and index rests on their types and on
   Lib/opcode.py building them once at import; the tables are bounded by the
   opcode count of the release, so there is no size to vary.
-* `stack_effect()` is a C function in Python/compile.c (3.10 to 3.12) and
+* `stack_effect()` is a C function in Python/compile.c (3.11 and 3.12) and
   generated metadata (3.13+); its O(1) in the opcode is read from that
   source, and only `oparg` is varied.
 * Names outside `__all__` and the `dis` documentation are not on the page:
@@ -57,7 +57,7 @@ Not settled here:
   module level; `MIN_INSTRUMENTED_OPCODE` (3.12+), and on 3.12 alone
   `ENABLE_SPECIALIZATION`, `MIN_PSEUDO_OPCODE`, `MAX_PSEUDO_OPCODE`,
   `is_pseudo` and `oplists`, are internals the module imports or builds.
-  `hasnargs`, in `__all__` on 3.10 and 3.11 and always empty, was never in
+  `hasnargs`, in `__all__` on 3.11 and always empty, was never in
   the `dis` documentation and is not on the page either.
 """
 
@@ -259,7 +259,7 @@ class TestHaveArgument:
 
 class TestCollectionsByVersion:
     """`hasarg` and `hasexc` are 3.12+, `hasjump` is 3.13+ and is `hasjrel`,
-    and `hasjabs` is empty on 3.11+."""
+    and `hasjabs` is empty."""
 
     @pytest.mark.parametrize("name", ["hasarg", "hasexc"])
     def test_hasarg_and_hasexc_arrive_in_312(self, name: str) -> None:
@@ -270,8 +270,8 @@ class TestCollectionsByVersion:
         if sys.version_info >= (3, 13):
             assert opcode.hasjrel is opcode.hasjump  # type: ignore[attr-defined]
 
-    def test_hasjabs_is_empty_from_311(self) -> None:
-        assert (opcode.hasjabs == []) == (sys.version_info >= (3, 11))
+    def test_hasjabs_is_empty(self) -> None:
+        assert opcode.hasjabs == []
 
 
 class TestStackEffect:

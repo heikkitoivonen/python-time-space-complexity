@@ -35,7 +35,7 @@ the number of draws is not bounded, but its mean is a small constant.
 | `random.choices(population, k=k)` | O(k) | O(k) | With replacement; the population is indexed, never copied |
 | `random.choices(population, weights, k=k)` | O(n + k log n) | O(n + k) | Accumulates the weights on every call, then bisects once per draw |
 | `random.choices(population, cum_weights=c, k=k)` | O(k log n) | O(k) | Skips the accumulation, so prepared cumulative weights can be reused across calls |
-| `random.sample(population, k)` | O(k) expected | O(k) | Independent of n. `population` must be a sequence; 3.10 still accepts a set, copying it in O(n) |
+| `random.sample(population, k)` | O(k) expected | O(k) | Independent of n. `population` must be a sequence, so a set is rejected |
 | `random.sample(population, k, counts=c)` | O(n + k log n) expected | O(n + k) | Accumulates the counts, samples k positions, then bisects each one |
 | `random.shuffle(x)` | O(n) expected | O(1) | In place |
 
@@ -161,8 +161,8 @@ for _ in range(10):
 `sample()` is O(k) however long the population is. It remembers the indices it has drawn in a
 set, or, when the population is no bigger than that set would be, copies it into a list and
 draws from that; either way the work and memory follow k. Pass a `range` to sample from a span
-of integers far larger than k without building it. A dict is not a sequence and is rejected, and so, from
-Python 3.11, is a set: convert one first with `list()` or `sorted()`.
+of integers far larger than k without building it. A dict is not a sequence and is rejected, and so is a
+set: convert one first with `list()` or `sorted()`.
 
 ```python
 import random

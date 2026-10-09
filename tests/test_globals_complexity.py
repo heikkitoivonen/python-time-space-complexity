@@ -31,8 +31,8 @@ Observation settles every row but one:
   3.14); up to 3.12 a write through it is not seen by the function.
 
 Elapsed time settles the function-scope locals() row: x16 in bound locals
-(1,000 to 16,000) costs x15.6 on 3.10, x22.4 on 3.11, x22.4 on 3.12, x210.5
-on 3.13 and x215.9 on 3.14, where linear predicts x16 and quadratic x256. The
+(1,000 to 16,000) costs x22.4 on 3.11, x22.4 on 3.12, x210.5 on 3.13 and
+x215.9 on 3.14, where linear predicts x16 and quadratic x256. The
 assignments that bind the locals are inside the timed call and are about 1%
 of it on 3.13 and later; before 3.13 they are a fixed share, so the ratio
 stays near linear either way.
