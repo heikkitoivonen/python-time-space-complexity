@@ -60,6 +60,11 @@ Measurement scope:
   2,000,000 bytes (the temporary plus the result); from a prepared `bytes`
   it peaks under 1,500,000. `bytes + b"y"` scales with the value it copies,
   which is the concatenation the page steers away from.
+* Extending an empty bytearray is timed in batches of 20 calls at 100,000,
+  1,000,000 and 10,000,000 bytes, and at 10,000, 100,000 and 1,000,000 list
+  items. Each 10x operand step must cost between 3x and 40x, separating
+  linear growth from constant and quadratic growth on both intervals.
+  Operands are prepared outside the timing; each call allocates a fresh result.
 * `ba[:]` of 10,000,000 traces a peak of at least 10,000,000 and
   `memoryview(ba)` under 1,000. Under a live view `append()`, `del`,
   `clear()` and `+=` raise `BufferError` while an item assignment succeeds.
@@ -558,19 +563,23 @@ class TestAppendIsAmortized:
 
     @pytest.mark.timing
     @FRESH_PAGES_ON_WINDOWS
-    def test_extend_scales_with_the_operand(self) -> None:
-        small_bytes, large_bytes = bytes(SMALL), bytes(LARGE)
-        small_list, large_list = [0] * (SMALL // 10), [0] * (LARGE // 10)
+    @pytest.mark.parametrize("operand", ["bytes", "list"])
+    def test_extend_scales_with_the_operand(self, operand: str) -> None:
+        sizes = (100_000, 1_000_000, 10_000_000)
+        if operand == "list":
+            sizes = tuple(size // 10 for size in sizes)
 
-        from_bytes = growth(
-            lambda: bytearray().extend(small_bytes), lambda: bytearray().extend(large_bytes)
-        )
-        from_list = growth(
-            lambda: bytearray().extend(small_list), lambda: bytearray().extend(large_list)
-        )
+        def measure(size: int) -> float:
+            source = bytes(size) if operand == "bytes" else [0] * size
+            return best_ns(lambda: bytearray().extend(source), inner=20)
 
-        assert_linear("extend(bytes)", from_bytes)
-        assert_linear("extend(list)", from_list)
+        times = [measure(size) for size in sizes]
+
+        for small, large in zip(times, times[1:], strict=False):
+            ratio = large / small
+            assert 3 < ratio < 40, (
+                f"extend({operand}): 10x the operand cost x{ratio:.2f}; {sizes=}, {times=} ns"
+            )
 
     @pytest.mark.timing
     @FRESH_PAGES_ON_WINDOWS

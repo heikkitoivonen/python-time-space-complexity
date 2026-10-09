@@ -51,7 +51,12 @@ Measured on one aarch64 machine under CPython 3.14.7:
   batched 20 calls per sample. Each 10x width step must cost between 3x and
   30x, excluding constant and quadratic growth; comparing values of different
   widths: x1.0;
-* `hash`: x4.0; `bit_count`: x3.9; `from_bytes`: x4.1; `to_bytes` of a fixed
+* `hash`: x4.0; `bit_count`: x3.9; `from_bytes` on prepared random inputs of
+  125,000, 1,250,000 and 12,500,000 bytes is batched 20 calls per sample.
+  Each 10x byte-count step must cost between 3x and 30x, excluding constant
+  and quadratic growth on both intervals. Input generation is not timed;
+  byte order stays big-endian and signedness stays unsigned.
+  `to_bytes` of a fixed
   1,000-bit value into 125,000, 1,250,000 and 12,500,000 bytes is batched
   20 calls per sample. Each 10x length step must cost between 3x and 30x,
   separating linear from constant and quadratic at a fixed value width;
@@ -671,12 +676,16 @@ class TestIdentities:
 
     @pytest.mark.timing
     def test_from_bytes_is_linear_in_the_byte_count(self) -> None:
-        small = random_bits(1_000_000).to_bytes(125_000, "big")
-        large = random_bits(4_000_000).to_bytes(500_000, "big")
+        sizes = (125_000, 1_250_000, 12_500_000)
+        sources = [random_bits(size * 8).to_bytes(size, "big") for size in sizes]
+        times = [
+            best_time(batched(partial(int.from_bytes, source, "big"), loops=20), repeats=7)
+            for source in sources
+        ]
 
-        growth = ratio(lambda: int.from_bytes(small, "big"), lambda: int.from_bytes(large, "big"))
-
-        assert 2.5 < growth < 7, f"x{growth:.1f} for 4x the bytes"
+        for small, large in zip(times, times[1:], strict=False):
+            growth = large / small
+            assert 3 < growth < 30, f"x{growth:.2f} for 10x the bytes: {sizes=}, {times=}"
 
 
 class TestSmallIntCache:
