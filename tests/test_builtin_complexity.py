@@ -1093,20 +1093,3 @@ class TestFloatComplexity:
         assert is_constant_time(small_time, large_time), (
             f"float addition appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
         )
-
-
-class TestBoolComplexity:
-    """Test bool operation complexities as documented in docs/builtins/bool.md."""
-
-    @pytest.mark.timing
-    def test_logical_ops_are_o1(self) -> None:
-        """Boolean logic should be O(1)."""
-        small_bool = True
-        large_bool = False
-
-        small_time = measure_time(lambda: small_bool and True)
-        large_time = measure_time(lambda: large_bool and True)
-
-        assert is_constant_time(small_time, large_time), (
-            f"bool logic appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
-        )

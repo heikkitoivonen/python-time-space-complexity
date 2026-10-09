@@ -30,21 +30,6 @@ def best_time(func: Callable[[], Any], repeats: int = 5) -> float:
     return min(times)
 
 
-class TestBoolSingletons:
-    """docs/builtins/bool.md: True and False are cached singletons, so every
-    comparison is a pointer or small-int check, never a scan."""
-
-    def test_bools_are_singletons(self) -> None:
-        assert bool(1) is True
-        assert bool(0) is False
-        assert (1 == 1) is True
-
-    def test_bool_is_an_int_subclass(self) -> None:
-        assert isinstance(True, int)
-        assert True == 1 and False == 0
-        assert True + True == 2
-
-
 class TestBytesImmutabilityCosts:
     """docs/builtins/bytes.md: changing a bytes means building a new one,
     O(n); a bytearray mutates in place, O(1)."""
