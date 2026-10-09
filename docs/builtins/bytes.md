@@ -1,225 +1,276 @@
-# Bytes and Bytearray Operations Complexity
+# bytes Type Complexity
 
-The `bytes` type is an immutable sequence of bytes, while `bytearray` is the mutable equivalent.
+The `bytes` type is an immutable sequence of bytes: one fixed buffer, never resized or edited
+after it is built. Its searches and predicates only read that buffer, and the operations that
+produce bytes copy what they return - except that, because nothing can change it, an exact
+`bytes` returns itself from most operations whose result would be an equal copy: a full slice,
+a strip that strips nothing, a `replace()` that finds nothing. For the mutable counterpart, which always
+copies, see [bytearray](bytearray.md).
+
+`n` is the bytes in the receiver, `k` is the bytes in the other operand (the data concatenated,
+the slice covered, or the characters of a hex string), `m` is the bytes in a pattern (`sub`,
+`old`, `prefix`, `suffix`, `sep`), `p` is the parts handed to `join()`, and `w` is the bytes in
+the result where that differs from `n`. Reading one byte, or one item of a `bytes`, is O(1). The
+`decode()` row assumes a codec and error handler whose cost and output are proportional to their
+input, as the byte-oriented codecs are, and the `%` row assumes values whose formatting costs
+what it emits.
 
 ## Complexity Reference
 
-### Bytes
+### Sequence operations
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `len()` | O(1) | O(1) | Direct lookup |
-| `access[i]` | O(1) | O(1) | Direct indexing |
-| `in` (membership) | O(n) | O(1) | Linear search |
-| **Search** ||||
-| `find(sub)` | O(n + m) avg | O(1) | n = bytes length, m = pattern length |
-| `rfind(sub)` | O(n*m) worst | O(1) | Search from right |
-| `index(sub)` | O(n) | O(1) | Like find() but raises ValueError |
-| `rindex(sub)` | O(n*m) worst | O(1) | Like rfind() but raises ValueError |
-| `count(sub)` | O(n) | O(1) | Count non-overlapping occurrences |
-| `startswith(prefix)` | O(m) | O(1) | m = prefix length |
-| `endswith(suffix)` | O(m) | O(1) | m = suffix length |
-| **Replace/Translate** ||||
-| `replace(old, new)` | O(n) | O(n) | Creates new bytes object |
-| `translate(table)` | O(n) | O(n) | Single pass with table lookup |
-| `maketrans(from, to)` | O(k) | O(k) | k = mapping size; static method |
-| `expandtabs(tabsize)` | O(n) | O(n) | Replace tabs with spaces |
-| `removeprefix(prefix)` | O(n) | O(n) | Returns slice if prefix matches |
-| `removesuffix(suffix)` | O(n) | O(n) | Returns slice if suffix matches |
-| **Split/Join** ||||
-| `split(sep)` | O(n) | O(n) | Single pass |
-| `rsplit(sep)` | O(n) | O(n) | Split from right |
-| `splitlines()` | O(n) | O(n) | Split on line boundaries |
-| `partition(sep)` | O(n) | O(n) | Split into 3-tuple at first sep |
-| `rpartition(sep)` | O(n) | O(n) | Split into 3-tuple at last sep |
-| `join(iterable)` | O(n) | O(n) | n = total output length |
-| **Case Conversion** ||||
-| `upper()` | O(n) | O(n) | ASCII uppercase |
-| `lower()` | O(n) | O(n) | ASCII lowercase |
-| `capitalize()` | O(n) | O(n) | Uppercase first, lowercase rest |
-| `title()` | O(n) | O(n) | Titlecase words |
-| `swapcase()` | O(n) | O(n) | Swap upper/lower |
-| **Stripping** ||||
-| `strip(chars)` | O(n) | O(n) | Remove from both ends |
-| `lstrip(chars)` | O(n) | O(n) | Remove from left |
-| `rstrip(chars)` | O(n) | O(n) | Remove from right |
-| **Padding/Alignment** ||||
-| `center(width)` | O(n) | O(n) | Pad both sides |
-| `ljust(width)` | O(n) | O(n) | Pad right side |
-| `rjust(width)` | O(n) | O(n) | Pad left side |
-| `zfill(width)` | O(n) | O(n) | Pad with zeros |
-| **Predicates** ||||
-| `isalnum()` | O(n) | O(1) | Check alphanumeric |
-| `isalpha()` | O(n) | O(1) | Check alphabetic |
-| `isascii()` | O(n) | O(1) | Check ASCII (Python 3.7+) |
-| `isdigit()` | O(n) | O(1) | Check digit chars |
-| `islower()` | O(n) | O(1) | Check lowercase |
-| `isspace()` | O(n) | O(1) | Check whitespace |
-| `istitle()` | O(n) | O(1) | Check titlecase |
-| `isupper()` | O(n) | O(1) | Check uppercase |
-| **Encoding** ||||
-| `decode(encoding)` | O(n) | O(n) | Convert to string |
-| `hex()` | O(n) | O(n) | Convert to hex string |
-| `fromhex(string)` | O(n) | O(n) | Create bytes from hex; class method |
+| `len(b)` | O(1) | O(1) | |
+| `b[i]` | O(1) | O(1) | An `int` in `range(256)`; `b[i] = v` raises `TypeError` |
+| `b[i:j]`, `b[i:j:step]` | O(k) | O(k) | A copy of the k bytes covered; a step-1 slice covering all of `b` is `b` itself, O(1). `memoryview(b)` is the O(1) alternative |
+| `x in b` | O(n + m) | O(1) | `x` is an `int` or bytes-like |
+| `b + other`, `b += other` | O(n + k) | O(n + k) | `other` is any bytes-like. `+=` cannot grow `b` in place, so a loop of them copies everything accumulated each time |
+| `b * count` | O(n·count) | O(n·count) | O(1) for a count of 1, which returns `b` itself, and for a count of 0 or less, which returns `b''` |
+| `b == other`, `b != other` | O(n) | O(1) | O(1) when the lengths differ; `<` and the other orderings walk to the first difference |
+| `for x in b` | O(n) | O(1) | One `int` per byte; `iter(b)` on its own is O(1) |
+| `hash(b)` | O(n) the first time, then O(1) | O(1) | Cached on the object; an equal `bytes` built separately hashes its n bytes again |
+| `b % values` | O(n + w) | O(n + w) | w = result length |
+| `memoryview(b)` | O(1) | O(1) | A read-only view of the same buffer; slicing the view is O(1) as well |
 
-*Note: bytes is immutable, so operations that appear to modify return new objects (O(n) space).*
-
-### Bytearray
+### Searching
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `len()` | O(1) | O(1) | Direct lookup |
-| `access[i]` | O(1) | O(1) | Direct indexing |
-| `in` (membership) | O(n) | O(1) | Linear search |
-| **Mutation** ||||
-| `append(x)` | O(1)* | O(1) | Amortized, may resize |
-| `extend(iterable)` | O(k) | O(k) | k = length |
-| `insert(i, x)` | O(n) | O(1) | Shift elements |
-| `pop()` | O(1) | O(1) | Remove last |
-| `pop(i)` | O(n) | O(1) | Remove at index; shifts remaining |
-| `remove(x)` | O(n) | O(1) | Search and remove |
-| `clear()` | O(n) | O(1) | Deallocate |
-| `copy()` | O(n) | O(n) | Shallow copy |
-| `reverse()` | O(n) | O(1) | Reverse in-place |
-| `resize(n)` | O(n) | O(1) | Resize to n bytes; may truncate or zero-fill |
-| **Search** ||||
-| `find(sub)` | O(n + m) avg | O(1) | n = length, m = pattern length |
-| `rfind(sub)` | O(n*m) worst | O(1) | Search from right |
-| `index(sub)` | O(n) | O(1) | Like find() but raises ValueError |
-| `rindex(sub)` | O(n*m) worst | O(1) | Like rfind() but raises ValueError |
-| `count(sub)` | O(n) | O(1) | Count non-overlapping occurrences |
-| `startswith(prefix)` | O(m) | O(1) | m = prefix length |
-| `endswith(suffix)` | O(m) | O(1) | m = suffix length |
-| **Replace/Translate** ||||
-| `replace(old, new)` | O(n) | O(n) | Creates new bytearray |
-| `translate(table)` | O(n) | O(n) | Single pass with table lookup |
-| `maketrans(from, to)` | O(k) | O(k) | k = mapping size; static method |
-| `expandtabs(tabsize)` | O(n) | O(n) | Replace tabs with spaces |
-| `removeprefix(prefix)` | O(n) | O(n) | Returns slice if prefix matches |
-| `removesuffix(suffix)` | O(n) | O(n) | Returns slice if suffix matches |
-| **Split/Join** ||||
-| `split(sep)` | O(n) | O(n) | Single pass |
-| `rsplit(sep)` | O(n) | O(n) | Split from right |
-| `splitlines()` | O(n) | O(n) | Split on line boundaries |
-| `partition(sep)` | O(n) | O(n) | Split into 3-tuple at first sep |
-| `rpartition(sep)` | O(n) | O(n) | Split into 3-tuple at last sep |
-| `join(iterable)` | O(n) | O(n) | n = total output length |
-| **Case Conversion** ||||
-| `upper()` | O(n) | O(n) | ASCII uppercase |
-| `lower()` | O(n) | O(n) | ASCII lowercase |
-| `capitalize()` | O(n) | O(n) | Uppercase first, lowercase rest |
-| `title()` | O(n) | O(n) | Titlecase words |
-| `swapcase()` | O(n) | O(n) | Swap upper/lower |
-| **Stripping** ||||
-| `strip(chars)` | O(n) | O(n) | Remove from both ends |
-| `lstrip(chars)` | O(n) | O(n) | Remove from left |
-| `rstrip(chars)` | O(n) | O(n) | Remove from right |
-| **Padding/Alignment** ||||
-| `center(width)` | O(n) | O(n) | Pad both sides |
-| `ljust(width)` | O(n) | O(n) | Pad right side |
-| `rjust(width)` | O(n) | O(n) | Pad left side |
-| `zfill(width)` | O(n) | O(n) | Pad with zeros |
-| **Predicates** ||||
-| `isalnum()` | O(n) | O(1) | Check alphanumeric |
-| `isalpha()` | O(n) | O(1) | Check alphabetic |
-| `isascii()` | O(n) | O(1) | Check ASCII (Python 3.7+) |
-| `isdigit()` | O(n) | O(1) | Check digit chars |
-| `islower()` | O(n) | O(1) | Check lowercase |
-| `isspace()` | O(n) | O(1) | Check whitespace |
-| `istitle()` | O(n) | O(1) | Check titlecase |
-| `isupper()` | O(n) | O(1) | Check uppercase |
-| **Encoding** ||||
-| `decode(encoding)` | O(n) | O(n) | Convert to string |
-| `hex()` | O(n) | O(n) | Convert to hex string |
-| `fromhex(string)` | O(n) | O(n) | Create bytearray from hex; class method |
+| `find(sub, start, end)`, `index(sub, start, end)` | O(n + m) | O(1) | `sub` is bytes-like or an `int`; `index()` raises `ValueError` when absent |
+| `rfind(sub, start, end)`, `rindex(sub, start, end)` | O(n·m) | O(1) | Worst case, absent patterns included: the reverse search has no linear-time fallback, where the forward one does |
+| `count(sub, start, end)` | O(n + m) | O(1) | Non-overlapping occurrences |
+| `startswith(prefix, start, end)`, `endswith(suffix, start, end)` | O(m + q) | O(1) | Independent of n. Either accepts a tuple of q candidates, and then m is their total length |
 
-## Implementation Details
+### Transforming
 
-### Bytes vs Bytearray
+Where the Notes say `b` itself, a call that changes nothing returns the receiver rather than a
+copy; the others always build a new object.
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `replace(old, new, count=-1)` | O(n + w) | O(w) | w = result length. `b` itself, in O(1) space, when `old` does not occur |
+| `translate(table, /, delete=b'')` | O(n + d) | O(n) | `table` is a 256-byte table from `maketrans()`, or `None`; d = bytes in `delete`. `b` itself when no byte changes, though the n-byte result is built before that is known |
+| `bytes.maketrans(from, to)` | O(k) | O(1) | A 256-byte `bytes` whatever k is; the two arguments must be the same length. Static method |
+| `upper()`, `lower()`, `capitalize()`, `title()`, `swapcase()` | O(n) | O(n) | ASCII letters only. A new object even when nothing changes |
+| `strip(chars)`, `lstrip(chars)`, `rstrip(chars)` | O(n + (s + 1)·c) | O(n) | s = bytes stripped, c = bytes in `chars`, which is searched once per stripped byte and once more to stop; without `chars`, c is O(1). `b` itself when nothing is stripped, which costs only that O(c) search and O(1) space |
+| `removeprefix(prefix)`, `removesuffix(suffix)` | O(n) | O(n) | `b` itself when the prefix or suffix is absent: O(m) time and O(1) space |
+| `center(width, fillbyte)`, `ljust(width, fillbyte)`, `rjust(width, fillbyte)`, `zfill(width)` | O(width) | O(width) | `b` itself, O(1), when width ≤ n |
+| `expandtabs(tabsize=8)` | O(n + w) | O(w) | A new object even with no tabs; a `tabsize` below 1 drops the tabs, so w can be smaller than n |
+
+### Splitting and joining
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `split(sep=None, maxsplit=-1)` | O(n + m) | O(n) | A list of new `bytes` holding at most n bytes between them; `[b]` holding `b` itself when no separator occurs |
+| `rsplit(sep=None, maxsplit=-1)` | O(n·m) | O(n) | Worst case: a multi-byte `sep` is searched backwards, with the `rfind()` worst case at each match. `None`, and a one-byte `sep`, scan. `[b]` when no separator occurs |
+| `splitlines(keepends=False)` | O(n) | O(n) | `[b]` holding `b` itself when there is no line break |
+| `partition(sep)` | O(n + m) | O(n) | A hit copies the bytes either side of `sep`; a miss returns `(b, b'', b'')` with `b` itself, in O(1) space |
+| `rpartition(sep)` | O(n·m) | O(n) | Worst case, as for `rfind()`. A miss returns `(b'', b'', b)` with `b` itself |
+| `join(iterable)` | O(p + w) | O(p + w) | Every part must be bytes-like, and each costs a buffer descriptor whatever its length. A lone part that is an exact `bytes` is returned itself |
+
+### Predicates and conversion
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `isalnum()`, `isalpha()`, `isascii()`, `isdigit()`, `islower()`, `isspace()`, `istitle()`, `isupper()` | O(n) | O(1) | Stop at the first byte that settles the answer |
+| `decode(encoding='utf-8', errors='strict')` | O(n) | O(n) | |
+| `hex(sep, bytes_per_sep)` | O(n) | O(n) | Two characters per byte, plus any separators |
+| `bytes.fromhex(string)` | O(k) | O(k) | k = characters, one byte per pair; whitespace between pairs is skipped. Class method |
+
+## Unchanged Results Are the Receiver
+
+A `bytes` cannot change, so handing back the same object is as good as a copy. Where a method
+finds nothing to do, an exact `bytes` usually returns itself instead of copying, which a
+`bytearray` never does. The case-changing methods and `expandtabs()` are the exceptions: they
+always build a new object.
 
 ```python
-# Bytes: immutable
-b = b"hello"
-b[0]           # O(1) - 104 (ASCII value)
-b[0] = 106     # TypeError: bytes are immutable
-# Changing a bytes object means building a new one: O(n)
+data = b"Hello"
 
-# Bytearray: mutable
-ba = bytearray(b"hello")
-ba[0] = 106    # O(1) in place, becomes b"jello"
-ba.append(33)  # O(1) amortized - most appends touch only the free slot,
-               # but a resize reallocates and copies the buffer
+assert data[:] is data  # O(1) - the whole buffer, step 1
+assert bytes(data) is data  # O(1) - see bytes()
+assert data.strip() is data  # O(1) - nothing to strip, only the ends are read
+assert data.replace(b"z", b"y") is data  # O(n) to search, O(1) space
+assert data.removeprefix(b"z") is data  # O(m)
+assert data.center(3) is data  # O(1) - width <= n
+assert data.split(b",")[0] is data  # O(n + m) - no separator, so no copy
+assert data.partition(b",")[0] is data  # O(n + m)
+
+assert data.upper() is not data  # O(n) - always a new object
+assert data.upper().upper() == b"HELLO"
+mutable = bytearray(data)
+assert mutable.strip() is not mutable  # a bytearray always copies
+
+
+class Packet(bytes):
+    pass
+
+
+packet = Packet(b"Hello")
+assert packet.strip() is not packet  # a subclass gets a copy
+assert type(packet.strip()) is bytes
 ```
 
-### Performance Comparison
+## Building Bytes Incrementally
+
+`b += other` cannot extend `b` in place: once `b` is non-empty, each non-empty `other` builds
+a new object holding both, so a loop that accumulates p chunks copies everything gathered so far on every pass,
+O(w·p) in total. Collect the parts and `join()` them once, O(p + w), or grow a
+[bytearray](bytearray.md) and convert it at the end.
 
 ```python
-# Bytes: immutable, hashable
-data = b"x" * 1000000
-h = hash(data)      # Can be hashed
+chunks = [b"header", b":", b"payload", b"\n"] * 3
 
-# Bytearray: mutable, not hashable
-data_mut = bytearray(data)
-h = hash(data_mut)  # TypeError: not hashable
+# QUADRATIC: every += copies the whole accumulated value
+slow = b""
+for chunk in chunks:
+    slow += chunk  # O(len(slow) + len(chunk))
+
+# LINEAR: one pass to measure, one to copy
+fast = b"".join(chunks)  # O(p + w)
+
+# LINEAR: an amortized O(k) append per chunk, one copy at the end
+buffer = bytearray()
+for chunk in chunks:
+    buffer += chunk  # O(k) amortized
+built = bytes(buffer)  # O(w)
+
+assert slow == fast == built
+assert len(fast) == 3 * len(b"header:payload\n")
+assert b"".join([fast]) is fast  # a single bytes part is returned itself
 ```
 
-## Use Cases
+## Hashing and Dictionary Keys
 
-### Bytes
-- Fixed binary data
-- As dictionary keys (immutable)
-- Network protocols
-- File I/O
-
-### Bytearray
-- Modifying binary data
-- Building up binary streams
-- Incremental encoding/decoding
-- Memoryview compatibility
-
-## Common Operations
-
-### Encoding/Decoding
+A `bytes` computes its hash the first time it is asked and keeps it, so a key used many times
+hashes its bytes once. The cache belongs to the object: a fresh slice or concatenation that
+produces an equal `bytes` is a new object, and hashing it reads every byte again. A successful
+lookup with a distinct but equal key also compares the two, reading all k bytes of the key.
 
 ```python
-# String to bytes
-s = "Hello, 世界"
-b = s.encode('utf-8')      # O(n)
-b = s.encode('ascii')      # O(n), may raise
+routes = {b"GET /": "index", b"GET /health": "health"}
 
-# Bytes to string
-b = b"Hello"
-s = b.decode('utf-8')      # O(n)
-s = b.decode('ascii')      # O(n)
+request = b"GET /health HTTP/1.1"
+key = request.partition(b" HTTP/")[0]  # O(n + m) - a new 11-byte object
+
+assert routes[key] == "health"  # O(k) to hash the new key, O(k) to compare it
+assert routes[key] == "health"  # O(k) - the hash is cached, the comparison is not
+assert hash(key) == hash(b"GET /health")  # equal bytes, equal hashes
+
+try:
+    hash(bytearray(key))
+except TypeError as error:
+    assert "unhashable" in str(error)
+else:
+    raise AssertionError("a bytearray was hashed")
 ```
 
-### Searching and Replacing
+## Slices Copy, Views Do Not
+
+A slice copies the k bytes it covers. A `memoryview` shares the buffer, and so
+does every slice of the view, so parsing a large message field by field through a view copies
+only what is finally converted.
 
 ```python
-# Find substring: O(n + m) worst for long strings, O(n*m) worst for pathological cases
-data = b"hello world"
-idx = data.find(b"world")  # O(n)
+message = b"\x00\x05hello world"
 
-# Replace: O(n)
-new = data.replace(b"world", b"python")
+length = int.from_bytes(message[:2], "big")  # O(k) - a 2-byte copy
+assert length == 5
 
-# Split: O(n)
-parts = data.split(b" ")
+view = memoryview(message)  # O(1)
+body = view[2 : 2 + length]  # O(1) - no bytes copied
+assert body.tobytes() == b"hello"  # O(k) - the one copy, when it is needed
+assert bytes(body) == b"hello"  # O(k) likewise
+
+try:
+    view[0] = 1  # the view is read-only, as the bytes is
+except TypeError as error:
+    assert "read-only" in str(error)
+else:
+    raise AssertionError("a view of a bytes was written to")
+view.release()
 ```
+
+## Searching
+
+`find()` is linear even in the worst case. `rfind()` searches backwards with a simpler algorithm
+that can compare most of the pattern at every position, and so can cost the pattern's length at
+each of the receiver's. `rsplit()`, `rpartition()` and `rindex()` search the same way.
+
+```python
+haystack = b"a" * 10_000
+needle = b"ab" + b"a" * 98  # mismatches only at its second byte
+
+assert haystack.find(needle) == -1  # O(n + m) - linear in the worst case
+assert haystack.rfind(needle) == -1  # O(n·m) - m comparisons at each of n positions
+assert haystack.count(b"aa") == 5_000  # O(n + m) - non-overlapping
+assert haystack.startswith(b"aaa")  # O(m) - the prefix's length, not the receiver's
+assert 97 in haystack  # O(n) - an int is a byte value
+
+try:
+    haystack.index(b"b")  # O(n + m)
+except ValueError as error:
+    assert "not found" in str(error)
+else:
+    raise AssertionError("index() found a byte that is not there")
+```
+
+## Common Patterns
+
+### Splitting Records
+
+```python
+data = b"alice,30\nbob,25\ncara,41\n"
+
+rows = []
+for line in data.splitlines():  # O(n)
+    name, _, age = line.partition(b",")  # O(n + m), n = this line's length
+    rows.append((name.decode("ascii"), int(age)))  # O(n)
+
+assert rows == [("alice", 30), ("bob", 25), ("cara", 41)]
+```
+
+### Normalising Without Copying
+
+Normalising input that is usually clean makes no copies of the clean inputs, since each step
+returns its receiver when it has nothing to do.
+
+```python
+def normalise(field):
+    return field.strip().removeprefix(b"0x")  # no copy when nothing changes
+
+
+clean = b"ff00"
+assert normalise(clean) is clean  # no copies made
+assert normalise(b" 0xff00 ") == b"ff00"  # two copies, each O(n)
+assert bytes.fromhex(normalise(b" 0xff00 ").decode("ascii")) == b"\xff\x00"  # O(k)
+```
+
+## Performance Best Practices
+
+✅ **Do**:
+
+- Build output with `b"".join(parts)` or a `bytearray`, not `+=`; both stay linear in the bytes produced
+- Slice through `memoryview(b)` when parsing a large buffer field by field; each `bytes` slice copies its k bytes
+- Reuse one `bytes` object as a repeated dictionary key; its hash is computed once and cached
+- Prefer the forward `find()`, `index()`, `split()` and `partition()` to their `r` counterparts on input you do not control; only the forward search is linear in the worst case
+
+❌ **Avoid**:
+
+- `b += chunk` in a loop - each pass copies everything accumulated so far
+- Copying a `bytes` to protect it, with `b[:]` or `bytes(b)` - it cannot change, and both return `b` itself
+- Calling `upper()`, `lower()` or `expandtabs()` to test the contents - they always copy, where `isupper()`, `find()` and `startswith()` do not
+- `rfind()`, `rsplit()` or `rpartition()` with a long pattern on untrusted input - O(n·m) in the worst case
 
 ## Version Notes
 
-- **All Python 3.x**: Core complexity unchanged
-- **Python 3.2+**: Bytearray optimizations
-- **Python 3.5+**: Better unicode handling
+- **Python 3.14+**: `bytes.fromhex()` accepts bytes-like input as well as `str`
 
 ## Related Types
 
-- **[Strings](str.md)** - Unicode text
-- **[Lists](list.md)** - Mutable sequences
-- **[Memoryview](memoryview_func.md)** - Zero-copy buffer interface
-
-## Further Reading
-
-- [CPython Internals: bytes](https://zpoint.github.io/CPython-Internals/BasicObject/bytes/bytes.html){ target="_blank" rel="noopener" }:material-open-in-new: -
-  Deep dive into CPython's bytes implementation
+- **[bytes()](bytes_func.md)** - Every way of building a `bytes`, and what each costs
+- **[bytearray](bytearray.md)** - The mutable counterpart: the same methods, plus amortized O(1) appends, but every transform copies
+- **[bytearray()](bytearray_func.md)** - Building a `bytearray`, the linear way to accumulate bytes
+- **[memoryview()](memoryview_func.md)** - O(1) views and slices over a `bytes` buffer
+- **[str](str.md)** - Text; `str.encode()` and `bytes.decode()` convert between the two in O(n)

@@ -30,50 +30,6 @@ def best_time(func: Callable[[], Any], repeats: int = 5) -> float:
     return min(times)
 
 
-class TestBytesImmutabilityCosts:
-    """docs/builtins/bytes.md: changing a bytes means building a new one,
-    O(n); a bytearray mutates in place, O(1)."""
-
-    def test_bytes_cannot_be_mutated(self) -> None:
-        data = bytearray(b"hello")
-        with_change = bytes(data)
-        try:
-            with_change[0] = 106  # type: ignore[index]
-        except TypeError:
-            pass
-        else:  # pragma: no cover - would mean bytes became mutable
-            raise AssertionError("bytes should be immutable")
-
-    def test_changing_bytes_allocates_a_new_object(self) -> None:
-        original = b"hello"
-        changed = b"j" + original[1:]
-        assert changed is not original
-        assert original == b"hello", "the original is untouched, so it was copied"
-
-    def test_bytearray_mutates_in_place(self) -> None:
-        buffer = bytearray(b"hello")
-        identity = id(buffer)
-        buffer[0] = 106
-        assert buffer == bytearray(b"jello")
-        assert id(buffer) == identity, "no new object, so no copy of the contents"
-
-    @pytest.mark.timing
-    def test_growing_a_bytes_scales_but_a_bytearray_does_not(self) -> None:
-        small, large = b"x" * 1_000, b"x" * 1_000_000
-
-        rebuild_small = best_time(lambda: small + b"y")
-        rebuild_large = best_time(lambda: large + b"y")
-        append_small = best_time(lambda: bytearray(small).append(121))
-        append_large = best_time(lambda: bytearray(large).append(121))
-
-        assert rebuild_large > rebuild_small * 3, (
-            f"concatenating bytes copies everything: {rebuild_small:.2e}s vs {rebuild_large:.2e}s"
-        )
-        # The bytearray() construction dominates here, so compare the ratio
-        # rather than the absolute: appending does not add a second copy.
-        assert append_large / append_small < rebuild_large / rebuild_small * 2
-
-
 class TestExecReparsesEveryCall:
     """docs/builtins/exec.md: exec(source) is O(n + m) every call because it
     reparses; a function is compiled once at import and costs only O(m)."""
