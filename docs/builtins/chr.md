@@ -1,14 +1,19 @@
 # chr() Function Complexity
 
-The `chr()` function returns the character corresponding to a Unicode code point.
+The `chr()` function returns the one-character string for a Unicode code point.
+Each call on an int is O(1): the argument is converted to a C integer, range-checked, and
+turned into a string of length one, whatever the code point.
+
+`n` is the number of code points when `chr()` is applied to a sequence of them.
 
 ## Complexity Analysis
 
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
-| Valid code point | O(1) | O(1) | Direct character lookup |
-| Invalid range | O(1) | O(1) | Raises ValueError |
-| High Unicode | O(1) | O(1) | Works for all valid points |
+| Valid code point | O(1) | O(1) | Any code point from 0 to 0x10FFFF, surrogates included |
+| Out of range | O(1) | O(1) | Raises `ValueError`; an int beyond the C `int` range raised `OverflowError` before Python 3.13 |
+| Object with `__index__` | `__index__` + O(1) | `__index__` + O(1) | Any other non-int, such as a float or a str, raises `TypeError` |
+| `n` code points to a string | O(n) | O(n) | `''.join(map(chr, codes))` |
 
 ## Basic Usage
 
@@ -71,7 +76,7 @@ text = ''.join(chr(c) for c in codes)
 # "Hello"
 
 # Using map
-text = ''.join(map(chr, codes))  # O(n) - slightly more efficient
+text = ''.join(map(chr, codes))  # O(n), the same string
 ```
 
 ### Building Strings from Code Points
@@ -149,17 +154,17 @@ chr(241)       # 'ñ'
 chr(223)       # 'ß'
 
 # High Unicode points
-chr(119808)    # '𝔸' (Mathematical Alphanumeric)
-chr(127925)    # '🎵' (Music note emoji)
+chr(119808)    # '𝐀' (Mathematical Bold Capital A)
+chr(127925)    # '🎵' (Musical note emoji)
 
 # Maximum valid code point
-chr(0x10FFFF)  # Last valid Unicode character
+chr(0x10FFFF)  # Highest code point chr() accepts
 ```
 
 ### Character Category Ranges
 
 ```python
-# O(1) - create characters from ranges
+# O(k) - k = end - start + 1 characters
 def create_chars_in_range(start, end):
     return ''.join(chr(i) for i in range(start, end + 1))
 
@@ -182,7 +187,7 @@ chr(0x10FFFF)  # Highest valid Unicode
 
 # ValueError - out of range
 try:
-    chr(-1)    # ValueError: chr() arg not in valid range
+    chr(-1)    # ValueError: chr() arg not in range(0x110000)
 except ValueError:
     pass
 
@@ -215,19 +220,13 @@ except TypeError:
 ### vs String Literals
 
 ```python
-# Same performance - O(1) both
+# Both O(1); a literal is a constant, chr() is a call
 a = chr(65)    # 'A'
 b = 'A'        # 'A' - literal
 
-# But chr() useful when code point is computed
+# chr() is for code points computed at run time
 code = 65
 char = chr(code)  # 'A'
-
-# Bulk operations
-import timeit
-t1 = timeit.timeit(lambda: chr(65), number=10**7)
-t2 = timeit.timeit(lambda: 'A', number=10**7)
-# chr() slightly slower but trivial difference
 ```
 
 ### Building Strings Efficiently
@@ -238,22 +237,19 @@ codes = range(65, 91)
 result = ''.join(chr(c) for c in codes)
 # "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-# Same complexity as:
+# Same complexity and result:
 result = ''.join(map(chr, codes))
-# map() slightly more efficient
 ```
 
 ## Best Practices
 
 ✅ **Do**:
 
-- Use `map(chr, codes)` for bulk conversion
+- Convert many code points with one `''.join(map(chr, codes))` - O(n) for the whole string
 
 ❌ **Avoid**:
 
-- Creating strings character by character (use join)
-- Using string literals when code points are computed
-- Unnecessary intermediate lists
+- Calling `chr()` on a constant code point; write the literal instead
 
 ## Related Functions
 
@@ -264,6 +260,5 @@ result = ''.join(map(chr, codes))
 
 ## Version Notes
 
-- **Python 2.x**: Returns unicode with u prefix (u'A')
-- **Python 3.x**: Returns str, all strings are Unicode
-- **Python 3.8+**: Consistent Unicode support across versions
+- **Python 3.13+**: Every out-of-range int raises `ValueError`; before 3.13 one outside the C `int` range, such as `2**31`, raised `OverflowError`
+- **All Python 3**: `chr()` returns a `str` and accepts any object with `__index__`
