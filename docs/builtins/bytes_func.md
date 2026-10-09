@@ -1,294 +1,175 @@
 # bytes() Function Complexity
 
-The `bytes()` function creates bytes objects from strings, iterables, or allocates empty bytes.
+The `bytes()` constructor builds an immutable sequence of bytes from a count, a bytes-like
+object, an iterable of integers, a string with an encoding, or an object's `__bytes__()`
+method. An exact `bytes` is immutable, so `bytes(b)` returns `b` itself; every other source is
+copied or converted.
 
-## Complexity Analysis
+`n` is the count passed to `bytes(count)`, `k` is the length of the source - the bytes in a
+bytes-like object, the items of an iterable, or the characters in a string - and `f` is the
+time and space a `__bytes__()` method takes. An item of an iterable is an `int` in
+`range(256)`, read at O(1), and the encoding row assumes a codec and error handler whose cost
+and output are proportional to their input, as the byte-oriented codecs are. A structured
+codec can cost more.
 
-| Case | Time | Space | Notes |
-|------|------|-------|-------|
-| Empty bytes | O(1) | O(1) | bytes() |
-| From string with encoding | O(n) | O(n) | n = string length |
-| From iterable | O(n) | O(n) | n = iterable length |
-| From int (size) | O(n) | O(n) | n = requested size |
-| Copy bytes | O(n) | O(n) | n = bytes length |
+## Complexity Reference
 
-## Basic Usage
+### Construction
 
-### Create Empty Bytes
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `bytes()` | O(1) | O(1) | The shared empty `bytes`; `bytes(0)` returns it too |
+| `bytes(count)` | O(n) | O(n) | n zero bytes |
+| `bytes(b)` where `b` is a `bytes` | O(1) | O(1) | Returns `b` itself. An instance of a `bytes` subclass is copied, O(k) |
+| `bytes(bytes_like)` | O(k) | O(k) | Copies the buffer of a `bytearray`, `memoryview` or `array.array`; the copy keeps its value when the source changes |
+| `bytes(iterable)` | O(k) | O(k) | One byte per item |
+| `bytes(string, encoding, errors='strict')` | O(k) | O(k) | The encoder `str.encode(string, encoding, errors)` runs; k = characters in the string, which it walks whatever it emits |
+| `bytes(obj)` where `obj` defines `__bytes__()` | O(f) | O(f) | Takes precedence over the other forms; a result that is not a `bytes` raises `TypeError` |
+
+### Errors
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `bytes(count)` with a negative count | O(1) | O(1) | `ValueError`, before anything is allocated |
+| `bytes(iterable)` with an item outside `range(256)` | O(k) | O(k) | `ValueError` at the first such item; no item after it is read |
+| `bytes(string)` without an encoding | O(1) | O(1) | `TypeError`, before the string is read; so is `errors` without an encoding |
+| `bytes(obj, encoding)` where `obj` is not a `str` | O(1) | O(1) | `TypeError`, before `obj` is read |
+
+## Copying and Sharing
+
+A `bytes` cannot change, so converting one to `bytes` hands back the same object. A mutable
+source is copied, and the copy keeps its value when the source changes; `memoryview()` views a
+buffer in O(1) without copying it.
 
 ```python
-# O(1)
-b = bytes()       # b''
-b = bytes(0)      # b'' (size 0)
+data = b"payload"
+assert bytes(data) is data  # O(1) - an exact bytes is returned as it is
+
+buffer = bytearray(b"payload")
+frozen = bytes(buffer)  # O(k) - a copy
+buffer[0] = ord("P")
+assert frozen == b"payload"  # the copy kept its value
+
+view = memoryview(buffer)  # O(1) - shares the buffer instead
+assert bytes(view[:3]) == b"Pay"  # O(k) - copies only the 3 bytes the view covers
 ```
 
-### From String with Encoding
+## Integers Are Counts
+
+An `int` argument is a length, not a value: `bytes(5)` is five zero bytes, and `bytes(n)`
+allocates n of them however large n is. `int.to_bytes()` encodes the value instead. An
+iterable of integers supplies one byte per item.
 
 ```python
-# O(n) - where n = string length
-b = bytes("hello", "utf-8")        # b'hello'
-b = bytes("café", "utf-8")         # b'caf\xc3\xa9' (3 bytes for é)
-b = bytes("中国", "utf-8")         # Multiple bytes per character
+assert bytes(5) == b"\x00\x00\x00\x00\x00"  # O(n) - five zero bytes, not the number 5
+assert (5).to_bytes(1, "big") == b"\x05"  # O(length) - the value
+
+assert bytes([72, 105]) == b"Hi"  # O(k) - one byte per item
+assert bytes(range(3)) == b"\x00\x01\x02"  # O(k) - any iterable of ints
+
+try:
+    bytes(-1)
+except ValueError as error:
+    assert "negative count" in str(error)
+else:
+    raise AssertionError("a negative count was accepted")
+
+try:
+    bytes([65, 256])
+except ValueError as error:
+    assert "range(0, 256)" in str(error)
+else:
+    raise AssertionError("an item outside range(256) was accepted")
 ```
 
-### Allocate Bytes (Zero-filled)
+## Encoding Text
+
+`bytes(text, encoding)` runs the same encoder as `str.encode()`, at O(k) in the
+characters. A `str` without an encoding is rejected before it is read, as is an encoding
+given for anything that is not a `str`. Hex digits are not an encoding: `bytes.fromhex()`
+reads them.
 
 ```python
-# O(n) - where n = size
-b = bytes(10)      # b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
-b = bytes(1000)    # 1000 zero bytes
+text = "café"
+
+encoded = bytes(text, "utf-8")  # O(k) - k = characters
+assert encoded == text.encode("utf-8") == b"caf\xc3\xa9"
+assert len(encoded) == 5  # é takes two bytes in UTF-8
+
+assert bytes(text, "ascii", "replace") == b"caf?"  # O(k)
+assert bytes.fromhex("63 61 66") == b"caf"  # O(k) - two hex digits per byte
+
+try:
+    bytes(text, "ascii")  # errors='strict'
+except UnicodeEncodeError as error:
+    assert error.start == 3
+else:
+    raise AssertionError("é was encoded as ASCII")
+
+try:
+    bytes(text)  # O(1) - rejected before it is read
+except TypeError as error:
+    assert "without an encoding" in str(error)
+else:
+    raise AssertionError("a str was converted without an encoding")
+
+try:
+    bytes(b"cafe", "utf-8")  # O(1)
+except TypeError as error:
+    assert "encoding without a string" in str(error)
+else:
+    raise AssertionError("an encoding was applied to bytes")
 ```
 
-### From Iterable of Integers
+## Objects That Define `__bytes__`
+
+`bytes(obj)` calls `obj.__bytes__()` when it exists, ahead of the buffer, count and iterable
+forms, and returns its result. The cost is the method's own.
 
 ```python
-# O(n) - where n = number of items
-b = bytes([65, 66, 67])         # b'ABC'
-b = bytes(range(256))           # All byte values
-b = bytes([0, 255, 128, 64])    # b'\x00\xff\x80@'
-```
+class Packet:
+    def __init__(self, payload):
+        self.payload = payload
 
-### Copy Bytes
+    def __bytes__(self):
+        return len(self.payload).to_bytes(2, "big") + self.payload
 
-```python
-# O(n) - where n = bytes length
-original = b"hello"
-copy = bytes(original)  # Creates new bytes object
-```
 
-## Complexity Details
-
-### String Encoding
-
-```python
-# O(n) - linear in string length
-short = bytes("hi", "utf-8")       # O(2)
-long = bytes("a" * 1000, "utf-8")  # O(1000)
-
-# Each character must be encoded
-# ASCII characters = 1 byte each
-# UTF-8 multibyte = multiple bytes
-```
-
-### Multibyte Characters
-
-```python
-# O(n) - but n = encoded byte length, not character count
-english = bytes("hello", "utf-8")  # O(5) - 5 ASCII characters
-# Result: b'hello' (5 bytes)
-
-accented = bytes("café", "utf-8")  # O(4) - 4 characters
-# Result: b'caf\xc3\xa9' (5 bytes!) - é = 2 bytes in UTF-8
-
-chinese = bytes("中国", "utf-8")   # O(2) - 2 characters
-# Result: 6 bytes (3 bytes per character)
-```
-
-### From Iterable
-
-```python
-# O(n) - iterate and convert
-data = [65, 66, 67, 68, 69]
-b = bytes(data)  # O(5)
-# b'ABCDE'
-
-# With range
-b = bytes(range(256))  # O(256)
-```
-
-### Allocating Size
-
-```python
-# O(n) - allocate and zero-fill
-small = bytes(10)      # O(10)
-medium = bytes(1000)   # O(1000)
-large = bytes(1000000) # O(1000000)
-
-# Must initialize all bytes to zero
+packet = Packet(b"data")
+assert bytes(packet) == b"\x00\x04data"  # O(f) - whatever __bytes__ costs
 ```
 
 ## Common Patterns
 
-### Encoding Strings
+### Building Then Freezing
 
 ```python
-# O(n) - convert text to bytes
-text = "Hello, World!"
-encoded = bytes(text, "utf-8")  # O(13)
-# b'Hello, World!'
+buffer = bytearray()
+for value in range(5):
+    buffer.append(value)  # O(1) amortized
+
+frozen = bytes(buffer)  # O(k) - one copy, at the end
+assert frozen == b"\x00\x01\x02\x03\x04"
+assert bytes(frozen) is frozen  # O(1) - converting it again copies nothing
 ```
 
-### Different Encodings
-
-```python
-# O(n) - same complexity, different results
-text = "café"
-
-utf8 = bytes(text, "utf-8")         # O(4) - 5 bytes result
-utf16 = bytes(text, "utf-16")       # O(4) - 10 bytes result
-latin1 = bytes(text, "latin-1")     # O(4) - 4 bytes result
-ascii = bytes(text, "ascii")        # UnicodeEncodeError!
-```
-
-### Converting Between Bytes and Strings
-
-```python
-# O(n) - encode and decode
-text = "hello"
-
-# String -> Bytes
-b = bytes(text, "utf-8")  # O(n)
-
-# Bytes -> String
-decoded = str(b, "utf-8")    # O(n)
-# or
-decoded = b.decode("utf-8")  # O(n) - same complexity
-
-# Round trip
-text2 = str(bytes(text, "utf-8"), "utf-8")
-assert text == text2
-```
-
-## Performance Patterns
-
-### Batch Encoding
-
-```python
-# O(n * m) - n strings, m = avg length
-texts = ["hello", "world", "python"]
-encoded = [bytes(t, "utf-8") for t in texts]  # O(n * m)
-
-# Using map - same complexity
-encoded = list(map(lambda x: bytes(x, "utf-8"), texts))
-```
-
-### File I/O
-
-```python
-# O(n) - read as bytes
-with open("file.bin", "rb") as f:
-    data = f.read()  # bytes
-
-# O(n) - write bytes
-with open("output.bin", "wb") as f:
-    f.write(bytes("hello", "utf-8"))  # O(n)
-```
-
-### Network Transmission
-
-```python
-# O(n) - convert and send
-import socket
-
-message = "Hello, Server!"
-data = bytes(message, "utf-8")  # O(n)
-
-# socket.send(data)  # Sends bytes
-```
-
-## Edge Cases
-
-### Empty String
-
-```python
-# O(1)
-b = bytes("", "utf-8")  # b''
-```
-
-### Zero-size Allocation
-
-```python
-# O(1)
-b = bytes(0)  # b'' - empty bytes
-```
-
-### Invalid Encoding
-
-```python
-# O(n) - error during conversion
-try:
-    b = bytes("café", "ascii")  # UnicodeEncodeError
-except UnicodeEncodeError:
-    pass
-```
-
-### Invalid Iterable Values
-
-```python
-# O(n) - error checking
-try:
-    b = bytes([0, 256, 128])  # ValueError - 256 > 255
-except ValueError:
-    pass
-
-try:
-    b = bytes([-1, 50, 100])  # ValueError - negative
-except ValueError:
-    pass
-```
-
-### Large Allocations
-
-```python
-# O(n) - allocate and zero-fill
-huge = bytes(10**7)  # 10MB of zeros - slower
-# Useful but memory intensive
-```
-
-## Comparison with bytearray()
-
-```python
-# bytes() - immutable
-b = bytes("hello", "utf-8")
-# b[0] = 65  # TypeError - can't modify
-
-# bytearray() - mutable
-ba = bytearray("hello", "utf-8")
-ba[0] = 72  # OK - changed to 'H'
-
-# Both O(n) to create, but different mutability
-```
-
-## String Methods
-
-```python
-# encode() method - equivalent to bytes()
-text = "hello"
-b1 = bytes(text, "utf-8")
-b2 = text.encode("utf-8")
-# b1 == b2 - same result
-
-# decode() method - inverse
-b = b"hello"
-text = b.decode("utf-8")
-# "hello"
-```
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Specify encoding explicitly: `bytes(text, "utf-8")`
-- Use UTF-8 as default encoding
-- Handle encoding errors: `errors="strict"` (default) or other options
-- Cache encoded values if used repeatedly
+- Build changing data in a `bytearray` and call `bytes()` once at the end; concatenating `bytes` copies everything accumulated every time
+- Normalise an argument with `bytes(x)` freely when it is usually a `bytes` already; that case is O(1)
+- Take part of a large buffer as a `memoryview()` slice, which is O(1); `bytes(view)` then copies only the bytes the view covers
 
 ❌ **Avoid**:
 
-- Assuming ASCII encoding (won't work with accents)
-- Forgetting encoding parameter in bytes()
-- Creating large bytes objects unnecessarily
-- Confusing bytes with strings in Python 3
+- `bytes(n)` to convert an integer - it allocates n zero bytes; `n.to_bytes(length, byteorder)` encodes the value
+- Converting a `bytearray` you keep changing with `bytes()` after every change - each call copies all of it
 
 ## Related Functions
 
-- **[str()](str_func.md)** - Convert to string
-- **[bytearray()](index.md)** - Mutable bytes
-- **[encode()](str.md)** - String method to bytes
-- **[decode()](bytes.md)** - Bytes method to string
-
-## Version Notes
-
-- **Python 2.x**: str is bytes, unicode is text
-- **Python 3.x**: str is text, bytes is binary data
-- **All versions**: UTF-8 is recommended encoding
+- **[bytes](bytes.md)** - The type's operations and methods, including `decode()` and the `bytes.fromhex()` alternate constructor
+- **[bytearray()](bytearray_func.md)** - The mutable counterpart, built from a count, a buffer, an iterable or a string
+- **[bytearray](bytearray.md)** - The mutable type's methods, for building data before freezing it with `bytes()`
+- **[str](str.md)** - `str.encode()`, the encoder `bytes(text, encoding)` runs
+- **[memoryview()](memoryview_func.md)** - O(1) views over a buffer, where `bytes()` copies it
