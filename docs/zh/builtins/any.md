@@ -1,5 +1,5 @@
 ---
-source_sha: 4b6b1d20baacc7ebd5dcd5e6e38e7c1696ddd9d11e137a18d4f8963f5672c4c6
+source_sha: 7a20410af2e442ff73c3ad67a2c57ec962ae7130686345b733eb1aaecb25dd9e
 translated: machine
 ---
 
@@ -246,12 +246,12 @@ result = any(f() for f in [expensive1, expensive2, expensive3])
 - 条件中不必要的嵌套
 - 忽略短路求值行为
 
+## 版本说明
+
+- **所有 Python 3 版本**：在第一个真值元素处停止，迭代器中其余元素保持未消费
+
 ## 相关函数
 
 - **[all()](all.md)** - 检查是否所有元素都为真
 - **[filter()](filter.md)** - 按谓词过滤元素
 - **[内置类型总览](index.md)** - 各内置类型中 `in` 的成员测试
-
-## 版本说明
-
-- **所有 Python 3 版本**：在第一个真值元素处停止，迭代器中其余元素保持未消费

@@ -193,13 +193,13 @@ ascii("日本語")   # "'\\u65e5\\u672c\\u8a9e'"
 - Using `ascii()` when you can use proper encoding
 - Forgetting that `ascii()` doesn't decode escape sequences
 
+## Version Notes
+
+- **All Python 3**: `ascii(x)` is `repr(x)` with every non-ASCII character escaped as `\xHH`, `\uHHHH` or `\UHHHHHHHH`; a string argument comes back quoted, other objects in whatever form their `repr()` takes
+
 ## Related Functions
 
 - **[repr()](repr.md)** - Python representation (keeps printable non-ASCII characters)
 - **[str()](str.md)** - String representation (human-readable)
 - **[encode()](str.md)** - Encode to bytes with specific encoding
 - **[bytes()](bytes.md)** - Convert to bytes
-
-## Version Notes
-
-- **All Python 3**: `ascii(x)` is `repr(x)` with every non-ASCII character escaped as `\xHH`, `\uHHHH` or `\UHHHHHHHH`; a string argument comes back quoted, other objects in whatever form their `repr()` takes

@@ -1,5 +1,5 @@
 ---
-source_sha: 74f480c5b351806412878d0913ebada93bb8e2cf981d2d6b15b5285028f9a8ab
+source_sha: 0ba7a75a1afb09668076ee8085fb7274a327ff9daa713ab1dc8e5a73e47eff75
 translated: machine
 ---
 
@@ -196,13 +196,13 @@ ascii("日本語")   # "'\\u65e5\\u672c\\u8a9e'"
 - 能用正确编码时仍使用 `ascii()`
 - 忘记 `ascii()` 不会解码转义序列
 
+## 版本说明
+
+- **所有 Python 3**：`ascii(x)` 即 `repr(x)`，其中每个非 ASCII 字符都转义为 `\xHH`、`\uHHHH` 或 `\UHHHHHHHH`；字符串参数返回时带引号，其他对象则采用其 `repr()` 的形式
+
 ## 相关函数
 
 - **[repr()](repr.md)** - Python 表示形式（保留可打印的非 ASCII 字符）
 - **[str()](str.md)** - 字符串表示形式（人类可读）
 - **[encode()](str.md)** - 按指定编码编码为字节
 - **[bytes()](bytes.md)** - 转换为字节
-
-## 版本说明
-
-- **所有 Python 3**：`ascii(x)` 即 `repr(x)`，其中每个非 ASCII 字符都转义为 `\xHH`、`\uHHHH` 或 `\UHHHHHHHH`；字符串参数返回时带引号，其他对象则采用其 `repr()` 的形式

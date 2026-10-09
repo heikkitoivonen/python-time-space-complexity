@@ -243,12 +243,12 @@ result = any(f() for f in [expensive1, expensive2, expensive3])
 - Unnecessary nesting in conditions
 - Forgetting short-circuit behavior
 
+## Version Notes
+
+- **All Python 3**: Stops at the first truthy item and leaves the rest of an iterator unconsumed
+
 ## Related Functions
 
 - **[all()](all.md)** - Check if all items are truthy
 - **[filter()](filter.md)** - Filter items based on predicate
 - **[Builtins overview](index.md)** - Membership testing with `in` across built-in types
-
-## Version Notes
-
-- **All Python 3**: Stops at the first truthy item and leaves the rest of an iterator unconsumed

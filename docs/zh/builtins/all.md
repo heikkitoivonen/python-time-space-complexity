@@ -1,5 +1,5 @@
 ---
-source_sha: d40df4d8a0d7e4ef4fae6eb5db4f36c67ab5f79fe48c7bae1e7431f934a5e0f1
+source_sha: 74fdf8295a89a91b5e8669755086b5e28bdfebd2638be26588f1e250aa1cba9a
 translated: machine
 ---
 
@@ -223,12 +223,12 @@ not any(x > 0 for x in numbers)  # False
 - 条件中不必要的嵌套
 - 只检查单个元素时使用 `all()`
 
-## 相关函数
-
-- **[any()](any.md)** - 检查是否存在为真的元素
-- **[filter()](filter.md)** - 按谓词过滤元素
-
 ## 版本说明
 
 - **Python 2.x**：提供基本功能
 - **Python 3.x**：行为相同
+
+## 相关函数
+
+- **[any()](any.md)** - 检查是否存在为真的元素
+- **[filter()](filter.md)** - 按谓词过滤元素

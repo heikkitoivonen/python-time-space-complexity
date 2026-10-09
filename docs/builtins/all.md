@@ -220,12 +220,12 @@ not any(x > 0 for x in numbers)  # False
 - Unnecessary nesting in conditions
 - Using `all()` when checking just one item
 
-## Related Functions
-
-- **[any()](any.md)** - Check if any item is truthy
-- **[filter()](filter.md)** - Filter items based on predicate
-
 ## Version Notes
 
 - **Python 2.x**: Basic functionality available
 - **Python 3.x**: Same behavior
+
+## Related Functions
+
+- **[any()](any.md)** - Check if any item is truthy
+- **[filter()](filter.md)** - Filter items based on predicate
