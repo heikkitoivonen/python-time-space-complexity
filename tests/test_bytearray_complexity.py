@@ -1,14 +1,15 @@
-"""Tests for docs/builtins/bytearray_func.md.
+"""Tests for docs/builtins/bytearray.md.
 
 The page prices a bytearray as one resizable buffer with a start offset. A
 modest increase overallocates it by an eighth, which makes appending
 amortized O(1); removing a prefix advances the offset rather than moving the
 tail, for `del ba[:k]` and for a shorter slice assigned at the front, which
 still copies what it assigns; a change of length anywhere else shifts the
-tail; and the splitting and transforming methods shared
-with `bytes` build a new object, copying all n bytes even when nothing
-changed, where its searches and predicates only read the buffer. Copies, temporaries and identity are settled by traced allocation and
-`__alloc__()`, which need no tolerance; error and value behaviour by what is
+tail; and the splitting and transforming methods shared with `bytes` build
+a new object, copying all n bytes even when nothing changed, where its
+searches and predicates only read the buffer. Copies, temporaries and
+identity are settled by traced allocation and `__alloc__()`, which need no
+tolerance; error and value behaviour by what is
 raised or returned; the growth classes a counter cannot reach by timing a
 hundredfold step in one dimension. A row claiming O(1) has to come in under
 x3 for that step, and a row claiming linearity between x10 and x1,000 - far
@@ -16,15 +17,6 @@ from the x1 of a constant and the x10,000 of a square.
 
 Measurement scope:
 
-* Construction: `bytearray(count)`, `bytearray(bytes)`, `bytearray(str,
-  'utf-8')`, `bytearray.fromhex()`, `bytearray(list)` and an ASCII encode
-  with `errors='ignore'` - which emits nothing and still walks the string -
-  all scale with their source. Building 10,000,000 bytes from a count or
-  from a `bytes` traces a peak of at least 10,000,000. The copy is asserted
-  independent of its source by mutating it, the empty bytearray has an
-  allocation of 0, and the `TypeError` and `ValueError` cases are asserted by
-  their messages. `fromhex()` takes a `bytes` argument on 3.14 and raises
-  `TypeError` before.
 * `len()`, `ba[i]`, `ba[i] = v` and `iter(ba)` cost the same at 100,000 and
   10,000,000 bytes, as do `append()`, `ba += bytes` of 100 bytes, `extend()`
   of 100 bytes, `pop()`, `del ba[0]`, `del ba[:10]`, `del ba[-1]`, a
@@ -90,8 +82,8 @@ Measurement scope:
   forward search, and compared in full at every position by a reverse one -
   `rfind()`, `rsplit()` and `rpartition()` each cost between x4 and x50,
   where `find()`, `count()`, `split()`, `partition()` and `replace()` stay
-  flat. Against one mismatching only at its last byte, which is what turns a
-  naive forward scan quadratic, all eight come in under x3: that is the forward
+  flat. Against one mismatching only at its second-to-last byte, which is
+  what turns a naive forward scan quadratic, all eight come in under x3: that is the forward
   search's linear-time fallback, which the reverse search has no equivalent
   of.
 * Transforms: seventeen methods are asserted to return a new bytearray that
@@ -131,12 +123,16 @@ Measurement scope:
   all scale, as do `ba + other` in each of its two operands separately,
   `bytes(ba)` - which also traces a full-size peak - and `ba *= count` in
   the receiver's length and in the count, each measured on a buffer built
-  outside the timing since the operation consumes it; `==` between buffers of different length costs the same at both
-  sizes. `ba *= count` for a count of 0 or less leaves an empty bytearray
-  with at most one byte allocated, which is `clear()`'s release rather than
-  a count-sized result. `ba * count` scales in both of its dimensions, measured on 10,000
-  and 1,000,000-byte buffers: a hundredfold buffer at a fixed count, and a
-  hundredfold count at a fixed buffer.
+  outside the timing since the operation consumes it; `==` between buffers
+  of different length costs the same at both sizes. `ba *= count` for a
+  count of 0 or less leaves an empty bytearray with at most one byte
+  allocated, which is `clear()`'s release rather than a count-sized result.
+  `ba * count` scales in both of its dimensions, measured on 10,000 and
+  1,000,000-byte buffers: a hundredfold buffer at a fixed count, and a
+  hundredfold count at a fixed buffer. `ba * 0` and `ba * -1` cost the same
+  at 100,000 and 10,000,000 bytes.
+* `bytearray.fromhex()` returns a bytearray that round-trips `hex()`; its
+  scaling is measured in tests/test_bytearray_func_complexity.py.
 * Every fenced Python block runs in its own subprocess, and a mutated
   assertion in one of them is asserted to fail.
 
@@ -156,16 +152,14 @@ Not settled here:
   term is timed. The reverse search's worst case is measured at one buffer
   size, by pattern length alone.
 * The growth policy's threshold and the compaction threshold are read
-  from bytearray_resize in Objects/bytearrayobject.c, the same on every
-  supported branch; the tests observe that reallocations are rare and that
+  from PyByteArray_Resize in Objects/bytearrayobject.c (its body moved to
+  bytearray_resize_lock_held in 3.14), the same on every supported branch; the tests observe that reallocations are rare and that
   compaction happens, not the ratios themselves.
-* The `str` constructor is timed with UTF-8 and with ASCII plus
-  `errors='ignore'`; other codecs and error handlers are not varied.
 * `strip()`'s (s + 1)·c term is measured with `chars` holding one byte that
   matches; a `chars` where several match earlier lowers the constant without
   changing the term. The three stripping methods share one implementation,
   and only `strip()` is timed.
-* The encoding rows are scoped to codecs and error handlers whose cost and
+* The `decode()` row is scoped to codecs and error handlers whose cost and
   output are proportional to their input. Only UTF-8 and ASCII are measured.
   A registered handler may return a replacement of any length, and a codec
   that rebuilds its result as it goes costs more than its output; both are
@@ -173,14 +167,13 @@ Not settled here:
 * Timings hold the element values fixed, all `b"a"` or zeros. The scaling
   measurements run at 100,000 and 10,000,000 bytes except for `ba * count`,
   whose result would reach 100 MB there: its ratio then prices the page
-  faults of writing that, not the product, so it is measured two orders
+  faults of writing that, not the product, so it is measured one order
   smaller. `split()` runs at 50,000 and 5,000,000 bytes, and `join()`'s part
   counts at 2,000 and 200,000, so the pieces stay within 64 MB.
 """
 
 from __future__ import annotations
 
-import array
 import pathlib
 import re
 import subprocess
@@ -193,7 +186,7 @@ from typing import Any
 
 import pytest
 
-PAGE = pathlib.Path(__file__).parent.parent / "docs" / "builtins" / "bytearray_func.md"
+PAGE = pathlib.Path(__file__).parent.parent / "docs" / "builtins" / "bytearray.md"
 EXPECTED_BLOCKS = 8
 
 SMALL = 100_000
@@ -252,92 +245,6 @@ def peak_bytes(func: Callable[[], Any]) -> int:
 
 def letters(size: int) -> bytearray:
     return bytearray(b"a" * size)
-
-
-class TestConstruction:
-    """`bytearray(count)` | O(n), `bytearray(bytes_like)` | O(k) as a copy,
-    `bytearray(iterable)` | O(k) item by item, `bytearray(str, encoding)` |
-    O(k), `fromhex()` | O(k); the empty one allocates nothing."""
-
-    def test_the_empty_bytearray_allocates_no_buffer(self) -> None:
-        assert bytearray().__alloc__() == 0
-        assert bytearray(0) == bytearray()
-
-    def test_a_count_gives_that_many_zero_bytes(self) -> None:
-        assert bytearray(5) == b"\x00\x00\x00\x00\x00"
-        with pytest.raises(ValueError, match="negative count"):
-            bytearray(-1)
-
-    def test_a_count_allocates_the_buffer_up_front(self) -> None:
-        peak = peak_bytes(lambda: bytearray(LARGE))
-
-        assert peak >= LARGE, f"bytearray({LARGE}) peaked at {peak} bytes"
-
-    def test_a_bytes_like_source_is_copied_not_shared(self) -> None:
-        source = bytearray(b"hello")
-
-        copy = bytearray(source)
-        copy[0] = ord("j")
-
-        assert copy is not source
-        assert source == bytearray(b"hello")
-        assert bytearray(memoryview(b"xy")) == b"xy"
-        assert bytearray(array.array("B", [1, 2])) == b"\x01\x02"
-
-    def test_copying_a_bytes_allocates_its_length(self) -> None:
-        source = bytes(LARGE)
-
-        peak = peak_bytes(lambda: bytearray(source))
-
-        assert peak >= LARGE, f"bytearray(bytes of {LARGE}) peaked at {peak} bytes"
-
-    def test_an_iterable_supplies_one_byte_per_item(self) -> None:
-        assert bytearray([65, 66, 67]) == b"ABC"
-        assert bytearray(value for value in range(3)) == b"\x00\x01\x02"
-        with pytest.raises(ValueError, match="range\\(0, 256\\)"):
-            bytearray([0, 256])
-        with pytest.raises(ValueError, match="range\\(0, 256\\)"):
-            bytearray([-1])
-
-    def test_a_string_needs_an_encoding(self) -> None:
-        assert bytearray("café", "utf-8") == b"caf\xc3\xa9"
-        assert bytearray("é" * 1_000, "ascii", "ignore") == b"", "the discarded input is still read"
-        with pytest.raises(TypeError, match="without an encoding"):
-            bytearray("café")  # type: ignore[call-overload]
-
-    def test_fromhex_reads_two_characters_per_byte(self) -> None:
-        assert bytearray.fromhex("48 65") == b"He"
-        assert bytearray.fromhex("4865") == b"He"
-
-    def test_fromhex_takes_bytes_from_3_14(self) -> None:
-        if sys.version_info >= (3, 14):
-            assert bytearray.fromhex(b"ab") == b"\xab"  # type: ignore[arg-type]
-        else:
-            with pytest.raises(TypeError):
-                bytearray.fromhex(b"ab")  # type: ignore[arg-type]
-
-    @pytest.mark.timing
-    @FRESH_PAGES_ON_WINDOWS
-    def test_each_constructor_scales_with_its_source(self) -> None:
-        def scaling(source: Callable[[int], Any], build: Callable[[Any], Any]) -> float:
-            # One pair of sources alive at a time.
-            small, large = source(SMALL), source(LARGE)
-            return growth(lambda: build(small), lambda: build(large))
-
-        ratios = {
-            "count": scaling(lambda size: size, bytearray),
-            "bytes": scaling(bytes, bytearray),
-            "str": scaling(lambda size: "é" * size, lambda text: bytearray(text, "utf-8")),
-            "fromhex": scaling(lambda size: "ab" * size, bytearray.fromhex),
-            "list": scaling(lambda size: [0] * (size // 10), bytearray),
-            # A lossy handler emits nothing, and still walks every character.
-            "str, ascii, ignore": scaling(
-                lambda size: "é" * size, lambda text: bytearray(text, "ascii", "ignore")
-            ),
-        }
-
-        for name, ratio in ratios.items():
-            assert_linear(f"bytearray from {name}", ratio)
 
 
 class TestIndexingIsConstant:
@@ -1004,7 +911,7 @@ class TestSearching:
         Each shape defeats one direction. A pattern that mismatches at its
         second byte is rejected at once by any forward search, naive or not,
         and is the one a reverse search has to compare in full at every
-        position. A pattern that mismatches only at its last byte is the
+        position. A pattern that mismatches only at its second-to-last byte is the
         reverse of that: trivial backwards, and the case a naive forward scan
         turns quadratic. Staying flat on it is what separates the documented
         O(n + m) from a scan with no linear-time fallback.
@@ -1012,7 +919,7 @@ class TestSearching:
         haystack = letters(SMALL)
         shapes = {
             "mismatching at the second byte": (b"ab" + b"a" * 98, b"ab" + b"a" * 998),
-            "mismatching at the last byte": (b"a" * 98 + b"ba", b"a" * 998 + b"ba"),
+            "mismatching at the second-to-last byte": (b"a" * 98 + b"ba", b"a" * 998 + b"ba"),
         }
         backward = ["rfind", "rsplit", "rpartition"]
         searches = ["find", "count", "split", "partition", "replace", *backward]
@@ -1359,7 +1266,7 @@ class TestSplittingAndJoining:
 
 class TestPredicatesAndConversions:
     """The `is*()` predicates | O(n) | O(1), stopping at the first deciding
-    byte; `decode()`, `hex()` | O(n) | O(n)."""
+    byte; `decode()`, `hex()` | O(n) | O(n); `fromhex()` inverts `hex()`."""
 
     def test_the_documented_results(self) -> None:
         data = bytearray(b"Hello")
@@ -1371,6 +1278,8 @@ class TestPredicatesAndConversions:
         assert data.hex() == "48656c6c6f"
         assert data.hex(":") == "48:65:6c:6c:6f"
         assert data.hex("_", 2) == "48_656c_6c6f"
+        assert bytearray.fromhex(data.hex()) == data
+        assert isinstance(bytearray.fromhex(data.hex()), bytearray)
 
     @pytest.mark.timing
     def test_a_predicate_stops_at_the_first_deciding_byte(self) -> None:
@@ -1452,6 +1361,18 @@ class TestComparisonsIterationAndArithmetic:
         assert_linear("ba *= count over 100x the bytes", by_length)
         assert_linear("ba *= count over 100x the count", by_count)
 
+    @pytest.mark.timing
+    def test_repeating_into_a_new_object_by_zero_or_less_is_constant(self) -> None:
+        """`ba * count` for a count of 0 or less builds an empty bytearray
+        without reading the receiver."""
+        small, large = letters(SMALL), letters(LARGE)
+
+        assert large * 0 == b"" and large * -1 == b""
+        for count in (0, -1):
+            ratio = growth(lambda c=count: small * c, lambda c=count: large * c, inner=100)  # type: ignore[misc]
+
+            assert ratio < CONSTANT, f"ba * {count} on 100x the buffer cost x{ratio:.2f}"
+
     @pytest.mark.parametrize("count", [0, -3])
     def test_repeating_by_zero_or_less_empties_the_buffer(self, count: int) -> None:
         """Which is the release `clear()` pays for, not a count-sized result."""
@@ -1494,7 +1415,7 @@ class TestComparisonsIterationAndArithmetic:
 
         iteration = growth(lambda: sum(small), lambda: sum(large))
         making_an_iterator = growth(lambda: iter(small), lambda: iter(large), inner=100)
-        # Repetition is measured on buffers two orders smaller: the row is
+        # Repetition is measured on buffers one order smaller: the row is
         # O(n·count) in the result, and a 100 MB one prices the page faults
         # of writing it rather than the product.
         narrow, wide = letters(10_000), letters(1_000_000)

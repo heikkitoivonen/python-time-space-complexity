@@ -352,6 +352,10 @@ def test_page_mapping(tmp_path: Path) -> None:
         audit.documentation_page(tmp_path, "builtins", "builtins.memoryview.nbytes").name
         == "memoryview_func.md"
     )
+    assert (
+        audit.documentation_page(tmp_path, "builtins", "builtins.bytearray.fromhex").name
+        == "bytearray.md"
+    )
 
 
 def test_report_ranks_all_defects_and_preserves_unknowns(

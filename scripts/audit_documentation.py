@@ -94,7 +94,6 @@ def get_documented_files(docs_dir: Path) -> dict[str, list[str]]:
     # Handle naming pattern mismatches
     # Some items have lowercase file names that should match titlecase builtins
     naming_mappings = {
-        "bytearray": "bytearray_func",
         "complex": "complex_func",
         "memoryview": "memoryview_func",
         "object": "object_func",
@@ -232,7 +231,6 @@ POSIX_ONLY_MODULES = {
     "multiprocessing.popen_spawn_posix",
 }
 BUILTIN_PAGES = {
-    "bytearray": "bytearray_func",
     "complex": "complex_func",
     "memoryview": "memoryview_func",
     "object": "object_func",

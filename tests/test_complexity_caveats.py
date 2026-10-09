@@ -229,22 +229,6 @@ class _SameHash:
         return isinstance(other, _SameHash) and self.value == other.value
 
 
-class TestBytearrayAppendReallocates:
-    """docs/builtins/bytes.md said append() copies nothing. Amortized O(1)
-    means most appends are free and an occasional one reallocates."""
-
-    def test_buffer_grows_in_jumps_not_per_append(self) -> None:
-        buffer = bytearray()
-        sizes: set[int] = set()
-        for _ in range(2_000):
-            buffer.append(0)
-            sizes.add(sys.getsizeof(buffer))
-
-        assert 1 < len(sizes) < 2_000, (
-            f"expected occasional reallocation, saw {len(sizes)} distinct sizes"
-        )
-
-
 class TestIsinstanceIsNotUniversallyConstant:
     """docs/builtins/type_func.md claimed isinstance() is O(1)."""
 

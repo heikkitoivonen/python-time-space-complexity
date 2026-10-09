@@ -835,66 +835,6 @@ class TestBytesComplexity:
         )
 
 
-class TestBytearrayComplexity:
-    """Test bytearray operation complexities as documented in docs/builtins/bytes.md."""
-
-    SMALL_SIZE = 1_000
-    LARGE_SIZE = 100_000
-    SIZE_RATIO = LARGE_SIZE / SMALL_SIZE
-
-    @pytest.mark.timing
-    def test_len_is_o1(self) -> None:
-        """len() should be O(1) - direct lookup."""
-        small_ba = bytearray(b"a" * self.SMALL_SIZE)
-        large_ba = bytearray(b"a" * self.LARGE_SIZE)
-
-        small_time = measure_time(lambda: len(small_ba))
-        large_time = measure_time(lambda: len(large_ba))
-
-        assert is_constant_time(small_time, large_time), (
-            f"len() appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
-        )
-
-    @pytest.mark.timing
-    def test_index_access_is_o1(self) -> None:
-        """bytearray[i] should be O(1) - direct indexing."""
-        small_ba = bytearray(b"a" * self.SMALL_SIZE)
-        large_ba = bytearray(b"a" * self.LARGE_SIZE)
-
-        small_time = measure_time(lambda: small_ba[self.SMALL_SIZE // 2])
-        large_time = measure_time(lambda: large_ba[self.LARGE_SIZE // 2])
-
-        assert is_constant_time(small_time, large_time), (
-            f"Index access appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
-        )
-
-    @pytest.mark.timing
-    def test_in_membership_is_on(self) -> None:
-        """'in' membership should be O(n) - linear search."""
-        small_ba = bytearray(b"a" * self.SMALL_SIZE)
-        large_ba = bytearray(b"a" * self.LARGE_SIZE)
-
-        small_time = measure_time(lambda: b"b" in small_ba, iterations=50)
-        large_time = measure_time(lambda: b"b" in large_ba, iterations=50)
-
-        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
-            f"'in' doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
-        )
-
-    @pytest.mark.timing
-    def test_count_is_on(self) -> None:
-        """bytearray.count() should be O(n) - linear scan."""
-        small_ba = bytearray(b"a" * self.SMALL_SIZE)
-        large_ba = bytearray(b"a" * self.LARGE_SIZE)
-
-        small_time = measure_time(lambda: small_ba.count(97), iterations=50)
-        large_time = measure_time(lambda: large_ba.count(97), iterations=50)
-
-        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
-            f"count() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
-        )
-
-
 class TestSetComplexity:
     """Test set operation complexities as documented in docs/builtins/set.md."""
 
