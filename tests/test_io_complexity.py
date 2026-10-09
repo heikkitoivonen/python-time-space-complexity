@@ -6,8 +6,7 @@ streams and sinks that record every `readinto()`, `read()` and `write()` made
 on them. Sharing and copying are settled by identity and traced allocation,
 which separate an O(1) handoff from an O(n) copy by orders of magnitude.
 Timing is used where neither can see the cost: `TextIOWrapper.tell()` and
-`seek()`, `StringIO` conversion and truncation, `BytesIO` truncation, and
-`str +=`.
+`seek()`, `StringIO` conversion and truncation, and `BytesIO` truncation.
 
 Measurement scope:
 
@@ -76,11 +75,15 @@ Measurement scope:
   copy. `truncate(size // 4)` on a stream sharing its bytes costs more than
   20x for 100x the bytes; `seek()` and `tell()` cost under 20x. A write one
   byte 10 MB past the end peaks over 10 MB and leaves zero bytes behind it.
-* `str +=` on CPython with a second reference to the string: 500, 5,000 and
-  50,000 appends of 20 characters cost more than 30x per 10x step and more
-  than 1,000x overall. Linear growth predicts 10x per step and 100x overall;
-  quadratic growth predicts 100x per step and 10,000x overall. Row width and
-  character representation are held fixed.
+* `str +=` on CPython with a second reference to the string: building 100,
+  1,000 and 10,000 rows of 20 ASCII characters allocates a fresh string on
+  every append after the first row. Each append's traced allocation is at
+  least the full result length, and the cumulative allocation is between
+  P and 2P, where P = 20 * (rows * (rows + 1) / 2 - 1). This measures total
+  allocation across the loop, not peak live memory. Row width and character
+  representation are held fixed. Objects/unicodeobject.c in CPython v3.12.15,
+  `PyUnicode_Append`, copies both operands into this fresh flat buffer;
+  the sum of the copied lengths establishes the quadratic work without timing.
 * `io.Reader` and `io.Writer` accept any object with the method and reject
   one without it; they are skipped before 3.14. `UnsupportedOperation` is
   both an `OSError` and a `ValueError`, and `io.BlockingIOError` is the
@@ -988,30 +991,31 @@ class TestStrConcatenation:
     """`+=` on a `str` that something else still refers to copies what came
     before, so the loop is O(n²)."""
 
-    @staticmethod
-    def build(rows: int) -> str:
-        text = ""
-        previous = text
-        for _ in range(rows):
-            previous = text  # a second reference, so += cannot extend in place
-            text += "x" * 19 + "\n"
-        assert len(previous) == len(text) - 20
-        return text
+    @pytest.mark.serial
+    @pytest.mark.parametrize("rows", [100, 1_000, 10_000])
+    def test_an_aliased_loop_allocates_a_quadratic_total(self, rows: int) -> None:
+        row = "x" * 19 + "\n"
+        text = row  # appending to an empty string may reuse the row itself
+        total = 0
+        tracemalloc.start()
+        try:
+            for _ in range(1, rows):
+                previous = text  # keeps the old allocation alive across +=
+                before = tracemalloc.get_traced_memory()[0]
+                text += row
+                allocated = tracemalloc.get_traced_memory()[0] - before
 
-    @pytest.mark.timing
-    @pytest.mark.skipif(
-        sys.platform == "win32",
-        reason="each concatenation's Windows heap allocation costs about as much as the 5 KB "
-        "copy at 500 rows and varies with heap state, so the first 10x step runs x25 to x55",
-    )
-    def test_an_aliased_loop_is_quadratic(self) -> None:
-        durations = [best_ns(partial(self.build, rows), repeats=5) for rows in (500, 5_000, 50_000)]
-        ratios = [larger / smaller for smaller, larger in pairwise(durations)]
+                assert text is not previous
+                assert allocated >= len(text), f"{allocated} new bytes for {len(text)} characters"
+                total += allocated
+        finally:
+            tracemalloc.stop()
 
-        assert durations[2] > durations[0] * 1_000, f"100x rows: {durations} ns, linear is 100x"
-        assert all(ratio > 30 for ratio in ratios), (
-            f"10x rows per step: {ratios}; linear is 10x, quadratic 100x; {durations} ns"
+        payload = len(row) * (rows * (rows + 1) // 2 - 1)
+        assert payload <= total < 2 * payload, (
+            f"{rows} rows allocated {total} bytes cumulatively; quadratic payload is {payload}"
         )
+        assert text == row * rows
 
 
 class TestProtocolsAndConstants:

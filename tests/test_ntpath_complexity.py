@@ -35,10 +35,12 @@ Measurement scope:
   `normcase` and `join`.
 * The O(L) and O(B) time rows: `split` (both implementations), `splitext`,
   `splitdrive`, `normcase`, `join` of L/10 one-character components and
-  `commonpath` of two such paths are timed at L = 3,000, 30,000 and 300,000;
-  each 10x step costs under 30x, where quadratic predicts 100x (x8.6 to
-  x17 on 3.14; `splitdrive` x1.8 then x5.9 on 3.10, where fixed cost
-  dominates). These are str arguments. `join` was measured separately up to
+  `commonpath` of two such paths are timed at L = 1,000, 10,000 and 100,000;
+  each 10x step costs under 30x, where quadratic predicts 100x.
+  `splitdrive` is measured in batches of 100 calls because its smallest
+  input takes less than a microsecond. Fixed overhead can dominate its first
+  interval, so this test excludes quadratic growth without asserting a
+  linear lower bound. These are str arguments. `join` was measured separately up to
   64,000 characters: with components of 1,000 characters and totals past
   400,000 its string concatenation stops growing in place on Windows and
   the steps turn superlinear, for `posixpath.join` as much as for
@@ -517,7 +519,10 @@ class TestStringFunctionsAreLinear:
     )
     def test_ten_times_the_input_costs_about_ten_times(self, name: str) -> None:
         make = self.cases()[name]
-        durations = [best_ns(make(size), repeats=5) for size in (1_000, 10_000, 100_000)]
+        inner = 100 if name == "splitdrive" else 1
+        durations = [
+            best_ns(make(size), repeats=5, inner=inner) for size in (1_000, 10_000, 100_000)
+        ]
         ratios = [durations[1] / durations[0], durations[2] / durations[1]]
 
         assert all(ratio < 30 for ratio in ratios), f"{name}: {durations} ns, x{ratios}"
