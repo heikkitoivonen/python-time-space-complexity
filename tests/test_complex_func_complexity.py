@@ -23,7 +23,11 @@ Measurement scope:
   is under 1 KiB; a 200,001-character string of Arabic-Indic digits peaks above
   its length, as does an ASCII one with underscores;
 * int: 2**1000 converts; 10**400 and a 10,000,000-bit int raise OverflowError.
-  Peak space for rejecting the 10,000,000-bit int is under 1 KiB;
+  Peak space for rejecting the 10,000,000-bit int is under 1 KiB. Rejecting
+  2**10_000_000 costs between x20 and x1,000 the time of 2**100_000 (linear
+  in the int predicts x100, constant x1; measured about x90), as the only
+  argument, as `imag`, as what `__index__` returns, and through
+  complex.from_number() on 3.14+;
 * the protocol order: an object with `__complex__` and `__float__` has only
   `__complex__` called, once; one with only `__index__` has it called once;
 * the version-gated 3.14 behaviour, and that a literal compiles to a constant
@@ -38,9 +42,9 @@ Not settled here:
 * Not varied: int subclasses and float subclasses as arguments, complex
   subclasses as the class or the argument (the identity shortcut is exact-type
   only).
-* Rejection time is not priced on the page: rejecting 1 << 10_000_000 against
-  1 << 1100 measured x820 (3.11.17) and x1,300 (3.14), from the sticky-bit scan
-  over zero low digits, a power-of-two shape that ordinary ints do not have.
+* That most ints stop the scan after a few digits is measured for float() in
+  tests/test_float_func_complexity.py; this file times the power-of-two worst
+  case only.
 """
 
 from __future__ import annotations
@@ -122,8 +126,53 @@ class TestFromComplex:
         assert complex(original) is original
 
 
+class Index:
+    """An object whose `__index__` returns a stored int."""
+
+    def __init__(self, value: int) -> None:
+        self.value = value
+
+    def __index__(self) -> int:
+        return self.value
+
+
 class TestHugeInt:
-    """Row: from int/float - an int too large for a float raises OverflowError."""
+    """Rows: from int/float, from two numbers and the protocols - an int is
+    converted in O(d) at worst, and one too large for a float raises
+    OverflowError."""
+
+    @pytest.mark.timing
+    @pytest.mark.parametrize(
+        "convert",
+        [
+            pytest.param(lambda v: complex(v), id="int"),
+            pytest.param(lambda v: complex(0, v), id="imag"),
+            pytest.param(lambda v: complex(Index(v)), id="__index__"),
+            pytest.param(
+                lambda v: complex.from_number(v),  # type: ignore[attr-defined]
+                id="from_number",
+                marks=pytest.mark.skipif(
+                    sys.version_info < (3, 14),
+                    reason="version: complex.from_number() is new in 3.14",
+                ),
+            ),
+        ],
+    )
+    def test_rejecting_a_power_of_two_is_linear(self, convert: Callable[[int], Any]) -> None:
+        def rejects(value: int) -> Callable[[], None]:
+            def run() -> None:
+                try:
+                    convert(value)
+                except OverflowError:
+                    return
+                raise AssertionError("complex() accepted an int too large for a float")
+
+            return run
+
+        small, large = 1 << 100_000, 1 << 10_000_000
+        ratio = best_time(rejects(large)) / best_time(rejects(small))
+
+        assert 20 < ratio < 1_000, f"100x the bits cost x{ratio:.1f}; linear predicts x100"
 
     @pytest.mark.serial
     def test_rejection_takes_constant_space(self) -> None:

@@ -1,5 +1,5 @@
 ---
-source_sha: f3db4b76a11dd29a44444ad2b7e74a777af6e2a2bcef12e2b00708cccc27f881
+source_sha: c6154a41633b0dafdf4bb3ac41f14320d86f817db41733076e5819994eab88ce
 translated: machine
 ---
 
@@ -124,7 +124,7 @@ mainittu kustannus on se, minkä maksat iteraattorin läpikäynnistä.
 |-------------|------|-------|-------|
 | [`bool()`](bool_func.md) | O(1) | O(1) | Säilöt vastaavat `__len__()`-metodilla, joka on O(1) |
 | [`int()`](int_func.md) | O(1) | O(1) | O(n²) hyvin pitkän lukumerkkijonon jäsennyksessä |
-| [`float()`](float_func.md) | O(1) | O(1) | O(n) merkkijonosta |
+| [`float()`](float_func.md) | O(1) | O(1) | O(n) merkkijonosta, ja O(n) tilaa ei-ASCII- tai alaviivoja sisältävälle tekstille; pahimmillaan O(d) d-numeroisesta kokonaisluvusta |
 | [`complex()`](complex_func.md) | O(1) | O(1) | O(n) merkkijonosta |
 | [`str()`](str_func.md) | O(1) | O(1) | O(n) säilöille ja omalle `__str__()`-toteutukselle |
 | [`bytes()`](bytes_func.md) | O(n) | O(n) | n = lähteen pituus; O(1), kun lähde on tarkalleen tyyppiä `bytes` |

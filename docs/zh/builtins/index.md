@@ -1,5 +1,5 @@
 ---
-source_sha: f3db4b76a11dd29a44444ad2b7e74a777af6e2a2bcef12e2b00708cccc27f881
+source_sha: c6154a41633b0dafdf4bb3ac41f14320d86f817db41733076e5819994eab88ce
 translated: machine
 ---
 
@@ -121,7 +121,7 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 |-------------|------|-------|-------|
 | [`bool()`](bool_func.md) | O(1) | O(1) | 容器通过 `__len__()` 判断，该操作为 O(1) |
 | [`int()`](int_func.md) | O(1) | O(1) | 解析很长的数字字符串时为 O(n²) |
-| [`float()`](float_func.md) | O(1) | O(1) | 从字符串转换为 O(n) |
+| [`float()`](float_func.md) | O(1) | O(1) | 从字符串转换为 O(n)，含非 ASCII 字符或下划线时空间也为 O(n)；从 d 位整数转换最坏为 O(d) |
 | [`complex()`](complex_func.md) | O(1) | O(1) | 从字符串转换为 O(n) |
 | [`str()`](str_func.md) | O(1) | O(1) | 容器与自定义 `__str__()` 为 O(n) |
 | [`bytes()`](bytes_func.md) | O(n) | O(n) | n 为来源的长度；来源的类型恰为 `bytes` 时为 O(1) |

@@ -119,7 +119,7 @@ under Notes is what you pay to consume it.
 |-------------|------|-------|-------|
 | [`bool()`](bool_func.md) | O(1) | O(1) | Containers answer via `__len__()`, which is O(1) |
 | [`int()`](int_func.md) | O(1) | O(1) | O(n²) parsing a very long numeric string |
-| [`float()`](float_func.md) | O(1) | O(1) | O(n) from a string |
+| [`float()`](float_func.md) | O(1) | O(1) | O(n) from a string, with O(n) space for non-ASCII or underscored text; O(d) at worst from a d-digit int |
 | [`complex()`](complex_func.md) | O(1) | O(1) | O(n) from a string |
 | [`str()`](str_func.md) | O(1) | O(1) | O(n) for containers and custom `__str__()` |
 | [`bytes()`](bytes_func.md) | O(n) | O(n) | n = length of the source; O(1) when it is an exact `bytes` |

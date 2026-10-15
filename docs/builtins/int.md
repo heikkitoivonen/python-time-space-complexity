@@ -13,7 +13,7 @@ CPython stores an int as a sequence of 30-bit digits, so costs below are given i
 | `x * y` | O(n * m) | O(n + m) | Schoolbook. Karatsuba once both operands exceed 70 digits (2,100 bits), or 140 for `x * x`: O(n^1.58) for equal widths, and O(n * m^0.58) for n > m, where the wider operand is multiplied in m-bit slices |
 | `x // y`, `x % y`, `divmod(x, y)` | O(q * m) | O(n + m) | Schoolbook, q = max(n - m, 0) + 1 quotient bits: O(n) for a one-digit divisor, O(m) for equal widths, O(1) when 0 <= x < y and x has fewer digits or a smaller top digit, O(m) when the top digits match (a negative x below y still allocates an m-bit remainder). 3.12+: O(n^1.58) divide-and-conquer once the divisor exceeds 300 digits and the quotient 150 |
 | `x / y` | O(n + m) | O(n) | True division rounds to a float, so only the leading 55 bits of the quotient are computed; O(1) when both operands fit in a float exactly |
-| `x ** y` | O(r²) | Θ(r) | For abs(x) >= 2 and y > 0, with r = result bits, about n * y. Bases 0, 1 and -1 cost O(m), a negative y returns a float in O(1); see [pow()](pow.md) for the three-argument form |
+| `x ** y` | O(r²) | Θ(r) | For abs(x) >= 2 and y > 0, with r = result bits, about n * y. Bases 0, 1 and -1 cost O(m), a negative y converts both operands to floats and returns a float, O(1) for most ints and O(n + m) at worst; see [pow()](pow.md) for the three-argument form |
 | `abs(x)` | O(n) | O(n) | Copies a negative operand with the sign flipped; returns `x` itself when it is non-negative |
 | `-x` | O(n) | O(n) | Copies the digits with the sign flipped; O(1) for a one-digit value |
 | `+x` | O(1) | O(1) | Returns `x` itself |

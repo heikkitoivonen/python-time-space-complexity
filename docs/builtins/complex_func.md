@@ -4,18 +4,22 @@ The `complex()` function creates a complex number from a string, from one number
 a real and an imaginary part. A complex number holds two C doubles, so every result is
 the same size whatever the input.
 
-`n` is the number of characters in a string argument.
+`n` is the number of characters in a string argument, and `d` the number of digits in an int
+argument. Converting an int to a double reads its top bits and then scans the lower ones until one
+is nonzero, so it is O(1) for most ints and O(d) at worst: an int such as `2**k`, whose lower
+bits are all zero, is read in full, and a power of two too large for a float is read in full
+before it is rejected.
 
 ## Complexity Analysis
 
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
 | `complex()` | O(1) | O(1) | `0j` |
-| From two numbers | O(1) | O(1) | `complex(real, imag)` with ints or floats |
+| From two numbers | O(1); O(d) at worst for an int | O(1) | `complex(real, imag)` with ints or floats; O(d) at worst for an int part |
 | From complex | O(1) | O(1) | An exact `complex` is returned as the same object |
-| From int/float | O(1) | O(1) | An int too large for a float raises `OverflowError` |
+| From int/float | O(1); O(d) at worst for an int | O(1) | O(d) at worst for an int; one too large for a float raises `OverflowError` |
 | From string | O(n) | O(n) | No copy for an ASCII string without underscores |
-| Object with `__complex__`, `__float__` or `__index__` | method + O(1) | method + O(1) | `__complex__` is tried first |
+| Object with `__complex__`, `__float__` or `__index__` | method + O(1); + O(d) at worst for `__index__` | method + O(1) | `__complex__` is tried first; an int that `__index__` returns is converted in O(d) at worst |
 
 ## Basic Usage
 
@@ -196,7 +200,7 @@ else:
 | Method | Time | Space | Notes |
 |--------|------|-------|-------|
 | `conjugate()` | O(1) | O(1) | Return complex conjugate (flip sign of imaginary) |
-| `from_number(x)` | O(1) | O(1) | Class method; convert a number, not a string, to complex (Python 3.14+); plus `__complex__`, `__float__` or `__index__` for other types |
+| `from_number(x)` | O(1); O(d) at worst for an int | O(1) | Class method; convert a number, not a string, to complex (Python 3.14+); plus `__complex__`, `__float__` or `__index__` for other types, and O(d) at worst for an int |
 
 ## Attributes
 

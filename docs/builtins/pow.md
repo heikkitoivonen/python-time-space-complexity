@@ -15,8 +15,8 @@ but excludes the input integers.
 
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
-| Float base or exponent | O(1) | O(1) | One libm call, independent of magnitude |
-| Integer base, `y < 0` | O(1) | O(1) | Returns a float; `OverflowError` once the base exceeds float range |
+| Float base or exponent | O(1); O(b) or O(e) at worst for an int | O(1) | One libm call, independent of magnitude. An int on the other side is converted to a float first: O(1) for most ints, O(b) or O(e) at worst |
+| Integer base, `y < 0` | O(b + e) | O(1) | Both operands are converted to floats, which reads their top bits and scans the lower ones until one is nonzero: O(1) for most ints, O(b + e) for a power of two. Returns a float; `OverflowError` once the base exceeds float range |
 | Integer base, `y = 0` | O(1) | O(1) | Returns `1`, including `0 ** 0` |
 | Integer base `0`, `1`, or `-1`, `y > 0` | O(e) | O(1) | The result is `0`, `1`, or `-1`; scanning the exponent still costs time |
 | Integer base with `abs(x) >= 2`, `y > 0` | O(r²) | Θ(r) | The result grows with both base width and exponent |
@@ -49,7 +49,7 @@ pow(2, 100)    # 1267650600228229401496703205376
 (2 ** 1000).bit_length()    # 1001
 (10 ** 1000).bit_length()   # 3322
 
-# Negative exponent - O(1), but the result is a float
+# Negative exponent - both operands become floats, and so does the result
 pow(2, -1)     # 0.5
 pow(2, -2)     # 0.25
 ```

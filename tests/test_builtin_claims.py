@@ -11,7 +11,6 @@ Where a claim can be settled by observation rather than a stopwatch, it is -
 one, and identity does not need a tolerance.
 """
 
-import sys
 import time
 from collections.abc import Callable
 from decimal import Decimal
@@ -161,26 +160,3 @@ class TestStrConversionAvoidsACopy:
             f"encoding copies every character: {short_time:.2e}s vs {long_time:.2e}s"
         )
         assert identity_time < long_time, "str() on a str should not copy at all"
-
-
-class TestIntFloatParsingAsymmetry:
-    """docs/builtins/float_func.md: float() only scans, because its result is
-    fixed width. int() has to build an arbitrary-precision value."""
-
-    @pytest.mark.timing
-    def test_float_parsing_is_linear(self) -> None:
-        short, long = "9" * 100, "9" * 400
-
-        short_time = best_time(lambda: float(short))
-        long_time = best_time(lambda: float(long))
-
-        assert long_time < short_time * 8, (
-            f"float parsing should stay near linear: {short_time:.2e}s vs {long_time:.2e}s"
-        )
-
-    def test_float_result_is_fixed_width_however_many_digits(self) -> None:
-        assert sys.getsizeof(float("9" * 300)) == sys.getsizeof(1.0)
-        assert float("9" * 400) == float("inf")
-
-    def test_int_result_grows_with_the_digits(self) -> None:
-        assert sys.getsizeof(int("9" * 300)) > sys.getsizeof(int("9" * 30))

@@ -44,7 +44,10 @@ Measurement scope:
   `__rfloordiv__` and one `__rmod__`. `float(q)` on a `Rational` reads
   `numerator` and `denominator` once each. `operator.index(i)` and
   `float(i)` on an `Integral` are one `__int__` each, `Integral.numerator`
-  one `__pos__`, `Integral.denominator` is `1` with no call.
+  one `__pos__`, `Integral.denominator` is `1` with no call. `float(i)` on
+  an `Integral` whose `__int__` returns 2**10_000_000 costs between x20 and
+  x1,000 the time for 2**100_000 (O(d) at worst predicts x100, constant x1;
+  measured about x90), the scan of `_PyLong_Frexp` in Objects/longobject.c.
 * `Rational.__float__()`: `Fraction.__float__` is that function. On
   fractions whose numerator and denominator are random integers of 10,000,
   100,000 and 1,000,000 bits, each 10x step costs more than 4x the time,
@@ -63,10 +66,8 @@ Not settled here:
 * `register()` is priced at two `issubclass()` checks, read from
   `_abc__abc_register_impl`; the tests show its effect on the token.
 * Each abstract method is counted as O(1); the pages of the concrete types
-  price the real ones. `float(i)` on an `Integral` is priced as one
-  `__int__` plus `float()` of an int, which reads the int's top digits and
-  scans its low digits only while they are zero (`_PyLong_Frexp` in
-  Objects/longobject.c); only the call count is tested.
+  price the real ones. That most ints stop `float()`'s scan after a few
+  digits is measured in tests/test_float_func_complexity.py.
 * `Rational.__float__()` is measured on terms of equal size with a finite
   quotient; a quotient that overflows or underflows, and terms of very
   different sizes, are not varied.
@@ -620,6 +621,26 @@ class TestIntegralMixins:
         assert calls.counts == {"__int__": 1}
         assert float(i) == 7.0
         assert calls.counts == {"__int__": 2}
+
+    @pytest.mark.timing
+    def test_float_of_a_power_of_two_is_linear_in_its_digits(self) -> None:
+        def integral(value: int) -> Any:
+            return concrete(numbers.Integral, Calls(), __int__=lambda self: value)()
+
+        def rejects(instance: Any) -> Callable[[], None]:
+            def run() -> None:
+                try:
+                    float(instance)
+                except OverflowError:
+                    return
+                raise AssertionError("float() accepted an int too large for a float")
+
+            return run
+
+        small, large = integral(1 << 100_000), integral(1 << 10_000_000)
+        ratio = best_ns(rejects(large)) / best_ns(rejects(small))
+
+        assert 20 < ratio < 1_000, f"100x the bits cost x{ratio:.1f}; linear predicts x100"
 
     def test_numerator_is_one_pos_and_denominator_is_one(self) -> None:
         calls = Calls()

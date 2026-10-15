@@ -1,152 +1,188 @@
 # Float Type Complexity
 
-The `float` type represents floating-point numbers with fixed precision (64-bit IEEE 754 double).
+A `float` is a fixed-size object holding one C `double`, which is an IEEE 754 binary64 value on
+every platform CPython supports: 53 significant bits, and a finite range up to about 1.8e308.
+Its width never depends on its value, so arithmetic between floats, comparison and hashing are
+O(1), and so is every conversion whose output that width bounds: `repr()`, `int()`, `hex()`,
+`as_integer_ratio()`.
 
-## Arithmetic Operations
+Three size variables appear below: `n` is the length of a string being parsed, `p` is the
+precision or width a format specification asks for, and `d` is the length in digits of an `int`
+operand that has to be converted to a float. An operation that produces a float returns
+a new fixed-size object, except where a row says it returns `x` itself. That holds for an exact
+float; an instance of a subclass gets a new plain `float` instead.
 
-| Operation | Time | Space | Notes |
-|-----------|------|-------|-------|
-| `x + y` | O(1) | O(1) | IEEE 754 addition |
-| `x - y` | O(1) | O(1) | Subtraction |
-| `x * y` | O(1) | O(1) | Multiplication |
-| `x / y` | O(1) | O(1) | Division |
-| `x // y` | O(1) | O(1) | Floor division |
-| `x % y` | O(1) | O(1) | Modulo |
-| `x ** y` | O(1) | O(1) | Exponentiation |
-| `divmod(x, y)` | O(1) | O(1) | Combined division |
-| `abs(x)` | O(1) | O(1) | Absolute value |
-| `-x` | O(1) | O(1) | Negation |
+## Complexity Reference
 
-## Comparison Operations
+### Arithmetic
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `x == y` | O(1) | O(1) | Equality check |
-| `x < y` | O(1) | O(1) | Less than |
-| `x > y` | O(1) | O(1) | Greater than |
-| `x <= y` | O(1) | O(1) | Less or equal |
-| `x >= y` | O(1) | O(1) | Greater or equal |
-| `x != y` | O(1) | O(1) | Not equal |
-| `x is y` | O(1) | O(1) | Object identity |
+| `x + y`, `x - y`, `x * y`, `x / y` | O(1); O(d) at worst for an int | O(1) | O(d) at worst with an `int` operand, which is converted to float first; one beyond the float range raises `OverflowError`. A float result that overflows is `inf` |
+| `x // y`, `x % y`, `divmod(x, y)` | O(1); O(d) at worst for an int | O(1) | O(d) at worst with an `int` operand, as for `+` |
+| `x ** y`, `pow(x, y)` | O(1); O(d) at worst for an int | O(1) | O(1) for any float `y`; O(d) at worst for an `int` `y`, as for `+`. A negative `x` with a non-integer `y` returns a `complex`; a result beyond the float range raises `OverflowError` |
+| `-x`, `abs(x)` | O(1) | O(1) | |
+| `+x` | O(1) | O(1) | Returns `x` itself |
+| `bool(x)` | O(1) | O(1) | `False` only for `0.0` and `-0.0` |
 
-## Special Methods
+### Comparison
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `hash(x)` | O(1) | O(1) | Hash value |
-| `str(x)` | O(1) | O(1) | String conversion |
-| `repr(x)` | O(1) | O(1) | Representation |
-| `int(x)` | O(1) | O(1) | Convert to int |
-| `float(x)` | O(1) | O(1) | Convert from other |
-| `round(x, n)` | O(1) | O(1) | Round to n places |
-| `math.floor(x)` | O(1) | O(1) | Floor |
-| `math.ceil(x)` | O(1) | O(1) | Ceiling |
-| `math.trunc(x)` | O(1) | O(1) | Truncate |
+| `x == y`, `x != y` | O(1) | O(1) | Exact against an `int` of any size: the int is not rounded to a float, and its size does not change the cost |
+| `x < y`, `x <= y`, `x > y`, `x >= y` | O(1) | O(1) | Exact against an `int` of any size, as for `==` |
 
-## Instance Methods
+### Conversion and Formatting
 
-| Method | Time | Space | Notes |
-|--------|------|-------|-------|
-| `is_integer()` | O(1) | O(1) | Check if float is whole number |
-| `as_integer_ratio()` | O(1) | O(1) | Returns exact (numerator, denominator) tuple |
-| `hex()` | O(1) | O(1) | Convert to hexadecimal string |
-| `fromhex(s)` | O(n) | O(1) | Class method; create float from hex string |
-| `conjugate()` | O(1) | O(1) | Returns self; complex number compatibility |
-| `from_number(x)` | O(1) | O(1) | Class method; convert number to float (Python 3.14+) |
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `hash(x)` | O(1) | O(1) | Equals `hash(int(x))` when `x` is integral, so `1.0` and `1` are the same dict key |
+| `str(x)`, `repr(x)`, `f"{x}"` | O(1) | O(1) | The fewest significant digits that read back as `x` |
+| `format(x, spec)`, `f"{x:{spec}}"` | O(p) | O(p) | `'f'` and `'e'` write every digit of the precision; `'f'` also writes every integer digit, up to 309 for the largest floats |
+| `int(x)`, `math.trunc(x)`, `math.floor(x)`, `math.ceil(x)`, `round(x)` | O(1) | O(1) | The int returned is at most 1,024 bits wide. `OverflowError` for an infinity, `ValueError` for a NaN |
+| `round(x, ndigits)` | O(1) | O(1) | Returns a float |
+| `float(x)` | O(n) for a string; O(d) at worst for an int; O(1) for a float | O(1) | For a string; O(n) space when it contains underscores or non-ASCII characters. O(d) at worst for an `int`; O(1) for a `float`, and returns an exact float `x` itself. See [float()](float_func.md) |
 
-## Numeric Attributes
+### float Methods and Attributes
 
-| Attribute | Time | Notes |
-|-----------|------|-------|
-| `real` | O(1) | Returns self; real part |
-| `imag` | O(1) | Always 0.0; imaginary part |
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `x.is_integer()` | O(1) | O(1) | |
+| `x.as_integer_ratio()` | O(1) | O(1) | Exact and in lowest terms; the denominator is a power of two, at most 2**1074 |
+| `x.hex()` | O(1) | O(1) | Exact; `float.fromhex()` reads it back |
+| `float.fromhex(s)` | O(n) | O(1) | Class method. O(1) space holds for ASCII text; a non-ASCII string is copied to UTF-8 before it is rejected with `ValueError` |
+| `x.conjugate()`, `x.real` | O(1) | O(1) | Return `x` itself |
+| `x.imag` | O(1) | O(1) | Always `0.0` |
+| `float.from_number(x)` | O(1); O(d) at worst for an int | O(1) | Class method, Python 3.14+. Returns an exact float `x` itself; for a non-float, adds the cost of its `__float__()` or `__index__()`, and an int that `__index__()` returns is converted in O(d) at worst. Unlike `float()`, rejects strings |
 
-## Common Operations
+## Arithmetic
 
-### Basic Arithmetic
+Every operator works on two doubles, so `x ** y` costs the same for a huge float `y` as
+for a small one. Overflow is where the operators differ: `*` and `+` return `inf`, while `**`
+raises.
 
 ```python
-# All operations are constant time (fixed 64-bit precision)
+import math
+
 x = 3.14
 y = 2.71
 
-sum_result = x + y      # O(1)
-product = x * y         # O(1)
-quotient = x / y        # O(1)
-exponent = x ** y       # O(1) - built-in, not iterative
+assert math.isclose(x + y, 5.85)       # O(1)
+assert math.isclose(x * y, 8.5094)     # O(1)
+assert 0.5 ** 1e15 == 0.0              # O(1) - not 1e15 multiplications
+assert 1e308 * 10 == math.inf          # O(1) - overflow gives inf
+
+try:
+    10.0 ** 400
+except OverflowError:
+    pass
+else:
+    raise AssertionError('10.0 ** 400 did not overflow')
+
+root = (-8.0) ** (1 / 3)               # O(1) - a complex result
+assert isinstance(root, complex)
+assert math.isclose(root.real, 1.0)
 ```
 
-### Rounding and Truncation
+## Mixing Floats and Ints
+
+A comparison between a float and an int is exact, whatever the int's size, and costs the same
+for a 100,000-digit int as for a small one. Arithmetic converts the int to a float first, which
+rounds it to 53 bits and fails for an int beyond the float range. The conversion reads the int's
+top bits and then scans the lower ones until one is nonzero, so it is O(d) at worst: an int such
+as `2**k`, whose lower bits are all zero, is read in full, even when it is too large and is then
+rejected.
+
+```python
+big = 10 ** 100_000
+
+assert 1.5 < big                       # O(1) - big is not converted
+assert 2 ** 53 + 1 != float(2 ** 53 + 1)   # exact: the float rounded down
+assert float(2 ** 53 + 1) == 2 ** 53
+
+try:
+    1.5 + big                          # O(d) at worst - the int must become a float first
+except OverflowError as error:
+    assert 'too large to convert to float' in str(error)
+else:
+    raise AssertionError('a huge int was added to a float')
+```
+
+## Converting and Formatting
+
+`str()` and `repr()` write the fewest significant digits that read back as the same float, so
+their output is bounded. A precision in a format specification is not: with `'f'` or `'e'`,
+`format()` writes every digit asked for. Conversions to `int` are bounded by the largest float, whose integer value is 1,024
+bits wide.
+
+```python
+import math
+
+x = 0.1
+
+assert repr(x) == '0.1'                         # O(1) - fewest digits that round-trip
+assert len(format(x, '.1000f')) == 1002         # O(p) - every digit requested
+assert len(format(1e300, '.0f')) == 301         # 'f' writes every integer digit
+
+assert int(1.7976931348623157e308).bit_length() == 1024   # O(1)
+assert x.as_integer_ratio() == (3602879701896397, 2 ** 55)
+
+text = x.hex()                                  # O(1) - exact
+assert text == '0x1.999999999999ap-4'
+assert float.fromhex(text) == x                 # O(n), n = len(text)
+
+for bad, error in ((math.inf, OverflowError), (math.nan, ValueError)):
+    try:
+        int(bad)
+    except error:
+        pass
+    else:
+        raise AssertionError(f'int({bad}) did not raise')
+```
+
+## Rounding and Truncation
+
+`round(x)` and the `math` functions return ints; `round(x, ndigits)` returns a float.
+`round()` works on the binary value, so a decimal halfway case stored as slightly less than half
+rounds down.
 
 ```python
 import math
 
 x = 3.14159
 
-# All O(1)
-rounded = round(x, 2)   # 3.14
-floored = math.floor(x) # 3
-ceiled = math.ceil(x)   # 4
-truncated = math.trunc(x) # 3
+assert round(x, 2) == 3.14             # O(1) - a float
+assert round(x) == 3                   # O(1) - an int
+assert math.floor(x) == 3              # O(1)
+assert math.ceil(x) == 4               # O(1)
+assert math.trunc(-x) == -3            # O(1) - toward zero
+
+assert round(2.675, 2) == 2.67         # 2.675 is stored as 2.67499999...
 ```
 
-### Comparison and Equality
+## Performance Best Practices
 
-```python
-# All comparisons are O(1)
-x = 1.0
-y = 1.0
+✅ **Do**:
 
-if x == y:              # O(1)
-    pass
-if x < y + 0.001:       # O(1)
-    pass
-```
+- Compare a float with an int directly: it is exact and O(1) for any int
+- Use `repr()` or `str()` when a round-trip string is enough; its length is bounded
+- Use `hex()` and `float.fromhex()` for an exact text form of a float
 
-## Performance Characteristics
+❌ **Avoid**:
 
-### Fixed-size Operations
-
-```python
-# All float operations are hardware-assisted - O(1)
-import timeit
-
-# Addition
-timeit.timeit('1.5 + 2.5', number=1000000)
-
-# Division
-timeit.timeit('10.0 / 3.0', number=1000000)
-
-# Complex computation
-timeit.timeit('(1.5 + 2.5) * (10.0 / 3.0)', number=1000000)
-```
-
-### Type Conversion Overhead
-
-```python
-x = 5
-y = 5.0
-
-# int to float - O(1)
-z = float(x)
-
-# float to int - O(1)
-w = int(y)
-
-# Repeated conversions are still O(1) but can add up
-for i in range(1000000):
-    _ = float(i)  # O(1) each, O(n) total for loop
-```
+- Arithmetic between a float and an int that may exceed the float range: it raises
+  `OverflowError`
+- A format precision larger than the digits you need: `'f'` and `'e'` write all of them
+- Comparing computed floats with `==` when rounding error is possible; use `math.isclose()`
 
 ## Version Notes
 
-- **Python 2.x**: Separate `int` and `float` division operators
-- **Python 3.x**: Unified `/` operator always returns float
-- **All versions**: Uses IEEE 754 double precision
+- **Python 3.14+**: Added `float.from_number()`
 
 ## Related Types
 
 - **[Int](int.md)** - Arbitrary precision integers
+- **[float()](float_func.md)** - Parsing strings and converting other objects
 - **[Complex](complex_func.md)** - Complex floating-point numbers
 - **[Decimal](../stdlib/decimal.md)** - Arbitrary precision decimal
 - **[Fraction](../stdlib/fractions.md)** - Rational numbers

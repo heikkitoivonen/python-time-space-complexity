@@ -11,7 +11,8 @@ Mixins are priced in calls to the abstract methods a subclass supplies, each cou
 For the runtime checks, `L` is the length of the checked class's MRO, and `S` and `R` are the
 subclasses and the registered classes a check can reach from the ABC, counted transitively
 through both. `register(cls)` is priced for a `cls` that is not itself an ABC.
-`d` is the digits in a rational's numerator and denominator.
+`d` is the digits in a rational's numerator and denominator, or in the int an integral's
+`__int__` returns.
 
 ## Complexity Reference
 
@@ -60,7 +61,7 @@ through both. `register(cls)` is priced for a `cls` that is not itself an ABC.
 |-----------|------|-------|-------|
 | `__int__`, `__pow__(exponent, modulus=None)`, `__lshift__`, `__rshift__`, `__and__`, `__xor__`, `__or__`, their reflected forms, `__invert__` | O(1) | O(1) | Abstract, on top of `Real`'s. `int` is registered here, which covers `bool` |
 | `operator.index(i)` (`Integral.__index__()`) | O(1) | O(1) | One `__int__` |
-| `float(i)` (`Integral.__float__()`) | O(1) | O(1) | One `__int__`, then `float()` of the result |
+| `float(i)` (`Integral.__float__()`) | O(d) | O(1) | One `__int__`, then `float()` of the result: O(1) for most ints, O(d) at worst, as on the [float()](../builtins/float_func.md) page |
 | `Integral.numerator` | O(1) | O(1) | One `+self` |
 | `Integral.denominator` | O(1) | O(1) | The constant `1` |
 

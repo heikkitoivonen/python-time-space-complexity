@@ -1,5 +1,5 @@
 ---
-source_sha: f3db4b76a11dd29a44444ad2b7e74a777af6e2a2bcef12e2b00708cccc27f881
+source_sha: c6154a41633b0dafdf4bb3ac41f14320d86f817db41733076e5819994eab88ce
 translated: machine
 ---
 
@@ -120,7 +120,7 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 |-------------|------|-------|-------|
 | [`bool()`](bool_func.md) | O(1) | O(1) | コンテナは O(1) の `__len__()` で答える |
 | [`int()`](int_func.md) | O(1) | O(1) | 非常に長い数値文字列の解析では O(n²) |
-| [`float()`](float_func.md) | O(1) | O(1) | 文字列からは O(n) |
+| [`float()`](float_func.md) | O(1) | O(1) | 文字列からは O(n)、非 ASCII 文字やアンダースコアを含む文字列では空間も O(n)、d 桁の整数からは最悪 O(d) |
 | [`complex()`](complex_func.md) | O(1) | O(1) | 文字列からは O(n) |
 | [`str()`](str_func.md) | O(1) | O(1) | コンテナと独自の `__str__()` では O(n) |
 | [`bytes()`](bytes_func.md) | O(n) | O(n) | n は元データの長さ。元データの型がちょうど `bytes` なら O(1) |

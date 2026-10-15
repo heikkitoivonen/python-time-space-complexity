@@ -28,7 +28,14 @@ The rest need elapsed time, each framed to leave the widest gap measured:
 * reducing afterwards costs x19,000 at RSA scale, and nothing at 2**10;
 * `1 << n` beats `pow(2, n)` by x2,500 at n = 1e6;
 * and a dense base costs x12 more than a power of two at the same result
-  width, which is why the growth tests above use a 64-bit base rather than 2.
+  width, which is why the growth tests above use a 64-bit base rather than 2;
+* converting an int to a float for `y < 0` or a float operand is linear at
+  worst: rejecting 2**10_000_000 costs between x20 and x1,000 the time of
+  2**100_000 as the base of `pow(x, -1)`, as the negative exponent of
+  `pow(2, y)` (negated before timing), and as either operand of a power with
+  the float 2.0 (x100 if linear, x1 if constant; measured
+  about x90). A power of two is the worst case; most ints stop the scan
+  after a few digits, which tests/test_float_func_complexity.py measures.
 
 That last one is also the caveat on the table's `O(r²)`: it is an upper bound,
 as the page's Performance Notes say, and a power-of-two base sits far below it -
@@ -191,9 +198,42 @@ class TestIntegerPowerWidth:
         )
 
 
+def reject_ratio(power: Callable[[int], Any], sign: int = 1) -> float:
+    """Time to reject 2**10_000_000 over time to reject 2**100_000.
+
+    Converting an int to a float scans its bits below the top 55 until one is
+    nonzero, so a power of two is read in full: linear predicts x100."""
+
+    def reject(value: int) -> Callable[[], None]:
+        def run() -> None:
+            for _ in range(3):
+                try:
+                    power(value)
+                except OverflowError:
+                    continue
+                raise AssertionError("an int beyond the float range was converted")
+
+        return run
+
+    small, large = sign * (1 << 100_000), sign * (1 << 10_000_000)
+    return best_time(reject(large)) / best_time(reject(small))
+
+
 class TestNegativeIntegerExponent:
-    """The `Integer base, y < 0` row: O(1) via float, and OverflowError once
-    the base leaves float range."""
+    """The `Integer base, y < 0` row: via float, O(b + e) at worst, and
+    OverflowError once the base leaves float range."""
+
+    @pytest.mark.timing
+    def test_converting_a_power_of_two_base_is_linear(self) -> None:
+        ratio = reject_ratio(lambda base: pow(base, -1))
+
+        assert 20 < ratio < 1_000, f"100x the base bits cost x{ratio:.1f}; linear is x100"
+
+    @pytest.mark.timing
+    def test_converting_a_power_of_two_exponent_is_linear(self) -> None:
+        ratio = reject_ratio(lambda exponent: pow(2, exponent), sign=-1)
+
+        assert 20 < ratio < 1_000, f"100x the exponent bits cost x{ratio:.1f}; linear is x100"
 
     def test_returns_a_float(self) -> None:
         assert pow(2, -1) == 0.25 * 2
@@ -210,7 +250,8 @@ class TestNegativeIntegerExponent:
 
 
 class TestFloatPower:
-    """The `Float base or exponent` row: one libm call, O(1) either way."""
+    """The `Float base or exponent` row: one libm call, O(1) either way; an int
+    on the other side is converted first, O(b) or O(e) at worst."""
 
     def test_stated_values(self) -> None:
         assert pow(2.0, 3) == 8.0
@@ -223,6 +264,19 @@ class TestFloatPower:
 
         assert isinstance(result, complex)
         assert result == pytest.approx(1 + 1.7320508075688772j)
+
+    @pytest.mark.timing
+    @pytest.mark.parametrize(
+        "power",
+        [lambda exponent: pow(2.0, exponent), lambda base: pow(base, 2.0)],
+        ids=["int exponent", "int base"],
+    )
+    def test_an_int_operand_is_converted_in_linear_time_at_worst(
+        self, power: Callable[[int], Any]
+    ) -> None:
+        ratio = reject_ratio(power)
+
+        assert 20 < ratio < 1_000, f"100x the int's bits cost x{ratio:.1f}; linear is x100"
 
     @pytest.mark.timing
     def test_cost_is_independent_of_magnitude(self) -> None:
