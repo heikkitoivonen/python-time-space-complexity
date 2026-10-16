@@ -1,222 +1,275 @@
 # hash() Function Complexity
 
-The `hash()` function returns the hash value of an object, which is used by dictionaries and sets for fast lookups.
+The `hash()` function returns an object's hash value, the integer that dictionaries and sets use to
+find a key. It calls the type's `__hash__`, so its cost is that method's cost: some built-in types
+compute the value once and keep it on the object, others compute it on every call.
+
+`n` is the length of a `str` or `bytes`, or the number of items in a `tuple` or `frozenset`. `m` is
+the number of 30-bit digits in an `int`. `h` is the cost of a class's own `__hash__`, and `k` is the
+cost of hashing one item of a tuple. `c` is the number of entries in a dict or set. Space bounds
+exclude what a class's own `__hash__` allocates, and dict and set bounds price one key comparison
+at O(1).
 
 ## Complexity Reference
 
+### hash
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `hash(object)` | O(k) | O(1) | k depends on object representation and type |
-| Hash of int | O(1) compact, O(m) large | O(1) | m = number of internal integer digits |
-| Hash of float | O(1) | O(1) | Fixed-size floating representation |
-| Hash of string | O(n) | O(1) | n = string length; cached after first call |
-| Hash of tuple | O(n) | O(1) | n = tuple length, combines element hashes |
-| Hash of mutable | Error | - | e.g., list, dict, set (unhashable) |
-| Dictionary lookup | O(1) avg | O(1) | O(n) worst case with hash collisions |
-| Set membership | O(1) avg | O(1) | O(n) worst case with hash collisions |
+| `hash(object)` | O(h) | O(1) | Calls `type(object).__hash__`; the rows below give h for the built-in types |
+| `hash()` of an `int` | O(m) | O(1) | Recomputed on every call |
+| `hash()` of a `float` | O(1) | O(1) | An integral float hashes like the equal `int` |
+| `hash()` of a `str` or `bytes` | O(n) first call, O(1) after | O(1) | Kept on the object; an equal object built separately is hashed again |
+| `hash()` of a `tuple` | O(n·k) first call | O(1) | Hashes every item; O(1) after the first call on 3.14+, O(n·k) on every call before |
+| `hash()` of a `frozenset` | O(n) first call, O(1) after | O(1) | Combines the item hashes the set already stores; no item is hashed again |
+| `hash()` of `None`, a `bool`, or a plain instance | O(1) | O(1) | An instance whose class inherits `object.__hash__` hashes by its identity |
+| `hash()` of an instance with its own `__hash__` | O(h) | O(1) | Called on every `hash()`, dict lookup and set test; nothing is kept |
+| `hash()` of a `list`, `dict`, `set` or `bytearray` | O(1) | O(1) | Raises `TypeError`, as does a class that defines `__eq__` without `__hash__` |
 
-## Hash Basics
+### Hashing in dict and set
 
-### Creating Hashes
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `d[key]`, `key in d`, `key in s` | O(1) avg, O(c) worst | O(1) | Plus one hash of `key`; the worst case is every key's hash colliding |
+| Building a dict or set of c keys | O(c) avg, O(c²) worst | O(c) | Plus one hash of each key; copying a dict or set reuses its stored hashes |
+| `s1 & s2` on two sets | O(min(len(s1), len(s2))) avg | O(min(len(s1), len(s2))) | Reuses the hashes both sets store; `\|`, `-`, `^` and comparisons between sets do too |
 
-```python
-# Hash immutable types
-hash(42)                    # O(1) - compact integer
-hash(3.14)                  # O(1) - float hashing is constant time
-hash("hello")               # O(n) first call (n = string length), O(1) cached
-hash((1, 2, 3))            # O(n) - tuple size, hashes each element
-```
+## Hashing Built-in Types
 
-## Hash-based Collections
+### Numbers
 
-### Dictionary Lookups
-
-```python
-# Dictionary uses hash for O(1) lookup
-d = {'key1': 'value1', 'key2': 'value2'}
-
-# Lookup - O(1) average case
-value = d['key1']  # O(1) - uses hash('key1')
-
-# Insert - O(1) average case
-d['key3'] = 'value3'  # O(1) - uses hash('key3')
-
-# Delete - O(1) average case
-del d['key1']  # O(1) - uses hash('key1')
-
-# Membership - O(1) average case
-if 'key2' in d:  # O(1) - uses hash('key2')
-    pass
-```
-
-### Set Operations
+An `int` is hashed digit by digit on every call. Numbers that compare equal hash equal across types,
+so `1`, `1.0` and `True` are the same dict key.
 
 ```python
-# Set uses hash for O(1) membership
-s = {1, 2, 3, 4, 5}
+import sys
 
-# Add - O(1) average
-s.add(6)  # O(1) - uses hash(6)
+assert hash(0) == 0
+assert hash(256) == 256          # O(m) - a small int hashes to itself
+assert hash(-1) == -2            # -1 is reserved, so it maps to -2
 
-# Remove - O(1) average
-s.discard(3)  # O(1) - uses hash(3)
-
-# Membership - O(1) average
-if 4 in s:  # O(1) - uses hash(4)
-    pass
-
-# Set intersection (requires hashing) - O(min(len(s1), len(s2)))
-s1 = {1, 2, 3}
-s2 = {2, 3, 4}
-result = s1 & s2  # O(min(3, 3)) = O(3)
-```
-
-## Hashing Different Types
-
-### Immutable Types
-
-```python
-# All hashable efficiently - O(size)
-hash(None)             # O(1) - special case
-hash(True)             # O(1) - boolean
-hash(42)               # O(1) - small integer
-hash(12345678901234)   # O(1) for compact integer values
-hash(3.14)             # O(1) - float
-hash("hello")          # O(5) - string length
-hash(b"hello")         # O(5) - bytes length
-hash((1, 2, 3))        # O(3) - tuple depth
-hash(frozenset([1,2])) # O(2) - frozenset size
-```
-
-### Integers
-
-```python
-# Integer hashing - O(1) for compact ints, O(m) for very large ints
-hash(0)      # 0
-hash(1)      # 1
-hash(-1)     # -2
-hash(256)    # 256
-
-# Small integers cached for performance
-# hash(n) usually returns n itself for small values
-
-# Large integers
 big = 10**100
-hash(big)  # O(m), m = number of internal digits
+assert hash(big) == hash(big)    # O(m) on each call
+
+assert hash(1.0) == hash(1) == hash(True)     # O(1)
+assert {1: "one"}[1.0] == "one"
+
+modulus = sys.hash_info.modulus
+assert hash(modulus + 5) == hash(5)    # ints are reduced modulo a fixed prime
 ```
 
-### Strings
+### Strings and Bytes
+
+A `str` or `bytes` reads every character the first time it is hashed and keeps the result. Equal
+strings hash equal whether or not they are the same object, but a string built separately has not
+been hashed yet.
 
 ```python
-# String hashing - O(len(string))
-hash("")      # O(0)
-hash("a")     # O(1)
-hash("hello") # O(5)
+text = "ab" * 50_000
 
-# String intern: equal strings have equal hashes
-s1 = "hello"
-s2 = "hello"
-hash(s1) == hash(s2)  # True - O(5)
+first = hash(text)                    # O(n) - reads all 100,000 characters
+assert hash(text) == first            # O(1) - the kept value
+
+rebuilt = "".join(["ab"] * 50_000)    # equal, but a new object
+assert rebuilt is not text
+assert hash(rebuilt) == first         # O(n) again, for the new object
+
+assert hash(b"hello") == hash(bytes([104, 101, 108, 108, 111]))
 ```
 
-### Tuples
+### Tuples and Frozensets
+
+A tuple hashes each item, so its cost is the sum of its items' hash costs, and a tuple that holds an
+unhashable item raises. A frozenset stores its items' hashes when it is built, and its own hash
+combines those stored values.
 
 ```python
-# Tuple hashing combines element hashes - O(tuple_size)
-hash((1,))         # O(1)
-hash((1, 2, 3))    # O(3) - hashes all elements
-hash(())           # O(0) - empty tuple
+point = (1, 2, 3)
+assert hash(point) == hash((1, 2, 3))      # O(n·k) - hashes all three items
 
-# If tuple contains unhashable, fails
+nested = ((1, 2), ("a", "b"))
+assert hash(nested) == hash(((1, 2), ("a", "b")))    # hashes the inner tuples too
+
 try:
-    hash((1, [2, 3]))  # TypeError! list is unhashable
-except TypeError:
-    pass
+    hash((1, [2, 3]))
+except TypeError as exc:
+    assert "unhashable type: 'list'" in str(exc)
+else:
+    raise AssertionError("a tuple holding a list was hashed")
+
+tags = frozenset(["x", "y", "z"])
+assert hash(tags) == hash(frozenset(["z", "y", "x"]))    # O(n) first call, order-free
 ```
 
-## Using Hash for Caching
+## Hashing Your Own Classes
+
+A class that inherits `__eq__` and `__hash__` from `object` hashes by identity in O(1). Defining `__eq__`
+alone makes instances unhashable. A `__hash__` you write is called on every `hash()`, every dict
+lookup and every set test, so hash a tuple of the fields that `__eq__` compares.
+
+```python
+class Point:
+    def __init__(self, x, y):
+        self.x, self.y = x, y
+
+    def __eq__(self, other):
+        return (self.x, self.y) == (other.x, other.y)
+
+    def __hash__(self):
+        return hash((self.x, self.y))      # hashes a 2-tuple of the fields
+
+
+assert hash(Point(1, 2)) == hash(Point(1, 2))
+assert {Point(1, 2): "a"}[Point(1, 2)] == "a"
+
+
+class EqOnly:
+    def __eq__(self, other):
+        return True
+
+
+assert EqOnly.__hash__ is None
+try:
+    hash(EqOnly())
+except TypeError as exc:
+    assert "unhashable type" in str(exc)
+else:
+    raise AssertionError("a class with only __eq__ was hashed")
+
+plain = object()
+assert hash(plain) == hash(plain)          # O(1) - from the object's identity
+```
+
+## Hash Collisions
+
+A lookup compares the stored hash first and calls `__eq__` only when the hashes match, so distinct
+hashes keep lookups O(1). When every key has the same hash, each insert compares the new key with
+the keys already there, and building a set or dict of c keys does O(c²) comparisons.
+
+```python
+class Collides:
+    comparisons = 0
+
+    def __init__(self, value):
+        self.value = value
+
+    def __hash__(self):
+        return 42                          # every instance collides
+
+    def __eq__(self, other):
+        Collides.comparisons += 1
+        return self.value == other.value
+
+
+items = {Collides(i) for i in range(1_000)}     # O(c²) comparisons
+assert len(items) == 1_000
+assert Collides.comparisons >= 1_000 * 999 // 2
+```
+
+`str` and `bytes` hashes are salted with a per-process random value, so unless `PYTHONHASHSEED`
+fixes the salt, their colliding inputs cannot be chosen in advance. `int` hashes are not salted:
+non-negative ints that differ by a multiple of `sys.hash_info.modulus` always collide.
+
+```python
+import sys
+
+modulus = sys.hash_info.modulus
+keys = [i * modulus for i in range(1, 6)]
+assert len({hash(key) for key in keys}) == 1    # five keys, one hash
+assert len(set(keys)) == 5                      # still distinct keys
+```
+
+## Set Operations Reuse Stored Hashes
+
+A set keeps each element's hash next to it, so operations between two sets or frozensets - `&`,
+`|`, `-`, `^`, comparisons and copies - look elements up without calling `__hash__` again. An
+operand that is not a set, such as a list passed to `intersection()`, is hashed item by item.
+
+```python
+class Counted:
+    hashes = 0
+
+    def __init__(self, value):
+        self.value = value
+
+    def __hash__(self):
+        Counted.hashes += 1
+        return hash(self.value)
+
+    def __eq__(self, other):
+        return self.value == other.value
+
+
+left = {Counted(i) for i in range(100)}         # 100 hashes
+right = {Counted(i) for i in range(50, 300)}    # 250 hashes
+Counted.hashes = 0
+
+common = left & right                           # O(min(len(left), len(right)))
+assert len(common) == 50
+assert Counted.hashes == 0                      # no element hashed again
+
+left.intersection(list(right))                  # the list's 250 items are hashed
+assert Counted.hashes == 250
+```
+
+## Common Patterns
 
 ### Memoization with Hashable Keys
 
+Each lookup in a cache dict hashes the key, so the key's hash cost from the table above is part of
+every cache hit.
+
 ```python
-# Cache expensive computation with the full key object
+calls = []
+
+def do_expensive_work(arg):
+    calls.append(arg)
+    return len(arg)
+
 cache = {}
 
 def expensive_function(arg):
-    if arg in cache:  # O(1) average lookup; hashing handled by dict
+    if arg in cache:                    # O(1) avg, plus one hash of arg
         return cache[arg]
-    
-    result = do_expensive_work(arg)  # Slow
-    cache[arg] = result  # O(1) average store
+    result = do_expensive_work(arg)
+    cache[arg] = result                 # O(1) avg, plus one hash of arg
     return result
 
-# Multiple calls with same argument are fast
-result1 = expensive_function(("data", 1))  # Computed
-result2 = expensive_function(("data", 1))  # From cache O(1)
+assert expensive_function(("data", 1)) == 2      # computed
+assert expensive_function(("data", 1)) == 2      # from the cache
+assert calls == [("data", 1)]
 ```
 
-### Set Deduplication
+### Deduplicating Unhashable Values
+
+Lists cannot go into a set, so convert each one to a tuple first. That hashes every item of every
+list once.
 
 ```python
-# Remove duplicates using hash - O(n)
-numbers = [1, 2, 2, 3, 3, 3, 4, 4, 4, 4]
-unique = set(numbers)  # O(n) - uses hash for each
-
-# For unhashable types, need different approach
 data = [[1, 2], [1, 2], [3, 4]]
-# Can't use set directly
-# Instead convert to hashable:
-unique = set(tuple(d) for d in data)  # O(n)
+
+unique = {tuple(row) for row in data}    # O(rows + total items)
+assert unique == {(1, 2), (3, 4)}
 ```
 
-## Performance Notes
+## Performance Best Practices
 
-### Hash Collisions and Worst Case
+✅ **Do**:
 
-```python
-# Average case: O(1) dictionary access
-# Worst case: O(n) if all items hash to same value
+- Reuse the same `str` or `bytes` object as a key - its hash is computed once
+- Hash a tuple of the fields `__eq__` compares, so equal objects hash equal and unequal ones rarely collide
+- Use set operations between sets - they reuse stored hashes instead of calling `__hash__`
 
-# Python mitigates this with:
-# 1. Good hash functions
-# 2. Randomized hashing (Python 3.3+)
-# 3. Open addressing with probing (CPython)
+❌ **Avoid**:
 
-# You shouldn't encounter O(n) in practice
-d = {}
-for i in range(1000):
-    d[i] = i  # O(1) each, not O(n)
-```
-
-### Hash vs Equality
-
-```python
-# Hash is used first for efficiency
-# If hash matches, equality check confirms
-
-# This matters for custom classes:
-class Efficient:
-    def __init__(self, data):
-        self.data = data
-    
-    def __hash__(self):
-        return 42  # All same hash
-    
-    def __eq__(self, other):
-        return self.data == other.data  # Expensive comparison
-        # Only called if hashes match
-
-# With 1000 unique objects:
-s = {Efficient(i) for i in range(1000)}
-# Constant hash causes many collisions:
-# insertion can degrade significantly (toward O(n^2) total build time)
-```
+- A `__hash__` that returns a constant or few distinct values - a dict or set of c keys becomes O(c²)
+- An expensive `__hash__` on a class used as a key - it runs on every lookup, and nothing keeps its result
+- Integer keys chosen by an untrusted party - int hashes are not salted, so collisions can be forced
 
 ## Version Notes
 
-- **Python 2.x**: Different hash implementation
-- **Python 3.3+**: Hash randomization for security
-- **All versions**: equal objects must hash equally; hash values for str/bytes vary across processes
+- **Python 3.14+**: a tuple keeps its hash, so hashing the same tuple again is O(1)
+- **All Python 3**: `str` and `bytes` hashes vary between processes unless `PYTHONHASHSEED` is set to a number; `int` hashes do not
 
 ## Related Functions
 
