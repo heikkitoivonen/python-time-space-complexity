@@ -44,12 +44,12 @@ Measurement scope:
   over 8x, since every start position scans to the end. `\\b\\w+@` and
   `\\w+@` over 20-character words separated by spaces stay under 8x per
   step with `search()`, so a bounded failed attempt keeps the scan linear.
-* Competing repetitions: `a*a*b` matched against 250, 1,000 and 4,000 `a`s
-  costs over 8x per 4x step within one attempt. `(a+)+b` costs over 8x
+* Competing repetitions: `a*a*b` matched against 250, 2,500 and 25,000 `a`s
+  costs between 30x and 300x per 10x step within one attempt: linear predicts
+  10x, quadratic 100x and cubic 1,000x. `(a+)+b` costs over 8x
   from 14 to 18 characters against a failing subject, and over 1,000x more
   than `(a+)+$` on a subject it matches, than `a+b`, than `(?>a+)+b` and
-  than `(a++)+b`. `a*a*b` is also asserted under 40x per 4x step, which excludes
-  cubic growth. `(?:a|aa)+b`, one repetition over overlapping alternatives,
+  than `(a++)+b`. `(?:a|aa)+b`, one repetition over overlapping alternatives,
   costs over 5x from 16 to 22 characters.
 * Backtracking stack: a `fullmatch` of `(?:ab)*` peaks over 5x higher at
   200,000 characters than at 20,000, while `[ab]*` peaks under 10 KB at
@@ -471,11 +471,16 @@ class TestBacktracking:
     @pytest.mark.timing
     def test_two_repetitions_competing_are_quadratic_in_one_attempt(self) -> None:
         pattern = re.compile(r"a*a*b")
-        subjects = ["a" * size for size in (250, 1_000, 4_000)]
-        times = [best_ns(lambda s=subject: pattern.match(s), repeats=3) for subject in subjects]
+        subjects = ["a" * size for size in (250, 2_500, 25_000)]
+        for subject in subjects:
+            assert pattern.match(subject) is None
+        times = [best_ns(lambda s=subject: pattern.match(s), repeats=5) for subject in subjects]
 
         steps = [later / earlier for earlier, later in zip(times, times[1:], strict=False)]
-        assert all(8 < step < 40 for step in steps), f"4x the subject should cost ~16x: {steps}"
+        assert all(30 < step < 300 for step in steps), (
+            f"10x the subject: {times} ns, ratios {steps}; "
+            "linear predicts 10x, quadratic 100x, cubic 1,000x"
+        )
 
     @pytest.mark.timing
     def test_overlapping_alternatives_in_a_repetition_multiply_too(self) -> None:

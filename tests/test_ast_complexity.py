@@ -31,9 +31,13 @@ Most of them can be settled by observation:
   lies between w and 2w, and here it lands on w;
 * `unparse()`'s q term is interpolation nesting: a `FormattedValue` renders
   its expression with a fresh unparser and copies the result into the
-  enclosing string. 500 then 4,000 nested `JoinedStr` levels emit x8.0 the
-  characters in x27 the time, which rejects linear scaling (x8) without
-  pinning an upper bound. The q copies are made one after another, so the
+  enclosing string. At 32, 320 and 3,200 nested `JoinedStr` levels, a wrapper
+  around the unparser's `visit()` counts the characters in every returned
+  string. Each 10x depth step emits 8x to 12x the final characters but
+  materialises 50x to 150x the characters across intermediate strings,
+  separating linear output from quadratic copying without a clock.
+  Each depth d makes d + 1 renderings, one for each f-string and the inner
+  name. The q copies are made one after another, so the
   space stays the output size; no test measures a peak here. On 3.11
   `unparse()` runs out of quote characters: four levels round-trip, the fifth
   emits text the parser rejects and the sixth raises `ValueError`. The
@@ -645,34 +649,47 @@ class TestUnparse:
             with pytest.raises(ValueError, match="Unable to avoid backslash"):
                 ast.unparse(self.nested_f_string(6))
 
-    @pytest.mark.timing
     @pytest.mark.skipif(
         sys.version_info < (3, 12), reason="unparse cannot nest f-strings past five levels"
     )
-    def test_nested_f_strings_re_render_what_is_inside_them(self) -> None:
-        """8x the f-string nesting with the output growing 8x as well.
+    def test_nested_f_strings_re_render_what_is_inside_them(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Count the materialised strings returned by nested unparsers.
 
-        A `FormattedValue` renders its expression with a fresh unparser and
-        copies the result in, so text under q of them is copied q times. The
-        assertion rejects linear scaling for this input family: linear work
-        predicts x8, and CPython 3.14.7 measures x27 from 500 to 4,000 levels
-        against x8 characters. It does not pin an upper bound. Only
-        `JoinedStr` nesting is varied - one `Name` at the centre, no format
-        specs, no conversions, no statements and no block depth. The q term
-        goes unmeasured on 3.11, where `unparse()` cannot nest
-        f-strings past four levels usefully at all.
+        Released Lib/ast.py (3.12-3.13) and Lib/_ast_unparse.py (3.14+)
+        join each unparser's buffer in visit(). Counting those return lengths
+        observes the copying term even when dispatch dominates elapsed time.
+        Only nesting varies: one Name, no format specs, conversions or blocks.
         """
+        # From 3.14 ast imports its unparser lazily on the first call.
+        ast.unparse(ast.Name(id="warmup", ctx=ast.Load()))
+        unparser = getattr(ast, "_Unparser")  # noqa: B009 - private class absent from typeshed
+        visit = unparser.visit
+        rendered: list[int] = []
 
-        small, large = self.nested_f_string(500), self.nested_f_string(4_000)
+        def counted_visit(self: Any, node: ast.AST) -> str:
+            text = visit(self, node)
+            rendered.append(len(text))
+            return text
 
-        def measure() -> tuple[float, float]:
-            characters = len(ast.unparse(large)) / len(ast.unparse(small))
-            return characters, ratio(lambda: ast.unparse(small), lambda: ast.unparse(large), 3)
+        monkeypatch.setattr(unparser, "visit", counted_visit)
+        output_lengths = []
+        materialised = []
+        for depth in (32, 320, 3_200):
+            tree = self.nested_f_string(depth).body
+            rendered.clear()
+            output = in_deep_stack(partial(ast.unparse, tree))
+            assert len(rendered) == depth + 1
+            assert rendered[-1] == len(output)
+            output_lengths.append(len(output))
+            materialised.append(sum(rendered))
 
-        characters, growth = in_deep_stack(measure)
-
-        assert 7 < characters < 9, f"x{characters:.1f} characters for 8x the nesting"
-        assert growth > 14, f"x{growth:.1f} for 8x the nesting; linear would be 8, copying 64"
+        for index in range(2):
+            output_growth = output_lengths[index + 1] / output_lengths[index]
+            copying_growth = materialised[index + 1] / materialised[index]
+            assert 8 < output_growth < 12, output_lengths
+            assert 50 < copying_growth < 150, materialised
 
     def test_round_trips(self) -> None:
         source = "x = 1 + 2\nprint(x)"

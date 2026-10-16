@@ -41,8 +41,10 @@ Measurement scope:
   1,000,000-character result from a one-digit coefficient, which is the L
   term.
 * Addition. The coefficients are held at one digit while the exponent gap
-  grows from 1e2 to 1e8 at the default precision: time stays within 2x, so a
-  gap the precision will not keep is not materialised. Raise the precision
+  grows through 100, 100,000 and 100,000,000 at precision 28. Each gap exceeds
+  the retained precision, every result is 1 rounded to 28 digits, and each
+  1,000x gap step costs under 10x rather than the 1,000x full alignment would
+  require. Raise the precision
   above the gap and it is: `Decimal(1) + Decimal('1E-2000')` at prec 3,000 is
   asserted to have 2,001 digits. Held at a gap of zero, time grows more than
   8x from 2,000 to 64,000 coefficient digits.
@@ -651,19 +653,26 @@ class TestRenderingRendersWhatItKeeps:
 
 
 class TestAdditionReadsCoefficientsNotExponents:
-    """`a + b` | O(n + m) | "a gap between the exponents is not materialised".
-
-    The wrong version - aligning the operands by padding out the gap - would
-    make a 1e8 gap eight orders of magnitude dearer than a 1e2 one. It is
-    not, and the same addition does grow with the coefficients.
-    """
+    """`a + b` | O(n + m + min(g, p)): precision caps exponent alignment."""
 
     @pytest.mark.timing
-    def test_the_exponent_gap_does_not_cost_anything(self) -> None:
+    def test_alignment_cost_is_bounded_once_the_gap_exceeds_precision(self) -> None:
         one = Decimal(1)
-        near, far = Decimal("1E-2"), Decimal("1E-100000000")
-        ratio = best_ns(lambda: one + far, inner=200) / best_ns(lambda: one + near, inner=200)
-        assert ratio < 2.0, f"a 1e8 gap should cost what a 1e2 gap does, not {ratio:.1f}x"
+        gaps = (100, 100_000, 100_000_000)
+        times = []
+        with localcontext() as ctx:
+            ctx.prec = 28
+            for gap in gaps:
+                tiny = Decimal((0, (1,), -gap))
+                result = one + tiny
+                assert result == one and digits(result) == ctx.prec
+                times.append(best_ns(lambda value=tiny: one + value, inner=2_000))
+
+        steps = [later / earlier for earlier, later in zip(times, times[1:], strict=False)]
+        assert all(step < 10 for step in steps), (
+            f"1,000x exponent-gap steps at precision 28: {times} ns, ratios {steps}; "
+            "materialising the whole gap predicts 1,000x"
+        )
 
     @pytest.mark.timing
     def test_the_coefficients_do(self) -> None:

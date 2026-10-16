@@ -62,9 +62,9 @@ Measurement scope:
   pass vacuously.
 * A mock's call records are read directly off each ancestor. A leaf four hops
   below the root puts one entry on all five mocks, under five different names,
-  which is the whole of the per-call O(d) row; the timing test alongside it steps depth from 1 to 32
-  rather than doubling it, because the per-call cost at depth 1 is small enough
-  that a narrow step would not separate it from noise.
+  and depths 1, 10 and 100 each produce d + 1 records. With every attribute
+  named `link`, the recorded names total 5*d*(d+1)/2 - d characters: O(d)
+  appends and O(d²) stored name characters, counted without a clock.
 * `create_autospec` and `Mock(spec=...)` are separated by counting children
   rather than by a clock: the autospec has a child mock per method before
   anything is touched and the spec'd mock has none. A list-of-strings spec is
@@ -1403,18 +1403,24 @@ class TestAMockCallReachesEveryAncestor:
         assert mock.mock_calls == []
         assert mock.child.mock_calls == []
 
-    def test_a_deep_call_costs_more_than_a_shallow_one(self) -> None:
-        def per_call(depth: int) -> float:
-            root = unittest.mock.Mock()
-            node = root
-            for _ in range(depth):
-                node = node.link
-            return timed(lambda: [node(1) for _ in range(500)])
+    @pytest.mark.parametrize("depth", [1, 10, 100])
+    def test_record_count_and_name_lengths_grow_with_depth(self, depth: int) -> None:
+        """One record per ancestor, with a name that grows by one component.
 
-        shallow = per_call(1)
-        deep = per_call(32)
+        Attribute width and call arguments stay fixed. Inspecting every list
+        and name distinguishes constant, linear and quadratic storage directly.
+        """
+        nodes = [unittest.mock.Mock()]
+        for _ in range(depth):
+            nodes.append(nodes[-1].link)
+        nodes[-1].return_value = None
 
-        assert deep > shallow * 5, f"depth 1 {shallow:.6f}s, depth 32 {deep:.6f}s"
+        nodes[-1](1)
+
+        assert [len(node.mock_calls) for node in nodes] == [1] * (depth + 1)
+        names = [node.mock_calls[0][0] for node in nodes]
+        assert names == [".".join(["link"] * hops) for hops in range(depth, -1, -1)]
+        assert sum(map(len, names)) == 5 * depth * (depth + 1) // 2 - depth
 
     def test_a_child_is_built_once_and_cached(self) -> None:
         mock = unittest.mock.Mock()
