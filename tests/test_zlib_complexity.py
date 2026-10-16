@@ -75,9 +75,13 @@ Measurement scope:
   shares its input and peaks under 1,000 traced bytes.
 * `crc32_combine()` and `adler32_combine()` (3.15+) are asserted to equal
   the checksum of the concatenation for second pieces of 0, 1, 4,095 and
-  1,000,003 bytes, and to take `len2` up to 2**63 - 1. Their cost does not
+  1,000,003 bytes, and to take `len2` up to the signed `off_t` maximum,
+  rejecting the next integer. CPython 3.15's Modules/zlibmodule.c selects
+  its conversion by SIZEOF_OFF_T: 32 bits on Windows (PC/pyconfig.h),
+  64 bits on the Linux and macOS CI builds. Their cost does not
   follow the data: with `len2` = 16,000,000, each runs over 100x faster
-  than checksumming the 16,000,000-byte second piece, and `len2` = 2**62
+  than checksumming the 16,000,000-byte second piece, and `len2` = 2**30
+  on Windows or 2**62 on the 64-bit off_t builds
   costs under 10x `len2` = 1. The O(log len2) bound of `crc32_combine()`
   is read from zlib's crc32.c (`x2nmodp()` steps once per bit of `len2`);
   the timing only shows the practical cost over those lengths.
@@ -110,6 +114,7 @@ import random
 import re
 import subprocess
 import sys
+import sysconfig
 import textwrap
 import time
 import tracemalloc
@@ -122,6 +127,9 @@ import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "zlib.md"
 EXPECTED_BLOCKS = 12
+# Windows' sysconfig omits SIZEOF_OFF_T; PC/pyconfig.h defines it as 4.
+OFF_T_BYTES = 4 if sys.platform == "win32" else sysconfig.get_config_var("SIZEOF_OFF_T")
+COMBINE_MAX_LENGTH = (1 << (8 * OFF_T_BYTES - 1)) - 1
 
 CHECKSUMS = pytest.mark.parametrize(
     ("checksum", "start"), [(zlib.crc32, 0), (zlib.adler32, 1)], ids=["crc32", "adler32"]
@@ -683,12 +691,12 @@ class TestCombiningReadsNeitherPiece:
         assert combine(checksum(first), checksum(second), size) == checksum(first + second)
 
     @COMBINES
-    def test_len2_takes_any_ssize_t(self, name: str, checksum: Callable[[bytes], int]) -> None:
+    def test_len2_is_bounded_by_off_t(self, name: str, checksum: Callable[[bytes], int]) -> None:
         combine = getattr(zlib, name)
 
-        assert 0 <= combine(1, 2, 2**63 - 1) < 2**32
+        assert 0 <= combine(1, 2, COMBINE_MAX_LENGTH) < 2**32
         with pytest.raises(OverflowError):
-            combine(1, 2, 2**63)
+            combine(1, 2, COMBINE_MAX_LENGTH + 1)
 
     @pytest.mark.timing
     @COMBINES
@@ -711,10 +719,11 @@ class TestCombiningReadsNeitherPiece:
     ) -> None:
         combine = getattr(zlib, name)
 
+        length = (COMBINE_MAX_LENGTH + 1) // 2
         small = best_ns(lambda: [combine(1, 2, 1) for _ in range(10_000)])
-        huge = best_ns(lambda: [combine(1, 2, 2**62) for _ in range(10_000)])
+        huge = best_ns(lambda: [combine(1, 2, length) for _ in range(10_000)])
 
-        assert huge < 10 * small, f"{name}: len2 = 1 cost {small} ns, 2**62 {huge} ns"
+        assert huge < 10 * small, f"{name}: len2 = 1 cost {small} ns, {length} cost {huge} ns"
 
 
 class TestDocumentedExamples:

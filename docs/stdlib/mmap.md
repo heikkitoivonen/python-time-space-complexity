@@ -42,7 +42,7 @@ prices. System calls that take no length, such as
 | `mm[i:j]`, `mm[i:j:step]` | O(k) | O(k) | k = slice length; a new `bytes` copy |
 | `mm[i:j] = data` | O(k) | O(1) | `data` must be exactly the slice's length |
 | `len(mm)` | O(1) | O(1) | The mapped length, not the file size |
-| `memoryview(mm)` | O(1) | O(1) | No copy; `close()` and `resize()` raise `BufferError` until every view is released |
+| `memoryview(mm)` | O(1) | O(1) | No copy; `close()` and, where available, `resize()` raise `BufferError` until every view is released |
 | Iterating an `mmap`, `x in mm` | O(n) | O(1) | Yields one-byte `bytes` objects, so `in` finds a single byte and is `False` for any longer needle; use `find()` |
 
 ### Searching
@@ -57,7 +57,7 @@ prices. System calls that take no length, such as
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `mmap.size()` | O(1) | O(1) | The size of the file, which can exceed `len(mm)`. For anonymous memory, Python 3.15+ returns the mapped length and earlier versions raise `OSError` on Unix. On Unix a map built with `trackfd=False` raises: `ValueError` from Python 3.15, `OSError` before |
-| `mmap.resize(newsize)` | O(p) | O(1) | Linux remaps without copying the bytes and resizes a mapped file to match. Windows copies anonymous memory, O(min(n, newsize)). Unix without `mremap()`, macOS included, raises `SystemError`. Linux cannot grow shared anonymous memory: Python 3.13+ raises `ValueError`, and earlier versions crash with `SIGBUS` when the new pages are touched |
+| `mmap.resize(newsize)` | O(p) | O(1) | Linux remaps without copying the bytes and resizes a mapped file to match. Windows copies anonymous memory, O(min(n, newsize)). On Unix without `mremap()`, macOS included, the method is absent from Python 3.15; earlier versions raise `SystemError`. Linux cannot grow shared anonymous memory: Python 3.13+ raises `ValueError`, and earlier versions crash with `SIGBUS` when the new pages are touched |
 | `mmap.flush([offset[, size]])` | O(q) | O(1) | Writes the file's dirty pages in the range back, whichever writer dirtied them; on Unix it waits for the writes. Does nothing for `ACCESS_READ` and `ACCESS_COPY` |
 | `mmap.madvise(option[, start[, length]])` | O(q) | O(1) | What the kernel does with them depends on `option`. Unix only |
 | `mmap.set_name(name)` | O(len(name)) | O(1) | Python 3.15+. On Linux, labels anonymous memory in `/proc/<pid>/maps` when Python runs in development mode or is a debug build, and raises `OSError` there if the kernel lacks the feature; otherwise it does nothing. A file-backed map, or a name over 66 bytes, raises `ValueError`. Other platforms raise `NotImplementedError` |
@@ -215,8 +215,9 @@ with mmap.mmap(-1, 4096) as mm:
 ## Resizing and Flushing
 
 `resize()` changes the mapping and, for a file, the file's length. On Linux it remaps the pages
-rather than copying their bytes; on Unix systems without `mremap()`, macOS among them, it raises
-`SystemError`, so portable code closes the map, resizes the file, and maps it again. On Linux,
+rather than copying their bytes; on Unix systems without `mremap()`, macOS among them, the method
+is absent from Python 3.15 and raises `SystemError` on earlier versions. Portable code closes the
+map, resizes the file, and maps it again. On Linux,
 shared anonymous memory cannot grow at all. `flush()` writes the dirty pages in a range back to
 the file, and on Unix waits for them; a copy-on-write map never reaches the file, so flushing it
 does nothing.
@@ -291,7 +292,7 @@ with tempfile.TemporaryFile() as f:
 
 - `x in mm` to look for a byte string - it walks the whole map and matches single bytes only
 - `mm[:]` or `read()` on a large map - each is an O(n) copy into memory
-- `resize()` in portable code - it raises where the OS has no `mremap()`
+- `resize()` in portable code - on Unix without `mremap()` it is absent from Python 3.15 and raises on earlier versions
 - `flush()` after every small write - each call writes back the dirty pages in its range
 
 ## Version Notes

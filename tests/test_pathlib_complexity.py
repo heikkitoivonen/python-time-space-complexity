@@ -45,9 +45,10 @@ Measurement scope:
   `is_mount()` makes the same count at depth 1 and 16 except on 3.12, where
   15 more components cost 15 more calls. `resolve()` makes eight more
   stat-family calls for eight more components.
-* `Path.info` (3.14): on POSIX four `exists`/`is_file`/`is_dir` queries make
-  one stat call where the `Path` predicates make four, and `is_symlink()` adds
-  one lstat. On Windows the first `exists()`, `is_file()` and `is_dir()` make
+* `Path.info` (3.14+): on POSIX `exists`/`is_file`/`is_dir` queries make
+  one stat call, repeating them makes none, and `is_symlink()` adds
+  one lstat. Windows shares these caches from 3.15 (Lib/pathlib/__init__.py).
+  On Windows 3.14 the first `exists()`, `is_file()` and `is_dir()` make
   one native query each and asking all three again makes none; `is_symlink()`
   asked twice makes one. On either platform the attribute is the same object
   on each access, and its answer survives the file's deletion while a fresh
@@ -92,8 +93,8 @@ Measurement scope:
 
 Not settled here:
 
-* The Windows `Path.info` counts: the test that asserts them is guarded to
-  Windows, and CI, which runs on Linux, skips it.
+* The Windows 3.14 `Path.info` native queries run only on Windows;
+  Linux and macOS cannot verify that branch of the cache test.
 * "O(1)" for a syscall is a choice of unit: the kernel resolves a path
   component by component. On a real filesystem a recursive glob over a chain
   is quadratic in its depth by the clock on every version, which is that
@@ -896,55 +897,37 @@ class TestModificationRowsAreOneSyscall:
 @pytest.mark.skipif(sys.version_info < (3, 14), reason="Path.info is 3.14+")
 class TestPathInfoCaches:
     """`PathInfo.exists()`, `is_dir()`, `is_file()` share one stat call on
-    POSIX and take at most one native query each on Windows; `is_symlink()`
-    takes one more; every answer is kept for the object's life."""
+    POSIX and Windows 3.15+, and take at most one native query each on
+    Windows 3.14; `is_symlink()` takes one more; every answer is kept for
+    the object's life."""
 
-    @POSIX_ONLY
-    def test_three_questions_cost_one_stat(self, tmp_path: pathlib.Path) -> None:
+    def test_file_status_queries_are_cached(self, tmp_path: pathlib.Path) -> None:
         target = tmp_path / "f.txt"
         target.write_text("x", encoding="utf-8")
 
         info = target.info  # type: ignore[attr-defined]
         with counting_syscalls() as counter:
-            info.exists()
-            info.is_file()
-            info.is_dir()
-            info.exists()
-        cached = dict(counter.counts)
-
-        with counting_syscalls() as counter:
-            info.is_symlink()
-            info.is_symlink()
-        symlink = dict(counter.counts)
-
-        assert (cached["stat"], cached["lstat"]) == (1, 0), cached
-        assert (symlink["stat"], symlink["lstat"]) == (0, 1), symlink
-
-    @WINDOWS_ONLY
-    def test_on_windows_each_question_is_its_own_cached_query(self, tmp_path: pathlib.Path) -> None:
-        target = tmp_path / "f.txt"
-        target.write_text("x", encoding="utf-8")
-
-        info = target.info  # type: ignore[attr-defined]
-        with counting_syscalls() as counter:
-            info.exists()
-            info.is_file()
-            info.is_dir()
+            assert info.exists()
+            assert info.is_file()
+            assert not info.is_dir()
         first = dict(counter.counts)
         with counting_syscalls() as counter:
-            info.exists()
-            info.is_file()
-            info.is_dir()
+            assert info.exists()
+            assert info.is_file()
+            assert not info.is_dir()
         again = dict(counter.counts)
 
         with counting_syscalls() as counter:
-            info.is_symlink()
-            info.is_symlink()
+            assert not info.is_symlink()
+            assert not info.is_symlink()
         symlink = dict(counter.counts)
 
-        assert (first["native"], first["stat"], first["lstat"]) == (3, 0, 0), first
+        native_queries = sys.platform == "win32" and sys.version_info < (3, 15)
+        expected_first = (3, 0, 0) if native_queries else (0, 1, 0)
+        expected_symlink = (1, 0, 0) if native_queries else (0, 0, 1)
+        assert (first["native"], first["stat"], first["lstat"]) == expected_first, first
         assert sum(again.values()) == 0, again
-        assert (symlink["native"], symlink["stat"], symlink["lstat"]) == (1, 0, 0), symlink
+        assert (symlink["native"], symlink["stat"], symlink["lstat"]) == expected_symlink, symlink
 
     def test_the_attribute_itself_is_cached(self, tmp_path: pathlib.Path) -> None:
         assert tmp_path.info is tmp_path.info  # type: ignore[attr-defined]

@@ -59,8 +59,10 @@ Measurement scope:
   the development machine's is. `length=0` maps the whole file at offset 0 and from `offset` to the
   end otherwise. Slicing leaves the position where it was. A `length` past the end
   of the file raises `ValueError` on Unix, and an `offset` that is not a
-  multiple of `ALLOCATIONGRANULARITY` raises `OSError`. `close()` and `resize()` raise `BufferError` under a live
-  `memoryview`; `close()` leaves the file open. `ACCESS_COPY` writes and
+  multiple of `ALLOCATIONGRANULARITY` raises `OSError`. `close()` and,
+  where available, `resize()` raise `BufferError` under a live `memoryview`.
+  On macOS `resize()` raises `SystemError` through 3.14 and is absent from
+  3.15; this is checked only on macOS. `close()` leaves the file open. `ACCESS_COPY` writes and
   `flush()` leave the file unchanged; `ACCESS_DEFAULT` writes reach it.
   `find()` without `start` begins at, and does not move, the position.
   `seek()` returns the new position on 3.13+ and `None` before; `seekable()`
@@ -79,9 +81,9 @@ Not settled here:
 * `resize()` is shown not to copy by its page faults, not by its time. O(p)
   is the kernel's page-table work behind `mremap()` and is not measured
   across sizes.
-* Platform rows, which no run of this project reaches: the Windows
+* Platform rows not exercised here: the Windows
   constructor with `tagname` and its file growth, Windows `resize()` copying
-  anonymous memory, `SystemError` from `resize()` on Unix without `mremap()`,
+  anonymous memory, `resize()` on Unix without `mremap()` other than macOS,
   the macOS flush at construction, and `flush()` on Windows. They follow the
   released Modules/mmapmodule.c and the official documentation. The
   Linux-only tests here are guarded on `sys.platform` and skip elsewhere.
@@ -114,6 +116,10 @@ EXPECTED_BLOCKS = 7
 MIB = 1 << 20
 
 linux_only = pytest.mark.skipif(sys.platform != "linux", reason="Linux-only probe")
+resize_available = pytest.mark.skipif(
+    sys.platform == "darwin" and sys.version_info >= (3, 15),
+    reason="platform: macOS has no mremap(), so Python 3.15+ omits mmap.resize()",
+)
 
 
 def best_ns(func: Callable[[], Any], repeats: int = 7, inner: int = 1) -> float:
@@ -543,18 +549,17 @@ class TestViewsShareMemory:
         view.release()
         mm.close()
 
-    def test_close_and_resize_wait_for_the_view(self) -> None:
-        mm = mmap.mmap(-1, mmap.PAGESIZE)
-        view = memoryview(mm)
-
-        with pytest.raises(BufferError):
-            mm.close()
-        with pytest.raises(BufferError):
-            mm.resize(2 * mmap.PAGESIZE)
-
-        view.release()
-        mm.close()
+    def test_close_waits_for_the_view(self) -> None:
+        with mmap.mmap(-1, mmap.PAGESIZE) as mm:
+            with memoryview(mm), pytest.raises(BufferError):
+                mm.close()
         assert mm.closed
+
+    @resize_available
+    def test_resize_waits_for_the_view(self) -> None:
+        with mmap.mmap(-1, mmap.PAGESIZE) as mm:
+            with memoryview(mm), pytest.raises(BufferError):
+                mm.resize(2 * mmap.PAGESIZE)
 
 
 class TestIterationIsNotASubstringTest:
@@ -762,6 +767,16 @@ class TestSizeResizeAndFlush:
 
         assert result.returncode == -signal.SIGBUS, result
 
+    @pytest.mark.skipif(sys.platform != "darwin", reason="platform: macOS has no mremap()")
+    def test_macos_resize_is_unsupported(self) -> None:
+        with mmap.mmap(-1, mmap.PAGESIZE) as mm:
+            if sys.version_info >= (3, 15):
+                assert not hasattr(mm, "resize")
+            else:
+                with pytest.raises(SystemError, match="resizing not available"):
+                    mm.resize(2 * mmap.PAGESIZE)
+
+    @resize_available
     def test_resize_refuses_a_copy_on_write_map(self, file_of: Callable[[bytes], Any]) -> None:
         f = file_of(b"abcd")
 

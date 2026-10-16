@@ -40,10 +40,11 @@ Measurement scope:
   ``notify_all()`` on three waiters none returns while the notifier still
   holds the lock. A wait that times out behind 20 waiters is removed from
   index 20 of the deque, through ``Condition.wait``, ``Event.wait``,
-  ``Semaphore.acquire`` and ``Barrier.wait`` alike. A semaphore may repeat
-  its condition wait before its deadline clock expires; a controlled clock
-  forces two waits, both removed at index 20, leaving the original 20
-  waiters queued. Each ``notify_all`` removal is from index 0. ``wait_for``
+  ``Semaphore.acquire`` and ``Barrier.wait`` alike. A semaphore or barrier
+  may repeat its condition wait before its deadline clock expires; a
+  controlled clock forces two waits, both removed at index 20. The semaphore
+  leaves the original 20 waiters queued; the barrier breaks and wakes them.
+  Each ``notify_all`` removal is from index 0. ``wait_for``
   calls its predicate once when it is already true and once more per wakeup.
 * A thread blocked in ``Event.wait(0.2)`` uses under 50 ms of its own CPU
   time (``time.thread_time``), where a thread spinning on ``is_set()``
@@ -757,9 +758,17 @@ class TestConditionQueuesItsWaiters:
             release(primitive)
             join_all(threads)
 
-    def test_a_barrier_timeout_pays_the_same_removal_before_breaking(self) -> None:
-        """The expired party leaves from index 20; breaking then wakes the rest
-        from index 0."""
+    @pytest.mark.parametrize(
+        "clock_ticks", [None, (0.0, SHORT / 2, SHORT)], ids=["native", "retry"]
+    )
+    def test_a_barrier_timeout_pays_the_same_removal_before_breaking(
+        self, clock_ticks: tuple[float, ...] | None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Each timed wait leaves from index 20; breaking wakes the rest from 0.
+
+        The deadline clock may outlast a native lock wait. A controlled clock
+        forces two waits to exercise that retry on every platform.
+        """
         barrier = threading.Barrier(22)
         queue = RecordingDeque()
         cast("Any", condition_of(barrier))._waiters = queue
@@ -774,12 +783,21 @@ class TestConditionQueuesItsWaiters:
         threads = [spawn(wait) for _ in range(20)]
         try:
             assert wait_until(lambda: len(queue) == 20)
-            with pytest.raises(threading.BrokenBarrierError):
-                barrier.wait(SHORT)
+            with monkeypatch.context() as patch:
+                if clock_ticks is not None:
+                    ticks = iter(clock_ticks)
+                    patch.setattr(threading, "_time", lambda: next(ticks))
+                with pytest.raises(threading.BrokenBarrierError):
+                    barrier.wait(SHORT)
+            assert barrier.broken
         finally:
             barrier.abort()
-        join_all(threads)
-        assert queue.removed_at == [20] + [0] * 20
+            join_all(threads)
+        timeout_removals = queue.removed_at[:-20]
+        assert timeout_removals and set(timeout_removals) == {20}, queue.removed_at
+        assert queue.removed_at[-20:] == [0] * 20, queue.removed_at
+        if clock_ticks is not None:
+            assert timeout_removals == [20, 20]
         assert outcomes == ["broken"] * 20
 
     def test_wait_for_calls_the_predicate_once_per_wakeup(self) -> None:
