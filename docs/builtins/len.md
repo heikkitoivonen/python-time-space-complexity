@@ -88,6 +88,12 @@ count = sum(1 for x in gen)  # O(n) - must iterate
 ### Checking if Container is Empty
 
 ```python
+def process(item):
+    pass
+
+container = [1, 2, 3]
+generator = (x for x in range(3))
+
 # Correct - O(1), doesn't create list
 if len(container) > 0:
     process(container)
@@ -118,6 +124,8 @@ def process_list(items):
 ### Comparing Container Sizes
 
 ```python
+list1, list2 = [1, 2, 3], [4, 5]
+
 # All O(1)
 if len(list1) > len(list2):
     smaller = list2
@@ -136,6 +144,11 @@ if len(list1) != len(list2):
 ### Length Operations in Loops
 
 ```python
+def process(item):
+    pass
+
+items = [1, 2, 3]
+
 # O(n) - good, length is O(1)
 for i in range(len(items)):
     process(items[i])
@@ -150,7 +163,10 @@ while count < len(items):
 ### Pre-computing Length
 
 ```python
-items = get_large_list()
+def process(item):
+    pass
+
+items = list(range(100_000))
 
 # Don't do this - wastes a variable
 length = len(items)

@@ -37,6 +37,7 @@ recomputed. A slice of a 10,000,000-item range costs the same as one of a
 items cost between x10 and x1,000 what they do over 10,000.
 """
 
+import pathlib
 import time
 from collections.abc import Callable
 from decimal import Decimal
@@ -44,6 +45,8 @@ from fractions import Fraction
 from typing import Any
 
 import pytest
+
+from tests.page_examples import DOCS, failing_blocks, python_blocks, run_block
 
 
 def trimmed_mean(samples: list[float], trim_fraction: float = 0.1) -> float:
@@ -385,3 +388,24 @@ class TestMinAndMaxIterate:
             assert large_time < small_time * 1_000, (
                 f"{name}() over 100x the range cost x{large_time / small_time:.1f}"
             )
+
+
+class TestDocumentedExamples:
+    """Each block runs in its own interpreter and defines every name it uses."""
+
+    def test_the_page_has_the_expected_blocks(self) -> None:
+        assert len(python_blocks(DOCS / "builtins/range.md")) == 12
+
+    def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
+        failures = failing_blocks(DOCS / "builtins/range.md", tmp_path)
+
+        assert not failures, "\n\n".join(failures)
+
+    def test_the_runner_notices_an_undefined_name(self, tmp_path: pathlib.Path) -> None:
+        source = next(
+            s for _, s in python_blocks(DOCS / "builtins/range.md") if "enumerate(items)" in s
+        )
+        mutated = source.replace('items = ["a", "b", "c"]\n', "", 1)
+
+        assert mutated != source
+        assert run_block(mutated, tmp_path).returncode != 0

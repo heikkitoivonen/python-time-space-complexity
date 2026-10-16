@@ -68,6 +68,9 @@ r[10]               # 60 (10 + 5*10)
 ### Iteration
 
 ```python
+def process(i):
+    pass
+
 # Efficient iteration
 for i in range(1000000):  # O(n) iteration, O(1) per item
     process(i)
@@ -96,6 +99,8 @@ for i in range(100, 10, -5):
 ### Indexing
 
 ```python
+items = ["a", "b", "c"]
+
 # Works with enumerate - O(n) total, O(1) space
 for idx, val in enumerate(items):
     print(idx, val)

@@ -1,5 +1,5 @@
 ---
-source_sha: 25d20c67983aa9804a0793e87e0afd576db8524bd855c9ea48e968b52107cf06
+source_sha: 7b1172f01365212c7ebefaf415399dc1e6483614c58b56dadaf3dbd4bcec00d3
 translated: machine
 ---
 
@@ -170,6 +170,8 @@ JIT 编译为重复操作提供额外优化。
 ### 高效构建字符串
 
 ```python
+words = ["fast", "string", "building"]
+
 # Bad: O(n²)
 result = ""
 for word in words:
@@ -199,6 +201,8 @@ message = "Hello, %s!" % name
 ### 模式匹配
 
 ```python
+s = "test_42"
+
 # Use str methods for simple patterns
 if s.startswith("test_"):  # O(m) where m = prefix length
     pass

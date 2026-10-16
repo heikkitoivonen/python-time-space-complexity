@@ -165,6 +165,8 @@ Backed by Java strings, similar performance characteristics.
 ### Efficient String Building
 
 ```python
+words = ["fast", "string", "building"]
+
 # Bad: O(n²)
 result = ""
 for word in words:
@@ -194,6 +196,8 @@ message = "Hello, %s!" % name
 ### Pattern Matching
 
 ```python
+s = "test_42"
+
 # Use str methods for simple patterns
 if s.startswith("test_"):  # O(m) where m = prefix length
     pass

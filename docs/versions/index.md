@@ -71,9 +71,6 @@ Experimental features and optimizations:
 New features and optimizations:
 
 ```python
-# Improved error messages
-"test"[999]  # IndexError with better message
-
 # Type parameter syntax (PEP 695)
 def greet[T: str](x: T) -> T:
     return x
@@ -112,6 +109,7 @@ Pattern matching:
 
 ```python
 # Structural pattern matching
+value = 2
 match value:
     case 1:
         print("one")

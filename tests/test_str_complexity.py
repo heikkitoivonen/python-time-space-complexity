@@ -63,6 +63,8 @@ from typing import Any
 
 import pytest
 
+from tests.page_examples import DOCS, failing_blocks, python_blocks, run_block
+
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "builtins" / "str.md"
 
 SMALL = 100_000
@@ -287,3 +289,24 @@ class TestIteration:
                 pass
 
         assert_linear("for c in s", growth(lambda: drain(small), lambda: drain(large)))
+
+
+class TestDocumentedExamples:
+    """Each block runs in its own interpreter and defines every name it uses."""
+
+    def test_the_page_has_the_expected_blocks(self) -> None:
+        assert len(python_blocks(DOCS / "builtins/str.md")) == 7
+
+    def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
+        failures = failing_blocks(DOCS / "builtins/str.md", tmp_path)
+
+        assert not failures, "\n\n".join(failures)
+
+    def test_the_runner_notices_an_undefined_name(self, tmp_path: pathlib.Path) -> None:
+        source = next(
+            s for _, s in python_blocks(DOCS / "builtins/str.md") if "for word in words:" in s
+        )
+        mutated = source.replace('words = ["fast", "string", "building"]\n', "", 1)
+
+        assert mutated != source
+        assert run_block(mutated, tmp_path).returncode != 0

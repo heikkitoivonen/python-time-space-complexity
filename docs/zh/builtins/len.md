@@ -1,5 +1,5 @@
 ---
-source_sha: d678eab417340ad37271b9efd45d109c51c9563b947ffd94873ec76ddb7be4e2
+source_sha: f560aa69dca68d409ee9d1a4bc543c05428effbcd89ce921b8ebe6fe1a21a8fe
 translated: machine
 ---
 
@@ -93,6 +93,12 @@ count = sum(1 for x in gen)  # O(n) - must iterate
 ### 判断容器是否为空
 
 ```python
+def process(item):
+    pass
+
+container = [1, 2, 3]
+generator = (x for x in range(3))
+
 # Correct - O(1), doesn't create list
 if len(container) > 0:
     process(container)
@@ -123,6 +129,8 @@ def process_list(items):
 ### 比较容器大小
 
 ```python
+list1, list2 = [1, 2, 3], [4, 5]
+
 # All O(1)
 if len(list1) > len(list2):
     smaller = list2
@@ -141,6 +149,11 @@ if len(list1) != len(list2):
 ### 循环中的长度操作
 
 ```python
+def process(item):
+    pass
+
+items = [1, 2, 3]
+
 # O(n) - good, length is O(1)
 for i in range(len(items)):
     process(items[i])
@@ -155,7 +168,10 @@ while count < len(items):
 ### 预先计算长度
 
 ```python
-items = get_large_list()
+def process(item):
+    pass
+
+items = list(range(100_000))
 
 # Don't do this - wastes a variable
 length = len(items)
