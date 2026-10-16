@@ -6,15 +6,22 @@ operand, the worst case under hash collisions, and the hash table that removal
 does not shrink. Membership and `len()` are timed in
 tests/test_builtin_complexity.py.
 
-`intersection_update()` and `&=` are documented as O(n) where the official
-table gives O(min(len(s1), len(s2))). Both forms build the intersection, swap
-it into `s` and free the old table, which walks every slot of it
-(Objects/setobject.c, `set_intersection_update` and `set_dealloc`). Measured
-on 3.11.17, 3.14.8 and 3.15.0 with a 3-element set as `other` and the
-elements of `s` kept alive elsewhere, so nothing but the table walk scales:
-10,000 / 100,000 / 1,000,000 elements cost about 10us / 100us / 3ms, while
-`s & other` on the same sets stays flat. Dropping n - k elements from `s` in
-place also means releasing those n - k elements.
+`intersection_update()` and `&=` are O(min(n, m)) amortized, as in the
+official table (v3.15.0:Doc/builtins/time-complexity.rst, intersection update
+row, footnotes 1 and 8). Both forms build the intersection, swap it into `s`
+and free the old table, which releases each of its n entries
+(Objects/setobject.c, `set_intersection_update` and `set_dealloc`). With a set
+operand the build walks the smaller side, so a single call is O(min(n, m) + n);
+a non-set operand is iterated to the end, or until the result holds n
+elements, so a single call is O(m + n). At most min(n, m) of the old entries
+are kept and the rest are dropped, so the release is paid for by the
+insertions that put the dropped elements in `s`; on a sparse table, the slots
+beyond its live entries were paid for by the insertions that filled them
+(footnote 7). The timing tests below are finite-size scaling checks on that
+argument, not a proof of it. Measured on 3.15.0 (aarch64 Linux) with a
+3-element `other` and the elements kept alive elsewhere: one call costs 5% to
+8% of building `s` by `add()` at 2,000 / 20,000 / 200,000 / 2,000,000
+elements, for `&=` and for the method with a set or a list.
 
 Measurement scope:
 
@@ -24,15 +31,28 @@ Measurement scope:
 * The walking operations are timed on that sparse set against a fresh set of
   the same 10 ints: iteration, `copy()`, `set(s)`, `frozenset(s)`, `s | {-1}`,
   `s - {-1}`, `s ^ {-1}`, `s <= s` and `s == twin` must each cost more than
-  50x (locally thousands). `len()` and `in` are held under 5x.
+  50x (locally thousands). `len()` and `in` are held under 5x. `&=` and
+  `intersection_update()` with a 1-element `other` must too, on a sparse set
+  whose 10 survivors are its highest ints: freeing the old table stops at its
+  last live entry, so survivors in the lowest slots cost far less (32x
+  against 1,134x on 3.15.0 with a 3-element `other`). Spread hashes leave the
+  last live entry near the end of the table.
 * `-=`, `difference_update()`, `&=` and `intersection_update()` doing the
   same mass removal are asserted to leave a set under 1/100 of the full size,
-  and so is `copy()` of the sparse set. Insertions, each removed again so the
+  and so is `copy()` of the sparse set. So are `&=` and
+  `intersection_update()` on the sparse set with an `other` holding all 10
+  survivors, which removes nothing. Insertions, each removed again so the
   set keeps 10 elements, are asserted to rebuild the sparse table smaller
   before 400,000 of them.
 * `intersection_update()` and `&=` are timed with a 3-element `other` on
   2,000 and 200,000 elements kept alive elsewhere: 100x the elements must
-  cost more than 20x. `s & other` on the same sets must stay under 5x.
+  cost more than 20x per call. `s & other` on the same sets must stay under
+  5x. One call divided by the `add()` loop that built the same set must stay
+  under 1/2 at 2,000, 20,000 and 200,000 elements, and grow under 3x across
+  them, where a call quadratic in n would grow it 100x. The bound does not
+  separate O(n) from O(n log n) per call; source settles that.
+  With 100 elements, an `other` of 1,000 and of 1,000,000 elements that
+  holds them all must cost under 5x apart, which is the min(n, m).
 * `difference_update()` and `-=` are timed with `other` a set: 100 elements
   against 1,000 and 1,000,000, and 1,000 and 1,000,000 elements against 3
   absent ones, each under 5x, which is the O(min(n, m)).
@@ -154,6 +174,30 @@ class TestRemovingDoesNotShrinkTheTable:
         assert sparse_ns > fresh_ns * 50, f"{name}: {fresh_ns:.0f}ns vs {sparse_ns:.0f}ns"
 
     @pytest.mark.timing
+    @pytest.mark.parametrize("form", ["method", "operator"])
+    def test_in_place_intersection_costs_the_former_size(self, form: str) -> None:
+        """Freeing the old table walks it up to its last live entry, so the
+        survivors are the highest ints, which sit in the highest slots."""
+        survivors = range(PEAK - KEPT, PEAK)
+        other = {PEAK - 1}
+
+        def sparse() -> set[int]:
+            s = set(range(PEAK))
+            for i in range(PEAK - KEPT):
+                s.discard(i)
+            return s
+
+        def apply(s: set[int]) -> None:
+            if form == "method":
+                s.intersection_update(other)
+            else:
+                s &= other
+
+        sparse_ns = best_fresh_ns(apply, sparse)
+        fresh_ns = best_fresh_ns(apply, lambda: set(survivors))
+        assert sparse_ns > fresh_ns * 50, f"{form}: {fresh_ns:.0f}ns vs {sparse_ns:.0f}ns"
+
+    @pytest.mark.timing
     @pytest.mark.parametrize("name", ["len", "in"])
     def test_len_and_membership_are_unaffected(self, name: str) -> None:
         operations: dict[str, Callable[[set[int]], Any]] = {
@@ -181,6 +225,17 @@ class TestRemovingDoesNotShrinkTheTable:
         assert s == set(range(KEPT))
         assert sys.getsizeof(s) * 100 < full
 
+    @pytest.mark.parametrize("form", ["method", "operator"])
+    def test_intersection_update_compacts_without_removing(self, form: str) -> None:
+        s = sparse_set()
+        sparse_size = sys.getsizeof(s)
+        if form == "method":
+            s.intersection_update(set(range(KEPT)))
+        else:
+            s &= set(range(KEPT))
+        assert s == set(range(KEPT))
+        assert sys.getsizeof(s) * 100 < sparse_size
+
     def test_copy_is_compact(self) -> None:
         s = sparse_set()
         copied = s.copy()
@@ -199,9 +254,11 @@ class TestRemovingDoesNotShrinkTheTable:
         assert sys.getsizeof(s) * 100 < full, "an insertion must eventually rebuild the table"
 
 
-class TestInPlaceIntersectionIsLinearInTheSet:
-    """See the module docstring: this is where the page departs from the
-    official O(min(len(s1), len(s2)))."""
+class TestInPlaceIntersectionIsAmortizedMinOfTheTwo:
+    """The row: O(min(n, m)) amortized, with one call freeing the old table in
+    O(n). A single call grows with n even for a tiny `other`, but stays a
+    fixed fraction of the insertions that built `s`, and does not grow with
+    an `other` larger than `s`."""
 
     SMALL = 2_000
     LARGE = 200_000
@@ -232,6 +289,44 @@ class TestInPlaceIntersectionIsLinearInTheSet:
             return best_ns(lambda: s & other, inner=1_000)
 
         small_ns, large_ns = run(self.SMALL), run(self.LARGE)
+        assert large_ns < small_ns * 5, f"{small_ns:.0f}ns vs {large_ns:.0f}ns"
+
+    @pytest.mark.timing
+    @pytest.mark.parametrize("form", ["method", "operator"])
+    def test_one_call_is_paid_for_by_building_the_set(self, form: str) -> None:
+        def quotient(size: int) -> float:
+            elements = list(range(self.SMALL, self.SMALL + size))
+            other = {elements[0], elements[size // 2], elements[-1]}
+
+            def apply(s: set[int]) -> None:
+                if form == "method":
+                    s.intersection_update(other)
+                else:
+                    s &= other
+
+            def build(s: set[int]) -> None:
+                for x in elements:
+                    s.add(x)
+
+            call_ns = best_fresh_ns(apply, lambda: set(elements))
+            # The set to fill comes from setup, so freeing it falls outside the timing.
+            build_ns = best_fresh_ns(build, set)
+            return call_ns / build_ns
+
+        quotients = [quotient(size) for size in (2_000, 20_000, 200_000)]
+        shown = ", ".join(f"{q:.3f}" for q in quotients)
+        assert max(quotients) < 0.5, f"{form}: {shown}"
+        assert quotients[-1] < quotients[0] * 3, f"{form}: {shown}"
+
+    @pytest.mark.timing
+    def test_a_larger_other_costs_no_more(self) -> None:
+        elements = list(range(self.SMALL, self.SMALL + 100))
+
+        def run(size: int) -> float:
+            other = set(range(self.SMALL, self.SMALL + size))
+            return best_fresh_ns(lambda s: s.intersection_update(other), lambda: set(elements))
+
+        small_ns, large_ns = run(1_000), run(1_000_000)
         assert large_ns < small_ns * 5, f"{small_ns:.0f}ns vs {large_ns:.0f}ns"
 
 

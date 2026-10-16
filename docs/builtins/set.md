@@ -26,7 +26,7 @@ Element hashing and comparison are treated as O(1).
 | `isdisjoint()` | O(min(n,m)); O(m) if `other` is not a set | O(1) | Early termination |
 | `update(other)`, `s \|= other` | O(m) | O(1) | In-place union; m = len(other) |
 | `difference_update(other)`, `s -= other` | O(min(n,m)); O(m) if `other` is not a set | O(n) | In-place difference; scans whichever side is smaller |
-| `intersection_update(other)`, `s &= other` | O(n); O(n+m) if `other` is not a set | O(min(n,m)) | In-place intersection; rebuilds the set and frees the old table, so O(n) even when `other` is small |
+| `intersection_update(other)`, `s &= other` | O(min(n,m)) amortized; O(m) amortized if `other` is not a set | O(min(n,m)) | In-place intersection; one call frees the old table in O(n), paid for by inserting the elements it drops |
 | `symmetric_difference_update(other)`, `s ^= other` | O(m) | O(1); O(m) if `other` is not a set | In-place symmetric difference |
 
 The operator forms accept only sets and frozensets; the methods also take any iterable. In the worst
@@ -34,10 +34,10 @@ case, when every element hashes to the same value, the O(1) operations take O(n)
 that look up every element of one set in another degrade accordingly.
 
 Removing elements with `remove()`, `discard()` or `pop()` does not shrink the table. After most
-elements are removed, operations that walk it - iteration, `copy()`, `|`, `-`, `^`, comparisons
+elements are removed, operations that walk it - iteration, `copy()`, `|`, `-`, `^`, `&=`, comparisons
 and `set(s)` - still take time proportional to the set's former size, until later insertions
-trigger a resize. `len()` and membership tests are unaffected, and removing most elements with
-`-=`, `&=` or their methods leaves a compact table.
+trigger a resize. `len()` and membership tests are unaffected. `&=` and its method always leave a compact table, as
+does removing most elements with `-=` or its method.
 
 ## Implementation Details
 

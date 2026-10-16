@@ -1,5 +1,5 @@
 ---
-source_sha: 65a8e42df7b8e94caa84a3882f8713b92843278026321b9aa5d0c0ff5c017968
+source_sha: aed89569718472744efe2fe630c10b81389a8b3acbbbd892311a4aba047ebccc
 translated: machine
 ---
 
@@ -30,12 +30,12 @@ translated: machine
 | `isdisjoint()` | O(min(n,m))；若 `other` 不是集合则为 O(m) | O(1) | 可提前终止 |
 | `update(other)`, `s \|= other` | O(m) | O(1) | 原地并集；m = len(other) |
 | `difference_update(other)`, `s -= other` | O(min(n,m))；若 `other` 不是集合则为 O(m) | O(n) | 原地差集，遍历较小的一侧 |
-| `intersection_update(other)`, `s &= other` | O(n)；若 `other` 不是集合则为 O(n+m) | O(min(n,m)) | 原地交集；重建集合并释放旧表，因此即使 `other` 很小也是 O(n) |
+| `intersection_update(other)`, `s &= other` | 均摊 O(min(n,m))；若 `other` 不是集合则为均摊 O(m) | O(min(n,m)) | 原地交集；单次调用会以 O(n) 释放旧表，这部分开销已在插入被移除的元素时支付 |
 | `symmetric_difference_update(other)`, `s ^= other` | O(m) | O(1)；若 `other` 不是集合则为 O(m) | 原地对称差集 |
 
 运算符形式只接受 set 和 frozenset；方法还接受任意可迭代对象。最坏情况下，当所有元素的哈希值相同时，O(1) 操作需要 O(n)，而在一个集合中查找另一个集合全部元素的操作也会相应变慢。
 
-用 `remove()`、`discard()` 或 `pop()` 删除元素不会缩小哈希表。删除大部分元素后，遍历表的操作（迭代、`copy()`、`|`、`-`、`^`、比较和 `set(s)`）仍然耗费与集合先前大小成正比的时间，直到之后的插入触发重新调整大小。`len()` 和成员测试不受影响，用 `-=`、`&=` 或其对应方法删除大部分元素则会留下紧凑的表。
+用 `remove()`、`discard()` 或 `pop()` 删除元素不会缩小哈希表。删除大部分元素后，遍历表的操作（迭代、`copy()`、`|`、`-`、`^`、`&=`、比较和 `set(s)`）仍然耗费与集合先前大小成正比的时间，直到之后的插入触发重新调整大小。`len()` 和成员测试不受影响。`&=` 及其对应方法总会留下紧凑的表，用 `-=` 或其对应方法删除大部分元素也是如此。
 
 ## 实现细节
 

@@ -1,5 +1,5 @@
 ---
-source_sha: 65a8e42df7b8e94caa84a3882f8713b92843278026321b9aa5d0c0ff5c017968
+source_sha: aed89569718472744efe2fe630c10b81389a8b3acbbbd892311a4aba047ebccc
 translated: machine
 ---
 
@@ -31,7 +31,7 @@ vertailu oletetaan O(1)-operaatioiksi.
 | `isdisjoint()` | O(min(n,m)); O(m), jos `other` ei ole joukko | O(1) | Päättyy heti löydöksen jälkeen |
 | `update(other)`, `s \|= other` | O(m) | O(1) | Yhdiste paikallaan; m = len(other) |
 | `difference_update(other)`, `s -= other` | O(min(n,m)); O(m), jos `other` ei ole joukko | O(n) | Erotus paikallaan; käy läpi pienemmän puolen |
-| `intersection_update(other)`, `s &= other` | O(n); O(n+m), jos `other` ei ole joukko | O(min(n,m)) | Leikkaus paikallaan; rakentaa joukon uudelleen ja vapauttaa vanhan taulun, joten O(n) myös silloin, kun `other` on pieni |
+| `intersection_update(other)`, `s &= other` | O(min(n,m)) tasoitettu; O(m) tasoitettu, jos `other` ei ole joukko | O(min(n,m)) | Leikkaus paikallaan; yksi kutsu vapauttaa vanhan taulun ajassa O(n), jonka pois jäävien alkioiden lisääminen on jo maksanut |
 | `symmetric_difference_update(other)`, `s ^= other` | O(m) | O(1); O(m), jos `other` ei ole joukko | Symmetrinen erotus paikallaan |
 
 Operaattorimuodot hyväksyvät vain joukkoja ja frozenset-olioita; metodit hyväksyvät myös minkä
@@ -41,9 +41,9 @@ hidastuvat vastaavasti.
 
 Alkioiden poistaminen metodeilla `remove()`, `discard()` tai `pop()` ei pienennä taulua. Kun
 suurin osa alkioista on poistettu, taulun läpikäyvät operaatiot - iterointi, `copy()`, `|`, `-`,
-`^`, vertailut ja `set(s)` - vievät yhä aikaa suhteessa joukon aiempaan kokoon, kunnes myöhemmät
-lisäykset laukaisevat kokomuutoksen. `len()` ja jäsenyystestit eivät muutu, ja kun suurin
-osa alkioista poistetaan operaattoreilla `-=`, `&=` tai niitä vastaavilla metodeilla, taulu jää tiiviiksi.
+`^`, `&=`, vertailut ja `set(s)` - vievät yhä aikaa suhteessa joukon aiempaan kokoon, kunnes myöhemmät
+lisäykset laukaisevat kokomuutoksen. `len()` ja jäsenyystestit eivät muutu. `&=` ja sitä vastaava metodi jättävät taulun aina
+tiiviiksi, samoin kuin suurimman osan alkioista poistaminen operaattorilla `-=` tai sitä vastaavalla metodilla.
 
 ## Toteutuksen yksityiskohdat
 
