@@ -1,41 +1,32 @@
 # getattr() Function Complexity
 
-The `getattr()` function retrieves the value of a named attribute from an object. It's the programmatic way to access object attributes dynamically.
+The `getattr()` function retrieves the value of a named attribute from an
+object: `getattr(obj, 'name')` does the same lookup as `obj.name`, with the
+name supplied at run time. It costs what that lookup costs: a cached
+class-level lookup plus an instance dict probe, or whatever a user-defined
+hook does.
 
-## Complexity Analysis
+## Complexity Reference
+
+Let `d` be the length of the object's class MRO and `g` the cost, in time and
+space, of a user-defined hook: `__getattr__`, `__getattribute__`, or a
+descriptor such as a property getter.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| Attribute lookup | O(1) avg | O(1) | Average case for direct instance attributes (dict lookup) |
-| MRO traversal | O(d=depth) | O(1) | d = depth of inheritance hierarchy; typically small (<10) |
-| Call __getattribute__ | O(1) | O(1) | Direct attribute fetch |
-| Call __getattr__ | O(k) | O(1) | k = custom __getattr__ implementation time |
-| Total operation | O(d) | O(1) | d = MRO depth, typically constant for most hierarchies |
+| `getattr(obj, name)` | O(1) avg | O(1) | The class-level lookup is cached per class and name object, for misses as well as hits, so `d` does not matter once the cache is warm - provided `name` is the same `str` object each time, as a literal in the source or a `sys.intern()` result is. A miss raises `AttributeError` |
+| `getattr(obj, name)` with a name built at run time | O(d) | O(1) | An f-string, a concatenation or a string read from input is usually a new object on every call, and the cache matches name objects rather than their text, so every call walks the MRO. `sys.intern(name)` returns one shared object per text and restores the cached cost. A `str` subclass, or a name longer than 100 characters, is never cached |
+| `getattr(obj, name, default)` | O(1) avg | O(1) | The same lookup; `default` is returned only when the lookup raises `AttributeError`. Any other exception propagates. The `default` expression is evaluated before the call, whether or not it is used |
+| `getattr(obj, name)`, first lookup after the class or a base changed | O(d) | O(1) | Walks the MRO once and caches the result. From Python 3.13, once a class has been changed and looked up again more than 1,000 times it is never cached again, and every lookup on it pays O(d) |
+| `getattr(obj, name)` through a hook | O(g) | O(g) | On top of the lookup above. A property getter runs on every call, and `__getattr__` runs on every miss |
+| `getattr(obj, name)` with a non-`str` name | O(1) | O(1) | Raises `TypeError` before any lookup, with or without a default |
 
 ## Basic Usage
-
-### Get Attribute by Name
-
-```python
-# O(1) - direct attribute access
-class MyClass:
-    value = 42
-
-obj = MyClass()
-
-# Direct access - O(1)
-val = obj.value  # 42
-
-# Using getattr - O(1)
-val = getattr(obj, 'value')  # 42
-
-# Both have same complexity, getattr is programmatic
-```
 
 ### Dynamic Attribute Names
 
 ```python
-# O(1) - programmatic attribute access
+# O(1) avg per name - the same lookup as obj.name
 class Config:
     host = "localhost"
     port = 8000
@@ -43,57 +34,43 @@ class Config:
 
 config = Config()
 
-# Get attribute by variable name - O(1)
-for attr_name in ['host', 'port', 'debug']:
-    value = getattr(config, attr_name)  # O(1)
-    print(f"{attr_name}: {value}")
+assert getattr(config, 'host') == config.host  # O(1) avg
+
+values = {name: getattr(config, name) for name in ['host', 'port', 'debug']}
+assert values == {'host': 'localhost', 'port': 8000, 'debug': True}
 ```
 
 ### Get with Default Value
 
 ```python
-# O(1) - returns default if not found
+# O(1) avg - the default replaces an AttributeError, nothing else
 class User:
     name = "Alice"
     email = None
 
 user = User()
 
-# With default - O(1)
-phone = getattr(user, 'phone', 'Not provided')
-email = getattr(user, 'email', 'no@email.com')
+phone = getattr(user, 'phone', 'Not provided')  # O(1) avg - a miss
+email = getattr(user, 'email', 'no@email.com')  # O(1) avg - a hit
 
-# Avoids AttributeError - O(1)
-# Instead of:
-# if hasattr(user, 'phone'):
-#     phone = user.phone
-# else:
-#     phone = 'Not provided'
+assert phone == 'Not provided'
+assert email is None  # the attribute exists, so its value wins over the default
+
+try:
+    getattr(user, 'phone')
+except AttributeError as error:
+    assert "'phone'" in str(error)
+else:
+    raise AssertionError("a miss without a default should raise")
 ```
 
-## Complexity Details
-
-### Direct Attribute Lookup
-
-```python
-# O(1) - simple lookup
-class Simple:
-    x = 1
-
-obj = Simple()
-
-# Direct lookup in object's namespace
-value = getattr(obj, 'x')  # O(1)
-
-# Python's attribute resolution:
-# 1. Check instance.__dict__ - O(1) hash table lookup
-# 2. If not found, return default - O(1)
-```
+## Lookup Cost
 
 ### Inheritance Chain Traversal
 
 ```python
-# O(d) - where d = MRO depth
+# The first lookup of a name on a class walks the MRO - O(d)
+# Later lookups of that name on that class are cached - O(1) avg
 class A:
     attr_a = 'A'
 
@@ -107,474 +84,281 @@ class D(C):
     attr_d = 'D'
 
 obj = D()
+assert D.__mro__ == (D, C, B, A, object)
 
-# Lookup in own attributes - O(1)
-val1 = getattr(obj, 'attr_d')  # O(1)
+val = getattr(obj, 'attr_a')  # O(d) once: D, C, B, then found in A
+assert val == 'A'
+val = getattr(obj, 'attr_a')  # O(1) avg: cached for (D, 'attr_a')
+assert val == 'A'
 
-# Lookup in parent - O(d) where d = MRO depth
-val2 = getattr(obj, 'attr_a')  # O(4) - traverse D -> C -> B -> A
+missing = getattr(obj, 'attr_x', None)  # O(d) once, then the miss is cached too
+assert missing is None
 
-# MRO for D: [D, C, B, A, object]
-# Linear search through MRO: O(d) where d = 5
+# Assigning to a class, or to any of its bases, invalidates its cache
+C.attr_c = 'C2'
+val = getattr(obj, 'attr_a')  # O(d) again, once
+assert val == 'A' and getattr(obj, 'attr_c') == 'C2'
 ```
 
-### Custom __getattr__
+### What the Default Catches
 
 ```python
-# O(1) - custom implementation
-class Dynamic:
-    def __getattribute__(self, name):
-        # Called for every attribute access
-        # Even existing attributes go through this
-        print(f"Accessing: {name}")
-        return super().__getattribute__(name)  # O(1)
-    
-    def __getattr__(self, name):
-        # Called only if attribute not found
-        print(f"Attribute not found: {name}")
-        return f"Generated: {name}"
+# Only AttributeError becomes the default; every other exception propagates
+class Strict:
+    @property
+    def broken(self):
+        raise KeyError("not an AttributeError")
 
-obj = Dynamic()
+    @property
+    def absent(self):
+        raise AttributeError("absent")
 
-# Calls __getattribute__ - O(1)
-val = getattr(obj, 'existing')
+obj = Strict()
 
-# Calls __getattribute__ then __getattr__ - O(1)
-val = getattr(obj, 'missing')
+assert getattr(obj, 'missing', None) is None
+assert getattr(obj, 'absent', None) is None  # the getter's AttributeError counts
+
+try:
+    getattr(obj, 'broken', None)
+except KeyError:
+    pass
+else:
+    raise AssertionError("the KeyError should propagate")
+
+try:
+    getattr(obj, 42, None)
+except TypeError as error:
+    assert "must be string" in str(error)
+else:
+    raise AssertionError("a non-str name should raise even with a default")
+```
+
+### The Default Is Evaluated Eagerly
+
+```python
+# The default is an ordinary argument: it is built before getattr() runs
+calls = 0
+
+def expensive_default():
+    global calls
+    calls += 1
+    return []
+
+class Cache:
+    items = [1, 2, 3]
+
+cache = Cache()
+
+items = getattr(cache, 'items', expensive_default())  # pays for the default anyway
+assert items == [1, 2, 3] and calls == 1
+
+# Build the default only on a miss - a private sentinel, since None may be a real value
+_missing = object()
+items = getattr(cache, 'items', _missing)
+if items is _missing:
+    items = expensive_default()
+assert items == [1, 2, 3] and calls == 1
+
+orders = getattr(cache, 'orders', _missing)
+if orders is _missing:
+    orders = expensive_default()
+assert orders == [] and calls == 2
 ```
 
 ## Performance Patterns
 
+### getattr vs hasattr
+
+```python
+# getattr() with a default - one lookup
+class Settings:
+    timeout = 30
+
+obj = Settings()
+
+value = getattr(obj, 'timeout', None)  # O(1) avg - one lookup
+assert value == 30
+
+# hasattr() then getattr() - two lookups of the same name
+if hasattr(obj, 'timeout'):
+    value = getattr(obj, 'timeout')
+else:
+    value = None
+
+assert value == 30
+```
+
 ### Direct Access vs getattr
 
 ```python
-# Direct attribute access - marginally faster
+# Both do the same O(1) avg lookup; getattr() adds one builtin call
 class Data:
     value = 42
 
 obj = Data()
 
-# Direct - O(1), very fast
-direct = obj.value
+direct = obj.value  # name fixed in the source
+dynamic = getattr(obj, 'value')  # name chosen at run time
+assert direct == dynamic == 42
 
-# getattr - O(1), slight overhead for name lookup
-dynamic = getattr(obj, 'value')
-
-# Both O(1), direct is ~5% faster in practice
-# Use getattr when you need dynamic access
+# With a name known in advance, write obj.value; getattr() is for names held in variables
 ```
 
-### getattr vs hasattr
+## Common Patterns
+
+### Dispatch by Name
 
 ```python
-# getattr with default - O(1)
-value = getattr(obj, 'attr', None)  # O(1)
+# O(1) avg - one lookup picks the handler, once the built name is interned
+import sys
 
-# vs hasattr + getattr - O(2)
-if hasattr(obj, 'attr'):  # O(1)
-    value = getattr(obj, 'attr')  # O(1)
-else:
-    value = None  # Total: O(2) - worse!
-
-# Use getattr with default for better performance
-```
-
-### Dynamic Method Lookup
-
-```python
-# O(d) - lookup in class hierarchy
-class Handler:
-    def handle_request(self):
-        return "handled"
-
-class VerboseHandler(Handler):
-    def log(self, msg):
-        print(msg)
-
-handler = VerboseHandler()
-
-# Lookup method - O(d) where d = MRO depth
-method = getattr(handler, 'handle_request')  # O(2)
-method()
-
-# More practical - use in callbacks
-def call_method(obj, method_name, *args):
-    """Generic method caller - O(d)"""
-    method = getattr(obj, method_name, None)  # O(d)
-    if method and callable(method):  # O(1)
-        return method(*args)
-    return None
-```
-
-## Common Use Cases
-
-### Generic Property Access
-
-```python
-# O(1) - implement generic accessors
-class Record:
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
-    
-    def get(self, key, default=None):
-        """Generic getter - O(1)"""
-        return getattr(self, key, default)
-
-record = Record(name="Alice", age=30)
-
-# O(1) - programmatic access
-print(record.get('name'))        # 'Alice'
-print(record.get('missing'))     # None
-print(record.get('missing', 'N/A'))  # 'N/A'
-```
-
-### Plugin System
-
-```python
-# O(d) - dynamically call plugin methods
-class Plugin:
-    def on_init(self):
-        pass
-    
-    def on_start(self):
-        pass
-
-class EventSystem:
-    def trigger(self, obj, event_name):
-        """Call event handler if exists - O(d)"""
-        handler = getattr(obj, event_name, None)  # O(d)
-        if callable(handler):  # O(1)
-            handler()  # O(1)
-
-plugin = Plugin()
-system = EventSystem()
-
-# O(d) - trigger event
-system.trigger(plugin, 'on_init')   # Calls on_init()
-system.trigger(plugin, 'on_start')  # Calls on_start()
-system.trigger(plugin, 'missing')   # No error, just skipped
-```
-
-### Object Copying
-
-```python
-# O(n) - copy attributes from one object to another
-def copy_attributes(source, dest):
-    """Copy attributes between objects - O(n)"""
-    for attr in dir(source):  # O(n log n)
-        if not attr.startswith('_'):  # O(1)
-            try:
-                value = getattr(source, attr)  # O(d)
-                setattr(dest, attr, value)  # O(1)
-            except:
-                pass  # Skip attributes that can't be accessed
-
-class A:
-    x = 1
-    y = 2
-
-class B:
-    pass
-
-a = A()
-b = B()
-copy_attributes(a, b)
-print(b.x, b.y)  # 1, 2
-```
-
-### Type-Based Dispatch
-
-```python
-# O(d) - select method by type
 class Processor:
     def process_int(self, val):
         return val * 2
-    
+
     def process_str(self, val):
         return val.upper()
-    
+
     def process_list(self, val):
         return len(val)
-    
+
     def process(self, val):
-        """Dispatch based on type - O(d)"""
-        type_name = type(val).__name__
-        method_name = f"process_{type_name}"
-        
-        # O(d) - lookup method
-        method = getattr(self, method_name, None)
-        
-        if method:
-            return method(val)
-        return None
+        """Dispatch on the value's type name - one lookup"""
+        # The f-string is a new object per call; interned, it hits the lookup cache
+        name = sys.intern(f"process_{type(val).__name__}")
+        method = getattr(self, name, None)
+        if method is None:
+            return None
+        return method(val)
 
 processor = Processor()
 
-print(processor.process(5))        # 10
-print(processor.process("hello"))  # HELLO
-print(processor.process([1,2,3])) # 3
+assert processor.process(5) == 10
+assert processor.process("hello") == "HELLO"
+assert processor.process([1, 2, 3]) == 3
+assert processor.process(1.5) is None
 ```
 
-### Configuration Loading
+### Optional Hooks
 
 ```python
-# O(n * d) - load config properties
+# O(1) avg per event - call a handler only if the object defines one
+class Plugin:
+    def __init__(self):
+        self.calls = []
+
+    def on_init(self):
+        self.calls.append('init')
+
+    def on_start(self):
+        self.calls.append('start')
+
+def trigger(obj, event_name):
+    """Call an event handler if it exists - one lookup"""
+    handler = getattr(obj, event_name, None)
+    if callable(handler):
+        handler()
+
+plugin = Plugin()
+
+trigger(plugin, 'on_init')
+trigger(plugin, 'on_start')
+trigger(plugin, 'on_stop')  # no handler, no error
+assert plugin.calls == ['init', 'start']
+```
+
+### Reading Several Names
+
+```python
+# O(n) - one lookup per name, for n names
 class Settings:
     debug = False
     timeout = 30
     max_connections = 100
 
-def apply_config(obj, config_dict):
-    """Apply config dictionary to object - O(n * d)"""
-    for key, value in config_dict.items():  # O(n)
-        if hasattr(obj, key):  # O(1)
-            setattr(obj, key, value)  # O(1)
-        # Could use: getattr(obj, key, None)
+def snapshot(obj, names):
+    """Read the named attributes into a dict - O(n)"""
+    return {name: getattr(obj, name) for name in names}
 
-settings = Settings()
-config = {
-    'debug': True,
-    'timeout': 60
-}
+assert snapshot(Settings(), ['debug', 'timeout']) == {'debug': False, 'timeout': 30}
 
-apply_config(settings, config)
-print(settings.debug)      # True
-print(settings.timeout)    # 60
-```
-
-## Advanced Usage
-
-### Meta-Programming
-
-```python
-# O(d) - implement property-like behavior
-class SmartObject:
-    def __init__(self):
-        self._values = {}
-    
-    def __getattribute__(self, name):
-        if name.startswith('_'):
-            return super().__getattribute__(name)
-        
-        # Custom logic for non-private attributes
-        values = super().__getattribute__('_values')
-        if name in values:
-            print(f"Retrieving {name}")
-            return values[name]
-        
-        return super().__getattribute__(name)
-
-obj = SmartObject()
-obj._values['x'] = 42
-
-# Calls __getattribute__ - O(1)
-val = getattr(obj, 'x')  # Prints "Retrieving x"
-```
-
-### Lazy Attribute Loading
-
-```python
-# O(d) - compute attributes on demand
-class LazyObject:
-    def __init__(self):
-        self._cache = {}
-    
-    def __getattr__(self, name):
-        """Called when attribute not found - O(1)"""
-        if name in self._cache:
-            return self._cache[name]
-        
-        # Expensive computation
-        result = self._compute(name)
-        self._cache[name] = result
-        return result
-    
-    def _compute(self, name):
-        # Simulate expensive operation
-        return f"computed_{name}"
-
-obj = LazyObject()
-
-# First access - O(1) + computation
-val1 = getattr(obj, 'attr1')  # Computes value
-
-# Second access - O(1) from cache
-val2 = getattr(obj, 'attr1')  # Returns from cache
-```
-
-## Practical Examples
-
-### Attribute Validation
-
-```python
-# O(d) - validate object attributes
-def has_method(obj, method_name):
-    """Check if object has callable method - O(d)"""
-    attr = getattr(obj, method_name, None)  # O(d)
-    return callable(attr)  # O(1)
-
-class API:
-    def fetch(self):
-        pass
-
-class BadAPI:
-    fetch_data = "not a method"
-
-api = API()
-bad = BadAPI()
-
-print(has_method(api, 'fetch'))  # True
-print(has_method(bad, 'fetch_data'))  # False
-```
-
-### Generic Method Invocation
-
-```python
-# O(d) - call method by name with fallback
-def invoke_method(obj, method_name, *args, **kwargs):
-    """Safely invoke method - O(d)"""
-    method = getattr(obj, method_name, None)  # O(d)
-    
-    if not callable(method):
-        return None
-    
-    try:
-        return method(*args, **kwargs)  # O(1)
-    except Exception as e:
-        return None
-
-class Calculator:
-    def add(self, a, b):
-        return a + b
-    
-    def multiply(self, a, b):
-        return a * b
-
-calc = Calculator()
-
-# O(d) - call method dynamically
-result = invoke_method(calc, 'add', 5, 3)  # 8
-```
-
-### Attribute Default Factory
-
-```python
-# O(d) - get with default factory
-class LazyDict:
-    def get(self, key, factory=None):
-        """Get attribute with default factory - O(d)"""
-        value = getattr(self, key, None)  # O(d)
-        
-        if value is None and factory:
-            value = factory()  # O(1)
-            setattr(self, key, value)
-        
-        return value
-
-obj = LazyDict()
-
-# O(d) - creates default on first access
-items = obj.get('items', list)  # Creates empty list
-items.append(1)
-
-# O(d) - returns existing value
-items2 = obj.get('items', list)  # Returns same list
-print(items2)  # [1]
+# dir() lists and sorts every attribute of the object and its whole MRO,
+# so copying "everything" grows with that count, not with the names wanted
+public = [name for name in dir(Settings()) if not name.startswith('_')]
+assert public == ['debug', 'max_connections', 'timeout']
 ```
 
 ## Edge Cases
 
-### Descriptors
+### Hooks Run Inside getattr()
 
 ```python
-# O(d) - descriptor protocol
-class DescriptorExample:
-    @property
-    def computed(self):
-        return "computed value"
+# A property getter runs on every getattr(); __getattr__ runs on every miss
+class Example:
+    present = 1
 
-obj = DescriptorExample()
-
-# O(d) - property descriptor is called
-value = getattr(obj, 'computed')  # Calls property getter
-```
-
-### __slots__
-
-```python
-# O(d) - works with __slots__
-class Slotted:
-    __slots__ = ['x', 'y']
-    
     def __init__(self):
-        self.x = 1
-        self.y = 2
+        self.getter_runs = 0
+        self.misses = []
 
-obj = Slotted()
+    @property
+    def computed(self):  # its cost is the call's
+        self.getter_runs += 1
+        return 100
 
-# O(d) - lookup in slots
-value = getattr(obj, 'x')  # O(1) - faster than __dict__
+    def __getattr__(self, name):  # reached only when the normal lookup fails
+        self.misses.append(name)
+        raise AttributeError(name)
+
+obj = Example()
+
+assert getattr(obj, 'computed') == 100
+assert getattr(obj, 'computed') == 100
+assert obj.getter_runs == 2
+
+assert getattr(obj, 'present') == 1
+assert obj.misses == []
+assert getattr(obj, 'missing', None) is None
+assert obj.misses == ['missing']
 ```
 
-### Accessing Non-Existent Attributes
+### __getattribute__ Sees Every Lookup
 
 ```python
-# O(d) - safe way to check
-class Simple:
-    pass
+# __getattribute__ replaces the lookup itself - every getattr() call runs it
+lookups = 0
 
-obj = Simple()
+class Counting:
+    attr = 1
 
-# Raises AttributeError
-try:
-    val = obj.missing  # AttributeError
-except AttributeError:
-    print("Not found")
+    def __getattribute__(self, name):
+        global lookups
+        lookups += 1
+        return super().__getattribute__(name)
 
-# Better - use getattr with default
-val = getattr(obj, 'missing', None)  # O(d), returns None
+obj = Counting()
+
+getattr(obj, 'attr')  # one lookup
+getattr(obj, 'missing', None)  # one lookup, then the default
+assert lookups == 2
 ```
 
-## Performance Considerations
-
-### Caching Attribute Lookups
-
-```python
-# O(1) - cached lookups vs O(d) repeated
-class CachedLookup:
-    def __init__(self, obj):
-        self.obj = obj
-        self._cache = {}
-    
-    def get(self, attr_name):
-        if attr_name not in self._cache:
-            self._cache[attr_name] = getattr(self.obj, attr_name)  # O(d)
-        return self._cache[attr_name]  # O(1)
-
-obj = type('Obj', (), {'x': 1, 'y': 2})()
-cached = CachedLookup(obj)
-
-val1 = cached.get('x')  # O(d) - first access
-val2 = cached.get('x')  # O(1) - from cache
-```
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use `getattr()` with default value instead of try/except
-- Cache results for repeated attribute lookups
-- Use for dynamic attribute access in loops
-- Document which attributes objects are expected to have
-- Use with `hasattr()` for complex validation
+- Use `getattr()` with a default instead of `hasattr()` followed by `getattr()` - one lookup, not two
+- Pass a private sentinel as the default and build the real fallback only when it comes back, when the fallback is expensive
+- Write `obj.name` when the name is fixed in the source
+- Pass a name built at run time through `sys.intern()` when it is looked up repeatedly on a deep hierarchy - a fresh string object misses the lookup cache
+- Expect property getters and `__getattr__` to run inside it
 
 ❌ **Avoid**:
 
-- Accessing attributes in tight O(n) loops without caching
-- Assuming all accessed attributes are safe (may raise exceptions)
-- Using `getattr()` when direct access is clearer
-- Forgetting that attribute lookup traverses MRO
-- Complex __getattr__ implementations (hard to debug)
+- An expensive expression as the default - it runs even when the attribute exists
+- Relying on the default to swallow anything but `AttributeError`
+- `dir()` as a way to read a few known names - it builds and sorts the whole attribute list
+- Reassigning a class's attributes in a hot loop on Python 3.13 or later - after more than 1,000 rounds of change and lookup the class is never cached again
 
 ## Related Functions
 
@@ -587,6 +371,5 @@ val2 = cached.get('x')  # O(1) - from cache
 
 ## Version Notes
 
-- **Python 2.x**: `getattr()` available with 2-3 arguments
-- **Python 3.x**: Same behavior with optional default
-- **All versions**: MRO traversal depth depends on inheritance
+- **Python 3.13+**: A class that has been changed and looked up again more than 1,000 times stops being cached, so lookups on it are O(d) from then on
+- **All Python 3**: A non-`str` name raises `TypeError`, with or without a default

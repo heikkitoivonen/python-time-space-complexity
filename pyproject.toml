@@ -120,6 +120,9 @@ ignore = [
 # The abc tests build ABCs with no abstract methods on purpose: registration,
 # caching and __subclasshook__ are the subject, and B024 flags every one of them.
 "tests/test_abc_complexity.py" = ["B024"]
+# The getattr tests call getattr() with constant names because getattr() is the
+# subject; B009's fix rewrites each call into the attribute access it measures against.
+"tests/test_getattr_complexity.py" = ["B009"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["python_time_space_complexity"]
