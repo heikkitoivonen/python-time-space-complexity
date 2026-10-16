@@ -268,8 +268,8 @@ assert unique == {(1, 2), (3, 4)}
 
 ## Version Notes
 
+- **Python 3.3+**: `str` and `bytes` hashes vary between processes unless `PYTHONHASHSEED` is set to a number; `int` hashes do not
 - **Python 3.14+**: a tuple keeps its hash, so hashing the same tuple again is O(1)
-- **All Python 3**: `str` and `bytes` hashes vary between processes unless `PYTHONHASHSEED` is set to a number; `int` hashes do not
 
 ## Related Functions
 

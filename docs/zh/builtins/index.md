@@ -1,5 +1,5 @@
 ---
-source_sha: 5dba3dc173101e68a7cbc10e0a5d6d5346073fdd0b7f80b959387e60cdedbb75
+source_sha: ec03a608e15bce0e310b5e6193a9eff2314572e06916eb684c2bcda1bcac8f23
 translated: machine
 ---
 
@@ -92,10 +92,10 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 |----------|------|-------|-------|
 | [`chr()`](chr.md) | O(1) | O(1) | 码位转字符 |
 | [`ord()`](ord.md) | O(1) | O(1) | 字符转码位 |
-| [`format()`](format.md) | O(n) | O(n) | n 为结果长度 |
+| [`format()`](format.md) | O(n) | O(n + p) | n 为结果长度，p 为精度；十进制 `int` 与 `str()` 一样为 O(n²)，既不填充也不截断的精确 `str` 为 O(1) |
 | [`repr()`](repr.md) | O(n) | O(n) | 递归处理容器 |
 | [`ascii()`](ascii.md) | O(n) | O(n) | 与 `repr()` 类似，但转义非 ASCII 字符 |
-| [`hash()`](hash.md) | O(k) | O(1) | 字符串为 O(n)，首次调用后缓存 |
+| [`hash()`](hash.md) | O(k) | O(1) | k 为内置类型值的大小，或其 `__hash__` 的开销；`str`、`bytes` 和 `frozenset` 会保存结果，元组从 3.14 起也会 |
 
 ### 对象、属性与类型
 
@@ -106,9 +106,9 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 | [`issubclass()`](issubclass.md) | O(d) | O(1) | d 为 MRO 深度；实际使用中相当于 O(1) |
 | [`callable()`](callable.md) | O(1) | O(1) | 检查是否有 `__call__` |
 | [`id()`](id.md) | O(1) | O(1) | `is` 运算符的基础 |
-| [`getattr()`](getattr.md) | O(d) | O(1) | 命中实例字典时平均为 O(1) |
+| [`getattr()`](getattr.md) | 平均 O(1) | O(1) | 按类和名称缓存；运行时构造的名称为 O(d)，d 为 MRO 深度 |
 | [`setattr()`](setattr.md) | O(1) | O(1) | 哈希表插入 |
-| [`hasattr()`](hasattr.md) | O(d) | O(1) | 与 `getattr()` 查找相同，只是捕获异常 |
+| [`hasattr()`](hasattr.md) | 平均 O(1) | O(1) | 与 `getattr()` 查找相同，只是捕获 `AttributeError`；运行时构造的名称为 O(d) |
 | [`delattr()`](delattr.md) | O(1) | O(1) | 哈希表删除 |
 | [`dir()`](dir.md) | O(k + p + n log n) | O(n) | 合并各类的字典，然后对名称排序 |
 | [`vars()`](vars.md) | O(1) | O(1) | 返回 `__dict__` 的引用，不复制 |
@@ -155,7 +155,7 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 | [`print()`](print.md) | O(n) | O(n) | n 为输出总长度；开销以 I/O 为主 |
 | [`input()`](input.md) | O(k) | O(k) | k 为读取行的长度 |
 | [`open()`](open.md) | O(1)* | O(1) | * 系统调用；读写的开销取决于数据量 |
-| [`help()`](help.md) | O(n) | O(n) | n 为被检视接口的规模 |
+| [`help()`](help.md) | O(D) | O(D) | D 为为该对象生成文档的开销，页面按对象种类分别给出 |
 | [`breakpoint()`](breakpoint.md) | O(1) | O(1) | 把控制权交给调试器 |
 
 ## 常量

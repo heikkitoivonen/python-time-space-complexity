@@ -1,5 +1,5 @@
 ---
-source_sha: 5dba3dc173101e68a7cbc10e0a5d6d5346073fdd0b7f80b959387e60cdedbb75
+source_sha: ec03a608e15bce0e310b5e6193a9eff2314572e06916eb684c2bcda1bcac8f23
 translated: machine
 ---
 
@@ -91,10 +91,10 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 |----------|------|-------|-------|
 | [`chr()`](chr.md) | O(1) | O(1) | コードポイントから文字へ |
 | [`ord()`](ord.md) | O(1) | O(1) | 文字からコードポイントへ |
-| [`format()`](format.md) | O(n) | O(n) | n は結果の長さ |
+| [`format()`](format.md) | O(n) | O(n + p) | n は結果の長さ、p は精度。10 進の `int` は `str()` と同じく O(n²)、パディングも切り詰めもしない厳密な `str` は O(1) |
 | [`repr()`](repr.md) | O(n) | O(n) | コンテナの中へ再帰する |
 | [`ascii()`](ascii.md) | O(n) | O(n) | `repr()` と同様で、非 ASCII をエスケープする |
-| [`hash()`](hash.md) | O(k) | O(1) | 文字列では O(n)、初回の呼び出し以降はキャッシュされる |
+| [`hash()`](hash.md) | O(k) | O(1) | k は組み込み型の値の大きさ、または `__hash__` のコスト。`str`、`bytes`、`frozenset` は結果を保持し、タプルも 3.14 から保持する |
 
 ### オブジェクト、属性、型
 
@@ -105,9 +105,9 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 | [`issubclass()`](issubclass.md) | O(d) | O(1) | d は MRO の深さ、実際上は O(1) |
 | [`callable()`](callable.md) | O(1) | O(1) | `__call__` の有無を調べる |
 | [`id()`](id.md) | O(1) | O(1) | `is` 演算子の土台 |
-| [`getattr()`](getattr.md) | O(d) | O(1) | インスタンス辞書に当たれば平均 O(1) |
+| [`getattr()`](getattr.md) | 平均 O(1) | O(1) | クラスと名前ごとにキャッシュされる。実行時に組み立てた名前では O(d)、d は MRO の深さ |
 | [`setattr()`](setattr.md) | O(1) | O(1) | ハッシュテーブルへの挿入 |
-| [`hasattr()`](hasattr.md) | O(d) | O(1) | `getattr()` と同じ探索で、例外を捕捉する |
+| [`hasattr()`](hasattr.md) | 平均 O(1) | O(1) | `getattr()` と同じ探索で、`AttributeError` を捕捉する。実行時に組み立てた名前では O(d) |
 | [`delattr()`](delattr.md) | O(1) | O(1) | ハッシュテーブルからの削除 |
 | [`dir()`](dir.md) | O(k + p + n log n) | O(n) | クラスの辞書をマージしてから名前をソート |
 | [`vars()`](vars.md) | O(1) | O(1) | `__dict__` への参照を返し、コピーはしない |
@@ -154,7 +154,7 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 | [`print()`](print.md) | O(n) | O(n) | n は出力の総量、I/O が支配的 |
 | [`input()`](input.md) | O(k) | O(k) | k は読み込む行の長さ |
 | [`open()`](open.md) | O(1)* | O(1) | * システムコール、読み書きは移動量に応じたコスト |
-| [`help()`](help.md) | O(n) | O(n) | n は調べる対象の大きさ |
+| [`help()`](help.md) | O(D) | O(D) | D はオブジェクトを文書化するコストで、ページで種類ごとに示す |
 | [`breakpoint()`](breakpoint.md) | O(1) | O(1) | 制御をデバッガに渡す |
 
 ## 定数

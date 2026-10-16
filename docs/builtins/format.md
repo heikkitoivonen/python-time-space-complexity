@@ -295,6 +295,7 @@ assert f'{3.14 + 2.71j}' == '(3.14+2.71j)'
 
 ## Version Notes
 
+- **Python 3.6+**: f-strings, and `'_'` as a grouping separator in the format spec
 - **Python 3.12+**: decimal conversion of very large ints is subquadratic; see [int](int.md)
 - **Python 3.14+**: `'_'` and `','` can group the fractional digits of a float as well (`'.6_f'`)
 

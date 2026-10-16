@@ -90,10 +90,10 @@ under Notes is what you pay to consume it.
 |----------|------|-------|-------|
 | [`chr()`](chr.md) | O(1) | O(1) | Code point to character |
 | [`ord()`](ord.md) | O(1) | O(1) | Character to code point |
-| [`format()`](format.md) | O(n) | O(n) | n = length of the result |
+| [`format()`](format.md) | O(n) | O(n + p) | n = length of the result, p = precision; a decimal `int` costs O(n²), like `str()`, and an exact `str` neither padded nor truncated O(1) |
 | [`repr()`](repr.md) | O(n) | O(n) | Recurses into containers |
 | [`ascii()`](ascii.md) | O(n) | O(n) | Like `repr()`, escaping non-ASCII |
-| [`hash()`](hash.md) | O(k) | O(1) | O(n) for strings, cached after the first call |
+| [`hash()`](hash.md) | O(k) | O(1) | k = size of a built-in value, or the cost of its `__hash__`; `str`, `bytes` and `frozenset` keep the result, a tuple from 3.14 |
 
 ### Objects, Attributes & Types
 
@@ -104,9 +104,9 @@ under Notes is what you pay to consume it.
 | [`issubclass()`](issubclass.md) | O(d) | O(1) | d = MRO depth; effectively O(1) in practice |
 | [`callable()`](callable.md) | O(1) | O(1) | Checks for `__call__` |
 | [`id()`](id.md) | O(1) | O(1) | Backs the `is` operator |
-| [`getattr()`](getattr.md) | O(d) | O(1) | Instance dict hit is O(1) average |
+| [`getattr()`](getattr.md) | O(1) avg | O(1) | Cached per class and name; O(d) for a name built at run time, d = MRO depth |
 | [`setattr()`](setattr.md) | O(1) | O(1) | Hash table insertion |
-| [`hasattr()`](hasattr.md) | O(d) | O(1) | Same lookup as `getattr()`, exception caught |
+| [`hasattr()`](hasattr.md) | O(1) avg | O(1) | The `getattr()` lookup with `AttributeError` caught; O(d) for a name built at run time |
 | [`delattr()`](delattr.md) | O(1) | O(1) | Hash table deletion |
 | [`dir()`](dir.md) | O(k + p + n log n) | O(n) | Merges the class dictionaries, then sorts the names |
 | [`vars()`](vars.md) | O(1) | O(1) | Returns the `__dict__` reference, no copy |
@@ -153,7 +153,7 @@ under Notes is what you pay to consume it.
 | [`print()`](print.md) | O(n) | O(n) | n = total output length; I/O dominates |
 | [`input()`](input.md) | O(k) | O(k) | k = length of the line read |
 | [`open()`](open.md) | O(1)* | O(1) | * a system call; reads and writes cost what they move |
-| [`help()`](help.md) | O(n) | O(n) | n = size of the introspected surface |
+| [`help()`](help.md) | O(D) | O(D) | D = documenting the object, which the page prices for each kind of object |
 | [`breakpoint()`](breakpoint.md) | O(1) | O(1) | Hands control to the debugger |
 
 ## Constants

@@ -1,5 +1,5 @@
 ---
-source_sha: 5dba3dc173101e68a7cbc10e0a5d6d5346073fdd0b7f80b959387e60cdedbb75
+source_sha: ec03a608e15bce0e310b5e6193a9eff2314572e06916eb684c2bcda1bcac8f23
 translated: machine
 ---
 
@@ -95,10 +95,10 @@ mainittu kustannus on se, minkä maksat iteraattorin läpikäynnistä.
 |----------|------|-------|-------|
 | [`chr()`](chr.md) | O(1) | O(1) | Koodipisteestä merkiksi |
 | [`ord()`](ord.md) | O(1) | O(1) | Merkistä koodipisteeksi |
-| [`format()`](format.md) | O(n) | O(n) | n = tuloksen pituus |
+| [`format()`](format.md) | O(n) | O(n + p) | n = tuloksen pituus, p = tarkkuus; desimaalimuotoinen `int` maksaa O(n²) kuten `str()`, ja tarkalleen `str`-tyyppinen arvo ilman täyttöä tai katkaisua O(1) |
 | [`repr()`](repr.md) | O(n) | O(n) | Etenee rekursiivisesti säilöihin |
 | [`ascii()`](ascii.md) | O(n) | O(n) | Kuten `repr()`, mutta suojaa ei-ASCII-merkit |
-| [`hash()`](hash.md) | O(k) | O(1) | O(n) merkkijonoille, välimuistissa ensimmäisen kutsun jälkeen |
+| [`hash()`](hash.md) | O(k) | O(1) | k = sisäänrakennetun arvon koko tai sen `__hash__`-metodin hinta; `str`, `bytes` ja `frozenset` säilyttävät tuloksen, monikko 3.14:stä alkaen |
 
 ### Oliot, attribuutit ja tyypit
 
@@ -109,9 +109,9 @@ mainittu kustannus on se, minkä maksat iteraattorin läpikäynnistä.
 | [`issubclass()`](issubclass.md) | O(d) | O(1) | d = MRO:n syvyys; käytännössä O(1) |
 | [`callable()`](callable.md) | O(1) | O(1) | Tarkistaa `__call__`-metodin |
 | [`id()`](id.md) | O(1) | O(1) | `is`-operaattorin perusta |
-| [`getattr()`](getattr.md) | O(d) | O(1) | Osuma ilmentymän sanakirjaan on keskimäärin O(1) |
+| [`getattr()`](getattr.md) | O(1) keskim. | O(1) | Välimuistissa luokan ja nimen mukaan; ajon aikana muodostetulle nimelle O(d), d = MRO:n syvyys |
 | [`setattr()`](setattr.md) | O(1) | O(1) | Lisäys hajautustauluun |
-| [`hasattr()`](hasattr.md) | O(d) | O(1) | Sama haku kuin `getattr()`, poikkeus napataan kiinni |
+| [`hasattr()`](hasattr.md) | O(1) keskim. | O(1) | Sama haku kuin `getattr()`, `AttributeError` napataan kiinni; ajon aikana muodostetulle nimelle O(d) |
 | [`delattr()`](delattr.md) | O(1) | O(1) | Poisto hajautustaulusta |
 | [`dir()`](dir.md) | O(k + p + n log n) | O(n) | Yhdistää luokkien sanakirjat ja järjestää sitten nimet |
 | [`vars()`](vars.md) | O(1) | O(1) | Palauttaa viitteen `__dict__`-sanakirjaan, ei kopiota |
@@ -158,7 +158,7 @@ mainittu kustannus on se, minkä maksat iteraattorin läpikäynnistä.
 | [`print()`](print.md) | O(n) | O(n) | n = tulosteen kokonaispituus; I/O hallitsee kustannusta |
 | [`input()`](input.md) | O(k) | O(k) | k = luetun rivin pituus |
 | [`open()`](open.md) | O(1)* | O(1) | * järjestelmäkutsu; luku ja kirjoitus maksavat sen minkä siirtävät |
-| [`help()`](help.md) | O(n) | O(n) | n = tarkasteltavan rajapinnan koko |
+| [`help()`](help.md) | O(D) | O(D) | D = olion dokumentoinnin hinta, jonka sivu erittelee kullekin oliotyypille |
 | [`breakpoint()`](breakpoint.md) | O(1) | O(1) | Luovuttaa hallinnan virheenjäljittimelle |
 
 ## Vakiot
