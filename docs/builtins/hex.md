@@ -1,21 +1,28 @@
 # hex() Function Complexity
 
 The `hex()` function returns the hexadecimal representation of an integer.
+It writes one character per hexadecimal digit, so its time and the size of the
+string it returns are both linear in the integer's number of hex digits.
+
+`n` is the integer's absolute value and `h` is the number of hex digits in the
+result: `n.bit_length()` divided by 4 and rounded up, about log₁₆ n, or 1 for
+zero.
 
 ## Complexity Analysis
 
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
-| Convert integer | O(log n) | O(log n) | n = integer value |
+| Convert integer | O(log n) | O(log n) | O(h): one character per hex digit |
 | Negative integer | O(log n) | O(log n) | Adds '-0x' prefix |
-| Large integer | O(log n) | O(log n) | Works with arbitrary precision |
+| Large integer | O(h) | O(h) | Not limited by `sys.set_int_max_str_digits()`, which exempts power-of-two bases |
+| Object with `__index__` | `__index__` + O(h) | `__index__` + O(h) | Any other non-int, such as a float, raises `TypeError` |
 
 ## Basic Usage
 
 ### Decimal to Hexadecimal
 
 ```python
-# O(log n) - where n = integer value
+# O(log n)
 hex(0)      # '0x0'
 hex(15)     # '0xf'
 hex(255)    # '0xff'
@@ -41,7 +48,7 @@ hex(2**100)    # '0x10000000000000000000000000'
 
 # Arbitrary precision
 big = 10**100
-hex(big)       # O(log(10**100)) = O(100)
+hex(big)       # O(h) - h = 84 hex digits
 ```
 
 ## Complexity Details
@@ -52,13 +59,15 @@ The conversion takes time proportional to the number of digits:
 
 ```python
 # Small number - few digits
-hex(255)    # '0xff' - 3 digits, O(log 255) = O(8)
+hex(255)    # '0xff' - h = 2
 
 # Large number - more digits
-hex(2**64 - 1)  # '0xffffffffffffffff' - 16 hex digits
-                # O(log(2**64)) = O(64)
+hex(2**64 - 1)  # '0xffffffffffffffff' - h = 16
 
-# Relationship: hex digits = log₁₆(n) = log₂(n) / 4
+# Relationship: hex digits = bit_length() / 4, rounded up
+value = 4095
+digits = len(hex(value)) - 2  # Subtract '0x'
+assert digits == (value.bit_length() + 3) // 4
 ```
 
 ## Common Patterns
@@ -80,13 +89,14 @@ for v in values:
 ### Color Representation
 
 ```python
-# O(log n) - RGB values to hex color
+# O(1) - RGB values to hex color, at most 2 hex digits per channel
 def rgb_to_hex(r, g, b):
-    # O(log(256)) = O(8) per channel
+    # Pad each channel to two digits: hex(8) is '0x8'
     return f"#{hex(r)[2:]:>02}{hex(g)[2:]:>02}{hex(b)[2:]:>02}"
 
 color = rgb_to_hex(255, 128, 64)
-# '#ff8040'
+assert color == '#ff8040'
+assert rgb_to_hex(255, 8, 64) == '#ff0840'
 
 # Converting from integers
 red = 255
@@ -94,6 +104,7 @@ green = 128
 blue = 64
 color_hex = f"#{red:02x}{green:02x}{blue:02x}"
 # Cleaner with format strings
+assert color_hex == color
 ```
 
 ### Memory Address Representation
@@ -102,7 +113,7 @@ color_hex = f"#{red:02x}{green:02x}{blue:02x}"
 # O(log n) - memory addresses in hex
 obj = [1, 2, 3]
 addr = id(obj)
-print(hex(addr))  # '0x7f...'  (memory address)
+print(hex(addr))  # '0x...' (memory address)
 
 # Compare addresses
 obj1 = []
@@ -134,23 +145,27 @@ original = int(hex_form, 16)  # 12345
 ### Batch Conversion
 
 ```python
-# O(n * log m) - n numbers, each ~m value
+# O(k * h) - k numbers of up to h hex digits each
 numbers = list(range(100))
 hex_values = [hex(n) for n in numbers]
-# O(100 * log 100)
+# k = 100, h = 2
 
 # vs direct method
 hex_values = [f"{n:x}" for n in numbers]
-# Similar complexity, might be slightly faster
+# Same digits, without the '0x' prefix
 ```
 
 ### Building Hex Strings
 
 ```python
-# O(n) - building multi-value hex
+# O(total hex digits) - building multi-value hex
 values = [10, 20, 30, 40]
 hex_str = ''.join(hex(v)[2:] for v in values)
-# 'a141e28' - concatenated hex values
+assert hex_str == 'a141e28'  # Unpadded: the digits run together
+
+# Pad to a fixed width to keep the values apart
+hex_str = ''.join(f"{v:02x}" for v in values)
+assert hex_str == '0a141e28'
 ```
 
 ## Common Use Cases
@@ -158,7 +173,7 @@ hex_str = ''.join(hex(v)[2:] for v in values)
 ### Debug Output
 
 ```python
-# O(log n) - show value in different bases
+# hex() and bin() are O(log n) each - show value in different bases
 value = 42
 print(f"Dec: {value}, Hex: {hex(value)}, Bin: {bin(value)}")
 # Dec: 42, Hex: 0x2a, Bin: 0b101010
@@ -177,12 +192,16 @@ restored = int(config_str, 16)  # 0x1a2b
 ### Checksums/Hashes
 
 ```python
-# O(log n) - display hash in hex
+# Bytes to hex: use bytes.hex(), not hex()
 import hashlib
 data = b"hello"
-h = hashlib.sha256(data).digest()
-# Convert bytes to hex for display
-hex_hash = h.hex()  # Bytes.hex() is even faster
+digest = hashlib.sha256(data).digest()
+hex_hash = digest.hex()  # O(len(digest)), two digits per byte
+assert len(hex_hash) == 2 * len(digest)
+
+# hex() of the same value drops leading zero bytes
+assert hex(int.from_bytes(b"\x00\x0f", "big")) == '0xf'
+assert b"\x00\x0f".hex() == '000f'
 ```
 
 ## Best Practices
@@ -196,10 +215,9 @@ hex_hash = h.hex()  # Bytes.hex() is even faster
 
 ❌ **Avoid**:
 
-- Assuming hex() output is always lowercase (it is, but format uppercase with 'X')
-- Building hex from decimal without understanding the conversion
+- Expecting uppercase digits from `hex()`; it always writes lowercase, so use `format(value, 'X')` for uppercase
 - Using `hex()` for very frequent operations (cache result)
-- Forgetting the '0x' prefix when parsing with `int()`
+- Parsing `hex()` output with plain `int(s)`, which rejects the '0x' prefix; use `int(s, 16)` or `int(s, 0)`
 
 ## Related Functions
 
@@ -210,6 +228,4 @@ hex_hash = h.hex()  # Bytes.hex() is even faster
 
 ## Version Notes
 
-- **Python 2.x**: Works with int and long
-- **Python 3.x**: Works with arbitrary precision integers
-- **All versions**: Returns string representation with '0x' prefix
+- **All Python 3**: `hex(x)` returns a lowercase string with a '0x' prefix, '-0x' for a negative number, and accepts any object with `__index__`
