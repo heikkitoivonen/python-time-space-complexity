@@ -1,5 +1,5 @@
 ---
-source_sha: ec03a608e15bce0e310b5e6193a9eff2314572e06916eb684c2bcda1bcac8f23
+source_sha: 28a5b6a6cd7958ab44a3f1fc6b2347fcc87987c10b262f6490bdff3794411b8b
 translated: machine
 ---
 
@@ -104,7 +104,7 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 | [`isinstance()`](isinstance.md) | O(d) | O(1) | d は MRO の深さ、実際上は O(1) |
 | [`issubclass()`](issubclass.md) | O(d) | O(1) | d は MRO の深さ、実際上は O(1) |
 | [`callable()`](callable.md) | O(1) | O(1) | `__call__` の有無を調べる |
-| [`id()`](id.md) | O(1) | O(1) | `is` 演算子の土台 |
+| [`id()`](id.md) | O(1) | O(1) | `int` としての同一性。CPython ではメモリアドレス |
 | [`getattr()`](getattr.md) | 平均 O(1) | O(1) | クラスと名前ごとにキャッシュされる。実行時に組み立てた名前では O(d)、d は MRO の深さ |
 | [`setattr()`](setattr.md) | O(1) | O(1) | ハッシュテーブルへの挿入 |
 | [`hasattr()`](hasattr.md) | 平均 O(1) | O(1) | `getattr()` と同じ探索で、`AttributeError` を捕捉する。実行時に組み立てた名前では O(d) |

@@ -103,7 +103,7 @@ under Notes is what you pay to consume it.
 | [`isinstance()`](isinstance.md) | O(d) | O(1) | d = MRO depth; effectively O(1) in practice |
 | [`issubclass()`](issubclass.md) | O(d) | O(1) | d = MRO depth; effectively O(1) in practice |
 | [`callable()`](callable.md) | O(1) | O(1) | Checks for `__call__` |
-| [`id()`](id.md) | O(1) | O(1) | Backs the `is` operator |
+| [`id()`](id.md) | O(1) | O(1) | Identity as an `int`; the memory address in CPython |
 | [`getattr()`](getattr.md) | O(1) avg | O(1) | Cached per class and name; O(d) for a name built at run time, d = MRO depth |
 | [`setattr()`](setattr.md) | O(1) | O(1) | Hash table insertion |
 | [`hasattr()`](hasattr.md) | O(1) avg | O(1) | The `getattr()` lookup with `AttributeError` caught; O(d) for a name built at run time |

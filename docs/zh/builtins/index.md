@@ -1,5 +1,5 @@
 ---
-source_sha: ec03a608e15bce0e310b5e6193a9eff2314572e06916eb684c2bcda1bcac8f23
+source_sha: 28a5b6a6cd7958ab44a3f1fc6b2347fcc87987c10b262f6490bdff3794411b8b
 translated: machine
 ---
 
@@ -105,7 +105,7 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 | [`isinstance()`](isinstance.md) | O(d) | O(1) | d 为 MRO 深度；实际使用中相当于 O(1) |
 | [`issubclass()`](issubclass.md) | O(d) | O(1) | d 为 MRO 深度；实际使用中相当于 O(1) |
 | [`callable()`](callable.md) | O(1) | O(1) | 检查是否有 `__call__` |
-| [`id()`](id.md) | O(1) | O(1) | `is` 运算符的基础 |
+| [`id()`](id.md) | O(1) | O(1) | 以 `int` 表示的标识；在 CPython 中为内存地址 |
 | [`getattr()`](getattr.md) | 平均 O(1) | O(1) | 按类和名称缓存；运行时构造的名称为 O(d)，d 为 MRO 深度 |
 | [`setattr()`](setattr.md) | O(1) | O(1) | 哈希表插入 |
 | [`hasattr()`](hasattr.md) | 平均 O(1) | O(1) | 与 `getattr()` 查找相同，只是捕获 `AttributeError`；运行时构造的名称为 O(d) |

@@ -24,11 +24,11 @@ unless they are the same object.
 # O(1) - distinct objects existing concurrently have distinct IDs
 a = [1, 2, 3]
 b = [1, 2, 3]
-print(id(a) == id(b))  # False - different objects in memory
+assert id(a) != id(b)  # different objects in memory
 
 # O(1) - aliases share the same identity
 c = a
-print(id(a) == id(c))  # True - same object
+assert id(a) == id(c)  # same object
 ```
 
 ### Address Recycling Across Non-Overlapping Lifetimes
@@ -38,12 +38,13 @@ a newly allocated object. Consequently, comparing IDs of objects with
 non-overlapping lifetimes can produce identical values for distinct objects.
 
 ```python
-# O(1) - the first list is destroyed before the second is created; CPython reuses the address
-print(id([]) == id([]))  # True - address recycled after deallocation
+# O(1) - the first list is destroyed before the second is created, so CPython
+# may hand its address to the second: this is often True
+recycled = id([]) == id([])
 
 # O(1) - both lists exist concurrently, so their identities differ
 x, y = [], []
-print(id(x) == id(y))    # False - non-overlapping lifetimes are required for reuse
+assert id(x) != id(y)  # non-overlapping lifetimes are required for reuse
 ```
 
 ### Singletons and Cached Values
@@ -53,13 +54,16 @@ singletons like `None`, `True`, and `False`. References to these values share
 the same object identity.
 
 ```python
-# O(1) - cached small integers share identity
-x = 42
-y = 42
-print(id(x) == id(y))  # True - same cached int object
+# O(1) - small integers built at runtime come from the cache
+small_a, small_b = int("42"), int("42")
+assert id(small_a) == id(small_b)  # same cached int object
+
+# Larger integers are fresh objects, so their IDs differ
+big_a, big_b = int("2000"), int("2000")
+assert id(big_a) != id(big_b)
 
 # O(1) - None is a singleton
-print(id(None) == id(None))  # True
+assert id(None) == id(None)
 ```
 
 ## Identity Testing: `is` Operator vs `id()`
@@ -73,11 +77,11 @@ b = a
 c = [1, 2, 3]
 
 # is operator: direct pointer comparison - O(1) time, 0 extra bytes
-print(a is b)  # True
-print(a is c)  # False
+assert a is b
+assert a is not c
 
 # id() comparison: calls id() twice, allocates integers, and runs int.__eq__ - O(1)
-print(id(a) == id(b))  # True
+assert id(a) == id(b)
 ```
 
 The `is` operator has two key advantages:
@@ -98,6 +102,8 @@ A cycle exists when an edge leads back to an active ancestor. Completed nodes
 can be shared without forming a cycle and need not be traversed again. This
 example follows dictionary values and list, tuple, and set elements. The root
 keeps reachable nodes alive; the containers must remain unchanged during traversal.
+Each level the traversal descends adds a Python frame, so following a chain
+nested more deeply than `sys.getrecursionlimit()` raises `RecursionError`.
 
 ```python
 # O(V + E) time, O(V) space to detect reference cycles across V nodes and E edges
@@ -130,15 +136,15 @@ def has_cycle(obj):
 # Self-referential structure
 node = {}
 node["child"] = node
-print(has_cycle(node))  # True - cycle detected
+assert has_cycle(node)  # cycle detected
 
 # Acyclic structure
 tree = {"left": [1, 2], "right": [3, 4]}
-print(has_cycle(tree))  # False
+assert not has_cycle(tree)
 
 # Shared references are not cycles
 shared = [1, 1]
-print(has_cycle([shared, shared]))  # False
+assert not has_cycle([shared, shared])
 ```
 
 ### Identity Caching and Weak References
@@ -161,6 +167,7 @@ class Tracked:
 registry = weakref.WeakKeyDictionary()
 item = Tracked()
 registry[item] = "metadata"
+assert registry[item] == "metadata"
 ```
 
 `WeakKeyDictionary` uses keys' hashing and equality, not identity. For per-object
@@ -168,7 +175,7 @@ metadata, use weak-referenceable keys with identity-based equality and hashing,
 as in `Tracked` above. Distinct equal keys share an entry; that entry disappears
 when the originally inserted key is collected, even if another equal key remains alive.
 
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
@@ -181,6 +188,11 @@ when the originally inserted key is collected, even if another equal key remains
 - Comparing `id(a) == id(b)` when `a is b` is intended.
 - Using `id(obj)` as a dictionary key without ensuring `obj` stays alive.
 - Persisting `id()` values across processes or Python sessions.
+
+## Version Notes
+
+- **Python 3.15+**: The small-integer cache covers -5 to 1024 instead of -5 to 256, so
+  runtime-built integers from 257 to 1024 share identity.
 
 ## Related Functions
 

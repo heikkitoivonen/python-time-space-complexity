@@ -1,35 +1,49 @@
 """Tests for docs/builtins/id.md.
 
-`id(obj)` is `builtin_id` in `Python/bltinmodule.c`, which calls `PyLong_FromVoidPtr(obj)`.
-It reads the pointer address of `obj` and constructs a Python `int` representing
-`(uintptr_t)obj`. Pointer width bounds the number of Python integer digits needed,
-so `id()` is O(1) time and O(1) auxiliary space. The integer's exact size can vary
-with the address value, independently of the referenced object's size.
+The page prices `id(obj)` at O(1): `builtin_id` in `Python/bltinmodule.c` hands the
+object's pointer to `PyLong_FromVoidPtr`, so the result never exceeds the pointer width,
+whatever the object holds. That is settled by bounding the returned integer, plus one
+timing test. The identity, recycling and caching claims are settled by observation,
+which needs no tolerance.
 
-Direct observation settles the behavioral and space claims without a stopwatch:
+Measurement scope:
 
-* In CPython, `id(x)` is the object's memory address: `ctypes.cast(id(x), ctypes.py_object).value`
-  recovers `x` itself;
-* `id(x)` is constant as long as `x` is kept alive;
-* Distinct objects existing concurrently have distinct IDs;
-* Objects with non-overlapping lifetimes can share the same ID due to memory address
-  recycling: `id([]) == id([])` evaluates to True in CPython while `[] is []` is False;
-* The `is` operator performs direct pointer comparison at the bytecode level (`IS_OP`) and
-  allocates 0 auxiliary bytes in tracemalloc, whereas `id(a) == id(b)` allocates integer objects;
-* CPython caches small integers (-5 to 256; -5 to 1024 from 3.15) and singletons like
-  `None`, so references to them share identity;
-* Cycle detection tracks active ancestors separately from completed nodes, accepting shared
-  acyclic containers and visiting each container once;
-* Using raw `id()` values as cache keys can collide once objects are collected, whereas
-  `weakref.WeakKeyDictionary` uses hashing and equality: identity-based keys stay separate,
-  but equal keys share an entry tied to the originally inserted key's lifetime.
+* `ctypes.cast(id(x), ctypes.py_object).value is x`, so the ID is the address in CPython.
+  IDs of a tuple, `None`, an object and lists of 0, 100 and 100,000 elements all fit in
+  `sizeof(void *)` bytes and take no more memory than the largest pointer-width int.
+* A timing test calls `id()` on an empty tuple and on a 100,000-element list, fastest of
+  five runs of 1,000 calls; the ratio stays between 0.2 and 5, against the 100,000x an
+  O(n) walk would predict.
+* `id([]) == id([])` is True at least once in 100 tries, while `[] is []` is False.
+  Two concurrent equal lists have different IDs; an alias has the same one.
+* The small-integer cache is observed with integers built by `int(str)`, which literals
+  folded into one code object would hide: -5, 256 and 1,024 are each one object on 3.15+,
+  257 and 1,024 are fresh objects on 3.14 and earlier, and -6 and 1,025 are always fresh.
+* `a is b` compiles to `IS_OP` with no call and no `id` name, and has a traced peak of 0 bytes; the
+  `id(a) == id(b)` comparison peaks at no less than one ID's `sys.getsizeof`.
+* The page's `has_cycle()` is run on self-referential dicts and lists, a back-edge
+  through a nested list, and shared acyclic lists, tuples, sets and dicts. A 13-level
+  binary DAG of 8,191 paths iterates each of its 13 containers once. A list nested one
+  level deeper than `sys.getrecursionlimit()` raises `RecursionError`; one nested to a
+  quarter of the limit does not.
+* A `WeakKeyDictionary` drops a collected key's entry and keeps an unrelated one's.
+  Two equal frozen dataclass instances share one entry that keeps the first key and
+  vanishes when that key is collected, though the second is alive.
 
-One timing test checks constant-time scaling:
-* `id()` on an empty tuple versus a 100,000-element list scales at ratio close to 1.0, well
-  below any input-size scaling.
+Not settled here:
+
+* Uniqueness among coexisting objects and constancy for an object's lifetime are the
+  language's guarantee for `id()`; the tests sample them, they cannot exhaust them.
+* That `id()` values mean nothing across processes or sessions follows from their being
+  addresses; no test runs two interpreters to compare them.
+* Interned strings sharing identity is stated as a cache CPython keeps, not measured.
+* Each check runs on CPython with its default allocator. Free-threaded builds and other
+  Python implementations are not varied, and the recycling test only asserts that reuse
+  is possible.
 """
 
 import ctypes
+import dis
 import gc
 import pathlib
 import re
@@ -150,12 +164,23 @@ class TestLifetimeAndReuse:
         recycled_equal = any(id([]) == id([]) for _ in range(100))
         assert recycled_equal, "expected address recycling for short-lived temporaries"
 
-    def test_small_ints_and_singletons_share_identity(self) -> None:
-        assert id(42) == id(42)
-        assert id(0) == id(0)
+    def test_singletons_share_identity(self) -> None:
         assert id(None) == id(None)
         assert id(True) == id(True)
         assert id(False) == id(False)
+
+    @pytest.mark.parametrize("text", ["-5", "0", "42", "256"])
+    def test_small_ints_built_at_runtime_share_identity(self, text: str) -> None:
+        assert int(text) is int(text)
+
+    @pytest.mark.parametrize("text", ["-6", "1025", "2000"])
+    def test_ints_outside_the_cache_are_fresh_objects(self, text: str) -> None:
+        assert int(text) is not int(text)
+
+    @pytest.mark.parametrize("text", ["257", "1024"])
+    def test_the_cache_reaches_1024_from_3_15(self, text: str) -> None:
+        shared = int(text) is int(text)
+        assert shared is (sys.version_info >= (3, 15))
 
 
 class TestIsOperatorComparison:
@@ -173,6 +198,14 @@ class TestIsOperatorComparison:
         b = [1, 2, 3]
         peak = traced_peak(lambda: id(a) == id(b))
         assert peak >= sys.getsizeof(id(a)), "id() comparison did not allocate integers"
+
+    def test_is_compiles_to_a_pointer_comparison_without_a_call(self) -> None:
+        """The `is` operator is its own opcode; it is not built on `id()`."""
+        instructions = list(dis.get_instructions(compile("a is b", "<is>", "eval")))
+        names = {instruction.opname for instruction in instructions}
+        assert "IS_OP" in names
+        assert not any(name.startswith("CALL") for name in names), names
+        assert "id" not in {instruction.argval for instruction in instructions}
 
     def test_is_prevents_false_positives_from_address_recycling(self) -> None:
         # id([]) == id([]) can be True due to reuse, but [] is [] is always False
@@ -214,6 +247,29 @@ for _ in range(12):
     root = CountedList([root, root])
 assert has_cycle(root) is False
 assert CountedList.visits == 13
+"""
+        result = _run(source + assertions, tmp_path)
+        assert result.returncode == 0, result.stderr
+
+    def test_cycle_detection_recurses_once_per_nesting_level(self, tmp_path: pathlib.Path) -> None:
+        source = next(src for _, src in _blocks() if "def has_cycle(" in src)
+        assertions = """
+import sys
+
+def nested(depth):
+    root = []
+    for _ in range(depth):
+        root = [root]
+    return root
+
+limit = sys.getrecursionlimit()
+assert has_cycle(nested(limit // 4)) is False
+try:
+    has_cycle(nested(limit + 1))
+except RecursionError:
+    pass
+else:
+    raise AssertionError("nesting past the recursion limit did not raise")
 """
         result = _run(source + assertions, tmp_path)
         assert result.returncode == 0, result.stderr
@@ -308,14 +364,6 @@ class TestDocumentedExamples:
             result = _run(source, tmp_path)
             if result.returncode != 0:
                 failures.append(f"{PAGE.name}:{line} raised: {result.stderr.strip()}")
-        assert not failures, "\n".join(failures)
-
-    def test_every_block_binds_the_names_it_uses(self, tmp_path: pathlib.Path) -> None:
-        failures: list[str] = []
-        for line, source in _blocks():
-            result = _run(source, tmp_path)
-            if "NameError" in result.stderr:
-                failures.append(f"{PAGE.name}:{line}: {result.stderr.strip()}")
         assert not failures, "\n".join(failures)
 
     def test_the_runner_catches_a_broken_block(self, tmp_path: pathlib.Path) -> None:

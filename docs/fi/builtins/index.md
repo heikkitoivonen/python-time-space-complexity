@@ -1,5 +1,5 @@
 ---
-source_sha: ec03a608e15bce0e310b5e6193a9eff2314572e06916eb684c2bcda1bcac8f23
+source_sha: 28a5b6a6cd7958ab44a3f1fc6b2347fcc87987c10b262f6490bdff3794411b8b
 translated: machine
 ---
 
@@ -108,7 +108,7 @@ mainittu kustannus on se, minkä maksat iteraattorin läpikäynnistä.
 | [`isinstance()`](isinstance.md) | O(d) | O(1) | d = MRO:n syvyys; käytännössä O(1) |
 | [`issubclass()`](issubclass.md) | O(d) | O(1) | d = MRO:n syvyys; käytännössä O(1) |
 | [`callable()`](callable.md) | O(1) | O(1) | Tarkistaa `__call__`-metodin |
-| [`id()`](id.md) | O(1) | O(1) | `is`-operaattorin perusta |
+| [`id()`](id.md) | O(1) | O(1) | Identiteetti `int`-arvona; CPythonissa muistiosoite |
 | [`getattr()`](getattr.md) | O(1) keskim. | O(1) | Välimuistissa luokan ja nimen mukaan; ajon aikana muodostetulle nimelle O(d), d = MRO:n syvyys |
 | [`setattr()`](setattr.md) | O(1) | O(1) | Lisäys hajautustauluun |
 | [`hasattr()`](hasattr.md) | O(1) keskim. | O(1) | Sama haku kuin `getattr()`, `AttributeError` napataan kiinni; ajon aikana muodostetulle nimelle O(d) |
