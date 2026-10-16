@@ -1,6 +1,6 @@
 ---
 name: documenting-complexity-modules
-description: Authors, expands, or reviews Python builtin and standard-library complexity pages, including API coverage, navigation, examples, translations, audit metadata, and verification. Use when adding a module/type page, materially expanding one, or reviewing an existing one for correctness - a review covers what the page omits as well as what it claims.
+description: Authors, expands, or reviews Python builtin and standard-library complexity pages, including API coverage, navigation, examples, translations, audit metadata, reconciliation with CPython's official time-complexity page, and verification. Use when adding a module/type page, materially expanding one, or reviewing an existing one for correctness - a review covers what the page omits as well as what it claims.
 ---
 
 # Documenting Complexity Modules
@@ -35,7 +35,9 @@ the repository's highest-risk content.
    interpreter unless a claim is about a particular version, in which case run
    that one for the tests asserting it; CI covers the matrix. Use official
    documentation where behavior is contractual and source where implementation
-   determines the bound.
+   determines the bound. The one exception is an operation CPython's own
+   time-complexity page prices: on 3.15.0 and later that page is the presumed
+   answer - see *The Official Time-Complexity Page Is the Presumed Answer*.
 5. Diff the implementation between consecutive released branches once, before
    writing - `git diff v3.10.13:Lib/csv.py v3.11.9:Lib/csv.py`, and the same
    for each later pair across the supported range. Resolve a concrete release
@@ -51,6 +53,78 @@ the repository's highest-risk content.
 
 Do not trust an existing claim, a plausible review comment, or a generic
 complexity rule without checking the operation's actual code path.
+
+## The Official Time-Complexity Page Is the Presumed Answer
+
+From 3.15.0, CPython documents the time complexity of operations on built-in
+types itself: `Doc/builtins/time-complexity.rst`, published at
+<https://docs.python.org/3.15/builtins/time-complexity.html>. In 3.15.0 it
+covers `list`, `tuple`, `dict`, `frozendict`, `set`, `frozenset`, `str`,
+`bytes`, `bytearray`, `memoryview` and `range`. For every operation it prices,
+treat it as correct on 3.15.0 and later. A claim here that disagrees is
+presumed to be our defect, and stays only if it survives *Verifying a
+Divergence From the Official Page* in `testing-complexity-claims`.
+
+1. **Read the released text.** Take the page from the newest released tag of
+   each supported line from 3.15 on, `git show v3.15.N:Doc/builtins/time-complexity.rst`
+   in a CPython checkout, not from the live URL or `main`; the live page tracks
+   the maintenance branch and can carry unreleased edits. If a release moves
+   the file, find it with `git ls-tree -r --name-only <tag> Doc`. Each line's
+   claims are compared with that line's page; where two lines' pages differ,
+   the difference is a version boundary. Take the list of covered types from
+   each tag's section headings, since later releases can add to it. Read the
+   introduction and every footnote, not just the rows: the cost model is
+   there. It prices CPython only, exact built-in types and not subclasses, `n`
+   as the elements currently in the container, `k` as a numeric argument, hash
+   tables in the average case with O(1) hashing and comparison, amortized
+   costs where footnote 1 marks them, and per-section qualifications such as
+   the frozen types, deleting at the front of a `bytearray` and `range` with
+   non-int arguments.
+2. **Scope every restatement.** A row priced by the official page may be
+   claimed in many places here: the type's own page and its `_func`
+   constructor page, `docs/builtins/index.md`, `len.md`, `min.md`, `max.md`,
+   `sorted.md`, `docs/implementations/cpython.md`, stdlib pages that compare
+   against a builtin, Do and Avoid items, example comments and translations.
+   Search for the operation, not for the type's page.
+3. **Map row by row, in both directions.** Pair each official row with the
+   rows here that price it, and each row here on a covered type with its
+   official row, if any. Classify each pair:
+   - **Agrees** - the same bound under the official cost model. Spelling a
+     bound with a named variable instead of `n - k` agrees when the variables
+     count the same thing.
+   - **Prices what the official page assumes away** - the cost of hashing or
+     comparing a key, a user `__eq__`. Not a divergence: the bound here must
+     reduce to the official one when its extra variable is O(1), and the
+     page's size-variable paragraph must say what it adds.
+   - **Outside the official page's scope** - a subclass of a built-in type,
+     another Python implementation. Not compared; the page states its own
+     scope for the row.
+   - **Looser, or missing a case the official page gives** - O(n) where it
+     gives O(n - k), no amortized O(1) for `del b[:k]` on a `bytearray`, no
+     caveat that a hash table is not shrunk by removal, no O(n) for `x in r`
+     with a non-int `x`. A defect here: adopt
+     the official bound or case, at the altitude *Document the Common Case*
+     sets, unless verification shows otherwise.
+   - **Conflicts** - under the official cost model the two give different
+     bounds. Presumed defect here; verify it before anything else on the page
+     rests on it.
+4. **Keep the presumption to the versions it covers.** It holds on 3.15.0 and
+   later. A bound that differs on an earlier supported version is a version
+   boundary, not a divergence: settle it from the source diff in *Establish
+   Scope and Evidence* step 5, and give it a Version Notes entry only when a
+   documented bound moved. Never read the official page back onto versions
+   that predate it.
+5. **Close each conflict one of three ways.**
+   - Our claim was wrong: correct it to the official bound at every site *A
+     Claim Lives in Several Places* lists.
+   - It was a cost-model mismatch: state the added variable or assumption in
+     the size-variable paragraph so the row visibly reduces to the official
+     one.
+   - It survived verification: keep the evidenced bound, say in one clause of
+     its Notes what the official table gives, and record the divergence in
+     the registry described in `testing-complexity-claims`. A page never
+     differs from the official table silently, and never differs from it
+     without a registry entry.
 
 ## Write the Page
 
@@ -389,6 +463,8 @@ Also inspect the final diff for:
   `docs/stdlib/csv.md`, checked against that page rather than against the
   pages edited most recently;
 - every claim mapped to evidence;
+- every row on a type the official time-complexity page covers reconciled with
+  it, and each divergence that survived verification in the registry;
 - every fenced code section tested or explicitly accounted for, with semantic
   assertions where execution alone is insufficient;
 - alphabetized navigation and passing live coverage checks;

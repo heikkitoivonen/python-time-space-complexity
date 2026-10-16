@@ -289,6 +289,81 @@ Trace the operation actually reached by the test, including eager setup,
 fallbacks, caches, callbacks, and output construction. Source review informs the
 test but does not replace runnable evidence for claims execution can settle.
 
+## Verifying a Divergence From the Official Page
+
+On 3.15.0 and later, CPython's own time-complexity page is presumed correct for
+the operations it prices; `documenting-complexity-modules` says how to read it
+and pair its rows with ours. A claim here that conflicts with it carries the
+burden of proof, and gets more scrutiny than any other claim, not the same:
+
+1. **Restate the official claim exactly** - its row, its footnotes and the
+   page's cost model - and confirm the conflict survives under that model.
+   Most do not: a subclass in the test, a non-set operand, a key whose hash is
+   not O(1), a table left sparse by removal, an amortized bound read as a
+   per-call one, or a size variable that counts something else.
+2. **Find the mechanism in released source** at the newest tag of each line
+   the conflict concerns: the function, and either the loop in it that does
+   work the official bound leaves out, or the shortcut that skips work the
+   official bound prices. A conflict over cost with no mechanism is a
+   measurement artefact until one is found. A conflict that is an ambiguity
+   in the official text needs no mechanism; quote the words and the two
+   readings, and still settle each reading by running code where it can be.
+3. **Measure to confirm the official bound, not ours.** Shape the input to give
+   the official claim its best chance. Vary each variable of both bounds on
+   its own while holding the others fixed, over at least three sizes spanning
+   two orders of magnitude, with thresholds far from what each bound predicts.
+   Exclude the confounders that mimic an extra term: element deallocation
+   (keep the elements alive elsewhere), garbage collection, freelists and the
+   3.15 small-int cache, allocator reuse, sparse tables, timer resolution.
+4. **Confirm it a second, independent way** - a counter or traced allocation
+   beside the stopwatch, or a second input shape - on the oldest and newest
+   supported lines from 3.15 on that have the operation. Record the platform
+   and interpreter of each; a local ratio is not CI.
+5. **Have the result reviewed by someone asked to argue for the official
+   page.**
+6. **Say which kind of divergence it is**: the official bound is wrong under
+   its own cost model (too high or too low), it is ambiguous (a variable
+   undefined, a case unscoped), or it leaves out a term ordinary use reaches.
+   Each is reportable; the report needs to say which.
+
+If the conflict dissolves at any step, correct the page as
+`documenting-complexity-modules` says and stop. Only a divergence that passes
+every step that applies to its kind stays.
+
+### The Divergence Registry
+
+Every divergence that survives is recorded in
+`tests/test_official_complexity_divergences.py`, created on first need and
+shaped like the csv tests, so that each can be reported to CPython without
+rediscovering it. Its module docstring opens "Divergences between this
+repository and CPython's official time-complexity page." and lists one entry per
+divergence:
+
+- the official row or footnote verbatim, with its tag, file and section
+  (`v3.15.N:Doc/builtins/time-complexity.rst`, then the section and the
+  row's Operation cell or footnote number);
+- the page and row here, and the bound they give;
+- the conflict in one sentence, and its kind from step 6;
+- the mechanism, as a function in released source;
+- the measurement: sizes, shapes, asserted ratios, versions and platforms;
+- status: `not reported`, or the CPython issue URL once the maintainer has
+  filed one.
+
+Give each entry a test class that asserts the behaviour our page documents,
+marked `timing` if it times, so a release that changes the implementation
+fails it loudly. Keep a minimal stdlib-only reproduction in the file as a
+source string the test executes, short enough to paste into a CPython issue
+and unable to rot because the suite runs it.
+
+Do not open or comment on a CPython issue yourself: reporting upstream is the
+maintainer's decision. When a later tag changes the official page
+(`git diff v3.15.0 v3.15.N -- Doc/builtins/time-complexity.rst`), re-check
+every entry against the new text, line by line. An entry names the supported
+lines it holds on; where a line's page now agrees, narrow the entry to the
+lines that still differ. Only when no supported line differs does it leave the
+registry, together with the page clause that pointed at it, and its tests move
+to the module's own test file rather than leaving with it.
+
 ## Finish
 
 Run the focused module and claim tests while iterating, then:
@@ -301,6 +376,9 @@ Before declaring coverage complete, reconcile the claim inventory against the
 final page line by line. Report any category C claims and their source evidence,
 and any category D claims the running platform skipped; do not say "all claims
 tested" when some are only sourced, skipped elsewhere, or remain uncertain.
+Report every divergence from the official time-complexity page that survived
+verification separately, with its registry entry, so it reaches the maintainer
+as a candidate CPython report rather than as one more passing test.
 
 This licenses nothing about `make check`: lint, types, tests and the audit must
 all pass before a commit, on every platform and without exception. A foreign-platform claim reaches a green suite by being

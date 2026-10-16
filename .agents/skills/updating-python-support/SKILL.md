@@ -182,6 +182,14 @@ For each relevant item:
    `docs/versions/index.md`, `mkdocs.yml`, and `docs/llms.txt`.
 5. Update support-range landing-page text in every existing locale. Missing
    translations of a new page may continue to fall back to English.
+6. Diff CPython's official time-complexity page,
+   `Doc/builtins/time-complexity.rst`, between the previous newest release and
+   the new one. Reconcile added, changed or removed rows, footnotes and
+   introductory cost-model text, and newly covered types, with the pages that
+   price them, and re-check every entry in
+   `tests/test_official_complexity_divergences.py`; see *The Official
+   Time-Complexity Page Is the Presumed Answer* in
+   `documenting-complexity-modules`.
 
 Do not turn "What's New" into a generic release summary. Include only changes
 that help readers understand operation cost, availability, or the choice
