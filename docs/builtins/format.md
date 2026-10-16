@@ -1,383 +1,306 @@
 # format() Function Complexity
 
-The `format()` function formats a value into a string according to a format specification.
+The `format(value, format_spec='')` function calls `type(value).__format__(value, format_spec)`
+and returns the string it produces. Its cost is the cost of that method: for the built-in
+types it is linear in the result's length, except decimal conversion of an `int`, and an exact
+`str` that needs no padding or truncation comes back unchanged. f-strings and `str.format()` call the
+same method for each replacement field.
+
+`n` is the length of the result string, `d` is the number of digits of an `int` written in
+decimal, and `p` is the precision a float specification asks for. A format specification is a few characters long and is priced at O(1); a type that
+defines its own `__format__` adds whatever that method does.
 
 ## Complexity Reference
 
+### format
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `format(value)` | O(n) | O(n) | n = result string length |
-| `format(value, spec)` | O(n) | O(n) | n = result string length |
-| `f"{value}"` | O(n) | O(n) | F-string (Python 3.6+) |
-| `"{0}".format(value)` | O(n) | O(n) | str.format() method |
-| `"%s" % value` | O(n) | O(n) | Old % formatting |
+| `format(value, format_spec='')` | O(1) + `__format__` | O(1) + `__format__` | Calls `type(value).__format__`; a result that is not a `str` raises `TypeError` |
+| `format(obj)` on a class that inherits `object.__format__` | Cost of `str(obj)` | Cost of `str(obj)` | `object.__format__` returns `str(obj)` for an empty spec and raises `TypeError` for any other |
 
-All return new string of size n; time proportional to output size.
+### str
 
-## Basic Usage
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `format(s)`, `format(s, spec)` on an exact `str` | O(1) | O(1) | Returns `s` itself when the spec neither pads nor truncates |
+| `format(s, spec)` that pads or truncates, or on a `str` subclass | O(n) | O(n) | A subclass is copied into a new exact `str` |
 
-### Simple Formatting
+### int
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `format(x)`, `format(x, 'd')`, `format(x, ',')` | O(d² + n); 3.12+: subquadratic above 30,000 bits | O(n) | The decimal conversion `str(x)` performs; see [int](int.md). Raises `ValueError` beyond `sys.get_int_max_str_digits()`, 4,300 digits by default, which is below the subquadratic range |
+| `format(x, 'b')`, `format(x, 'o')`, `format(x, 'x')`, `format(x, 'X')` | O(n) | O(n) | Power-of-two bases map bits straight to characters, with no digit limit |
+| `format(x, 'e')`, `format(x, 'f')`, `format(x, 'g')`, `format(x, '%')` | O(d + n) | O(n + p) | Converts `x` to a `float` first; an int too large for one raises `OverflowError` |
+
+### float and complex
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `format(f)`, `format(f, spec)` | O(n) | O(n + p) | `'f'` and `'e'` write every digit of the precision, and `'f'` every integer digit; `'g'` reserves room for the whole precision even when it drops trailing zeros; see [float](float.md) |
+| `format(c)`, `format(c, spec)` | O(n) | O(n + p) | The precision and presentation type apply to both parts |
+
+### f-strings, str.format() and %
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `f"{value}"`, `f"{value:spec}"` | Cost of `format(value, spec)` | Cost of `format(value, spec)` | A field alone, with no surrounding text, is the result itself |
+| `f"text {a} {b:spec}"` | O(n) + each field's `format()` | O(n) + each field's `format()` | |
+| `template.format(*args, **kwargs)` | O(n) + each field's `format()` | O(n) + each field's `format()` | Calls `__format__` per field like an f-string; see [str](str.md) |
+| `template % values` | O(n) + each conversion | O(n) + each conversion | `%s` calls `str()`, not `__format__` |
+
+## Returning a String Unchanged
+
+`str.__format__` with nothing to pad or cut returns the string it was given, so formatting a
+string that already has the right shape costs nothing, however long it is. A spec that widens or
+truncates it builds a new string of the result's length.
 
 ```python
-# Format integer - O(1) to O(n) depending on digits
-format(42)              # "42" - O(2)
-format(42, '05d')       # "00042" - O(5)
+s = 'x' * 1_000_000
 
-# Format float - O(n) for string size
-format(3.14159)         # "3.14159" - O(7)
-format(3.14159, '.2f')  # "3.14" - O(4)
+assert format(s) is s          # O(1) - the same object
+assert format(s, 's') is s     # O(1)
+assert format(s, '<10') is s   # O(1) - already wider than 10
+assert f'{s}' is s             # O(1) - an f-string that is only one field
 
-# Format string - O(n)
-format("hello")         # "hello" - O(5)
+padded = format(s, '<1000005')  # O(n) - a new string
+assert len(padded) == 1_000_005 and padded is not s
+assert format(s, '.3') == 'xxx'  # O(n) - truncated to the precision
 ```
 
-### Format Specifications
+## Formatting Integers
+
+Decimal output is the expensive case: it is the same conversion `str(x)` performs, quadratic in
+the digit count up to the default limit, and CPython refuses it past that limit. Binary, octal and hexadecimal
+need no arithmetic, so they stay linear and have no limit.
 
 ```python
-# Integer formatting - O(k) where k = digit count
-value = 42
-format(value, 'd')      # "42" - standard decimal
-format(value, '05d')    # "00042" - zero-padded to 5
-format(value, 'x')      # "2a" - hexadecimal
-format(value, 'b')      # "101010" - binary
-format(value, 'o')      # "52" - octal
+import sys
 
-# Float formatting - O(precision)
-value = 3.14159265
-format(value, '.2f')    # "3.14" - 2 decimal places
-format(value, '.4f')    # "3.1416" - 4 decimal places
-format(value, 'e')      # "3.141593e+00" - exponential
-format(value, 'g')      # "3.14159" - general format
+x = 7 ** 6_000                   # about 5,000 decimal digits
+
+try:
+    format(x)                    # O(d²) - decimal, so the digit limit applies
+except ValueError as error:
+    assert 'limit' in str(error)
+else:
+    raise AssertionError('a decimal conversion past the limit succeeded')
+
+assert len(format(x, 'x')) == (x.bit_length() + 3) // 4   # O(n) - no limit
+
+limit = sys.get_int_max_str_digits()
+sys.set_int_max_str_digits(0)    # 0 removes the limit
+try:
+    assert format(x) == str(x)
+finally:
+    sys.set_int_max_str_digits(limit)
+
+# A float presentation type converts the int to a float first
+try:
+    format(10 ** 400, 'f')
+except OverflowError as error:
+    assert 'too large' in str(error)
+else:
+    raise AssertionError('an int beyond the float range was formatted as one')
 ```
 
 ## Format Specification Mini-language
 
-### Format Spec Syntax
+The general form is `[[fill]align][sign]['z']['#']['0'][width][grouping]['.' precision[grouping]][type]`;
+the grouping after the precision is Python 3.14+.
+
+### Integers
 
 ```python
-# General format: [[fill]align][sign][#][0][width][,][.precision][type]
-
-# Width and padding - O(w) where w = width
 value = 42
-format(value, '10')     # "        42" - right aligned, 10 width
-format(value, '<10')    # "42        " - left aligned
-format(value, '^10')    # "    42    " - center aligned
-format(value, '010')    # "0000000042" - zero padding
+assert format(value, 'd') == '42'
+assert format(value, '05d') == '00042'      # zero-padded to width 5
+assert format(value, 'x') == '2a'
+assert format(value, 'b') == '101010'
+assert format(value, 'o') == '52'
 
-# Sign and alternate form - O(n)
-value = -42
-format(value, '+d')     # "-42" - show sign
-format(value, ' d')     # "-42" - space for positive
+assert format(42, '+d') == '+42'            # always show the sign
+assert format(42, ' d') == ' 42'            # a space where the sign would go
+assert format(-42, '+d') == '-42'
 
-value = 255
-format(value, '#x')     # "0xff" - alternate form (prefix)
-format(value, '#b')     # "0b11111111" - binary prefix
+assert format(255, '#x') == '0xff'          # alternate form adds the prefix
+assert format(255, '#b') == '0b11111111'
+assert format(255, '_b') == '1111_1111'     # binary groups by four digits
 
-# Thousands separator - O(n)
-value = 1000000
-format(value, ',')      # "1,000,000" - comma separator
-format(value, '_')      # "1_000_000" - underscore separator (Python 3.6+)
+assert format(1_000_000, ',') == '1,000,000'
+assert format(1_000_000, '_') == '1_000_000'
 ```
 
-## String Formatting Methods
-
-### str.format() Method
+### Floats
 
 ```python
-# Using format() method - O(n)
-template = "Hello, {}!"
-result = template.format("World")  # "Hello, World!" - O(13)
+value = 3.14159265
+assert format(value, '.2f') == '3.14'
+assert format(value, '.4f') == '3.1416'
+assert format(value, 'e') == '3.141593e+00'
+assert format(value, 'g') == '3.14159'
+assert format(0.42, '.1%') == '42.0%'
+assert format(123456789.0, '.2e') == '1.23e+08'
 
-# Multiple placeholders - O(n)
-template = "{0} + {1} = {2}"
-result = template.format(1, 2, 3)  # "1 + 2 = 3" - O(9)
-
-# Named arguments - O(n)
-template = "{name} is {age} years old"
-result = template.format(name="Alice", age=30)  # O(26)
+# Precision is not capped: 'f' writes every digit it is asked for
+assert len(format(0.1, '.1000f')) == 1002   # O(p)
+assert format(1.1, '.1000g') == format(1.1, '.60g')  # O(n), with room reserved for p digits
+assert format(-0.0001, 'z.1f') == '0.0'     # 'z' turns negative zero into zero
 ```
 
-### F-strings (Python 3.6+)
+### Width and Alignment
+
+Padding writes every fill character, so a width is paid for in full.
 
 ```python
-# F-strings are compiled to format calls - O(n)
-name = "Alice"
-age = 30
+value = 'hello'
+assert format(value, '<10') == 'hello     '
+assert format(value, '>10') == '     hello'
+assert format(value, '^10') == '  hello   '
+assert format(value, '.>10') == '.....hello'   # custom fill character
 
-# Simple variable - O(n)
-message = f"Hello, {name}"  # "Hello, Alice" - O(11)
+assert format(42, '10') == '        42'         # numbers align right by default
+assert format(-42, '=+6') == '-   42'           # pad between the sign and the digits
 
-# With expressions - O(n)
-value = 42
-message = f"Answer: {value * 2}"  # "Answer: 84" - O(10)
-
-# With format spec - O(n)
-pi = 3.14159
-message = f"Pi: {pi:.2f}"  # "Pi: 3.14" - O(8)
-
-# Multiple substitutions - O(n)
-result = f"{name} is {age} years old"  # O(26)
+assert len(format('', '<100000')) == 100_000     # O(n) for n = width
 ```
 
-### Old % Formatting
+## Custom `__format__`
+
+`format()` passes the spec string to the class's `__format__` and checks that a `str` comes back.
+What the method does with the spec, and what that costs, is up to the class.
 
 ```python
-# % operator formatting - O(n)
-template = "Hello, %s"
-result = template % "World"  # "Hello, World" - O(12)
-
-# Multiple values - O(n)
-template = "%s + %s = %d"
-result = template % (1, 2, 3)  # "1 + 2 = 3" - O(9)
-
-# Numeric formatting - O(n)
-template = "Value: %.2f"
-result = template % 3.14159  # "Value: 3.14" - O(11)
-```
-
-## Common Patterns
-
-### Number Formatting
-
-```python
-# Integer with thousands separator - O(digits + separators)
-num = 1234567
-formatted = format(num, ',d')  # "1,234,567" - O(10)
-
-# Float with fixed decimals - O(precision)
-value = 3.14159
-formatted = format(value, '.2f')  # "3.14" - O(4)
-
-# Scientific notation - O(precision)
-large = 123456789.0
-formatted = format(large, '.2e')  # "1.23e+08" - O(8)
-
-# Percentage - O(precision)
-value = 0.42
-formatted = format(value, '.1%')  # "42.0%" - O(5)
-```
-
-### Date and Time Formatting
-
-```python
-from datetime import datetime
-
-# DateTime formatting - O(n)
-dt = datetime(2024, 1, 15, 14, 30, 0)
-formatted = f"{dt:%Y-%m-%d}"     # "2024-01-15" - O(10)
-formatted = f"{dt:%H:%M:%S}"     # "14:30:00" - O(8)
-
-# Using format() - O(n)
-formatted = format(dt, '%Y-%m-%d %H:%M:%S')  # O(19)
-```
-
-### Alignment and Padding
-
-```python
-# Left align - O(width)
-value = "hello"
-formatted = format(value, '<20')  # "hello               " - O(20)
-
-# Right align - O(width)
-formatted = format(value, '>20')  # "               hello" - O(20)
-
-# Center align - O(width)
-formatted = format(value, '^20')  # "       hello        " - O(20)
-
-# Custom fill character - O(width)
-formatted = format(value, '.>20')  # ".............hello" - O(20)
-```
-
-### Grouping and Separators
-
-```python
-# Comma grouping - O(n)
-large = 1234567890
-formatted = f"{large:,}"  # "1,234,567,890" - O(13)
-
-# Underscore grouping (Python 3.6+) - O(n)
-formatted = f"{large:_}"  # "1_234_567_890" - O(13)
-
-# Binary with grouping - O(bits)
-value = 255
-formatted = f"{value:_b}"  # "11111111" - O(8)
-```
-
-## Custom Classes with __format__
-
-### Implementing __format__
-
-```python
-# Custom formatting - O(implementation)
 class Point:
     def __init__(self, x, y):
         self.x = x
         self.y = y
-    
+
     def __format__(self, spec):
         if spec == 'tuple':
-            return f"({self.x}, {self.y})"  # O(n)
-        elif spec == 'verbose':
-            return f"Point({self.x}, {self.y})"  # O(n)
-        else:
-            return f"{self.x:.1f},{self.y:.1f}"  # O(n)
+            return f'({self.x}, {self.y})'
+        if spec == 'verbose':
+            return f'Point({self.x}, {self.y})'
+        return f'{self.x:.1f},{self.y:.1f}'
 
-# Usage
 p = Point(3.14, 2.71)
-format(p, 'tuple')     # "(3.14, 2.71)" - O(14)
-format(p, 'verbose')   # "Point(3.14, 2.71)" - O(18)
-f"{p}"                 # "3.1,2.7" - O(7)
+assert format(p, 'tuple') == '(3.14, 2.71)'
+assert format(p, 'verbose') == 'Point(3.14, 2.71)'
+assert f'{p}' == '3.1,2.7'
+assert '{:tuple}'.format(p) == '(3.14, 2.71)'   # str.format() calls __format__ too
 ```
 
-### Custom Class Example
+### Inheriting `object.__format__`
+
+A class with no `__format__` of its own anywhere but `object` gets `object.__format__`, which
+formats as `str()` for an empty spec and rejects any other.
 
 ```python
-class Temperature:
-    def __init__(self, celsius):
-        self.celsius = celsius
-    
+class Plain:
+    def __str__(self):
+        return 'plain'
+
+assert format(Plain()) == 'plain'   # the cost of str()
+
+try:
+    format(Plain(), '>10')
+except TypeError as error:
+    assert 'unsupported format string' in str(error)
+else:
+    raise AssertionError('object.__format__ accepted a spec')
+
+class Broken:
     def __format__(self, spec):
-        if spec == 'F':
-            fahrenheit = self.celsius * 9/5 + 32
-            return f"{fahrenheit:.1f}°F"  # O(n)
-        else:
-            return f"{self.celsius:.1f}°C"  # O(n)
+        return 42
 
-# Usage
-temp = Temperature(25)
-format(temp, 'F')      # "77.0°F" - O(6)
-format(temp, 'C')      # "25.0°C" - O(6)
-f"{temp:F}"            # "77.0°F" - O(6)
+try:
+    format(Broken())
+except TypeError as error:
+    assert 'must return a str' in str(error)
+else:
+    raise AssertionError('a non-str __format__ result was accepted')
 ```
 
-## Performance Considerations
+## f-strings, str.format() and %
 
-### F-strings vs format()
-
-```python
-# F-strings are typically faster (compiled)
-name = "Alice"
-
-# F-string - O(n), optimized
-message = f"Hello, {name}"
-
-# format() method - O(n)
-message = "Hello, {}".format(name)
-
-# % formatting - O(n)
-message = "Hello, %s" % name
-
-# All have same complexity but f-strings may be slightly faster
-```
-
-### Building Large Strings
+f-strings and `str.format()` call `__format__` for each field; `%s` calls `str()`
+instead. All three are O(n) in the result plus the cost of converting each field.
 
 ```python
-# Inefficient: repeated string concatenation - O(n²)
-result = ""
-for item in items:
-    result += format(item, '05d') + ","  # O(n²) due to concatenation
+class Both:
+    def __str__(self):
+        return 'str'
 
-# Efficient: join with list - O(n)
-parts = [format(item, '05d') for item in items]  # O(n)
-result = ",".join(parts)  # O(n)
+    def __format__(self, spec):
+        return 'format'
 
-# Efficient: use generator with join - O(n)
-result = ",".join(format(item, '05d') for item in items)  # O(n)
-```
+b = Both()
+assert f'{b}' == 'format'
+assert '{}'.format(b) == 'format'
+assert format(b) == 'format'
+assert '%s' % b == 'str'          # % does not call __format__
+assert f'{b!s}' == 'str'          # !s converts with str() before formatting
 
-### Formatting in Loops
-
-```python
-# Pre-compile format specs
-items = range(1000000)
-
-# Inefficient: repeated format calls - O(n)
-results = [format(item, '010d') for item in items]
-
-# Same complexity but more readable
-results = [f"{item:010d}" for item in items]
-
-# Both O(n); prefer f-strings or list comprehension
-```
-
-## Comparison: Different Formatting Methods
-
-```python
 value = 42.567
-
-# Method 1: format() function - O(n)
-s1 = format(value, '.2f')  # "42.57" - O(5)
-
-# Method 2: str.format() - O(n)
-s2 = "{:.2f}".format(value)  # "42.57" - O(5)
-
-# Method 3: f-string - O(n)
-s3 = f"{value:.2f}"  # "42.57" - O(5)
-
-# Method 4: % operator - O(n)
-s4 = "%.2f" % value  # "42.57" - O(5)
-
-# All equivalent complexity; f-strings preferred (Python 3.6+)
+assert format(value, '.2f') == f'{value:.2f}' == '{:.2f}'.format(value) == '%.2f' % value
 ```
 
-## Special Format Types
+## Common Patterns
 
-### Boolean
+### Dates and Times
+
+`datetime` implements `__format__` with `strftime()`, so a spec is a `strftime` pattern.
 
 ```python
-# Boolean formatting - O(1) to O(n)
-value = True
-format(value)           # "True" - O(4)
-format(value, 'd')      # "1" - treated as int
-format(value, '05d')    # "00001" - as integer
+from datetime import datetime
 
-value = False
-format(value)           # "False" - O(5)
-format(value, 'd')      # "0" - as integer
+dt = datetime(2024, 1, 15, 14, 30, 0)
+assert f'{dt:%Y-%m-%d}' == '2024-01-15'
+assert f'{dt:%H:%M:%S}' == '14:30:00'
+assert format(dt, '%Y-%m-%d %H:%M:%S') == '2024-01-15 14:30:00'
+assert format(dt, '%A') == dt.strftime('%A') == 'Monday'
+assert format(dt) == str(dt)        # an empty spec formats as str()
 ```
 
-### Complex Numbers
+### Booleans and Complex Numbers
+
+`bool` is an `int` subclass, so a numeric spec formats it as 0 or 1; with no spec it formats as
+`str()` does. `complex` accepts `'e'`, `'f'` and `'g'` and applies them to both parts.
 
 ```python
-# Complex number formatting - O(n)
-value = 3 + 4j
-format(value)           # "(3+4j)" - O(6)
-format(value, '.2f')    # Error - no float spec for complex
+assert format(True) == 'True'
+assert format(True, 'd') == '1'
+assert format(True, '05d') == '00001'
+assert format(False, 'd') == '0'
 
-# Use string representation
-value = 3.14 + 2.71j
-formatted = f"{value}"  # "(3.14+2.71j)" - O(12)
+assert format(3 + 4j) == '(3+4j)'
+assert format(3 + 4j, '.2f') == '3.00+4.00j'
+assert f'{3.14 + 2.71j}' == '(3.14+2.71j)'
 ```
 
-## Version Notes
-
-- **Python 2.x**: `format()` available, % formatting standard
-- **Python 3.x**: `format()` available, str.format() method standard
-- **Python 3.6+**: F-strings available (preferred)
-- **Python 3.10+**: Enhanced f-string debugging with `=` specifier
-
-## Related Functions
-
-- **[str.format()](str.md)** - String format() method
-- **[f-strings](str.md)** - Formatted string literals
-- **[repr()](repr.md)** - String representation
-- **[str()](str.md)** - Convert to string
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use f-strings for clarity and performance (Python 3.6+)
-- Use str.format() for templating with variables
-- Use format() function for custom formatting logic
-- Pre-compile format specs if used repeatedly
-- Use join() for building large formatted strings
+- Pass a string through `format()` or `f'{s}'` freely when it needs no padding: it is returned as is
+- Use `'x'` or `'b'` for a very large `int` you only need to compare or store, rather than decimal
+- Size a width or precision to what you will display; each character of it is paid for
 
 ❌ **Avoid**:
 
-- % formatting for new code (harder to read)
-- Repeated string concatenation with format() results (O(n²))
-- Complex format specs without documentation
-- Formatting in inner loops without profiling
-- Mixing formatting methods in same code
+- Decimal-formatting large ints in a loop - each one is superlinear in its digits
+- Raising `sys.set_int_max_str_digits()` to format untrusted ints in decimal
+- Passing a format spec to an object that only has `object.__format__`
+
+## Version Notes
+
+- **Python 3.12+**: decimal conversion of very large ints is subquadratic; see [int](int.md)
+- **Python 3.14+**: `'_'` and `','` can group the fractional digits of a float as well (`'.6_f'`)
+
+## Related Functions
+
+- **[str()](str.md)** - `str.format()`, f-strings and `%` formatting
+- **[repr()](repr.md)** - The unambiguous representation, which `!r` uses
+- **[int()](int.md)** - Decimal conversion cost and the digit limit
+- **[float()](float.md)** - Precision and the digits `'f'` writes
