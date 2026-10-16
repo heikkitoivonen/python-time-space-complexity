@@ -24,9 +24,11 @@ Measurement scope:
   -10^9 to 4*10^9.
 * Output length, from 100 to 10,000 in each argument: `formatmonth()`
   grows over 50x for `w` and for `l`; `formatyear()` over 50x for `w` and
-  `l` and over 20x for `c`. Timing tests on `formatmonth()` give over 5x for
-  100x `w` (1,000 to 100,000) and over 4x for 1,000x `l` (1,000 to
-  1,000,000). `w=0, l=0` renders the same as `w=2, l=1`.
+  `l` and over 20x for `c`. Timing `formatmonth()` gives over 5x for
+  100x `w` (1,000 to 100,000). At `l` = 1, 100 and 10,000, every week
+  is formatted once with the same width, the nonblank lines are unchanged,
+  and the output gains exactly `l - 1` newlines per heading and week.
+  `w=0, l=0` renders the same as `w=2, l=1`.
 * `formatyear()` is observed to call `formatmonthname()` exactly twelve
   times for every `m` from 1 to 12, and its non-blank characters are the same
   multiset for every `m`, so `m` changes only the layout.
@@ -84,6 +86,9 @@ Not settled here:
   `setlocale()` and `strftime()` depends on the C library and is priced O(1).
 * The Space bounds of the text formatters are settled by the length of what
   they return; the peak allocation while building it is not traced.
+* The O(l) time term of `formatmonth()` follows from Lib/calendar.py:
+  it repeats a newline `l` times after each of a bounded number of headings
+  and weeks. Output size and week-formatting calls are observed, not time.
 * The time bounds for `w`, `l` and `c` in `formatyear()`, and for `c` in
   `calendar()` and `prcal()`, are read from Lib/calendar.py's per-cell
   `str.center()` and per-line joins; only `formatmonth()` is timed. `m` above
@@ -427,15 +432,24 @@ class TestTextLayoutGrows:
 
         assert ratio > 5, f"100x w: {durations} ns, x{ratio:.2f}"
 
-    @pytest.mark.timing
-    def test_formatmonth_time_follows_l(self) -> None:
-        durations = [
-            best_ns(lambda l=l: self.text.formatmonth(2024, 2, l=l), inner=3)  # type: ignore[misc]  # noqa: E741
-            for l in (1_000, 1_000_000)  # noqa: E741
-        ]
-        ratio = durations[1] / durations[0]
+    @pytest.mark.parametrize("spacing", [1, 100, 10_000])
+    def test_line_spacing_adds_newlines_without_reformatting_weeks(self, spacing: int) -> None:
+        weeks: list[tuple[Any, int]] = []
 
-        assert ratio > 4, f"1,000x l: {durations} ns, x{ratio:.2f}"
+        class Counting(calendar.TextCalendar):
+            def formatweek(self, theweek: Any, width: int) -> str:
+                weeks.append((theweek, width))
+                return super().formatweek(theweek, width)
+
+        expected_weeks = self.text.monthdays2calendar(2024, 2)
+        baseline = self.text.formatmonth(2024, 2, l=1)
+        rendered = Counting().formatmonth(2024, 2, l=spacing)
+        lines = 2 + len(expected_weeks)
+
+        assert weeks == [(week, 2) for week in expected_weeks]
+        assert rendered.count("\n") == lines * spacing
+        assert len(rendered) == len(baseline) + lines * (spacing - 1)
+        assert [line for line in rendered.splitlines() if line] == baseline.splitlines()
 
 
 class TestPrintingFunctions:

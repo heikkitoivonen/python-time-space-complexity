@@ -17,8 +17,10 @@ Measurement scope:
   `isnormal()`, `issubnormal()` and `signbit()`. The conversion is timed
   on 20,000-, 200,000- and 2,000,000-bit ints through `log()` and `sqrt()`: a
   random int costs the same at all three (x1.1 over 100x the bits on aarch64
-  3.14), while `2**w + 1`, whose digits below the leading ones are zero, grows
-  with w (x80 over the same span).
+  3.14). For `2**w + 1`, whose digits between the leading ones and the last
+  are zero, `log()` is timed at w = 200,000, 2,000,000 and 20,000,000 bits.
+  Each 10x step costs between 4x and 30x, separating linear growth from
+  constant and quadratic costs; inputs are built outside the timer.
 * `math.pow(2, 2000)` raises `OverflowError` while `pow(2, 2000)` has 2,001
   bits. `nextafter(0.0, 1.0, steps=10**7)` equals 10**7 times the smallest
   subnormal and agrees with 1,000 single steps at steps=1000; 10**15 steps
@@ -274,8 +276,8 @@ class TestIntConversionReadsTheLeadingDigits:
     """Converting an int is O(1) for most ints and O(w) at worst.
 
     A random int costs the same at 20,000 and 2,000,000 bits; `2**w + 1`,
-    whose digits below the leading ones are all zero, grows with w. The same
-    100x span separates x1 from x100.
+    with zero digits between the leading ones and the last, grows with w
+    over 200,000 to 20,000,000 bits. Both spans separate x1 from x100.
     """
 
     SIZES = (20_000, 200_000, 2_000_000)
@@ -300,12 +302,15 @@ class TestIntConversionReadsTheLeadingDigits:
 
     @pytest.mark.timing
     def test_zero_digits_below_the_leading_ones_cost_their_width(self) -> None:
-        values = [(1 << bits) + 1 for bits in self.SIZES]
+        sizes = (200_000, 2_000_000, 20_000_000)
+        values = [(1 << bits) + 1 for bits in sizes]
+        for bits, value in zip(sizes, values, strict=True):
+            assert math.isclose(math.log(value), bits * math.log(2))
 
-        logs = [best_ns(lambda v=v: math.log(v), inner=5) for v in values]
+        logs = [best_ns(lambda v=v: math.log(v), inner=50) for v in values]
 
         for before, after in zip(logs, logs[1:], strict=False):
-            assert after > 4 * before, f"log of 2**w + 1 over {self.SIZES} bits: {logs} ns"
+            assert 4 < after / before < 30, f"log of 2**w + 1 over {sizes} bits: {logs} ns"
 
 
 @pytest.mark.skipif(sys.version_info < (3, 12), reason="version: steps is Python 3.12+")

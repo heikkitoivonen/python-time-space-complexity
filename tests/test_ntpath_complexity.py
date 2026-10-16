@@ -34,13 +34,15 @@ Measurement scope:
   call each. The O(L) space is a result as long as its input for `split`,
   `normcase` and `join`.
 * The O(L) and O(B) time rows: `split` (both implementations), `splitext`,
-  `splitdrive`, `normcase`, `join` of L/10 one-character components and
+  `normcase`, `join` of L/10 one-character components and
   `commonpath` of two such paths are timed at L = 1,000, 10,000 and 100,000;
   each 10x step costs under 30x, where quadratic predicts 100x.
-  `splitdrive` is measured in batches of 100 calls because its smallest
-  input takes less than a microsecond. Fixed overhead can dominate its first
-  interval, so this test excludes quadratic growth without asserting a
-  linear lower bound. These are str arguments. `join` was measured separately up to
+  `splitdrive` scans UNC shares with server names of 100,000, 1,000,000 and
+  10,000,000 characters in batches of 20 calls; each 10x step costs between
+  3x and 30x, separating constant and quadratic growth from linear. The
+  share has no tail, so the Python fallback scans it without large path
+  slices whose allocation thresholds can dominate timings. These are str
+  arguments. `join` was measured separately up to
   64,000 characters: with components of 1,000 characters and totals past
   400,000 its string concatenation stops growing in place on Windows and
   the steps turn superlinear, for `posixpath.join` as much as for
@@ -171,8 +173,8 @@ Not settled here:
   predicate's query, is outside that model.
 * The O(L) bounds of the C helpers other than `_path_normpath`
   (`_path_splitroot_ex`, `_getfullpathname`, `_getvolumepathname`) are read
-  from Modules/posixmodule.c; `splitdrive` timed on 3.13 and 3.14 exercises
-  `_path_splitroot_ex` but only on a drive-letter path.
+  from Modules/posixmodule.c; from 3.13 on Windows, the `splitdrive` timing
+  exercises `_path_splitroot_ex`, but only on a UNC share with no tail.
 * The fallback run on Windows is the same code as `ntpath` on Linux and
   macOS, except where it looks outside `nt`: `normcase` uses `_winapi` when
   that imports, and on 3.12 `isjunction` lstats when `stat_result` has
@@ -476,7 +478,7 @@ class TestStringFunctionsAreLinear:
     """The O(L) and O(B) rows, timed: each 10x step in the input costs under
     30x, where linear predicts 10x and quadratic 100x.
 
-    The largest input is 100,000 characters. Several of these functions copy
+    The largest drive-letter input is 100,000 characters. Several functions copy
     the whole path, and a copy past glibc's 128 KiB mmap threshold is served
     fresh, zero-filled pages on every call, which adds page faults that are
     not the function's work: 300,000 characters measured x53 on the second
@@ -494,7 +496,6 @@ class TestStringFunctionsAreLinear:
             "split": chars(ntpath.split),
             "fallback split": chars(_fallback().split),
             "splitext": chars(ntpath.splitext),
-            "splitdrive": chars(ntpath.splitdrive),
             "normcase": chars(ntpath.normcase),
             "join": lambda n: functools.partial(ntpath.join, "C:\\", *parts(n)),
             "commonpath": lambda n: functools.partial(
@@ -505,17 +506,25 @@ class TestStringFunctionsAreLinear:
     @pytest.mark.timing
     @pytest.mark.parametrize(
         "name",
-        ["split", "fallback split", "splitext", "splitdrive", "normcase", "join", "commonpath"],
+        ["split", "fallback split", "splitext", "normcase", "join", "commonpath"],
     )
     def test_ten_times_the_input_costs_about_ten_times(self, name: str) -> None:
         make = self.cases()[name]
-        inner = 100 if name == "splitdrive" else 1
-        durations = [
-            best_ns(make(size), repeats=5, inner=inner) for size in (1_000, 10_000, 100_000)
-        ]
+        durations = [best_ns(make(size), repeats=5) for size in (1_000, 10_000, 100_000)]
         ratios = [durations[1] / durations[0], durations[2] / durations[1]]
 
         assert all(ratio < 30 for ratio in ratios), f"{name}: {durations} ns, x{ratios}"
+
+    @pytest.mark.timing
+    def test_splitdrive_scans_a_unc_share_linearly(self) -> None:
+        durations = []
+        for size in (100_000, 1_000_000, 10_000_000):
+            path = "\\\\" + "s" * size + "\\share"
+            assert ntpath.splitdrive(path) == (path, "")
+            durations.append(best_ns(functools.partial(ntpath.splitdrive, path), inner=20))
+
+        ratios = [after / before for before, after in zip(durations, durations[1:], strict=False)]
+        assert all(3 < ratio < 30 for ratio in ratios), f"splitdrive: {durations} ns, x{ratios}"
 
 
 FALLBACK_SHAPES = {
