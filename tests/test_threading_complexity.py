@@ -18,7 +18,8 @@ Measurement scope:
   blocked one returns after its 50 ms timeout with the thread still alive.
   Timeout measurements allow 5 ms of native-clock rounding.
 * Each of the eight deprecated aliases emits exactly one DeprecationWarning
-  per call, and from 3.14 so does an argument to ``RLock()``.
+  per call; on 3.14 so does an argument to ``RLock()``, which raises
+  TypeError from 3.15.
   ``settrace_all_threads`` and ``setprofile_all_threads`` exist exactly from
   3.12, and ``RLock().locked`` and ``Condition().locked`` exactly from 3.14.
 * A cancelled 10-second Timer is joined within two seconds and never calls
@@ -65,6 +66,25 @@ Measurement scope:
   more in each of three threads on their first attribute access, with the
   original argument, and a value assigned in one thread is not seen in
   another.
+* The 3.15 iterator wrappers. ``serialize_iterator()`` calls ``iter()`` once
+  and ``next()`` zero times, and holds a plain ``Lock``. A generator stalled
+  inside its own step raises ValueError ("already executing") for a second
+  thread's ``next()``; through the wrapper the second thread is still
+  waiting 50 ms later, and both get an item once the step finishes.
+  ``send()``, ``throw()`` and ``close()`` reach a generator, and ``send()``
+  on a list iterator raises AttributeError. ``synchronized_iterator()``
+  calls nothing until its wrapper is called, keeps the function's name and
+  returns a new ``serialize_iterator`` per call. ``concurrent_tee()`` returns
+  ``()`` for 0 copies, raises ValueError for -1 and returns a tuple of 5 for
+  5; over three copies a counting source is advanced once per item, and a
+  counting lock is entered once per item by the copy that reaches it first
+  and never by the other two, when the copies are read one after another;
+  a copy that arrives while another is still taking the item from the
+  source waits on the lock, which is read from `_concurrent_tee.__next__`
+  in Lib/threading.py and not exercised. One copy 50,000 items ahead of the other
+  peaks above 2 MB, two copies in lockstep under 100 KB. Four copies read
+  in four threads each see the whole stream of 5,000 items, read from the
+  source once. The names are asserted absent before 3.15.
 * With five threads blocked, ``active_count()`` equals ``len(enumerate())``
   and both grew by five; ``current_thread()`` is ``main_thread()`` on the
   main thread and the Thread object inside a worker; ``get_ident()`` and
@@ -140,7 +160,7 @@ from typing import Any, cast
 import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "threading.md"
-EXPECTED_BLOCKS = 7
+EXPECTED_BLOCKS = 8
 WAIT = 5.0
 SHORT = 0.05
 # Native waits (notably Windows' millisecond waits) and perf_counter use
@@ -330,13 +350,21 @@ class TestDeprecatedAndVersionGatedNames:
 
         assert [w.category for w in caught] == [DeprecationWarning]
 
-    @pytest.mark.skipif(sys.version_info < (3, 14), reason="version: deprecated from 3.14")
-    def test_arguments_to_rlock_warn_from_3_14(self) -> None:
+    @pytest.mark.skipif(
+        sys.version_info < (3, 14) or sys.version_info >= (3, 15),
+        reason="version: deprecated on 3.14 only",
+    )
+    def test_arguments_to_rlock_warn_on_3_14(self) -> None:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             cast("Any", threading.RLock)(1)
 
         assert [w.category for w in caught] == [DeprecationWarning]
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="version: removed in 3.15")
+    def test_arguments_to_rlock_raise_from_3_15(self) -> None:
+        with pytest.raises(TypeError):
+            cast("Any", threading.RLock)(1)
 
     def test_the_all_threads_hooks_exist_from_3_12(self) -> None:
         expected = sys.version_info >= (3, 12)
@@ -1037,6 +1065,194 @@ class TestLocalIsPerThread:
 
         assert seen == [False]
         assert data.value == 1
+
+
+THREADING: Any = threading
+NEEDS_315 = pytest.mark.skipif(
+    sys.version_info < (3, 15), reason="the iterator wrappers are Python 3.15+"
+)
+
+
+class CountingIterable:
+    """Counts `iter()` calls on itself and `next()` calls on what it returns."""
+
+    def __init__(self, count: int) -> None:
+        self.count = count
+        self.iters = 0
+        self.nexts = 0
+
+    def __iter__(self) -> Iterator[int]:
+        self.iters += 1
+        return self._items()
+
+    def _items(self) -> Iterator[int]:
+        for value in range(self.count):
+            self.nexts += 1
+            yield value
+
+
+class CountingLock:
+    """A lock that counts the times it is entered."""
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.entered = 0
+
+    def __enter__(self) -> None:
+        self.entered += 1
+        self.lock.acquire()
+
+    def __exit__(self, *exc: object) -> None:
+        self.lock.release()
+
+
+@NEEDS_315
+class TestIteratorWrappersSerializeEachStep:
+    """`serialize_iterator(iterable)` | O(1); each step O(w + g) through one
+    non-reentrant lock; `synchronized_iterator(func)` | O(1);
+    `concurrent_tee(iterable, n)` | O(k), each item read from the source once
+    and held, O(d), until the furthest-behind copy passes it."""
+
+    def test_wrapping_calls_iter_once_and_consumes_nothing(self) -> None:
+        source = CountingIterable(10)
+
+        wrapped = THREADING.serialize_iterator(source)
+
+        assert (source.iters, source.nexts) == (1, 0)
+        assert type(wrapped._lock) is type(threading.Lock())
+        assert list(wrapped) == list(range(10))
+
+    def test_a_second_thread_waits_where_a_bare_generator_raises(
+        self, gate: threading.Event
+    ) -> None:
+        """A generator blocked inside its own step refuses a second `next()`
+        with ValueError; through the wrapper the second caller waits for the
+        step in progress and then gets the next item."""
+        entered = threading.Event()
+
+        def stalls() -> Iterator[int]:
+            entered.set()
+            gate.wait(WAIT)
+            yield 0
+            yield 1
+
+        bare = stalls()
+        first = spawn(next, bare)
+        assert entered.wait(WAIT)
+        with pytest.raises(ValueError, match="already executing"):
+            next(bare)
+        gate.set()
+        join_all([first])
+
+        gate.clear()
+        entered.clear()
+        wrapped = THREADING.serialize_iterator(stalls())
+        results: list[int] = []
+        threads = [spawn(lambda: results.append(next(wrapped)))]
+        assert entered.wait(WAIT)
+        threads.append(spawn(lambda: results.append(next(wrapped))))
+        time.sleep(SHORT)
+        assert results == []  # the second caller is waiting on the lock, not failing
+        gate.set()
+        join_all(threads)
+
+        assert sorted(results) == [0, 1]
+
+    def test_send_throw_and_close_reach_the_generator(self) -> None:
+        def echo() -> Iterator[object]:
+            received: object = None
+            while True:
+                try:
+                    received = yield received
+                except KeyError:
+                    received = "caught"
+
+        wrapped = THREADING.serialize_iterator(echo())
+        next(wrapped)
+
+        assert wrapped.send("x") == "x"
+        assert wrapped.throw(KeyError()) == "caught"
+        wrapped.close()
+        with pytest.raises(StopIteration):
+            next(wrapped)
+        with pytest.raises(AttributeError):
+            THREADING.serialize_iterator([1, 2]).send(None)
+
+    def test_synchronized_iterator_wraps_each_call_and_calls_nothing_up_front(self) -> None:
+        calls: list[int] = []
+
+        def numbers(stop: int) -> Iterator[int]:
+            calls.append(stop)
+            yield from range(stop)
+
+        wrapper = THREADING.synchronized_iterator(numbers)
+
+        assert calls == [] and wrapper.__name__ == "numbers"
+        first, second = wrapper(3), wrapper(2)
+        assert type(first) is THREADING.serialize_iterator and first is not second
+        assert (list(first), list(second)) == ([0, 1, 2], [0, 1])
+        assert calls == [3, 2]
+
+    def test_tee_counts(self) -> None:
+        assert THREADING.concurrent_tee(range(3), 0) == ()
+        with pytest.raises(ValueError):
+            THREADING.concurrent_tee(range(3), -1)
+        copies = THREADING.concurrent_tee(range(3), 5)
+        assert type(copies) is tuple and len(copies) == 5
+        assert [list(copy) for copy in copies] == [[0, 1, 2]] * 5
+
+    def test_each_item_is_read_once_and_only_the_first_copy_takes_the_lock(self) -> None:
+        source = CountingIterable(100)
+        copies = THREADING.concurrent_tee(source, 3)
+        lock = CountingLock()
+        for copy in copies:
+            copy.lock = lock
+
+        assert [next(copies[0]) for _ in range(10)] == list(range(10))
+        assert (source.nexts, lock.entered) == (10, 10)
+        assert [next(copies[1]) for _ in range(10)] == list(range(10))
+        assert [next(copies[2]) for _ in range(10)] == list(range(10))
+        assert (source.nexts, lock.entered) == (10, 10)
+        assert [list(copy) for copy in copies] == [list(range(10, 100))] * 3
+        assert source.iters == 1 and source.nexts == 100
+
+    def test_the_held_items_follow_the_lag_between_copies(self) -> None:
+        """50,000 items: one copy 50,000 ahead of the other peaks above 2 MB of
+        retained links; two copies advanced in lockstep peak under 100 KB."""
+        count = 50_000
+
+        def ahead() -> None:
+            first, _second = THREADING.concurrent_tee(range(count))
+            for _ in range(count):
+                next(first)
+
+        def lockstep() -> None:
+            first, second = THREADING.concurrent_tee(range(count))
+            for _ in range(count):
+                next(first)
+                next(second)
+
+        lagging, level = traced_peak(ahead), traced_peak(lockstep)
+
+        assert lagging > 2_000_000, f"a lag of {count} peaked at {lagging} bytes"
+        assert level < 100_000, f"lockstep copies peaked at {level} bytes"
+
+    def test_each_copy_read_in_its_own_thread_sees_the_whole_stream(self) -> None:
+        source = CountingIterable(5_000)
+        copies = THREADING.concurrent_tee(source, 4)
+        seen: list[list[int]] = [[] for _ in copies]
+
+        threads = [spawn(seen[i].extend, copy) for i, copy in enumerate(copies)]
+        join_all(threads)
+
+        assert seen == [list(range(5_000))] * 4
+        assert source.nexts == 5_000
+
+
+@pytest.mark.skipif(sys.version_info >= (3, 15), reason="the iterator wrappers are 3.15+")
+def test_the_iterator_wrappers_are_absent_before_3_15() -> None:
+    for name in ("serialize_iterator", "synchronized_iterator", "concurrent_tee"):
+        assert not hasattr(threading, name)
 
 
 class TestRegistryCountsLiveThreads:

@@ -21,8 +21,8 @@ it.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `encodings.normalize_encoding(encoding)` | O(k) | O(k) | Expects an ASCII name, as `str` or `bytes`; each run of characters other than letters, digits and `.` becomes one `_`, with none at either end; case is kept |
-| `encodings.search_function(encoding)` | O(k + i) first call per name, O(k) after | O(k + i) first call per name, O(1) after | Cached by the exact string given; a name no codec matches is cached too, as `None`, and nothing evicts entries. Expects the lowercased name `codecs.lookup()` passes it, so call that instead |
+| `encodings.normalize_encoding(encoding)` | O(k) | O(k) | Expects an ASCII name, as `str` or `bytes` (a non-ASCII `str` warns on 3.15+); each run of characters other than letters, digits and `.` becomes one `_`, with none at either end; case is kept |
+| `encodings.search_function(encoding)` | O(k + i) on a cache miss, O(k) on a hit | O(k + i) on a miss, O(1) on a hit | A miss is the first call for a name, or the first after the cache was emptied. Cached by the exact string given; a name no codec matches is cached too, as `None`. On 3.13.13+, 3.14.4+ and 3.15+ the cache is emptied when it already holds 500 names; earlier releases never evict entries. Expects the lowercased name `codecs.lookup()` passes it, so call that instead |
 | `encodings.win32_code_page_search_function(encoding)` | O(k) | O(k) | Windows only, Python 3.14+; answers `cp` + number for code pages Windows supports, `None` for anything else |
 
 ### Alias table
@@ -69,10 +69,11 @@ it.
 
 ## Looking Up a Codec
 
-The `codecs` registry normalizes a name the same way, lowercases it, and calls `search_function()`
-the first time it sees the result; after that, `codecs.lookup()` answers from its own cache and the
-package is not asked again. The first call is the expensive one, because it imports the codec
-module.
+The `codecs` registry lowercases a name, and calls `search_function()` the first time it sees the
+result. Before 3.15 it also normalizes the name the way `normalize_encoding()` does; from 3.15 it
+only turns spaces into hyphens and leaves the rest to the package. After that, `codecs.lookup()`
+answers from its own cache and the package is not asked again. The first call is the expensive
+one, because it imports the codec module.
 
 ```python
 import codecs
@@ -96,9 +97,11 @@ assert encodings.search_function('L1') is None
 
 ### Unknown Names
 
-A name no codec module matches is cached as `None`, so the package tries its imports once per name.
+A name no codec module matches is cached as `None`, so the package tries its imports once per name
+for as long as that entry lasts.
 The registry does not cache a failure, so every distinct unknown name passes through to the package
-and stays in its cache.
+and stays in its cache: until the cache next fills to 500 names on 3.13.13+, 3.14.4+ and 3.15+,
+and for good on earlier releases.
 
 ```python
 import codecs
@@ -192,7 +195,8 @@ assert encoder.encode('he') + encoder.encode('llo') == data  # O(c) - one BOM, o
 - Look codecs up through `codecs.lookup()`, `str.encode()` or `bytes.decode()`: the registry caches
   each name it finds after one search
 - Check an encoding name that arrives from outside against the ones you support before looking it
-  up, since each distinct unknown name stays in the package's cache
+  up, since each distinct unknown name adds an entry to the package's cache, without limit before
+  3.13.13 and 3.14.4
 
 ❌ **Avoid**:
 
@@ -206,6 +210,12 @@ assert encoder.encode('he') + encoder.encode('llo') == data  # O(c) - one BOM, o
 - **Python 3.12+**: `encodings.idna.ToUnicode()` rejects a label over 1,024 characters before
   decoding it
 - **Python 3.14+**: Added `win32_code_page_search_function()`, on Windows only
+- **Python 3.13.13+, 3.14.4+ and 3.15+**: `search_function()` empties its cache when it already
+  holds 500 names, so unknown names no longer grow it without limit
+- **Python 3.15+**: `normalize_encoding()` emits `DeprecationWarning` for a non-ASCII `str`
+- **Python 3.15+**: `codecs.lookup()` passes the package the name lowercased with spaces turned
+  into hyphens: `'Mac Turkish'` arrives as `'mac-turkish'`, where earlier versions passed
+  `'mac_turkish'`
 
 ## Related Modules
 

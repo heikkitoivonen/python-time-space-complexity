@@ -44,8 +44,12 @@ Measurement scope:
   `array` and a `bytes` subclass come back as `bytes`; subclasses of `dict`,
   `int` and `str`, and a
   plain `object`, raise `ValueError`. `slice` round-trips on 3.14+ and
-  raises `ValueError` with version 4, and on earlier versions.
-  `marshal.version` is asserted as 5 on 3.14+ and 4 before.
+  raises `ValueError` with version 4, and on earlier versions. `frozendict`
+  round-trips on 3.15+ and raises `ValueError` with version 5. On 3.15.0 a
+  list holding one `frozendict` twice dumps but fails to load with
+  `ValueError` ("invalid reference"), where the same list of a `dict` loads
+  with the sharing kept. `marshal.version` is asserted as 6 on 3.15+, 5 on
+  3.14 and 4 before.
 * `allow_code=False` is asserted, on 3.13+, to make each of the four
   functions raise `ValueError` for a code object and to pass plain data.
 * A `.pyc` written by `py_compile` is asserted to be a 16-byte header
@@ -75,6 +79,7 @@ Not settled here:
 from __future__ import annotations
 
 import array
+import builtins
 import io
 import marshal
 import pathlib
@@ -96,6 +101,8 @@ PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "marshal.md"
 EXPECTED_BLOCKS = 6
 # Typeshed's 3.11 signatures have no allow_code and accept only marshallable values.
 UNTYPED: Any = marshal
+# frozendict is a 3.15 builtin, absent from the stubs for the checked Python version.
+FROZENDICT: Any = getattr(builtins, "frozendict", None)
 
 
 def best_ns(func: Callable[[], Any], repeats: int = 5) -> float:
@@ -435,10 +442,31 @@ class TestSupportedTypes:
 
     @pytest.mark.skipif(sys.version_info < (3, 14), reason="version 5 adds slice in 3.14")
     def test_slice_needs_version_5(self) -> None:
-        assert marshal.version == 5
+        assert marshal.version == (6 if sys.version_info >= (3, 15) else 5)
         assert marshal.loads(UNTYPED.dumps(slice(1, None, 2))) == slice(1, None, 2)
         with pytest.raises(ValueError):
             UNTYPED.dumps(slice(1, 2), 4)
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="version 6 adds frozendict in 3.15")
+    def test_frozendict_needs_version_6(self) -> None:
+        value = FROZENDICT(a=[1], b=(2,))
+        restored = marshal.loads(marshal.dumps(value))
+        assert type(restored) is FROZENDICT and restored == value
+        with pytest.raises(ValueError, match="unmarshallable"):
+            UNTYPED.dumps(value, 5)
+
+    @pytest.mark.skipif(sys.version_info[:3] != (3, 15, 0), reason="measured on 3.15.0")
+    def test_a_frozendict_reached_twice_does_not_load_on_3_15_0(self) -> None:
+        """The writer records a reference to the second occurrence, and the
+        3.15.0 reader never registers the frozendict it built, so loading
+        the reference fails. A dict reached twice is the control."""
+        shared_dict: dict[str, int] = {"a": 1}
+        restored = marshal.loads(marshal.dumps([shared_dict, shared_dict]))
+        assert restored[0] is restored[1]
+        shared = FROZENDICT(a=1)
+        data = marshal.dumps([shared, shared])
+        with pytest.raises(ValueError, match="invalid reference"):
+            marshal.loads(data)
 
     @pytest.mark.skipif(sys.version_info >= (3, 14), reason="version 5 adds slice in 3.14")
     def test_slice_is_unsupported_before_3_14(self) -> None:

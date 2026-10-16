@@ -10,7 +10,8 @@ its results plus one timing test on the size of `oparg`.
 Measurement scope:
 
 * Every name in `opcode.__all__` is the same object on two reads and is the
-  object `dis` exports under that name. `opmap` is a dict, `opname` a list
+  object `dis` exports under that name. `opmap` is a dict (a `frozendict`
+  from 3.15), `opname` a list
   and `cmp_op` a tuple; every `opmap` entry indexes back to its own name
   through `opname`, and every number outside `opmap` reads `'<n>'` unless
   it names one of 3.14's specialized instructions. In a module of 300
@@ -63,6 +64,7 @@ Not settled here:
 
 from __future__ import annotations
 
+import builtins
 import dis
 import opcode
 import pathlib
@@ -133,7 +135,9 @@ class TestTablesAreBuiltOnce:
         assert getattr(dis, name) is getattr(opcode, name)
 
     def test_the_tables_are_a_dict_a_list_and_a_tuple(self) -> None:
-        assert type(opcode.opmap) is dict
+        # 3.15 builds opmap as a frozendict, which is not a dict subclass.
+        opmap_type = builtins.frozendict if sys.version_info >= (3, 15) else dict
+        assert type(opcode.opmap) is opmap_type
         assert type(opcode.opname) is list
         assert type(opcode.cmp_op) is tuple
         assert all(type(getattr(opcode, name)) is list for name in HAS_LISTS)

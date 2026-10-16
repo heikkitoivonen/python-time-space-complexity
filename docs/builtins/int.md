@@ -162,18 +162,19 @@ finally:
 ### Small Integers (CPython optimization)
 
 ```python
-# Python preallocates the integers -5 to 256 and returns the shared object
+# Python preallocates the integers -5 to 256 (to 1024 from 3.15) and
+# returns the shared object
 a = int("100")
 b = int("100")
 print(a is b)  # True - same object
 
 # Every other parse allocates a new object
-x = int("300")
-y = int("300")
+x = int("2000")
+y = int("2000")
 print(x is y)  # False - different objects
 
 # Two equal literals in one function are one constant, folded by the
-# compiler, so `300 is 300` would say True for a different reason
+# compiler, so `2000 is 2000` would say True for a different reason
 ```
 
 ### Arithmetic Complexity by Implementation
@@ -196,6 +197,7 @@ product = (10**5000) * (10**5000)  # 16,610 bits each: Karatsuba, O(n^1.58)
 - **Python 3.10**: `bit_count()` added
 - **Python 3.11** (backported to 3.10.7): decimal string conversion is capped; `sys.set_int_max_str_digits()` adjusts the limit
 - **Python 3.12**: `is_integer()` added; decimal conversion in both directions and huge divisions switch to O(n^1.58) divide-and-conquer algorithms above the thresholds in the tables
+- **Python 3.15**: the preallocated small integers run from -5 to 1024, up from 256
 
 ## Implementation Details
 
@@ -204,7 +206,7 @@ product = (10**5000) * (10**5000)  # 16,610 bits each: Karatsuba, O(n^1.58)
 Uses variable-length representation for arbitrary precision:
 
 - 30-bit digits
-- The integers -5 to 256 are preallocated and shared
+- The integers -5 to 256 are preallocated and shared; from 3.15 the range runs to 1024
 - Karatsuba multiplication once both operands exceed 70 digits, or 140 when squaring
 - Schoolbook division, with a divide-and-conquer fallback for huge operands from 3.12
 - Decimal string conversion is quadratic and capped, power-of-two bases are linear and uncapped

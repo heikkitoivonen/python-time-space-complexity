@@ -1,11 +1,13 @@
 ---
-source_sha: 017611c2d2bcc901231a4ffb2170bb79a9c5ea0033777a6cac77c8344e2faf84
+source_sha: 65a8e42df7b8e94caa84a3882f8713b92843278026321b9aa5d0c0ff5c017968
 translated: machine
 ---
 
 # 集合操作の計算量
 
 `set` 型は重複のない要素を順序なしで集めたものです。CPython では辞書と同様のハッシュテーブルとして実装されています。
+
+`n` は集合の要素数、`m` はもう一方のオペランドの要素数です。要素のハッシュ計算と比較は O(1) とみなします。
 
 ## 計算量リファレンス
 
@@ -19,17 +21,21 @@ translated: machine
 | `clear()` | O(n) | O(1) | すべて解放する |
 | `x in set` | 平均 O(1)、最悪 O(n) | O(1) | ハッシュ探索、衝突があると O(n) になる |
 | `copy()` | O(n) | O(n) | 浅いコピー |
-| `union(other)` | O(n+m) | O(n+m) | n と m は集合の大きさ |
-| `intersection(other)` | O(min(n,m)) | O(min(n,m)) | 小さいほうの集合を走査する |
-| `difference(other)` | O(n) | O(n) | n は集合の大きさ |
-| `symmetric_difference(other)` | O(n+m) | O(n+m) | 集合演算の組み合わせ |
-| `issubset()` | O(n) | O(1) | すべての要素を調べる |
+| `union(other)`, `s \| other` | O(n+m) | O(n+m) | n と m は集合の大きさ |
+| `intersection(other)`, `s & other` | O(min(n,m))。`other` が集合でなければ O(m) | O(min(n,m)) | 小さいほうの集合を走査する |
+| `difference(other)`, `s - other` | O(n)。`other` が集合でなければ O(n+m) | O(n) | n は集合の大きさ |
+| `symmetric_difference(other)`, `s ^ other` | O(n+m) | O(n+m) | 集合演算の組み合わせ |
+| `issubset()` | O(n)。`other` が集合でなければ O(n+m) | O(1)。`other` が集合でなければ O(m) | すべての要素を調べる |
 | `issuperset()` | O(m) | O(1) | m は相手の大きさ |
-| `isdisjoint()` | O(min(n,m)) | O(1) | 早期に打ち切る |
-| `update(other)` | O(m) | O(1) | その場での和、m = len(other) |
-| `difference_update(other)` | O(min(n,m)) | O(1) | その場での差。小さいほうの側を走査する |
-| `intersection_update(other)` | O(n) | O(1) | その場での積、集合を作り直す |
-| `symmetric_difference_update(other)` | O(m) | O(1) | その場での対称差 |
+| `isdisjoint()` | O(min(n,m))。`other` が集合でなければ O(m) | O(1) | 早期に打ち切る |
+| `update(other)`, `s \|= other` | O(m) | O(1) | その場での和、m = len(other) |
+| `difference_update(other)`, `s -= other` | O(min(n,m))。`other` が集合でなければ O(m) | O(n) | その場での差。小さいほうの側を走査する |
+| `intersection_update(other)`, `s &= other` | O(n)。`other` が集合でなければ O(n+m) | O(min(n,m)) | その場での積。集合を作り直して古いテーブルを解放するため、`other` が小さくても O(n) |
+| `symmetric_difference_update(other)`, `s ^= other` | O(m) | O(1)。`other` が集合でなければ O(m) | その場での対称差 |
+
+演算子形式は set と frozenset しか受け付けませんが、メソッドは任意のイテラブルも受け付けます。最悪の場合、すべての要素が同じハッシュ値を持つと O(1) の操作は O(n) かかり、一方の集合の全要素をもう一方で検索する操作もそれに応じて遅くなります。
+
+`remove()`、`discard()`、`pop()` で要素を削除してもテーブルは縮小しません。大半の要素を削除した後も、テーブルを走査する操作（反復、`copy()`、`|`、`-`、`^`、比較、`set(s)`）は、後の挿入でリサイズが起きるまで、集合の以前のサイズに比例した時間がかかります。`len()` とメンバーシップテストは影響を受けず、`-=`、`&=` またはそれらのメソッドで大半の要素を削除した場合はコンパクトなテーブルが残ります。
 
 ## 実装の詳細
 
@@ -57,6 +63,25 @@ translated: machine
 {1, 2} ^ {2, 3}  # {1, 3} - O(len(s1) + len(s2))
 ```
 
+### 削除してもテーブルは縮小しない
+
+```python
+import sys
+
+s = set(range(100_000))
+full = sys.getsizeof(s)
+for i in range(10, 100_000):
+    s.discard(i)                   # O(1) each
+
+assert len(s) == 10                # O(1)
+assert sys.getsizeof(s) == full    # still sized for 100,000 elements
+items = list(s)                    # O(100,000): walks the old table
+
+s = s.copy()                       # O(100,000) once
+assert sys.getsizeof(s) < full     # sized for 10 elements
+assert sorted(s) == sorted(items)  # O(10)
+```
+
 ### メンバーシップの判定
 
 ```python
@@ -81,7 +106,6 @@ numbers_set = {1, 2, 3, 4, 5}
 ## バージョン別の注記
 
 - **Python 3 のすべてのバージョン**: 中心的な計算量は変わっていない
-- **Python 3.9+**: 新しい集合の和・積の演算子
 
 ## 実装ごとの比較
 
@@ -114,6 +138,8 @@ JIT コンパイルによりさらに最適化される場合がある。
 ### 重複の除去
 
 ```python
+items = [3, 1, 3, 2, 1]
+
 # Bad: preserves list, but O(n²)
 unique = []
 for item in items:
@@ -142,7 +168,7 @@ filtered = [x for x in large_list if x not in exclusions_set]
 
 ## 関連する型
 
-- **[Frozenset](index.md)** - 不変の集合
+- **[Frozenset](frozenset.md)** - 不変の集合
 - **[Dict](dict.md)** - 可変のマッピング
 - **[Deque](../stdlib/collections.md#deque)** - 順序を持つコレクション
 

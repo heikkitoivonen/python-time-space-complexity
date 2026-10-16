@@ -14,7 +14,8 @@ growth classes, always as a ratio between input sizes or input shapes.
 
 Measurement scope:
 
-* `normalize_encoding()` is asserted by output on names with runs of
+* `normalize_encoding()` warns once for a non-ASCII `str` on 3.15 and
+  never before, and not for an ASCII one. It is asserted by output on names with runs of
   punctuation, spaces, dots, mixed case, leading and trailing punctuation and
   ASCII `bytes`; non-ASCII `bytes` raise `UnicodeDecodeError`. Its traced peak
   grows between 50x and 200x from a 10,000- to a 1,000,000-character name
@@ -29,14 +30,21 @@ Measurement scope:
   `latin-1` are observed to take two cache entries and two normalizations.
   With `encodings.mac_turkish` removed from `sys.modules`, the first call
   imports a new module object. 200 distinct unknown names add 200 `None`
-  entries, and a retry of one calls `__import__` no more. `search_function`
+  entries, and a retry of one calls `__import__` no more. 600 distinct
+  unknown names leave 100 entries on 3.13.13+, 3.14.4+ and 3.15, where the
+  cache holds 1 to 500 names over the first 500 calls and is emptied when
+  the 501st arrives, and 600 on earlier releases.
+  The boundary was read from installed interpreters: 3.13.12 and 3.14.3
+  lack `_MAXCACHE`, 3.13.13 and 3.14.4 have it, and no 3.11 or 3.12
+  release up to 3.11.17 and 3.12.15 does. `search_function`
   returns `None` for `UTF-8` and `L1` and a codec for `utf-8` and `l1`.
 * `codecs.lookup()` is observed, after its own cache is emptied by
   registering and unregistering a search function, to call
-  `normalize_encoding()` once for `Mac-Turkish` and not again for
-  `mac turkish`, returning the same object; 100 distinct unknown names such
-  as `No-Such-Codec 0` each raise `LookupError` and add one entry, such as
-  `no_such_codec_0`, to the package's cache. Looking one up twice more
+  `normalize_encoding()` once for `Mac Turkish` and not again for
+  `mac-turkish` (`mac_turkish` before 3.15), returning the same object; 100
+  distinct unknown names such as `No-Such-Codec 0` each raise `LookupError`
+  and add one entry, `no-such-codec-0` on 3.15 and `no_such_codec_0`
+  before, to the package's cache. Looking one up twice more
   reaches a search function registered after the package's both times, so
   the registry cached neither failure, and adds no entry. Emptying the registry's cache leaves the package's cache as
   it was.
@@ -119,10 +127,10 @@ Not settled here:
 * `i`, the cost of importing a codec module, is a definitional term: the
   tests show the import happens on the first call only, not what it costs.
   Charmap modules build their encoding table at import; that is inside `i`.
-* That nothing evicts entries from the package's cache is read from
-  Lib/encodings/__init__.py, where only `search_function()` writes `_cache`,
-  and from a search of Lib for other writers; the test shows only that
-  emptying the registry's cache leaves it alone.
+* That nothing other than `search_function()` evicts entries from the
+  package's cache is read from Lib/encodings/__init__.py, where only it
+  writes `_cache`, and from a search of Lib for other writers; the test
+  shows only that emptying the registry's cache leaves it alone.
 * The `punycode` exception is priced and tested on the codecs page. Other
   codecs than UTF-8, `utf-8-sig`, ASCII, Latin-1 and `idna`, and other error
   handlers, are not timed here; `test_codecs_complexity.py` times more of them.
@@ -165,6 +173,7 @@ import textwrap
 import time
 import tracemalloc
 import types
+import warnings
 from collections.abc import Callable
 from encodings import idna, punycode
 from encodings.aliases import aliases
@@ -174,6 +183,7 @@ import pytest
 
 from tests.patched_python import require_patched_normalization
 
+CACHE_IS_BOUNDED = sys.version_info >= (3, 14, 4) or (3, 13, 13) <= sys.version_info < (3, 14)
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "encodings.md"
 EXPECTED_BLOCKS = 5
 
@@ -244,6 +254,16 @@ def empty_the_registry_cache() -> None:
 class TestNormalizeEncodingIsOnePass:
     """`normalize_encoding(encoding)` | O(k) | O(k): runs of characters other
     than letters, digits and `.` become one `_`, none at either end, case kept."""
+
+    def test_a_non_ascii_name_warns_from_3_15_only(self) -> None:
+        def deprecations(name: str) -> int:
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                encodings.normalize_encoding(name)
+            return sum(issubclass(w.category, DeprecationWarning) for w in caught)
+
+        assert deprecations("latin-1") == 0
+        assert deprecations("lätin-1") == (1 if sys.version_info >= (3, 15) else 0)
 
     def test_runs_collapse_and_ends_are_trimmed(self) -> None:
         assert encodings.normalize_encoding("Latin -- 1") == "Latin_1"
@@ -358,6 +378,22 @@ class TestSearchFunctionCaches:
         assert encodings.search_function(names[0]) is None
         assert calls.imported == [] and calls.normalized == []
 
+    def test_the_cache_is_emptied_at_500_names_on_patched_releases(
+        self, empty_cache: dict[str, Any]
+    ) -> None:
+        names = [f"no_such_codec_{index}" for index in range(600)]
+        sizes = []
+        for name in names:
+            assert encodings.search_function(name) is None
+            sizes.append(len(empty_cache))
+
+        if CACHE_IS_BOUNDED:
+            assert sizes[:500] == list(range(1, 501)), "emptied before holding 500"
+            assert sizes[500:] == list(range(1, 101))
+            assert names[0] not in empty_cache and names[-1] in empty_cache
+        else:
+            assert sizes == list(range(1, 601))
+
     def test_it_expects_a_lowercased_name(self, empty_cache: dict[str, Any]) -> None:
         assert encodings.search_function("UTF-8") is None
         assert encodings.search_function("L1") is None
@@ -376,23 +412,26 @@ class TestTheRegistryAsksThePackageOnce:
     failure, so every distinct unknown name reaches the package's cache."""
 
     def test_a_known_name_reaches_the_package_once(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delitem(encodings._cache, "mac_turkish", raising=False)  # noqa: SLF001
+        for key in ("mac_turkish", "mac-turkish"):
+            monkeypatch.delitem(encodings._cache, key, raising=False)  # noqa: SLF001
         empty_the_registry_cache()
         calls = Calls(monkeypatch)
 
-        first = codecs.lookup("Mac-Turkish")
-        second = codecs.lookup("mac turkish")
+        separator = "-" if sys.version_info >= (3, 15) else "_"
+        first = codecs.lookup("Mac Turkish")
+        second = codecs.lookup(f"mac{separator}turkish")
 
         assert second is first
-        assert calls.normalized == ["mac_turkish"]
+        assert calls.normalized == [f"mac{separator}turkish"]
 
     def test_unknown_names_each_add_an_entry(self, empty_cache: dict[str, Any]) -> None:
         for index in range(100):
             with pytest.raises(LookupError, match="unknown encoding"):
                 codecs.lookup(f"No-Such-Codec {index}")
 
+        separator = "-" if sys.version_info >= (3, 15) else "_"
         assert len(empty_cache) == 100
-        assert "no_such_codec_0" in empty_cache
+        assert f"no{separator}such{separator}codec{separator}0" in empty_cache
 
         asked: list[str] = []
 
@@ -406,7 +445,9 @@ class TestTheRegistryAsksThePackageOnce:
                     codecs.lookup("no-such-codec 0")
         finally:
             codecs.unregister(recording)
-        assert asked == ["no_such_codec_0", "no_such_codec_0"], "the registry cached a failure"
+        assert asked == [f"no{separator}such{separator}codec{separator}0"] * 2, (
+            "the registry cached a failure"
+        )
         assert len(empty_cache) == 100
 
     def test_emptying_the_registry_cache_leaves_the_package_s(

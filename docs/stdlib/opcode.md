@@ -14,7 +14,7 @@ which is fixed for a given release, so building a `set` from a `has*` list is a 
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `opcode.opmap`, `opmap[name]` | O(1) | O(1) | Dict from instruction name to opcode number |
+| `opcode.opmap`, `opmap[name]` | O(1) | O(1) | Dict from instruction name to opcode number; a `frozendict` from 3.15 |
 | `opcode.opname`, `opname[op]` | O(1) | O(1) | List indexed by opcode number; an unused number reads `'<n>'` |
 | `opcode.cmp_op` | O(1) | O(1) | Tuple of the six comparison operator strings |
 | `opcode.HAVE_ARGUMENT` | O(1) | O(1) | Opcodes below it ignore their argument; use `hasarg` to test whether one uses it on 3.12+ |
@@ -158,6 +158,7 @@ assert counts['name'] == 1  # the global `len`
   `stack_effect()` treats a missing `oparg` as 0 and ignores one the opcode does not use; before
   3.13 omitting it for an opcode that uses one, or passing one to an opcode that does not, raises
   `ValueError`
+- **Python 3.15+**: `opmap` is a `frozendict`; before 3.15 it is a `dict`
 - **All Python 3**: Bytecode is a CPython implementation detail; opcode numbers, names and the
   contents of the `has*` lists change between releases
 

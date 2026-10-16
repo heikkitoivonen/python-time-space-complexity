@@ -1,11 +1,14 @@
 ---
-source_sha: 017611c2d2bcc901231a4ffb2170bb79a9c5ea0033777a6cac77c8344e2faf84
+source_sha: 65a8e42df7b8e94caa84a3882f8713b92843278026321b9aa5d0c0ff5c017968
 translated: machine
 ---
 
 # Joukko-operaatioiden vaativuus
 
 Tyyppi `set` on järjestämätön kokoelma uniikkeja alkioita. CPythonissa se on toteutettu hajautustauluna samaan tapaan kuin sanakirjat.
+
+`n` on joukon alkioiden määrä ja `m` toisen operandin alkioiden määrä. Alkioiden hajautus ja
+vertailu oletetaan O(1)-operaatioiksi.
 
 ## Vaativuustaulukko
 
@@ -19,17 +22,28 @@ Tyyppi `set` on järjestämätön kokoelma uniikkeja alkioita. CPythonissa se on
 | `clear()` | O(n) | O(1) | Vapauttaa kaiken |
 | `x in set` | O(1) keskim., O(n) pahin | O(1) | Hajautushaku; törmäykset aiheuttavat O(n) |
 | `copy()` | O(n) | O(n) | Pinnallinen kopio |
-| `union(other)` | O(n+m) | O(n+m) | n, m = joukkojen koot |
-| `intersection(other)` | O(min(n,m)) | O(min(n,m)) | Käy läpi pienemmän joukon |
-| `difference(other)` | O(n) | O(n) | n = joukon koko |
-| `symmetric_difference(other)` | O(n+m) | O(n+m) | Yhdistetyt joukko-operaatiot |
-| `issubset()` | O(n) | O(1) | Tarkistaa kaikki alkiot |
+| `union(other)`, `s \| other` | O(n+m) | O(n+m) | n, m = joukkojen koot |
+| `intersection(other)`, `s & other` | O(min(n,m)); O(m), jos `other` ei ole joukko | O(min(n,m)) | Käy läpi pienemmän joukon |
+| `difference(other)`, `s - other` | O(n); O(n+m), jos `other` ei ole joukko | O(n) | n = joukon koko |
+| `symmetric_difference(other)`, `s ^ other` | O(n+m) | O(n+m) | Yhdistetyt joukko-operaatiot |
+| `issubset()` | O(n); O(n+m), jos `other` ei ole joukko | O(1); O(m), jos `other` ei ole joukko | Tarkistaa kaikki alkiot |
 | `issuperset()` | O(m) | O(1) | m = toisen joukon koko |
-| `isdisjoint()` | O(min(n,m)) | O(1) | Päättyy heti löydöksen jälkeen |
-| `update(other)` | O(m) | O(1) | Yhdiste paikallaan; m = len(other) |
-| `difference_update(other)` | O(min(n,m)) | O(1) | Erotus paikallaan; käy läpi pienemmän puolen |
-| `intersection_update(other)` | O(n) | O(1) | Leikkaus paikallaan; rakentaa joukon uudelleen |
-| `symmetric_difference_update(other)` | O(m) | O(1) | Symmetrinen erotus paikallaan |
+| `isdisjoint()` | O(min(n,m)); O(m), jos `other` ei ole joukko | O(1) | Päättyy heti löydöksen jälkeen |
+| `update(other)`, `s \|= other` | O(m) | O(1) | Yhdiste paikallaan; m = len(other) |
+| `difference_update(other)`, `s -= other` | O(min(n,m)); O(m), jos `other` ei ole joukko | O(n) | Erotus paikallaan; käy läpi pienemmän puolen |
+| `intersection_update(other)`, `s &= other` | O(n); O(n+m), jos `other` ei ole joukko | O(min(n,m)) | Leikkaus paikallaan; rakentaa joukon uudelleen ja vapauttaa vanhan taulun, joten O(n) myös silloin, kun `other` on pieni |
+| `symmetric_difference_update(other)`, `s ^= other` | O(m) | O(1); O(m), jos `other` ei ole joukko | Symmetrinen erotus paikallaan |
+
+Operaattorimuodot hyväksyvät vain joukkoja ja frozenset-olioita; metodit hyväksyvät myös minkä
+tahansa iteroitavan. Pahimmassa tapauksessa, kun jokaisella alkiolla on sama tiiviste,
+O(1)-operaatiot vievät O(n), ja operaatiot, jotka hakevat yhden joukon jokaisen alkion toisesta,
+hidastuvat vastaavasti.
+
+Alkioiden poistaminen metodeilla `remove()`, `discard()` tai `pop()` ei pienennä taulua. Kun
+suurin osa alkioista on poistettu, taulun läpikäyvät operaatiot - iterointi, `copy()`, `|`, `-`,
+`^`, vertailut ja `set(s)` - vievät yhä aikaa suhteessa joukon aiempaan kokoon, kunnes myöhemmät
+lisäykset laukaisevat kokomuutoksen. `len()` ja jäsenyystestit eivät muutu, ja kun suurin
+osa alkioista poistetaan operaattoreilla `-=`, `&=` tai niitä vastaavilla metodeilla, taulu jää tiiviiksi.
 
 ## Toteutuksen yksityiskohdat
 
@@ -57,6 +71,25 @@ Joukot käyttävät samaa hajautustaulurakennetta kuin sanakirjat, mutta:
 {1, 2} ^ {2, 3}  # {1, 3} - O(len(s1) + len(s2))
 ```
 
+### Poistaminen ei pienennä taulua
+
+```python
+import sys
+
+s = set(range(100_000))
+full = sys.getsizeof(s)
+for i in range(10, 100_000):
+    s.discard(i)                   # O(1) each
+
+assert len(s) == 10                # O(1)
+assert sys.getsizeof(s) == full    # still sized for 100,000 elements
+items = list(s)                    # O(100,000): walks the old table
+
+s = s.copy()                       # O(100,000) once
+assert sys.getsizeof(s) < full     # sized for 10 elements
+assert sorted(s) == sorted(items)  # O(10)
+```
+
 ### Jäsenyyden testaus
 
 ```python
@@ -81,7 +114,6 @@ numbers_set = {1, 2, 3, 4, 5}
 ## Versiohuomiot
 
 - **Kaikki Python 3 -versiot**: Perusvaativuudet ennallaan
-- **Python 3.9+**: Uudet joukkojen yhdiste- ja leikkausoperaattorit
 
 ## Toteutusten vertailu
 
@@ -114,6 +146,8 @@ Taustalla Javan HashSet, samat O(1)-ominaisuudet.
 ### Duplikaattien poisto
 
 ```python
+items = [3, 1, 3, 2, 1]
+
 # Bad: preserves list, but O(n²)
 unique = []
 for item in items:
@@ -142,7 +176,7 @@ filtered = [x for x in large_list if x not in exclusions_set]
 
 ## Liittyvät tyypit
 
-- **[Frozenset](index.md)** - Muuttumaton joukko
+- **[Frozenset](frozenset.md)** - Muuttumaton joukko
 - **[Dict](dict.md)** - Muuttuva kuvaus
 - **[Deque](../stdlib/collections.md#deque)** - Järjestetty kokoelma
 

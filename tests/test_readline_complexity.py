@@ -29,9 +29,10 @@ Measurement scope:
 * History files: `read_history_file()` appends to the history already held
   and raises `FileNotFoundError` for a missing file. `set_history_length(3)`
   leaves six in-memory entries alone and leaves three in the file after either
-  writer. Before 3.14.8, the libedit bundled with the Linux interpreters drops
-  the header and `read_history_file()` raises `OSError`; from 3.14.8, CPython
-  preserves the header and the retained entries read back. GNU readline and
+  writer. Before 3.14.8, and on 3.15.0, the libedit bundled with the Linux
+  interpreters drops the header and `read_history_file()` raises `OSError`;
+  on 3.14.8 and later 3.14 releases CPython preserves the header and the
+  retained entries read back. GNU readline and
   macOS's libedit keep the file readable on both versions. Removing the oldest
   entries before writing also keeps it readable. `append_history_file(1)` writes
   the newest entry. Timed: `append_history_file(1)` costs less than 3x as much
@@ -89,7 +90,9 @@ Not settled here:
 * That history files from one library may not be readable by the other is
   the official documentation's statement; only libedit is available here.
 * `append_history_file()`, `clear_history()` and `set_pre_input_hook()` are
-  present only if the library provides them. The interpreters CI pins have
+  present only if the library provides them, and 3.15's
+  `get_pre_input_hook()` exactly where `set_pre_input_hook()` is; it returns
+  the hook by identity, and `None` once cleared. The interpreters CI pins have
   all three; some 3.12 patch builds from the same distributor lack them.
 * `readline` does not exist on Windows; the module is skipped there.
 """
@@ -427,10 +430,12 @@ def assert_truncated_to(path: str, expected: list[str]) -> None:
 
     GNU readline, and the older libedit macOS ships, keep it readable. The
     libedit the Linux interpreters bundle drops the header when it truncates;
-    CPython 3.14.8+ preserves it with its own truncator (gh-123018).
+    CPython 3.14.8+ preserves it with its own truncator (gh-123018), which
+    3.15.0 does not carry.
     """
     empty_history()
-    if LIBEDIT and sys.platform != "darwin" and sys.version_info < (3, 14, 8):
+    header_dropped = sys.version_info < (3, 14, 8) or sys.version_info[:3] == (3, 15, 0)
+    if LIBEDIT and sys.platform != "darwin" and header_dropped:
         with pytest.raises(OSError):
             readline.read_history_file(path)
         lines = pathlib.Path(path).read_text().splitlines()
@@ -779,6 +784,23 @@ class TestHooks:
             if hasattr(readline, "set_pre_input_hook"):
                 assert seen.count("pre-input") == 2
             assert "display" in seen
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="get_pre_input_hook() is 3.15+")
+    def test_get_pre_input_hook_returns_the_function_that_was_set(self) -> None:
+        """`get_pre_input_hook()` | O(1) | The stored object, or None."""
+        assert hasattr(readline, "get_pre_input_hook") == hasattr(readline, "set_pre_input_hook")
+        if not hasattr(readline, "set_pre_input_hook"):
+            return  # the library has no hook; the parity above is the claim
+
+        def hook() -> None:
+            pass
+
+        readline.set_pre_input_hook(hook)
+        try:
+            assert readline.get_pre_input_hook() is hook
+        finally:
+            readline.set_pre_input_hook(None)
+        assert readline.get_pre_input_hook() is None
 
 
 class TestConfiguration:

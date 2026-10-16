@@ -37,6 +37,7 @@ as O(1).
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `Function.get_parameters()`, `Function.get_locals()`, `Function.get_globals()`, `Function.get_nonlocals()`, `Function.get_frees()` | O(s) first time, O(1) after | O(s) | Each filters the names once by their flags, with no scan of child tables, and returns the same cached tuple afterwards |
+| `Function.get_cells()` | O(s) first time, O(1) after | O(s) | Python 3.15+. The names bound here that a nested scope uses, whether it reads them or assigns them through `nonlocal`; cached like the getters above |
 
 ### Class
 
@@ -52,6 +53,7 @@ as O(1).
 | `Symbol.is_referenced()`, `Symbol.is_assigned()`, `Symbol.is_imported()`, `Symbol.is_annotated()`, `Symbol.is_parameter()` | O(1) | O(1) | Flag tests on an integer recorded when the table was built |
 | `Symbol.is_global()`, `Symbol.is_declared_global()`, `Symbol.is_local()`, `Symbol.is_nonlocal()`, `Symbol.is_free()` | O(1) | O(1) | Scope tests on the same integer |
 | `Symbol.is_type_parameter()`, `Symbol.is_free_class()`, `Symbol.is_comp_iter()`, `Symbol.is_comp_cell()` | O(1) | O(1) | Python 3.14+ |
+| `Symbol.is_cell()` | O(1) | O(1) | Python 3.15+. A scope test like `is_free()` |
 | `Symbol.is_namespace()`, `Symbol.get_namespaces()` | O(1) | O(1) | The child tables bound to the name, found by the `lookup()` that made the symbol; the same list is returned every time |
 | `Symbol.get_namespace()` | O(1) | O(1) | `ValueError` unless exactly one table is bound to the name |
 
@@ -261,6 +263,9 @@ assert closures(symtable.symtable(code, '<string>', 'exec'), []) == [('add', ('n
   the function's own, and a body holding variable annotations adds one among its children. Added
   `is_type_parameter()`, `is_free_class()`, `is_comp_iter()` and `is_comp_cell()`; deprecated
   `Class.get_methods()`
+- **Python 3.15+**: Lambda and generator-expression tables are named `'<lambda>'` and
+  `'<genexpr>'`, where earlier versions return `'lambda'` and `'genexpr'` from `get_name()`.
+  Added `Function.get_cells()` and `Symbol.is_cell()`
 
 ## Related Modules
 

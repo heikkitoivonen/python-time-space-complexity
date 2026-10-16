@@ -30,7 +30,8 @@ Measurement scope:
   `readline()` once per line plus once at end of file, and never `read()` or
   `readlines()`. A file of 100,000 comment lines peaks under 20 KB; one of
   100,000 definitions peaks over 2 MB. A dictionary passed as `vars` is the one
-  returned, with the parsed names added to what it held.
+  returned, with the parsed names added to what it held. A `#define` of a
+  double-quoted string keeps its quotes through 3.14 and loses them from 3.15.
 * `get_path_names()` is the same tuple on two calls; `get_scheme_names()` is a
   sorted tuple containing `posix_prefix` and `nt`; `get_python_version()` is
   `MAJOR.MINOR` from `sys.version_info`; `get_default_scheme()` and
@@ -348,7 +349,9 @@ class TestParseConfigHReadsALineAtATime:
 
         values = sysconfig.parse_config_h(io.StringIO(header))
 
-        assert values == {"HAVE_FORK": 1, "PY_NAME": '"python"', "HAVE_NOTHING": 0}
+        # 3.15 strips the quotes from a string value; earlier versions keep them.
+        name = "python" if sys.version_info >= (3, 15) else '"python"'
+        assert values == {"HAVE_FORK": 1, "PY_NAME": name, "HAVE_NOTHING": 0}
 
     def test_a_vars_dict_is_filled_and_returned(self) -> None:
         existing = {"KEPT": 1}

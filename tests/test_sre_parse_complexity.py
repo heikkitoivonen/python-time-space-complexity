@@ -70,6 +70,8 @@ Not settled here:
   which counts the newlines before the position; it is not timed.
 * The module is undocumented; which names it exposes is taken from the
   released sources of 3.11 to 3.14, not from a documented contract.
+* The module is removed in Python 3.15, as What's New in 3.15 records, so
+  this file skips there; the page's removal row is not asserted.
 """
 
 from __future__ import annotations
@@ -90,6 +92,9 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
+
+if sys.version_info >= (3, 15):
+    pytest.skip("version: sre_parse was removed in Python 3.15", allow_module_level=True)
 
 with warnings.catch_warnings():
     warnings.simplefilter("ignore", DeprecationWarning)

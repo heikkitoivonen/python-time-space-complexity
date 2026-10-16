@@ -25,7 +25,7 @@ changed since the load pays it again, into a new dictionary; from 3.14, so does 
 | `sysconfig.get_config_vars()` | O(1) | O(1) | Returns the module's cache itself, not a copy |
 | `sysconfig.get_config_vars(*names)` | O(a) | O(a) | A list of values, `None` for an unknown name |
 | `sysconfig.get_config_var(name)` | O(1) | O(1) | One dict lookup; `None` for an unknown name |
-| `sysconfig.parse_config_h(fp, vars=None)` | O(L) | O(D) | Reads one line at a time and keeps only the definitions; fills and returns `vars` when given |
+| `sysconfig.parse_config_h(fp, vars=None)` | O(L) | O(D) | Reads one line at a time and keeps only the definitions; fills and returns `vars` when given. From Python 3.15 a double-quoted string value is stored without its quotes |
 | `sysconfig.get_makefile_filename()` | O(V) | O(V) | Resolved through `get_path()` in an installed Python |
 | `sysconfig.get_config_h_filename()` | O(V) | O(V) | Resolved through `get_path()` in an installed Python |
 
@@ -80,6 +80,7 @@ not the size of the file.
 
 ```python
 import io
+import sys
 import sysconfig
 
 header = io.StringIO(
@@ -90,7 +91,8 @@ header = io.StringIO(
 )
 
 values = sysconfig.parse_config_h(header)  # O(L) time, O(D) space
-assert values == {'HAVE_FORK': 1, 'PY_NAME': '"python"', 'HAVE_NOTHING': 0}
+name = 'python' if sys.version_info >= (3, 15) else '"python"'  # quotes kept through 3.14
+assert values == {'HAVE_FORK': 1, 'PY_NAME': name, 'HAVE_NOTHING': 0}
 ```
 
 ## Install Paths
@@ -201,6 +203,7 @@ assert all(target.startswith(paths['platlib']) for target in targets.values())
 
 - **Python 3.11+**: `get_default_scheme()` and `get_preferred_scheme('prefix')` return `'venv'` inside a virtual environment
 - **Python 3.11+**: `get_config_var('SO')` returns `None`; use `'EXT_SUFFIX'`
+- **Python 3.15+**: `parse_config_h()` strips the double quotes from a string value
 
 ## Related Modules
 

@@ -41,8 +41,15 @@ Measurement scope:
   `'rb'`, and to reject any other mode; `close()` is asserted to close a file
   it opened by name and to leave a file object open.
 * Version notes: a `WAVE_FORMAT_EXTENSIBLE` PCM header reads on 3.12+ and
-  raises `wave.Error` before; `getmarkers()` and `getmark()` warn on 3.13+
-  and not before. A float (format 3) file and a non-RIFF file raise
+  raises `wave.Error` before; `getmarkers()` and `getmark()` warn on 3.13
+  and 3.14, not before, and are gone from 3.15. A float (format 3) file
+  raises `wave.Error` through 3.14; from 3.15 four 4-byte float frames
+  written with `setformat(WAVE_FORMAT_IEEE_FLOAT)` read back equal, with
+  `getformat()` reporting the format and a `fact` chunk before `data`
+  holding the frame count `close()` patched in. A float format with a
+  2-byte sample, and `setformat()` after frames were written, raise.
+  `setparams()` takes a seventh item for the format and resets it to PCM
+  with six. A format-2 (ADPCM) file and a non-RIFF file raise
   `wave.Error` on every version.
 * Every fenced Python block runs in its own subprocess and working directory,
   and a mutated assertion in one of them is asserted to fail.
@@ -55,10 +62,12 @@ Not settled here:
   big-endian host, and no run this project performs is on one.
 * The per-chunk cost of skipping on a seekable stream is one `seek()`; what
   that `seek()` costs is the file object's business and is not measured.
-* `Wave_read.getfp()`, `Wave_read.initfp()`, `Wave_write.initfp()` and
-  `Wave_write`'s `getmark()`, `getmarkers()` and `setmark()` exist at runtime
-  but are not in the official documentation, so the page leaves them out.
-* Sample widths other than 1 and 2 bytes, channel counts above 2,
+* `Wave_read.getfp()`, `Wave_read.initfp()`, `Wave_write.initfp()` and,
+  through 3.14, `Wave_write`'s `getmark()`, `getmarkers()` and `setmark()`
+  exist at runtime but are not in the official documentation, so the page
+  leaves them out.
+* Sample widths other than 1 and 2 bytes (beyond the one 4-byte float round
+  trip on 3.15), channel counts above 2,
   odd-sized (padded) chunks, files with chunks after `data`, and negative
   `readframes()` counts are not varied.
 """
@@ -609,7 +618,8 @@ class TestOpenAndClose:
 
 
 class TestFormats:
-    """Only PCM is supported; `WAVE_FORMAT_EXTENSIBLE` PCM reads from 3.12."""
+    """Only PCM is supported through 3.14, IEEE float too from 3.15;
+    `WAVE_FORMAT_EXTENSIBLE` PCM reads from 3.12."""
 
     EXTENSIBLE_PCM = fmt_file(
         0xFFFE,
@@ -617,9 +627,15 @@ class TestFormats:
         + b"\x01\x00\x00\x00\x00\x00\x10\x00\x80\x00\x00\xaa\x008\x9bq",
     )
 
-    def test_a_float_file_raises(self) -> None:
+    def test_a_float_file_raises_through_3_14(self) -> None:
+        if sys.version_info >= (3, 15):
+            pytest.skip("version: IEEE float files read from 3.15")
         with pytest.raises(wave.Error, match="unknown format"):
             wave.open(io.BytesIO(fmt_file(3)), "rb")
+
+    def test_another_format_raises_on_every_version(self) -> None:
+        with pytest.raises(wave.Error, match="unknown format"):
+            wave.open(io.BytesIO(fmt_file(2)), "rb")
 
     def test_a_non_riff_file_raises(self) -> None:
         with pytest.raises(wave.Error, match="RIFF"):
@@ -640,9 +656,58 @@ class TestFormats:
             wave.open(io.BytesIO(self.EXTENSIBLE_PCM), "rb")
 
 
+@pytest.mark.skipif(sys.version_info < (3, 15), reason="the format methods are 3.15+")
+class TestFloatFormat:
+    """`getformat()`, `setformat(format)` | O(1); IEEE float read and written."""
+
+    def test_a_float_file_round_trips_with_a_fact_chunk(self) -> None:
+        float_format = wave.WAVE_FORMAT_IEEE_FLOAT  # type: ignore[attr-defined]
+        frames = struct.pack("<4f", 0.0, 0.5, -0.5, 1.0)
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as out:
+            assert out.getformat() == wave.WAVE_FORMAT_PCM  # type: ignore[attr-defined]
+            out.setformat(float_format)  # type: ignore[attr-defined]
+            out.setnchannels(1)
+            out.setsampwidth(4)
+            out.setframerate(8000)
+            out.writeframes(frames)
+            with pytest.raises(wave.Error):
+                out.setformat(wave.WAVE_FORMAT_PCM)  # type: ignore[attr-defined]
+
+        raw = buffer.getvalue()
+        assert b"fact" in raw[: raw.index(b"data")]
+        fact_frames = struct.unpack_from("<L", raw, raw.index(b"fact") + 8)[0]
+        assert fact_frames == 4, "close() leaves the fact chunk holding the frames written"
+        buffer.seek(0)
+        with wave.open(buffer, "rb") as wav:
+            assert wav.getformat() == float_format  # type: ignore[attr-defined]
+            assert wav.readframes(4) == frames
+
+    def test_float_needs_a_four_or_eight_byte_sample(self) -> None:
+        with wave.open(io.BytesIO(), "wb") as out:
+            out.setparams((1, 2, 8000, 0, "NONE", "not compressed"))
+            with pytest.raises(wave.Error, match="IEEE float"):
+                out.setformat(wave.WAVE_FORMAT_IEEE_FLOAT)  # type: ignore[attr-defined]
+
+    def test_setparams_takes_a_seventh_item_for_the_format(self) -> None:
+        float_format = wave.WAVE_FORMAT_IEEE_FLOAT  # type: ignore[attr-defined]
+        with wave.open(io.BytesIO(), "wb") as out:
+            out.setparams((1, 4, 8000, 0, "NONE", "not compressed", float_format))  # type: ignore[arg-type]
+            assert out.getformat() == float_format  # type: ignore[attr-defined]
+            out.setparams((1, 2, 8000, 0, "NONE", "not compressed"))
+            assert out.getformat() == wave.WAVE_FORMAT_PCM  # type: ignore[attr-defined]
+
+    def test_the_marker_methods_are_removed(self) -> None:
+        for name in ("getmarkers", "getmark"):
+            assert not hasattr(wave.Wave_read, name)
+            assert not hasattr(wave.Wave_write, name)
+        assert not hasattr(wave.Wave_write, "setmark")
+
+
+@pytest.mark.skipif(sys.version_info >= (3, 15), reason="the marker methods are removed in 3.15")
 class TestMarkerStubs:
     """`getmarkers()`, `getmark(id)` | O(1) | return `None` and raise;
-    deprecated from 3.13."""
+    deprecated from 3.13, removed in 3.15."""
 
     def wav(self) -> wave.Wave_read:
         return wave.open(io.BytesIO(wav_bytes(1)), "rb")

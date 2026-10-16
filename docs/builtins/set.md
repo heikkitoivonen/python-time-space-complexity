@@ -2,6 +2,9 @@
 
 The `set` type is an unordered collection of unique items. It's implemented as a hash table similar to dictionaries in CPython.
 
+`n` is the number of elements in the set and `m` is the number of elements in the other operand.
+Element hashing and comparison are treated as O(1).
+
 ## Complexity Reference
 
 | Operation | Time | Space | Notes |
@@ -14,17 +17,27 @@ The `set` type is an unordered collection of unique items. It's implemented as a
 | `clear()` | O(n) | O(1) | Deallocate all |
 | `x in set` | O(1) avg, O(n) worst | O(1) | Hash lookup; collisions cause O(n) |
 | `copy()` | O(n) | O(n) | Shallow copy |
-| `union(other)` | O(n+m) | O(n+m) | n, m = set lengths |
-| `intersection(other)` | O(min(n,m)) | O(min(n,m)) | Iterate smaller set |
-| `difference(other)` | O(n) | O(n) | n = set length |
-| `symmetric_difference(other)` | O(n+m) | O(n+m) | Combined set ops |
-| `issubset()` | O(n) | O(1) | Check all elements |
+| `union(other)`, `s \| other` | O(n+m) | O(n+m) | n, m = set lengths |
+| `intersection(other)`, `s & other` | O(min(n,m)); O(m) if `other` is not a set | O(min(n,m)) | Iterate smaller set |
+| `difference(other)`, `s - other` | O(n); O(n+m) if `other` is not a set | O(n) | n = set length |
+| `symmetric_difference(other)`, `s ^ other` | O(n+m) | O(n+m) | Combined set ops |
+| `issubset()` | O(n); O(n+m) if `other` is not a set | O(1); O(m) if `other` is not a set | Check all elements |
 | `issuperset()` | O(m) | O(1) | m = other length |
-| `isdisjoint()` | O(min(n,m)) | O(1) | Early termination |
-| `update(other)` | O(m) | O(1) | In-place union; m = len(other) |
-| `difference_update(other)` | O(min(n,m)) | O(1) | In-place difference; scans whichever side is smaller |
-| `intersection_update(other)` | O(n) | O(1) | In-place intersection; rebuilds set |
-| `symmetric_difference_update(other)` | O(m) | O(1) | In-place symmetric difference |
+| `isdisjoint()` | O(min(n,m)); O(m) if `other` is not a set | O(1) | Early termination |
+| `update(other)`, `s \|= other` | O(m) | O(1) | In-place union; m = len(other) |
+| `difference_update(other)`, `s -= other` | O(min(n,m)); O(m) if `other` is not a set | O(n) | In-place difference; scans whichever side is smaller |
+| `intersection_update(other)`, `s &= other` | O(n); O(n+m) if `other` is not a set | O(min(n,m)) | In-place intersection; rebuilds the set and frees the old table, so O(n) even when `other` is small |
+| `symmetric_difference_update(other)`, `s ^= other` | O(m) | O(1); O(m) if `other` is not a set | In-place symmetric difference |
+
+The operator forms accept only sets and frozensets; the methods also take any iterable. In the worst
+case, when every element hashes to the same value, the O(1) operations take O(n), and operations
+that look up every element of one set in another degrade accordingly.
+
+Removing elements with `remove()`, `discard()` or `pop()` does not shrink the table. After most
+elements are removed, operations that walk it - iteration, `copy()`, `|`, `-`, `^`, comparisons
+and `set(s)` - still take time proportional to the set's former size, until later insertions
+trigger a resize. `len()` and membership tests are unaffected, and removing most elements with
+`-=`, `&=` or their methods leaves a compact table.
 
 ## Implementation Details
 
@@ -52,6 +65,25 @@ Sets use the same hash table design as dictionaries, but:
 {1, 2} ^ {2, 3}  # {1, 3} - O(len(s1) + len(s2))
 ```
 
+### Removing Does Not Shrink the Table
+
+```python
+import sys
+
+s = set(range(100_000))
+full = sys.getsizeof(s)
+for i in range(10, 100_000):
+    s.discard(i)                   # O(1) each
+
+assert len(s) == 10                # O(1)
+assert sys.getsizeof(s) == full    # still sized for 100,000 elements
+items = list(s)                    # O(100,000): walks the old table
+
+s = s.copy()                       # O(100,000) once
+assert sys.getsizeof(s) < full     # sized for 10 elements
+assert sorted(s) == sorted(items)  # O(10)
+```
+
 ### Membership Testing
 
 ```python
@@ -76,7 +108,6 @@ numbers_set = {1, 2, 3, 4, 5}
 ## Version Notes
 
 - **All Python 3 versions**: Core complexity unchanged
-- **Python 3.9+**: New set union/intersection operators
 
 ## Implementation Comparison
 
@@ -109,6 +140,8 @@ Underlying Java HashSet, same O(1) characteristics.
 ### Remove Duplicates
 
 ```python
+items = [3, 1, 3, 2, 1]
+
 # Bad: preserves list, but O(n²)
 unique = []
 for item in items:
@@ -137,7 +170,7 @@ filtered = [x for x in large_list if x not in exclusions_set]
 
 ## Related Types
 
-- **[Frozenset](index.md)** - Immutable set
+- **[Frozenset](frozenset.md)** - Immutable set
 - **[Dict](dict.md)** - Mutable mapping
 - **[Deque](../stdlib/collections.md#deque)** - Ordered collection
 

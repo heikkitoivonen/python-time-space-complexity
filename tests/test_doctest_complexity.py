@@ -50,6 +50,15 @@ Measurement scope:
   `skipped`/`skips` count them, and a `DocTestSuite` case with every example
   skipped is reported skipped; before 3.13 `attempted` excludes them. Both
   sides are guarded on `sys.version_info`.
+* A `DocTestSuite` case of two failing examples, one passing and one
+  skipped is one failure before 3.15, its report naming both failed
+  examples, and from 3.15 two `_SubTest` failures and one skip; an
+  all-skipped case reports the example's skip and then the case's from
+  3.15. Under `REPORT_ONLY_FIRST_FAILURE` the same case is one failure and
+  no skip on every version, its report naming one example before 3.15.
+  From 3.15 `report_skip()` is called once per skipped example, not at all
+  after a failure under `REPORT_ONLY_FIRST_FAILURE`, and writes nothing
+  even for a verbose runner.
 * Every fenced Python block runs in its own subprocess and working directory,
   and a mutated assertion in one of them is asserted to fail.
 
@@ -92,6 +101,7 @@ import time
 import tracemalloc
 import types
 import unittest
+import warnings
 from collections.abc import Callable, Iterator
 from typing import Any
 
@@ -729,7 +739,92 @@ class TestSkippedExamples:
 
         doctest.DocTestSuite(module).run(result)
 
-        assert len(result.skipped) == 1 and result.wasSuccessful()
+        assert result.wasSuccessful()
+        reasons = [reason for _, reason in result.skipped]
+        if sys.version_info >= (3, 15):
+            assert reasons == ["", "all examples were skipped"]  # the example, then the case
+        else:
+            assert reasons == ["all examples were skipped"]
+
+
+class TestSuiteCasesReportEachExample:
+    """Running one case of a `DocTestSuite`: from 3.15 every example is a
+    subtest, so each failing or skipped example is its own entry; before,
+    the case is one failure carrying the whole report."""
+
+    SOURCE = (
+        'def f():\n    """\n    >>> 1\n    2\n    >>> 1\n    1\n    >>> 3\n    4\n'
+        '    >>> 1  # doctest: +SKIP\n    5\n    """\n'
+    )
+
+    def test_two_failing_examples_and_a_skipped_one(self) -> None:
+        module = types.ModuleType("two_failures")
+        exec(self.SOURCE, module.__dict__)
+        module.__file__ = "two_failures.py"
+        result = unittest.TestResult()
+
+        with warnings.catch_warnings():
+            # 3.15 formats each failure through linecache, which warns that the
+            # bare test module has no __spec__.loader.
+            warnings.simplefilter("ignore", DeprecationWarning)
+            doctest.DocTestSuite(module).run(result)
+
+        assert result.testsRun == 1
+        if sys.version_info >= (3, 15):
+            assert len(result.failures) == 2 and len(result.skipped) == 1
+            assert all(type(case).__name__ == "_SubTest" for case, _ in result.failures)
+        else:
+            assert len(result.failures) == 1 and result.skipped == []
+            assert result.failures[0][1].count("Failed example:") == 2
+
+    def test_report_only_first_failure_reports_one_entry(self) -> None:
+        module = types.ModuleType("first_failure")
+        exec(self.SOURCE, module.__dict__)
+        module.__file__ = "first_failure.py"
+        result = unittest.TestResult()
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            suite = doctest.DocTestSuite(module, optionflags=doctest.REPORT_ONLY_FIRST_FAILURE)
+            suite.run(result)
+
+        assert len(result.failures) == 1 and result.skipped == []
+        if sys.version_info < (3, 15):
+            assert result.failures[0][1].count("Failed example:") == 1
+
+
+@pytest.mark.skipif(sys.version_info < (3, 15), reason="report_skip() is 3.15+")
+class TestReportSkip:
+    """`DocTestRunner.report_skip()` | O(1): called once per skipped example
+    unless `REPORT_ONLY_FIRST_FAILURE` has silenced reporting; writes nothing."""
+
+    TEXT = ">>> 1\n2\n>>> 1  # doctest: +SKIP\n3\n>>> 1  # doctest: +SKIP\n4\n"
+
+    def _skips(self, optionflags: int) -> list[str]:
+        calls: list[str] = []
+
+        class Recording(doctest.DocTestRunner):
+            def report_skip(self, out: Any, test: Any, example: Any) -> None:
+                calls.append(example.source)
+
+        test = doctest.DocTestParser().get_doctest(self.TEXT, {}, "t", None, 0)
+        Recording(verbose=False, optionflags=optionflags).run(test, out=discard)
+        return calls
+
+    def test_each_skipped_example_is_reported_once(self) -> None:
+        assert self._skips(0) == ["1  # doctest: +SKIP\n"] * 2
+
+    def test_the_default_writes_nothing_even_when_verbose(self) -> None:
+        test = doctest.DocTestParser().get_doctest(self.TEXT, {}, "t", None, 0)
+        written: list[str] = []
+
+        runner: Any = doctest.DocTestRunner(verbose=True)
+        runner.report_skip(written.append, test, test.examples[1])
+
+        assert written == []
+
+    def test_report_only_first_failure_silences_it_after_a_failure(self) -> None:
+        assert self._skips(doctest.REPORT_ONLY_FIRST_FAILURE) == []
 
 
 class TestUnittestIntegration:

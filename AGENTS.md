@@ -242,7 +242,7 @@ checked only on the versions that still have it.
 
 Only single-underscore modules such as `_thread` and `python -m` entry points
 (`json.__main__`) are outside the audit. `__future__`, `pydoc_data`, the
-`sre_*` shims, every `encodings` codec, `idlelib`, `turtledemo` and
+`sre_*` shims (until 3.15 removed them), every `encodings` codec, `idlelib`, `turtledemo` and
 `antigravity` are all in it. `antigravity` and `idlelib.idle` run a program on
 import, so the audit reads their names from source instead of importing them. The generic codec classes
 each `encodings` module repeats are not in the official API inventory, so they

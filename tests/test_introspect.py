@@ -20,6 +20,11 @@ from scripts.introspect import (
     should_include_member,
 )
 
+# The sre_* shims were removed in 3.15, so they are only in the stdlib before it.
+FORMERLY_SKIPPED = ["pydoc_data", "antigravity"] + (
+    ["sre_compile", "sre_constants", "sre_parse"] if sys.version_info < (3, 15) else []
+)
+
 
 class TestIsPublic:
     """Tests for is_public function."""
@@ -221,7 +226,7 @@ class TestGetStdlibModules:
 
     def test_only_single_underscore_modules_are_excluded(self) -> None:
         modules = get_stdlib_modules()
-        for mod in ["pydoc_data", "sre_compile", "sre_constants", "sre_parse", "antigravity"]:
+        for mod in FORMERLY_SKIPPED:
             assert mod in modules
         assert "__future__" in modules
         assert "_thread" not in modules
@@ -270,7 +275,7 @@ class TestBuildItemList:
     def test_includes_formerly_skipped_modules(self) -> None:
         items = build_item_list()
         names = [name for name, _ in items]
-        for mod in ["pydoc_data", "sre_compile", "sre_constants", "sre_parse", "antigravity"]:
+        for mod in FORMERLY_SKIPPED:
             assert mod in names, f"Module {mod} should be included"
 
     def test_antigravity_opens_no_browser(self, monkeypatch: pytest.MonkeyPatch) -> None:

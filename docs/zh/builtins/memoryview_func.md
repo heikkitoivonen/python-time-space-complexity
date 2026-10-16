@@ -1,5 +1,5 @@
 ---
-source_sha: fca17154f0b81909dbd752d49eace2541294a41ebc4b8567097c9ffc01052f91
+source_sha: 17dca96f77aa4827b96bfec2eeb12c24b2f1699ee2dcf6f6e3065eac5735ef2c
 translated: machine
 ---
 
@@ -38,8 +38,8 @@ translated: machine
 | `cast(format, shape)` | O(1) | O(1) | 重新解释同一块内存。仅限 C 连续视图，一侧必须是字节格式，总字节数不变，且源和新 `shape` 至少有一个是一维 |
 | `toreadonly()` | O(1) | O(1) | 同一缓冲区上新的只读视图 |
 | `release()` | O(1) | O(1) | 之后通过视图读写会抛出 `ValueError`；释放前 `bytearray` 导出者不能改变大小 |
-| `count(value)` | O(n) | O(1) | 3.14+。比较每个元素；仅限一维视图 |
-| `index(value, start, stop)` | O(n) | O(1) | 3.14+。在第一个匹配处停止；不存在时抛出 `ValueError`。仅限一维视图 |
+| `count(value)` | O(n) | O(1) | 3.14+。比较每个元素；仅限一维视图。每个元素都先解包成 Python 对象再比较，因此远慢于在同一块内存上调用 `bytes.count()` |
+| `index(value, start, stop)` | O(n) | O(1) | 3.14+。在第一个匹配处停止；不存在时抛出 `ValueError`。仅限一维视图。给出 `start` 和 `stop` 时，n 是两者之间的元素数，原地读取。与 `count()` 一样逐个解包元素 |
 
 ## 属性
 

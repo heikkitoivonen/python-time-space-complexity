@@ -62,7 +62,7 @@ is matching an exception against the few types given to `suppress()` and each `o
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `contextlib.ContextDecorator`, `contextlib.AsyncContextDecorator` | O(1) per call | O(1) | A subclass instance used as a decorator wraps each call in `with` on that same instance. `AsyncContextDecorator` is Python 3.10+ |
+| `contextlib.ContextDecorator`, `contextlib.AsyncContextDecorator` | O(1) per call | O(1) | A subclass instance used as a decorator wraps each call in `with` on that same instance; from Python 3.15 a decorated generator, coroutine or async generator function is wrapped across its iteration or await instead. `AsyncContextDecorator` is Python 3.10+ |
 | `contextlib.AbstractContextManager`, `contextlib.AbstractAsyncContextManager` | O(1) | O(1) | `__enter__` and `__aenter__` return `self`; an `isinstance()` check looks for the methods through the class's MRO the first time and is cached per class after that |
 
 ## Generator-Based Context Managers
@@ -446,6 +446,9 @@ assert counter == {"n": 2}
   `async with`
 - **Python 3.11+**: Added `chdir()`
 - **Python 3.12+**: `suppress()` handles exception groups
+- **Python 3.15+**: `ContextDecorator` and `AsyncContextDecorator`, and so `@contextmanager` and
+  `@asynccontextmanager` objects used as decorators, keep the context open while a decorated
+  generator is iterated or a coroutine awaited, rather than closing it when the call returns
 
 ## Related Modules
 

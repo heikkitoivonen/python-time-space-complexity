@@ -47,7 +47,7 @@ Measurement scope:
   `zipfile`, and each `files()` call on the reader runs
   `zipfile.ZipFile._RealGetContents` once.
 * `load_module()` warns with `DeprecationWarning` and returns the executed
-  module; `create_module()` returns `None`; `exec_module()` runs the body.
+  module before 3.15, and is absent from 3.15; `create_module()` returns `None`; `exec_module()` runs the body.
   `ZipImportError` subclasses `ImportError` and is raised for a file that is
   not an archive and a module the archive lacks; `archive` and `prefix` are
   asserted on a subpath.
@@ -55,7 +55,8 @@ Measurement scope:
   with no entry of its own is found as a namespace package on 3.14+ and not
   before; a module in a 70,001-entry archive, which `zipfile` writes with a
   ZIP64 end-of-directory record, is found on 3.13+ and not before; and
-  `find_loader()` and `find_module()` exist before 3.12 and not from it.
+  `find_loader()` and `find_module()` exist before 3.12 and not from it, and
+  `load_module()` before 3.15 and not from it.
 * Every fenced Python block runs in its own subprocess and working directory,
   and a mutated assertion in one of them is asserted to fail.
 
@@ -575,6 +576,7 @@ class TestLoaderProtocol:
         assert module.X == 7
         assert (calls.member, calls.compiled) == (1, 1)
 
+    @pytest.mark.skipif(sys.version_info >= (3, 15), reason="load_module() is removed in 3.15")
     def test_load_module_warns_and_loads(self, tmp_path: pathlib.Path, calls: Calls) -> None:
         importer = zipimport.zipimporter(
             build(tmp_path / "a.zip", {"zipimport_load_probe.py": "X = 3\n"})
@@ -620,6 +622,9 @@ class TestVersionBoundaries:
 
         assert hasattr(zipimport.zipimporter, "find_loader") is present
         assert hasattr(zipimport.zipimporter, "find_module") is present
+
+    def test_load_module_is_gone_from_315(self) -> None:
+        assert hasattr(zipimport.zipimporter, "load_module") is (sys.version_info < (3, 15))
 
     def test_a_directory_without_an_entry_is_a_namespace_package_from_314(
         self, tmp_path: pathlib.Path, calls: Calls

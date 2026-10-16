@@ -1,5 +1,5 @@
 ---
-source_sha: 98decccd3e9a6fd96ee9439cb758a0c2ae6ad39a0acb29d291e6ae8d31020d6c
+source_sha: 25d20c67983aa9804a0793e87e0afd576db8524bd855c9ea48e968b52107cf06
 translated: machine
 ---
 
@@ -13,16 +13,18 @@ Tyyppi `str` on muuttumaton Unicode-merkkien jono. Pythonin merkkijonoja on opti
 |-----------|------|-------|-------|
 | `len()` | O(1) | O(1) | Suora haku |
 | `access[i]` | O(1) | O(1) | Suora indeksointi |
-| `in` (substring) | O(n + m) avg | O(1) | Käyttää CPythonissa Two-Way-/fastsearch-algoritmia |
+| `in` (substring) | O(n) | O(1), O(m) levennettäessä | Käyttää CPythonissa Two-Way-/fastsearch-algoritmia, joka on lineaarinen pahimmassakin tapauksessa; merkkijonoa pidempi osajono palauttaa heti. Merkkijonoa kapeammin tallennettu monimerkkinen osajono, kuten ASCII-osajono CJK-merkkejä sisältävässä tekstissä, kopioidaan ensin merkkijonon leveyteen, niin tässä kuin metodeissa `find()`, `rfind()`, `index()`, `rindex()` ja `count()` |
 | `s + s` (concatenation) | O(n+m) | O(n+m) | Luo uuden merkkijonon |
 | `s * n` (repetition) | O(n\*len(s)) | O(n\*len(s)) | Luo uuden merkkijonon |
 | `slice [::2]` | O(k) | O(k) | k = viipaleen pituus |
+| `s[:]`, `str(s)`, `copy.copy(s)` | O(1) | O(1) | Palauttavat `s`:n itsensä, kun se on täsmälleen `str`, koska merkkijono on muuttumaton |
+| `for c in s` | O(n) | O(1) | Yksi yksimerkkinen merkkijono kullakin askeleella |
 | **Haku** ||||
-| `find(sub)` | O(n + m) avg | O(1) | Käyttää CPythonissa Two-Way-/fastsearch-algoritmia |
-| `rfind(sub)` | O(n*m) worst | O(1) | Käyttää taaksepäin toimivaa Boyer-Moore-Horspoolia |
-| `index(sub)` | O(n + m) | O(1) | Kuten find(), mutta nostaa ValueErrorin jos ei löydy |
-| `rindex(sub)` | O(n*m) worst | O(1) | Kuten rfind(), mutta nostaa ValueErrorin jos ei löydy |
-| `count(sub)` | O(n + m) avg | O(1) | n = merkkijono, m = osajono |
+| `find(sub, start, end)` | O(n) | O(1), O(m) levennettäessä | Käyttää CPythonissa Two-Way-/fastsearch-algoritmia. n = haetut merkit: `start`- ja `end`-argumenteilla vain se alue, joka luetaan paikallaan |
+| `rfind(sub)` | O(n*m) worst | O(1), O(m) levennettäessä | Käyttää taaksepäin toimivaa Boyer-Moore-Horspoolia |
+| `index(sub)` | O(n) | O(1), O(m) levennettäessä | Kuten find(), mutta nostaa ValueErrorin jos ei löydy |
+| `rindex(sub)` | O(n*m) worst | O(1), O(m) levennettäessä | Kuten rfind(), mutta nostaa ValueErrorin jos ei löydy |
+| `count(sub)` | O(n) | O(1), O(m) levennettäessä | n = merkkijono, m = osajono |
 | `startswith(prefix)` | O(m) | O(1) | m = etuliitteen pituus |
 | `endswith(suffix)` | O(m) | O(1) | m = jälkiliitteen pituus |
 | **Korvaus ja muunnos** ||||
@@ -34,10 +36,10 @@ Tyyppi `str` on muuttumaton Unicode-merkkien jono. Pythonin merkkijonoja on opti
 | `removesuffix(suffix)` | O(n) | O(n) | Palauttaa viipaleen, jos jälkiliite täsmää |
 | **Jako ja yhdistäminen** ||||
 | `split(sep)` | O(n) | O(n) | Yksi läpikäynti |
-| `rsplit(sep)` | O(n) | O(n) | Jakaa oikealta |
+| `rsplit(sep)` | O(n*m) worst | O(n) | Jakaa oikealta ja hakee taaksepäin kuten `rfind()`; O(n) ilman `sep`-argumenttia tai yksimerkkisellä erottimella |
 | `splitlines()` | O(n) | O(n) | Jakaa rivinvaihtojen kohdalta |
 | `partition(sep)` | O(n) | O(n) | Jakaa 3-monikoksi ensimmäisen erottimen kohdalta |
-| `rpartition(sep)` | O(n) | O(n) | Jakaa 3-monikoksi viimeisen erottimen kohdalta |
+| `rpartition(sep)` | O(n*m) worst | O(n) | Jakaa 3-monikoksi viimeisen erottimen kohdalta ja hakee taaksepäin kuten `rfind()` |
 | `join(iterable)` | O(n) | O(n) | n = tulosteen merkkien kokonaismäärä |
 | **Kirjainkoon muunnos** ||||
 | `upper()` | O(n) | O(n) | Käsittelee jokaisen merkin |
@@ -72,7 +74,7 @@ Tyyppi `str` on muuttumaton Unicode-merkkien jono. Pythonin merkkijonoja on opti
 | `format(*args)` | O(n) | O(n) | n = mallin pituus |
 | `format_map(mapping)` | O(n) | O(n) | Kuten format(), mutta kuvauksella |
 | **Koodaus** ||||
-| `encode(encoding)` | O(n) | O(n) | Muuntaa tavuiksi |
+| `encode(encoding)` | O(n) | O(n) | Muuntaa tavuiksi; olettaa koodekin, joka tekee vakiomäärän työtä merkkiä kohden |
 
 ## Toteutuksen yksityiskohdat
 
@@ -84,9 +86,9 @@ s1 = "hello"
 s2 = "hello"
 print(s1 is s2)  # Likely True - same object
 
-# Large strings are not interned
-s3 = "x" * 1000
-s4 = "x" * 1000
+# Strings built at run time are not interned
+s3 = "".join(["x"] * 1000)
+s4 = "".join(["x"] * 1000)
 print(s3 is s4)  # False - different objects
 ```
 
@@ -120,9 +122,9 @@ result = "".join(str(i) for i in range(10000))
 ### Osajonon haku
 
 ```python
-# Linear time on average for substring search
+# Linear time for substring search, even in the worst case
 s = "a" * 1000000 + "b"
-result = s.find("b")  # Usually O(n) avg, not O(n²)
+result = s.find("b")  # O(n)
 
 # CPython uses optimized algorithms (similar to Boyer-Moore)
 ```
@@ -153,7 +155,7 @@ Perustuu Javan merkkijonoihin, samankaltaiset suorituskykyominaisuudet.
 
 - Käytä `str.join()`-metodia useiden merkkijonojen yhdistämiseen
 - Käytä f-merkkijonoja muotoiluun (Python 3.6+)
-- Käytä `in`-operaattoria osajonon tarkistamiseen (keskimäärin O(n))
+- Käytä `in`-operaattoria osajonon tarkistamiseen (O(n))
 - Käytä `.find()`- ja `.replace()`-metodeja tehokkaaseen käsittelyyn
 
 ❌ **Vältä**:

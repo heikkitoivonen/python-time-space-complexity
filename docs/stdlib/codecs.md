@@ -31,7 +31,7 @@ handler you supply adds its own cost to every call that reaches it.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `codecs.lookup(encoding)` | O(1) | O(1) | Cached by normalized name (case, spaces and hyphens folded). The first lookup of a name calls the search functions in order, O(r); a name none recognizes is never cached |
+| `codecs.lookup(encoding)` | O(1) | O(1) | Cached by normalized name: ASCII case folded, and spaces become hyphens on 3.15+, where earlier versions fold spaces and hyphens into underscores. The first lookup of a name calls the search functions in order, O(r); a name none recognizes is never cached |
 | `codecs.register(search_function)` | O(1) | O(1) | Appends to the search list |
 | `codecs.unregister(search_function)` | O(r + k) | O(1) | k = cached names. Removing a registered function also empties the lookup cache, so every name is searched afresh once |
 | `codecs.getencoder(encoding)`, `codecs.getdecoder(encoding)` | O(1) | O(1) | `lookup(encoding).encode` and `.decode` |
@@ -201,8 +201,11 @@ assert codecs.encode('bücher.example', 'idna') == b'xn--bcher-kva.example'
 ## The Codec Registry
 
 `lookup()` normalizes the name and consults a cache before anything else, so a repeated lookup is
-a dict hit. A name the cache lacks is offered to each search function in registration order, and a
-name none of them recognizes is not cached: looking it up again repeats the search.
+a dict hit. From 3.15 normalizing lowercases ASCII letters and turns spaces into hyphens, so
+`'My Codec'` and `'my-codec'` share an entry but `'my-codec'` and `'my_codec'` do not; before 3.15
+spaces and hyphens both became underscores. A name the cache lacks is offered to each search
+function in registration order, and a name none of them recognizes is not cached: looking it up
+again repeats the search.
 Unregistering a registered function empties the whole cache.
 
 ```python
@@ -212,25 +215,25 @@ asked = []
 
 def search(name):
     asked.append(name)
-    return codecs.lookup('utf-8') if name == 'my_codec' else None
+    return codecs.lookup('utf-8') if name == 'mycodec' else None
 
 codecs.register(search)  # O(1)
-first = codecs.lookup('My-Codec')  # O(r) the first time
-assert codecs.lookup('my codec') is first  # O(1): same normalized name, cached
-assert asked == ['my_codec']
+first = codecs.lookup('MyCodec')  # O(r) the first time
+assert codecs.lookup('MYCODEC') is first  # O(1): same normalized name, cached
+assert asked == ['mycodec']
 
 for _ in range(2):
     try:
-        codecs.lookup('no-such-codec')
+        codecs.lookup('nosuchcodec')
     except LookupError as error:
         assert 'unknown encoding' in str(error)
     else:
         raise AssertionError('an unknown encoding was found')
-assert asked == ['my_codec', 'no_such_codec', 'no_such_codec']  # misses are not cached
+assert asked == ['mycodec', 'nosuchcodec', 'nosuchcodec']  # misses are not cached
 
 codecs.unregister(search)  # O(r), and the cache is emptied
 try:
-    codecs.lookup('my codec')
+    codecs.lookup('mycodec')
 except LookupError:
     pass
 else:
@@ -495,6 +498,9 @@ assert codecs.decode(data, 'utf-8-sig') == 'hello'  # the codec that strips it f
 
 ## Version Notes
 
+- **Python 3.15+**: `lookup()` normalizes a name by lowercasing ASCII letters and turning spaces
+  into hyphens; earlier versions turn spaces and hyphens into underscores, so a search function
+  sees `'my-codec'` from 3.15 where it saw `'my_codec'` before
 - **Python 3.14+**: `codecs.open()` is deprecated and emits `DeprecationWarning`; use `open()`
 - **All Python 3**: `codecs.open()` with an encoding opens the file in binary mode, so newlines
   are not translated

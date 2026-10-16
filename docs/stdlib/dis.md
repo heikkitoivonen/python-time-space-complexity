@@ -57,7 +57,7 @@ compiled first, which adds the cost of compiling it.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `dis.opname`, `dis.opmap`, `dis.cmp_op` | O(1) | O(1) | `opname[op]` indexes a list; `opmap[name]` is a dict lookup |
+| `dis.opname`, `dis.opmap`, `dis.cmp_op` | O(1) | O(1) | `opname[op]` indexes a list; `opmap[name]` is a dict lookup (`opmap` is a `frozendict` from 3.15) |
 | `dis.hasconst`, `dis.hasname`, `dis.haslocal`, `dis.hasfree`, `dis.hascompare`, `dis.hasjrel`, `dis.hasjabs` | O(1) | O(1) | Lists: `op in dis.hasconst` scans one, so build a `set` to test many instructions |
 | `dis.hasarg`, `dis.hasexc` | O(1) | O(1) | Python 3.12+; lists, like the others |
 | `dis.hasjump` | O(1) | O(1) | Python 3.13+; `hasjrel` is the same list |
@@ -290,6 +290,7 @@ assert reads == {'pi', 'abs'}
   the line number or `None`
 - **Python 3.13+**: `findlinestarts()` can yield `None` as a line number, for bytecode with no
   source line
+- **Python 3.15+**: `opmap` is a `frozendict`; before 3.15 it is a `dict`
 - **All Python 3**: Bytecode is a CPython implementation detail; opcode names and counts change
   between releases
 

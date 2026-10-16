@@ -42,9 +42,9 @@ Measurement scope:
   non-`str` key and a `set`
   raise `TypeError`, 2**64 raises `OverflowError`. `skipkeys=True` skips a
   non-`str` key with `sort_keys=False`. With `sort_keys=True`, mixed keys
-  raise `TypeError` before 3.13.16 on the 3.13 line and before 3.14.8 on the
-  3.14 line (also on 3.11 and 3.12); from those patches, non-string keys are
-  skipped and the remaining keys are sorted. Both values and key order are
+  raise `TypeError` before 3.13.16 on the 3.13 line, before 3.14.8 on the
+  3.14 line, and on 3.11, 3.12 and 3.15.0; from those patches, non-string
+  keys are skipped and the remaining keys are sorted. Both values and key order are
   checked in each successful case.
 * `UID` accepts 0 and 2**64 - 1, rejects -1 and 2**64 with `ValueError` and
   a `str` with `TypeError`,
@@ -382,7 +382,10 @@ class TestSortKeys:
         written = plistlib.dumps(mixed, fmt=fmt, skipkeys=True, sort_keys=False)
         assert list(plistlib.loads(written).items()) == [("z", 3), ("a", 1)]
         # gh-145856: filter non-string keys before sorting.
-        if sys.version_info >= (3, 14, 8) or (3, 13, 16) <= sys.version_info < (3, 14):
+        fixed = (3, 13, 16) <= sys.version_info < (3, 14) or (
+            (3, 14, 8) <= sys.version_info < (3, 15)
+        )
+        if fixed:
             written = plistlib.dumps(mixed, fmt=fmt, skipkeys=True)
             assert list(plistlib.loads(written).items()) == [("a", 1), ("z", 3)]
         else:

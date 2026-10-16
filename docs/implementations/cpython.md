@@ -114,7 +114,7 @@ gc.collect()  # O(n) where n = tracked objects
 
 | Operation | CPython Notes |
 |-----------|---|
-| `in` (substring) | O(n + m) worst for long strings, O(n*m) worst for pathological cases |
+| `in` (substring) | O(n) worst case, through the two-way algorithm; reverse searches such as `rfind()` can reach O(n*m) |
 | `split()` | O(n) with specialized fast path |
 | `replace()` | O(n) with careful copying |
 

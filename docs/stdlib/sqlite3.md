@@ -25,7 +25,7 @@ return one.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `sqlite3.connect(database, timeout=5.0, detect_types=0, ..., cached_statements=128, ...)` | O(1) | O(1) | Opens the file; SQLite checks that it is a database only at the first statement |
+| `sqlite3.connect(database, *, timeout=5.0, detect_types=0, ..., cached_statements=128, ...)` | O(1) | O(1) | Opens the file; SQLite checks that it is a database only at the first statement. Every parameter after `database` is keyword-only from Python 3.15 |
 | `sqlite3.complete_statement(statement)` | O(q) | O(1) | Whether the text ends in a complete statement; nothing is compiled |
 | `sqlite3.register_adapter(type, adapter, /)` | O(1) | O(1) | One entry in `sqlite3.adapters`; the adapter then runs per bound value of that type |
 | `sqlite3.register_converter(typename, converter, /)` | O(1) | O(1) | One entry in `sqlite3.converters`, matched case-insensitively |
@@ -46,13 +46,13 @@ return one.
 | `Connection.in_transaction`, `Connection.total_changes` | O(1) | O(1) | |
 | `Connection.isolation_level`, `Connection.autocommit` | O(1), plus a commit | O(1) | `autocommit` is Python 3.12+. Setting `isolation_level` to `None`, or `autocommit` to `True`, commits an open transaction first |
 | `Connection.row_factory`, `Connection.text_factory` | O(1) | O(1) | A cursor copies `row_factory` when it is created; the factory then runs once per row, `text_factory` once per TEXT value |
-| `Connection.create_function(name, narg, func, *, deterministic=False)` | O(1) | O(1) | `func` then runs once per call the SQL makes |
-| `Connection.create_aggregate(name, n_arg, aggregate_class)` | O(1) | O(1) | `step()` runs once per row, `finalize()` once per group |
+| `Connection.create_function(name, narg, func, /, *, deterministic=False)` | O(1) | O(1) | `func` then runs once per call the SQL makes |
+| `Connection.create_aggregate(name, n_arg, aggregate_class, /)` | O(1) | O(1) | `step()` runs once per row, `finalize()` once per group |
 | `Connection.create_window_function(name, num_params, aggregate_class, /)` | O(1) | O(1) | Python 3.11+ |
 | `Connection.create_collation(name, callback, /)` | O(1) | O(1) | `callback` runs once per comparison: sorting on it calls it O(r log r) times |
-| `Connection.set_authorizer(authorizer_callback)` | O(s) | O(1) | Expires every compiled statement, so each compiles again on its next run; the callback is called per action while a statement compiles, not each time it runs |
-| `Connection.set_progress_handler(progress_handler, n)` | O(1) | O(1) | Called periodically while a statement runs, at the given instruction interval |
-| `Connection.set_trace_callback(trace_callback)` | O(1) | O(1) | Called with the SQL text of each statement SQLite runs |
+| `Connection.set_authorizer(authorizer_callback, /)` | O(s) | O(1) | Expires every compiled statement, so each compiles again on its next run; the callback is called per action while a statement compiles, not each time it runs |
+| `Connection.set_progress_handler(progress_handler, /, n)` | O(1) | O(1) | Called periodically while a statement runs, at the given instruction interval |
+| `Connection.set_trace_callback(trace_callback, /)` | O(1) | O(1) | Called with the SQL text of each statement SQLite runs |
 | `Connection.interrupt()` | O(1) | O(1) | Aborts the running query at its next check |
 | `Connection.enable_load_extension(enable, /)`, `Connection.load_extension(name, /, *, entrypoint=None)` | O(1) + the extension's setup | O(1) | Present only when Python's SQLite build allows extensions; `entrypoint` is Python 3.12+ |
 | `Connection.iterdump(*, filter=None)` | O(m) | O(e + w) | A generator: e = the total length of the schema's CREATE statements, fetched up front, w = the longest statement; each row is read as its INSERT is yielded. `filter` is Python 3.13+ |
@@ -141,6 +141,7 @@ return one.
 | `sqlite3.apilevel`, `sqlite3.paramstyle`, `sqlite3.threadsafety` | O(1) | O(1) | DB-API 2.0 metadata |
 | `sqlite3.version`, `sqlite3.version_info` | O(1) | O(1) | Deprecated in Python 3.12 and removed in Python 3.14 |
 | `sqlite3.dbapi2` | O(1) | O(1) | The submodule everything above is re-exported from |
+| `sqlite3.SQLITE_KEYWORDS` | O(1) | O(1) | Python 3.15+, built against SQLite 3.24 or newer; a `tuple` of SQLite's keywords, so `in` scans it: build a `frozenset` once for repeated checks |
 | Authorizer codes and `SQLITE_DONE`, 37 names: `sqlite3.SQLITE_SELECT`, `sqlite3.SQLITE_INSERT`, the other actions, `SQLITE_OK`, `SQLITE_DENY`, `SQLITE_IGNORE`, and `SQLITE_DONE` | O(1) | O(1) | The actions `Connection.set_authorizer()` is handed and the three values it may return; `SQLITE_DONE` is a statement's finished result |
 | Result codes, 103 names: `sqlite3.SQLITE_BUSY`, `sqlite3.SQLITE_CONSTRAINT_UNIQUE`, and the rest | O(1) | O(1) | Python 3.11+; matched against `Error.sqlite_errorcode` |
 | Limit categories, 12 names: `sqlite3.SQLITE_LIMIT_LENGTH` and the other `SQLITE_LIMIT_*` | O(1) | O(1) | Python 3.11+; for `Connection.setlimit()` and `getlimit()` |
@@ -552,6 +553,9 @@ connection.close()
   removed; `version` and `version_info` deprecated
 - **Python 3.13+**: `iterdump()` takes `filter`
 - **Python 3.14+**: `version` and `version_info` removed
+- **Python 3.15+**: `SQLITE_KEYWORDS`; every `connect()` parameter after `database` is
+  keyword-only, and the leading parameters of `create_function()`, `create_aggregate()`,
+  `set_authorizer()`, `set_progress_handler()` and `set_trace_callback()` are positional-only
 
 ## Related Modules
 

@@ -25,6 +25,8 @@ is why the decompression rows are priced in both.
 | `zlib.decompressobj(wbits=MAX_WBITS, zdict=b'')` | O(1) | O(1) | Keeps a reference to `zdict` rather than a copy |
 | `zlib.adler32(data, value=1)` | O(n) | O(1) | Checksum of `data`; pass the previous result as `value` to continue a running checksum |
 | `zlib.crc32(data, value=0)` | O(n) | O(1) | As `adler32()`, computing CRC-32 |
+| `zlib.adler32_combine(adler1, adler2, len2, /)` | O(1) | O(1) | Python 3.15+; the Adler-32 of two sequences joined, from their checksums and the second one's length, without reading either sequence |
+| `zlib.crc32_combine(crc1, crc2, len2, /)` | O(log len2) | O(1) | Python 3.15+; as `adler32_combine()` for CRC-32, also without reading either sequence |
 
 ### Compress
 
@@ -300,6 +302,27 @@ assert running_adler == adler
 assert zlib.crc32(b"") == 0 and zlib.adler32(b"") == 1  # the starting values
 ```
 
+### Combining Checksums
+
+From Python 3.15, `crc32_combine()` and `adler32_combine()` join the checksums of two pieces
+computed separately, for instance in parallel, using only the second piece's length. Neither
+piece is read again.
+
+```python
+import zlib
+
+first, second = b"payload " * 50_000, b"trailer " * 70_000
+
+crc1, crc2 = zlib.crc32(first), zlib.crc32(second)            # O(n) each, computable in parallel
+adler1, adler2 = zlib.adler32(first), zlib.adler32(second)
+
+crc = zlib.crc32_combine(crc1, crc2, len(second))              # O(log len2)
+adler = zlib.adler32_combine(adler1, adler2, len(second))      # O(1)
+
+assert crc == zlib.crc32(first + second)
+assert adler == zlib.adler32(first + second)
+```
+
 ## Common Patterns
 
 ### Compressing and Decompressing a File
@@ -365,6 +388,7 @@ with tempfile.TemporaryDirectory() as directory:
 
 - **Python 3.11+**: `zlib.compress()` accepts `wbits`
 - **Python 3.14+**: `zlib.ZLIBNG_VERSION` exists when the module is built with zlib-ng
+- **Python 3.15+**: Added `adler32_combine()` and `crc32_combine()`
 - **All Python 3**: `zlib.decompress()` and `Decompress.flush()` have no output limit
 
 ## Related Modules

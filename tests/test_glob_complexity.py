@@ -36,9 +36,9 @@ wraps metacharacters in character classes; `glob0()` never matches a pattern
 while `glob1()` lists a directory; a `**` walk descends through directory
 symlinks, so one file can be reported under two paths.
 
-`glob0()` and `glob1()` are deprecated from 3.13; the tests assert that they
-warn there and stay silent before it, so the page's version note cannot drift
-from the interpreter.
+`glob0()` and `glob1()` are deprecated from 3.13 and removed in 3.15; the
+tests assert that they warn on 3.13 and 3.14, stay silent before, and are gone
+from 3.15, so the page's version notes cannot drift from the interpreter.
 https://github.com/python/cpython/blob/3.13/Lib/glob.py
 
 What `iterator.close()` releases differs by version: 3.11, 3.13 and 3.14
@@ -82,6 +82,7 @@ EXPECTED_BLOCKS = 11
 
 # Documented, but absent before 3.13. Its row must carry the version.
 ADDED_IN_313 = {"translate"}
+REMOVED_IN_315 = {"glob0", "glob1"}
 
 
 def best_ns(func: Callable[[], Any], repeats: int = 5, inner: int = 1) -> float:
@@ -143,7 +144,8 @@ class TestEveryPublicNameIsDocumented:
 
     def test_the_table_names_nothing_that_does_not_exist(self) -> None:
         """The other direction, so a typo cannot pass as coverage."""
-        unknown = sorted(_documented_names() - _public_names() - ADDED_IN_313)
+        removed = REMOVED_IN_315 if sys.version_info >= (3, 15) else set()
+        unknown = sorted(_documented_names() - _public_names() - ADDED_IN_313 - removed)
 
         assert not unknown, f"the table names attributes glob does not have: {unknown}"
 
@@ -168,8 +170,8 @@ class TestEveryPublicNameIsDocumented:
         documented = _documented_names()
 
         assert {"glob", "iglob", "escape", "has_magic"} <= documented
-        thinned = documented - {"glob1"}
-        assert _public_names() - thinned == {"glob1"}, (
+        thinned = documented - {"escape"}
+        assert _public_names() - thinned == {"escape"}, (
             "dropping one row from the extracted set should surface it as missing"
         )
 
@@ -467,11 +469,13 @@ class TestEscapingAndMagic:
         assert magic_check_bytes.search(b"a*b") is not None
 
 
+@pytest.mark.skipif(sys.version_info >= (3, 15), reason="glob0 and glob1 are removed in 3.15")
 class TestTheDeprecatedPair:
     """`glob0` never matches a pattern; `glob1` lists one directory.
 
-    Both are deprecated from 3.13, which is the one thing about them a reader
-    needs, so the deprecation is asserted rather than just silenced.
+    Both are deprecated from 3.13 and removed in 3.15, which is the one thing
+    about them a reader needs, so the deprecation is asserted rather than just
+    silenced.
     """
 
     @pytest.fixture(autouse=True)
@@ -523,6 +527,14 @@ class TestTheDeprecatedPair:
             glob.glob1(str(tmp_path), "*.py")
 
         assert [entry for entry in caught if issubclass(entry.category, DeprecationWarning)] == []
+
+
+def test_the_deprecated_pair_is_removed_from_3_15() -> None:
+    if sys.version_info < (3, 15):
+        pytest.skip("version: present through 3.14")
+
+    assert not hasattr(glob, "glob0")
+    assert not hasattr(glob, "glob1")
 
 
 @pytest.mark.skipif(not hasattr(glob, "translate"), reason="translate is 3.13+")

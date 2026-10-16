@@ -20,6 +20,9 @@ Measurement scope:
   source is mutated and the source asserted unchanged; `memoryview` and
   `array.array` sources are accepted. The `TypeError` and `ValueError` cases
   are asserted by their messages.
+* Encoding a 10,000,000-character ASCII string peaks below 15,000,000
+  traced bytes on 3.15, where the encoded `bytes` becomes the buffer, and
+  at 20,000,000 or more before it, where it is copied in.
 * `fromhex()` skips whitespace between pairs, and takes a `bytes` argument
   on 3.14 and raises `TypeError` before.
 * A bytes-like source copied in one step costs less than a tenth of a list
@@ -198,6 +201,19 @@ class TestTextAndHexSources:
         assert bytearray("é" * 1_000, "ascii", "ignore") == b"", "the discarded input is still read"
         with pytest.raises(TypeError, match="without an encoding"):
             bytearray("café")  # type: ignore[call-overload]
+
+    def test_the_encoded_bytes_become_the_buffer_from_3_15(self) -> None:
+        """A 10,000,000-character ASCII string encodes to 10,000,000 bytes.
+        From 3.15 that is the whole traced peak; before, the copy into the
+        buffer doubles it."""
+        text = "a" * LARGE
+
+        peak = peak_bytes(lambda: bytearray(text, "ascii"))
+
+        if sys.version_info >= (3, 15):
+            assert LARGE <= peak < LARGE * 3 // 2, f"peaked at {peak}"
+        else:
+            assert peak >= LARGE * 2, f"peaked at {peak}"
 
     def test_fromhex_reads_two_characters_per_byte(self) -> None:
         assert bytearray.fromhex("48 65") == b"He"

@@ -1,11 +1,12 @@
 # unicodedata Module Complexity
 
 The `unicodedata` module reads the Unicode Character Database compiled into CPython: per-character
-properties, character names, and the four normalization forms. A property or name is a table read
-for one code point; normalization is the one operation that walks a whole text.
+properties, character names, the four normalization forms and, from 3.15, grapheme clusters. A
+property or name is a table read for one code point; normalization and grapheme iteration are the
+operations that walk a whole text.
 
-`n` is the characters in the string being normalized or checked, and `m` is the characters in a
-name passed to `lookup()`. Every property function takes exactly one character, so it has no size
+`n` is the characters in the string being normalized, checked or segmented, `m` is the characters
+in a name passed to `lookup()`, and `g` is the characters in one grapheme cluster. Every property function takes exactly one character, so it has no size
 variable; a longer string raises `TypeError`. Character names have a fixed maximum length, so
 `name()` has none either.
 
@@ -16,12 +17,15 @@ variable; a longer string raises `TypeError`. Character names have a fixed maxim
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `unicodedata.category(chr)` | O(1) | O(1) | General category, such as `'Lu'` |
-| `unicodedata.bidirectional(chr)` | O(1) | O(1) | Bidi class; `''` if none is assigned |
+| `unicodedata.bidirectional(chr)` | O(1) | O(1) | Bidi class. Before 3.15 `''` for an unassigned code point; from 3.15 an unassigned one gets the default class for its range, such as `'L'`, `'R'` or `'BN'`. `ucd_3_2_0` answers `''` for one unassigned in Unicode 3.2.0 |
 | `unicodedata.combining(chr)` | O(1) | O(1) | Canonical combining class; `0` for a starter |
 | `unicodedata.east_asian_width(chr)` | O(1) | O(1) | `'W'`, `'F'`, `'Na'`, `'H'`, `'A'` or `'N'` |
 | `unicodedata.mirrored(chr)` | O(1) | O(1) | `1` if the character is mirrored in bidi text, else `0` |
 | `unicodedata.decomposition(chr)` | O(1) | O(1) | The mapping as hex code points, with a `<tag>` for a compatibility one; `''` if none |
 | `unicodedata.decimal(chr[, default])`, `unicodedata.digit(chr[, default])`, `unicodedata.numeric(chr[, default])` | O(1) | O(1) | Raise `ValueError` for a character without the value unless `default` is given |
+| `unicodedata.block(chr)` | O(1) | O(1) | Python 3.15+. A binary search of the fixed table of Unicode blocks; `'No_Block'` outside every block |
+| `unicodedata.isxidstart(chr)`, `unicodedata.isxidcontinue(chr)` | O(1) | O(1) | Python 3.15+. The `XID_Start` and `XID_Continue` properties of UAX #31 identifiers |
+| `unicodedata.grapheme_cluster_break(chr)`, `unicodedata.indic_conjunct_break(chr)`, `unicodedata.extended_pictographic(chr)` | O(1) | O(1) | Python 3.15+. The three properties `iter_graphemes()` segments by; the last returns a `bool` |
 
 ### Names
 
@@ -29,6 +33,16 @@ variable; a longer string raises `TypeError`. Character names have a fixed maxim
 |-----------|------|-------|-------|
 | `unicodedata.name(chr[, default])` | O(1) | O(1) | Raises `ValueError` for an unnamed character unless `default` is given |
 | `unicodedata.lookup(name)` | O(m) | O(m) | Case-insensitive; also accepts aliases and named sequences, and raises `KeyError` for an unknown name. A non-ASCII `name` is encoded to UTF-8 first |
+
+### Grapheme clusters
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `unicodedata.iter_graphemes(unistr, start=0, end=sys.maxsize)` | O(1) | O(1) | Python 3.15+. Lazy: holds a reference to `unistr` and copies nothing; `start` and `end` are clamped and may be negative, as in a slice |
+| `next()` on the iterator | O(g) | O(1) | Reads one extended grapheme cluster (UAX #29) and yields an object whose `start` and `end` give its position; a full pass is O(n) over `start` to `end` |
+| `str(segment)` | O(g) | O(g) | The cluster's text; the segment itself keeps the whole `unistr` alive, not a copy |
+
+The seven functions added in 3.15 are module functions only: `ucd_3_2_0` does not have them.
 
 ### Normalization
 
@@ -42,13 +56,13 @@ variable; a longer string raises `TypeError`. Character names have a fixed maxim
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `unicodedata.unidata_version` | O(1) | O(1) | The Unicode version of the module's tables; each Python minor release may move it |
-| `unicodedata.ucd_3_2_0` | O(1) | O(1) | The same functions against Unicode 3.2.0, as IDNA requires. Its `normalize()` and `is_normalized()` have no quick check, so both build the normal form in O(n) space even for ASCII, and `is_normalized()` shares the pre-patch quadratic |
+| `unicodedata.ucd_3_2_0` | O(1) | O(1) | The functions that predate 3.15 against Unicode 3.2.0, as IDNA requires. Its `normalize()` and `is_normalized()` have no quick check, so both build the normal form in O(n) space even for ASCII, and `is_normalized()` shares the pre-patch quadratic |
 | `unicodedata.UCD` | O(1) | O(1) | The type of `ucd_3_2_0`; it cannot be instantiated |
 
 ## Character Properties
 
-Each property is a read from a table indexed by code point, so the cost does not depend on which
-character is asked about.
+Each property is a read from a table indexed by code point - `block()` a binary search of a fixed
+table of blocks - so the cost does not depend on which character is asked about.
 
 ```python
 import unicodedata
@@ -105,6 +119,33 @@ else:
     raise AssertionError("an unknown name was found")
 ```
 
+## Grapheme Clusters
+
+`iter_graphemes()` (Python 3.15+) finds user-perceived characters - a base letter with its marks,
+a flag, an emoji sequence joined by U+200D - one at a time. Creating the iterator reads nothing, and
+each step costs the length of the cluster it yields.
+
+```python
+import sys
+import unicodedata
+
+if sys.version_info >= (3, 15):
+    text = "e\u0301\U0001f1eb\U0001f1ee\U0001f469\u200d\U0001f4bb!"
+    clusters = unicodedata.iter_graphemes(text)  # O(1) - nothing is read yet
+    first = next(clusters)  # O(g) - one cluster
+    assert (first.start, first.end) == (0, 2) and str(first) == "e\u0301"
+    assert [str(c) for c in clusters] == ["\U0001f1eb\U0001f1ee", "\U0001f469\u200d\U0001f4bb", "!"]
+
+    assert [str(c) for c in unicodedata.iter_graphemes("abcd", 1, -1)] == ["b", "c"]
+
+    assert unicodedata.block("\u00e9") == "Latin-1 Supplement"  # O(1)
+    assert unicodedata.isxidstart("a") and not unicodedata.isxidstart("1")  # O(1)
+    assert unicodedata.isxidcontinue("1")
+    assert unicodedata.grapheme_cluster_break("\u0301") == "Extend"  # O(1)
+    assert unicodedata.indic_conjunct_break("\u0915") == "Consonant"
+    assert unicodedata.extended_pictographic("\U0001f600") is True
+```
+
 ## Normalization
 
 `normalize()` runs a quick check over the string first. When the check can confirm the string is
@@ -157,7 +198,7 @@ assert not unicodedata.is_normalized("NFD", "a\u0301\u0316")
 
 ## The Unicode 3.2.0 Database
 
-`ucd_3_2_0` offers the same functions against the tables IDNA was defined on. Its normalization
+`ucd_3_2_0` offers the functions that predate 3.15 against the tables IDNA was defined on. Its normalization
 skips the quick check, so it rebuilds even ASCII input.
 
 ```python
@@ -213,6 +254,10 @@ assert key("cafe\u0301") == key("café")
 
 ## Version Notes
 
+- **Python 3.15+**: The tables are Unicode 17.0.0. Added `block()`, `isxidstart()`,
+  `isxidcontinue()`, `grapheme_cluster_break()`, `indic_conjunct_break()`,
+  `extended_pictographic()` and `iter_graphemes()`; `bidirectional()` gives an unassigned code point
+  its default class instead of `''`
 - **Python 3.11+**: `normalize()` and `is_normalized()` answer an ASCII string in O(1); on 3.10
   both scan it
 - **Python 3.10.21, 3.11.16, 3.12.14, 3.13.14, 3.14.6+**: `normalize()` is O(n) on a run of

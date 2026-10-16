@@ -97,6 +97,10 @@ Measurement scope:
   513th pattern drops a different one, while a hit served by the 256-entry
   fast-path cache in front of it refreshes nothing; on 3.11 the
   oldest-inserted entry is dropped despite a recent hit.
+* From 3.15 `re.prefixmatch` is `re.match`, and `Pattern.prefixmatch()`
+  returns the same span as `Pattern.match()` for a hit at 0, a hit at `pos`
+  2, a miss at 0 and a non-match; a timing test over 500, 2,000 and 8,000
+  characters keeps each 4x step under 8x, one attempt as for `match()`.
 * `re.PatternError` is `re.error` from 3.13, and absent before; `pos`,
   `lineno` and `colno` locate the error in a multi-line pattern.
 * Every fenced Python block runs in its own subprocess, on every supported
@@ -431,6 +435,25 @@ class TestOneAttemptOrMany:
         steps = self._steps(pattern.search, lambda size: ("a" * 20 + " ") * (size // 21))
 
         assert all(step < 8 for step in steps), f"words of 20 characters: steps {steps}"
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="prefixmatch() is 3.15+")
+    def test_prefixmatch_is_match_under_another_name(self) -> None:
+        pattern = re.compile(r"\w+@")
+        names: Any = re
+
+        assert names.prefixmatch is re.match
+        for subject, pos in (("alice@x", 0), ("  bob@", 2), ("  bob@", 0), ("nope", 0)):
+            matched, prefixed = pattern.match(subject, pos), pattern.prefixmatch(subject, pos)  # type: ignore[attr-defined]
+            assert (matched and matched.span()) == (prefixed and prefixed.span())
+
+    @pytest.mark.timing
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="prefixmatch() is 3.15+")
+    def test_prefixmatch_makes_one_attempt(self) -> None:
+        pattern: Any = re.compile(r"\w+@")
+
+        steps = self._steps(pattern.prefixmatch, lambda size: "a" * size)
+
+        assert all(step < 8 for step in steps), f"4x the subject: steps {steps}"
 
     def test_both_patterns_find_the_same_match(self) -> None:
         text = "mail alice@example.com"

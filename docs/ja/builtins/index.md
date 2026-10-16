@@ -1,5 +1,5 @@
 ---
-source_sha: c6154a41633b0dafdf4bb3ac41f14320d86f817db41733076e5819994eab88ce
+source_sha: 5dba3dc173101e68a7cbc10e0a5d6d5346073fdd0b7f80b959387e60cdedbb75
 translated: machine
 ---
 
@@ -18,6 +18,7 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 | `bytes` | バイナリデータ | O(1) | - | - |
 | `dict` | キーと値の対応 | O(1) | O(1) | O(1) |
 | `set` | 重複のない要素 | - | O(1) | O(1) |
+| `frozendict` | 不変のキーと値のマッピング（3.15+） | O(1) | - | - |
 | `frozenset` | 不変で重複のない要素 | - | - | - |
 
 ### シーケンス型
@@ -33,6 +34,7 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 
 - **[辞書](dict.md)** - ハッシュに基づくキーと値の格納
 - **[集合](set.md)** - 順序を持たない重複のない要素
+- **[frozendict](frozendict.md)** - 不変でハッシュ可能なマッピング（Python 3.15+）
 - **[frozenset](frozenset.md)** - 不変で重複のない要素
 
 ### 数値型と真偽値型
@@ -133,6 +135,7 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 | [`frozenset()`](frozenset_func.md) | O(n) | O(n) | 引数がすでに frozenset なら O(1) |
 | [`slice()`](slice.md) | O(1) | O(1) | 添字を保持するだけで、適用には O(k) かかる |
 | [`object()`](object_func.md) | O(1) | O(1) | すべてのクラスの基底 |
+| [`sentinel()`](sentinel.md) | O(1) | O(1) | Python 3.15+。一意の名前付きマーカーで、`is` で比較する |
 
 ### コードの実行
 

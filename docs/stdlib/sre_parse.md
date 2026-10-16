@@ -1,12 +1,16 @@
 # sre_parse Module Complexity
 
 The `sre_parse` module turns a regular-expression string into the intermediate tree that
-[sre_compile](sre_compile.md) translates into matcher code. From Python 3.11 it is a deprecated
-alias: importing it issues a `DeprecationWarning` and copies the names of the private `re._parser`
-module, which is what [re](re.md) uses. The module has never been documented, so it carries no
-stability guarantee - signatures and return shapes change between releases (see
+[sre_compile](sre_compile.md) translates into matcher code. From Python 3.11 to 3.14 it is a
+deprecated alias: importing it issues a `DeprecationWarning` and copies the names of the private
+`re._parser` module, which is what [re](re.md) uses. The module has never been documented, so it
+carries no stability guarantee - signatures and return shapes change between releases (see
 [Version Notes](#version-notes)). For the cost of compiling and matching through the public API,
 see [re](re.md).
+
+!!! warning "Removed in Python 3.15"
+    Removed in Python 3.15, where `import sre_parse` raises `ModuleNotFoundError`. This page
+    covers Python 3.11 to 3.14; `re` keeps the same code in its private `re._parser` module.
 
 `n` is the characters in a pattern, `t` the characters in a replacement template, `r` the
 characters in an expanded replacement, `w` the items in a parse tree (each literal, repeat, group,
@@ -20,7 +24,7 @@ O(1).
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `import sre_parse` | O(1) | O(1) | Python 3.11+: warns on the first import only; the names are the same objects as `re._parser`'s |
+| `import sre_parse` | O(1) | O(1) | Python 3.11 to 3.14: warns on the first import only; the names are the same objects as `re._parser`'s |
 | `sre_parse.parse(str, flags=0, state=None)` | O(n) | O(n) | O(n²) when a group's alternatives share a long common prefix, or when a long run of non-capturing groups such as `(?:ab)(?:cd)` sits at one level; O(n·d) when non-capturing groups nest d deep, since each level copies what it holds. Returns a `SubPattern`; nothing is cached |
 | `sre_parse.fix_flags(src, flags)` | O(1) | O(1) | Adds `SRE_FLAG_UNICODE` for a `str` pattern without `ASCII`; raises `ValueError` for flags the pattern type cannot take |
 | `sre_parse.parse_template(source, pattern)` | O(t) | O(t) | `pattern` is a compiled `Pattern`. Python 3.12+ returns a list alternating literals and group numbers; 3.11 names the argument `state` and returns a `(groups, literals)` pair |
@@ -179,8 +183,8 @@ else:
 
 ❌ **Avoid**:
 
-- New code that imports the module - it warns, and the tree it returns is an internal format with
-  no compatibility promise
+- New code that imports the module - it is gone from Python 3.15, it warns before that, and the
+  tree it returns is an internal format with no compatibility promise
 - Rebinding a name in the module to intercept `re` - `re` never looks there
 - A long alternation whose alternatives share a long prefix, or a long run of `(?:...)` groups
   side by side - both parse in O(n²)
@@ -195,7 +199,8 @@ else:
   `expand_template()` is gone
 - **Python 3.13+**: `PatternError` is the exception's name, and the inline `t` flag is no longer
   accepted
-- **All Python 3**: Undocumented; the deprecation names no removal release
+- **Python 3.15+**: Removed; `import sre_parse` raises `ModuleNotFoundError`
+- **All Python 3**: Undocumented
 
 ## Related Modules
 

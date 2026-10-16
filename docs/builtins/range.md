@@ -9,13 +9,15 @@ The `range` type is an immutable sequence of numbers used for iteration. It gene
 | `range(stop)` | O(1) | O(1) | Create range object |
 | `range(start, stop)` | O(1) | O(1) | Create range object |
 | `range(start, stop, step)` | O(1) | O(1) | Create range object |
-| `len()` | O(1) | O(1) | Calculated, not stored |
+| `len()` | O(1) | O(1) | Stored: the length is computed once, when the range is built |
 | `access[i]` | O(1) | O(1) | Direct calculation |
-| `in` (membership) | O(1)* | O(1) | *Arithmetic check for `int`/`bool`; other types fall back to an O(n) scan |
-| `index(value)` | O(1)* | O(1) | *Solves an equation for `int`/`bool`; other types scan in O(n) |
-| `count(value)` | O(1)* | O(1) | *Single check for `int`/`bool`; other types scan in O(n) |
+| `r[i:j]`, `r[i:j:k]` | O(1) | O(1) | A new range, whatever the slice covers |
+| `in` (membership) | O(1)* | O(1) | *Arithmetic check for an exact `int` or a `bool`; other types, `int` subclasses included, fall back to an O(n) scan |
+| `index(value)` | O(1)* | O(1) | *Solves an equation for an exact `int` or a `bool`; other types scan in O(n) |
+| `count(value)` | O(1)* | O(1) | *Single check for an exact `int` or a `bool`; other types scan in O(n) |
 | `iteration` | O(n) | O(1) | n = number of items; yields on demand |
 | `reversed()` | O(1) | O(1) | Iterator, not materialized |
+| `min(r)`, `max(r)` | O(n) | O(1) | The builtins iterate every item; `r[0]` and `r[-1]` give the ends in O(1) |
 | `list(range(...))` | O(n) | O(n) | Convert to list |
 
 ## Implementation Details
@@ -27,7 +29,7 @@ The `range` type is an immutable sequence of numbers used for iteration. It gene
 r = range(1000000)  # O(1) - very fast
 
 # Size is O(1)
-len(r)              # O(1) - calculated
+len(r)              # O(1) - stored when the range was built
 
 # Iteration is still O(n) for each item
 for i in r:         # O(n) total

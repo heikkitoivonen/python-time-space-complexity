@@ -50,10 +50,24 @@ Measurement scope:
   every supported version. It compares bare header names against a pattern
   ending in a colon, so nothing can match; its own docstring describes
   behaviour it does not have.
-* The header-count limit counts the terminating blank line, so 99 headers is
-  the most that parses and a normal block of 100 is already refused. The cap
-  is also per block rather than per call: `begin()` skips `100 Continue`
-  responses first, each parsed under the same limits.
+* Through 3.14 the header-count limit counts the terminating blank line, so 99
+  headers is the most that parses and a block of 100 is refused. From 3.15 the
+  terminator is not counted: 100 parse and 101 are refused. 3.15's
+  `max_response_headers` is driven through `getresponse()` over a fake socket:
+  each response carries the `X-*` headers asked for plus `Content-Length`, so a
+  limit of 5 takes 5 headers in all and refuses 6, a limit of 200 takes 151,
+  and the default refuses 151. The cap is also per block rather than per call:
+  `begin()` skips `100 Continue` responses first, each parsed under the same
+  limits.
+* 3.15's `extra_response_headers` is driven through `list_directory` with the
+  real header buffer: each new name is sent once, and a name the listing
+  already sent (`content-type`, matched case-insensitively) is skipped.
+  `default_content_type` is what `guess_type` returns for an unknown
+  extension, while a known one still resolves through the map.
+* `Morsel[attr] = value`, `setdefault` and `update` refuse a control
+  character placed after 10,000 ordinary ones, so each reads the whole value:
+  the O(v) in those rows. `js_output` warns DeprecationWarning on 3.15 and not
+  before.
 * `BaseCookie.load` is atomic only where the parser *refuses*. `'a=1; path'`
   discards everything, because a reserved key with no value returns; `'a=1;
   ;;;'` keeps `a`, because the pattern stops matching and the loop breaks
@@ -98,7 +112,7 @@ Measurement scope:
   matcher to show it scans the configured domains.
 
 Source evidence: Lib/http/{__init__,client,server,cookies,cookiejar}.py on the
-released CPython 3.11 through 3.14 branches. In client.py, `_MAXLINE` is 65536
+released CPython 3.11 through 3.15 branches. In client.py, `_MAXLINE` is 65536
 and `_MAXHEADERS` is 100; `send` loops `data.read(self.blocksize)` for a
 readable; `_send_output` joins the buffer and sends once. In cookies.py,
 `__parse_string` fills `parsed_items` and applies it only after the loop
@@ -111,6 +125,7 @@ https://github.com/python/cpython/blob/3.11/Lib/http/client.py
 https://github.com/python/cpython/blob/3.14/Lib/http/client.py
 https://github.com/python/cpython/blob/3.14/Lib/http/cookiejar.py
 https://github.com/python/cpython/blob/3.14/Lib/http/server.py
+https://github.com/python/cpython/blob/3.15/Lib/http/client.py
 
 Not settled here:
 
@@ -120,7 +135,8 @@ Not settled here:
   standing one up would test the server rather than the bound. The rows that
   name a round trip are read from the CPython source.
 * `CGIHTTPRequestHandler.do_POST` forks a child process, so its cost is the
-  script's. Its presence and deprecation are checked; its execution is not.
+  script's. Its presence and deprecation through 3.14 and its absence from
+  3.15 are checked; its execution is not.
 * The name lookup `HTTPServer` does when it binds, which is the network's.
 * `HTTPResponse.raw` appears in the audit's unclassified list but no supported
   CPython defines it on the class; the page does not document it, and this
@@ -128,6 +144,12 @@ Not settled here:
 * Whether dropping a jar's dictionary is O(1). Releasing it frees the cookies
   it held, which is work proportional to them, but that is deallocation rather
   than the operation; the rows price the dict delete.
+* Morsel values that are not strings. The control-character scan reads
+  `str(value)`, so a large non-string value would add a temporary of its
+  rendered length; the rows price string values, which is what cookies hold.
+* `max_response_headers` on the tunnel's CONNECT response and on a chunked
+  body's trailer block. Both pass the limit through in Lib/http/client.py on
+  3.15; only an ordinary response is driven here.
 * Chunked transfer encoding and trailer blocks. The response rows scope b to
   decoded body bytes and say so; no test drives a chunked peer.
 * `revert()`'s deep copy as a mechanism. The test establishes that the old
@@ -163,6 +185,7 @@ import http.client
 import http.cookiejar
 import http.cookies
 import http.server
+import inspect
 import io
 import os
 import os.path
@@ -210,6 +233,12 @@ def connected(reply: bytes = b"") -> tuple[http.client.HTTPConnection, FakeSocke
     sock = FakeSocket(reply)
     connection.sock = sock  # type: ignore[assignment]
     return connection, sock
+
+
+def header_block(count: int) -> io.BytesIO:
+    """`count` header lines and the blank line that ends them."""
+    lines = b"".join(b"X-%d: v\r\n" % index for index in range(count))
+    return io.BytesIO(lines + b"\r\n")
 
 
 def response_over(reply: bytes) -> http.client.HTTPResponse:
@@ -310,17 +339,48 @@ class TestParseHeaders:
         assert message["A"] == "1"
         assert message["B"] == "2"
 
-    def test_the_blank_line_counts_toward_the_header_cap(self) -> None:
-        """99 parses and 100 does not, because the terminator is counted too."""
+    def test_the_blank_line_counts_toward_the_header_cap_through_314(self) -> None:
+        """Through 3.14, 99 parses and 100 does not: the terminator is counted."""
+        if sys.version_info >= (3, 15):
+            pytest.skip("version: from 3.15 the terminator is not counted")
 
-        def block(count: int) -> io.BytesIO:
-            lines = b"".join(b"X-%d: v\r\n" % index for index in range(count))
-            return io.BytesIO(lines + b"\r\n")
-
-        assert http.client.parse_headers(block(99))["X-98"] == "v"
+        assert http.client.parse_headers(header_block(99))["X-98"] == "v"
 
         with pytest.raises(http.client.HTTPException, match="got more than 100 headers"):
-            http.client.parse_headers(block(100))
+            http.client.parse_headers(header_block(100))
+
+    def test_the_blank_line_is_not_counted_from_315(self) -> None:
+        """From 3.15, 100 headers parse and 101 do not."""
+        if sys.version_info < (3, 15):
+            pytest.skip("version: the terminator is counted through 3.14")
+
+        assert http.client.parse_headers(header_block(100))["X-99"] == "v"
+
+        with pytest.raises(http.client.HTTPException, match="got more than 100 headers"):
+            http.client.parse_headers(header_block(101))
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="max_response_headers is 3.15+")
+    def test_max_response_headers_replaces_the_cap_per_connection(self) -> None:
+        """`HTTPConnection.max_response_headers` | Sets h for that connection's responses."""
+
+        def response_with(headers: int, limit: int | None) -> http.client.HTTPResponse:
+            lines = b"".join(b"X-%d: v\r\n" % index for index in range(headers))
+            reply = b"HTTP/1.1 200 OK\r\n" + lines + b"Content-Length: 0\r\n\r\n"
+            connection = http.client.HTTPConnection(
+                "example.com",
+                max_response_headers=limit,  # type: ignore[call-arg]
+            )
+            connection.sock = FakeSocket(reply)  # type: ignore[assignment]
+            connection.request("GET", "/")
+            return connection.getresponse()
+
+        assert http.client.HTTPConnection("example.com").max_response_headers is None  # type: ignore[attr-defined]
+        assert response_with(4, 5).status == 200
+        with pytest.raises(http.client.HTTPException, match="got more than 5 headers"):
+            response_with(5, 5)
+        assert response_with(150, 200).getheader("X-149") == "v"
+        with pytest.raises(http.client.HTTPException, match="got more than 100 headers"):
+            response_with(150, None)
 
     def test_the_line_length_is_capped(self) -> None:
         source = b"X: " + b"v" * 70_000 + b"\r\n\r\n"
@@ -723,6 +783,7 @@ class HandlerHarness(http.server.SimpleHTTPRequestHandler):
         self.client_address = ("127.0.0.1", 12345)
         self.sent: list[tuple[str, Any, Any]] = []
         self._headers_buffer: list[bytes] = []
+        self.extra_response_headers = None  # set by __init__ from 3.15
 
     def send_response(self, code: Any, message: Any = None) -> None:
         self.sent.append(("response", code, message))
@@ -883,6 +944,20 @@ class TestContentTypeGuessing:
         assert handler.extensions_map[".gz"] == "application/gzip"
         assert handler.guess_type("x.gz") == "application/gzip"
 
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="default_content_type is 3.15+")
+    def test_default_content_type_replaces_the_fallback(self, tmp_path: pathlib.Path) -> None:
+        """`default_content_type` | A class attribute the unknown-extension case returns."""
+
+        class TextDefault(HandlerHarness):
+            default_content_type = "text/plain"
+
+        assert (
+            getattr(http.server.SimpleHTTPRequestHandler, "default_content_type")  # noqa: B009
+            == "application/octet-stream"
+        )
+        assert TextDefault(str(tmp_path)).guess_type("x.zzz") == "text/plain"
+        assert TextDefault(str(tmp_path)).guess_type("x.png") == "image/png"
+
     def test_index_pages_is_3_12_plus(self) -> None:
         present = hasattr(http.server.SimpleHTTPRequestHandler, "index_pages")
 
@@ -953,23 +1028,27 @@ class TestResponseHeaderBuffering:
         assert http.server.BaseHTTPRequestHandler.address_string(handler) == "192.0.2.1"
 
 
+@pytest.mark.skipif(sys.version_info >= (3, 15), reason="CGIHTTPRequestHandler is removed in 3.15")
 class TestCGIHandler:
     """Deprecated since 3.13, removed in 3.15."""
 
-    def test_it_is_present_on_every_supported_version(self) -> None:
-        assert issubclass(http.server.CGIHTTPRequestHandler, http.server.SimpleHTTPRequestHandler)
+    def test_it_is_present_through_3_14(self) -> None:
+        cgi_handler = getattr(http.server, "CGIHTTPRequestHandler")  # noqa: B009 - gone in 3.15
+        assert issubclass(cgi_handler, http.server.SimpleHTTPRequestHandler)
 
     def test_it_has_the_documented_attributes(self) -> None:
-        assert isinstance(http.server.CGIHTTPRequestHandler.cgi_directories, list)
-        assert hasattr(http.server.CGIHTTPRequestHandler, "do_POST")
+        cgi_handler = getattr(http.server, "CGIHTTPRequestHandler")  # noqa: B009 - gone in 3.15
+        assert isinstance(cgi_handler.cgi_directories, list)
+        assert hasattr(cgi_handler, "do_POST")
 
     @pytest.mark.skipif(sys.version_info < (3, 13), reason="deprecated from 3.13")
     def test_constructing_it_warns_and_names_the_removal(self) -> None:
         """The warning is raised by __init__, before the handler is set up."""
+        cgi_handler = getattr(http.server, "CGIHTTPRequestHandler")  # noqa: B009 - gone in 3.15
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             with contextlib.suppress(TypeError):
-                http.server.CGIHTTPRequestHandler()  # type: ignore[call-arg]
+                cgi_handler()
 
         messages = [
             str(entry.message) for entry in caught if issubclass(entry.category, DeprecationWarning)
@@ -984,9 +1063,70 @@ class TestCGIHandler:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             with contextlib.suppress(TypeError):
-                http.server.CGIHTTPRequestHandler()  # type: ignore[call-arg]
+                getattr(http.server, "CGIHTTPRequestHandler")()  # noqa: B009 - gone in 3.15
 
         assert not [e for e in caught if issubclass(e.category, DeprecationWarning)]
+
+
+class TestCGIHandlerRemoval:
+    """`CGIHTTPRequestHandler` is removed in Python 3.15; the row holds through 3.14."""
+
+    def test_it_is_absent_from_3_15(self) -> None:
+        if sys.version_info < (3, 15):
+            pytest.skip("version: present through 3.14")
+
+        assert not hasattr(http.server, "CGIHTTPRequestHandler")
+
+
+class ExtraHeadersHarness(http.server.SimpleHTTPRequestHandler):
+    """A socketless handler that keeps the real header buffering."""
+
+    def __init__(self, directory: str, extra: Any) -> None:
+        self.directory = directory
+        self.path = "/"
+        self.command = "GET"
+        self.requestline = "GET / HTTP/1.1"
+        self.request_version = "HTTP/1.1"
+        self.client_address = ("127.0.0.1", 12345)
+        self.wfile = io.BytesIO()  # type: ignore[assignment]
+        self.extra_response_headers = extra
+
+    def log_message(self, format: str, *args: Any) -> None:
+        pass
+
+
+@pytest.mark.skipif(sys.version_info < (3, 15), reason="extra_response_headers is 3.15+")
+class TestExtraResponseHeaders:
+    """`extra_response_headers` | Sent after the response's own headers, skipping repeats."""
+
+    def test_the_constructor_accepts_them(self) -> None:
+        signature = inspect.signature(http.server.SimpleHTTPRequestHandler.__init__)
+
+        assert "extra_response_headers" in signature.parameters
+
+    def test_a_listing_sends_each_new_name_once(self, tmp_path: pathlib.Path) -> None:
+        (tmp_path / "a.txt").write_text("x")
+        extra = [("X-Extra", "1"), ("content-type", "ignored"), ("X-Other", "2")]
+        handler = ExtraHeadersHarness(str(tmp_path), extra)
+
+        body = handler.list_directory(str(tmp_path))
+        handler.end_headers()
+
+        assert body is not None
+        sent = handler.wfile.getvalue().decode("latin-1")  # type: ignore[attr-defined]
+        assert sent.count("X-Extra: 1\r\n") == 1
+        assert sent.count("X-Other: 2\r\n") == 1
+        assert "ignored" not in sent, "a name the response already sent is skipped"
+        assert sent.lower().count("content-type:") == 1
+
+    def test_none_sends_nothing_extra(self, tmp_path: pathlib.Path) -> None:
+        handler = ExtraHeadersHarness(str(tmp_path), None)
+
+        assert handler.list_directory(str(tmp_path)) is not None
+        handler.end_headers()
+
+        sent = handler.wfile.getvalue().decode("latin-1")  # type: ignore[attr-defined]
+        assert "X-Extra" not in sent
 
 
 class TestCookieParsing:
@@ -1046,10 +1186,18 @@ class TestCookieParsing:
         cookie = http.cookies.SimpleCookie()
         cookie.load("a=1")
 
-        rendered = cookie.js_output()
+        deprecated = sys.version_info >= (3, 15)
+        renders: list[str] = []
+        for render in (cookie.js_output, cookie["a"].js_output):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                renders.append(render())
+            warned = any(issubclass(e.category, DeprecationWarning) for e in caught)
+            assert warned == deprecated, f"{render.__qualname__} warns from 3.15 only"
 
-        assert "<script" in rendered
-        assert "document.cookie" in rendered
+        assert "<script" in renders[0]
+        assert "document.cookie" in renders[0]
+        assert "<script" in renders[1]
 
     def test_simple_cookie_quotes_and_unquotes(self) -> None:
         """`value_encode` / `value_decode` | O(v)."""
@@ -1762,6 +1910,30 @@ class TestCodexReviewFindings:
             morsel.set("bad name", "v", "v")
         with pytest.raises(http.cookies.CookieError, match="Control characters"):
             morsel.set("name", "bad\nvalue", "bad\nvalue")
+
+    @pytest.mark.skipif(
+        sys.version_info[2] < MORSEL_CONTROL_CHECK.get(sys.version_info[:2], 0),
+        reason="version: Morsel's control-character check arrived in "
+        "3.11.15, 3.12.13, 3.13.12 and 3.14.3",
+    )
+    def test_reserved_key_writes_scan_the_value(self) -> None:
+        """O(v): `[attr] =`, `setdefault` and `update` all read the value through.
+
+        A control character at the far end of a long value is refused, so each
+        write inspects the whole value rather than a prefix.
+        """
+        tail = "v" * 10_000 + "\x7f"
+        morsel = http.cookies.Morsel()
+        del morsel["domain"]
+
+        with pytest.raises(http.cookies.CookieError, match="Control characters"):
+            morsel["path"] = tail
+        with pytest.raises(http.cookies.CookieError, match="Control characters"):
+            morsel.setdefault("domain", tail)
+        with pytest.raises(http.cookies.CookieError, match="Control characters"):
+            morsel.update({"comment": tail})
+        morsel["path"] = tail[:-1]
+        assert morsel["path"] == tail[:-1]
 
     def test_getallmatchingheaders_builds_the_name_list_first(self) -> None:
         """O(h) space despite the empty result: keys() is materialized."""

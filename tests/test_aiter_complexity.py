@@ -120,7 +120,12 @@ class TestAiterRejectsWhatIsNotAsyncIterable:
                 calls += 1
                 return object()
 
-        with pytest.raises(TypeError, match="returned not an async iterator of type 'object'"):
+        message = (
+            r"__aiter__\(\) must return an async iterator, not object"
+            if sys.version_info >= (3, 15)
+            else "returned not an async iterator of type 'object'"
+        )
+        with pytest.raises(TypeError, match=message):
             aiter(Broken())  # pyright: ignore[reportArgumentType]
         assert calls == 1
 

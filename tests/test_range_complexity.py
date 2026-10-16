@@ -27,6 +27,14 @@ Nor will a type checker save you. typeshed types `index()` and `count()` as
 taking an int, so those calls need a `type: ignore` below - but
 `__contains__` takes an object, so `2.0 in range(10)` type checks cleanly.
 The one form that is silently O(n) is the one nothing warns about.
+
+The rest of the file covers the table's other rows that a timing can
+separate from their alternative. `len()` of a five-item range over bounds of
+1,000 and 100,000 digits costs the same, under x3, while building those two
+ranges costs more than x10: the length is stored at construction, not
+recomputed. A slice of a 10,000,000-item range costs the same as one of a
+1,000-item range and is itself a range. `min()` and `max()` over 1,000,000
+items cost between x10 and x1,000 what they do over 10,000.
 """
 
 import time
@@ -192,13 +200,15 @@ class TestOnlyExactIntsAndBoolsTakeTheFastPath:
 
     @pytest.mark.timing
     def test_bool_takes_the_fast_path(self) -> None:
-        values = range(self.SIZE)
+        """An absent bool, so a scan would have to read the whole range: in
+        ranges of 1,000 and 1,000,000 items starting at 2 it costs the same."""
+        small, large = range(2, 1_002), range(2, 2 + self.SIZE)
 
-        bool_time = measure_time(lambda: True in values)
-        int_time = measure_time(lambda: 1 in values)
+        small_time = measure_time(lambda: True in small)
+        large_time = measure_time(lambda: True in large)
 
-        assert is_constant_time(int_time, bool_time), (
-            f"bool is special cased alongside int: int={int_time:.2e}s bool={bool_time:.2e}s"
+        assert is_constant_time(small_time, large_time), (
+            f"bool is special cased alongside int: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
     @pytest.mark.timing
@@ -301,3 +311,77 @@ class TestTheSlowPathStillGivesTheRightAnswer:
         assert is_constant_time(present, absent, tolerance=3.0), (
             f"both walk the whole range: present={present:.2e}s absent={absent:.2e}s"
         )
+
+
+class TestTheLengthIsStored:
+    """`len()` | O(1): computed once when the range is built, then read.
+
+    Bounds of 1,000 and 100,000 decimal digits make computing the length
+    cost something - comparing and subtracting the bounds reads every digit -
+    so building such a range scales with the digits, while `len()` of a
+    five-item range over them costs the same at both widths. The bounds are
+    built outside the timing.
+    """
+
+    @pytest.mark.timing
+    def test_len_does_not_recompute_from_the_bounds(self) -> None:
+        narrow_base, wide_base = 10**1_000, 10**100_000
+        narrow_stop, wide_stop = narrow_base + 5, wide_base + 5
+        narrow, wide = range(narrow_base, narrow_stop), range(wide_base, wide_stop)
+
+        reading = measure_time(lambda: len(wide)) / measure_time(lambda: len(narrow))
+        building = best_time(lambda: range(wide_base, wide_stop), repeats=7) / best_time(
+            lambda: range(narrow_base, narrow_stop), repeats=7
+        )
+
+        assert len(narrow) == len(wide) == 5
+        assert reading < 3, f"len() over 100x wider bounds cost x{reading:.2f}"
+        assert building > 10, f"building over 100x wider bounds cost only x{building:.2f}"
+
+
+class TestSlicingIsConstant:
+    """`r[i:j]`, `r[i:j:k]` | O(1) | O(1): a new range, whatever it covers."""
+
+    def test_a_slice_is_a_range(self) -> None:
+        values = range(10, 100, 5)
+
+        assert values[1:4] == range(15, 30, 5)
+        assert values[::-2] == range(95, 5, -10)
+        assert type(values[2:]) is range
+
+    @pytest.mark.timing
+    def test_a_slice_costs_the_same_whatever_it_covers(self) -> None:
+        small, large = range(1_000), range(10_000_000)
+
+        small_time = measure_time(lambda: small[1:-1])
+        large_time = measure_time(lambda: large[1:-1])
+
+        assert is_constant_time(small_time, large_time), (
+            f"slicing appears non-constant: {small_time:.2e}s vs {large_time:.2e}s"
+        )
+
+
+class TestMinAndMaxIterate:
+    """`min(r)`, `max(r)` | O(n): the builtins walk every item; the ends are
+    `r[0]` and `r[-1]`."""
+
+    def test_the_ends_are_the_extremes(self) -> None:
+        values = range(10, 100, 5)
+
+        assert min(values) == values[0] == 10
+        assert max(values) == values[-1] == 95
+
+    @pytest.mark.timing
+    def test_min_and_max_scale_with_the_range(self) -> None:
+        small, large = range(10_000), range(1_000_000)
+
+        for name, function in (("min", min), ("max", max)):
+            small_time = best_time(lambda function=function: function(small), repeats=5)
+            large_time = best_time(lambda function=function: function(large), repeats=5)
+
+            assert large_time > small_time * 10, (
+                f"{name}() over 100x the range cost x{large_time / small_time:.1f}"
+            )
+            assert large_time < small_time * 1_000, (
+                f"{name}() over 100x the range cost x{large_time / small_time:.1f}"
+            )

@@ -38,7 +38,7 @@ hash and compare, and a miss adds the O(m) compile.
 | `Struct.unpack(buffer)` | O(k + t) | O(k + t) | |
 | `Struct.unpack_from(buffer, offset=0)` | O(k + t) | O(k + t) | |
 | `Struct.iter_unpack(buffer)` | O(1) | O(1) | Records are unpacked as the iterator is advanced |
-| `Struct.format` | O(m) | O(m) | Built from the stored format on each access |
+| `Struct.format` | O(m) | O(m) | Built from the stored format on each access; O(1) from 3.15, which stores the string and returns it |
 | `Struct.size` | O(1) | O(1) | B, computed when the format was compiled |
 
 ### Exceptions
@@ -111,7 +111,7 @@ packed = HEADER.pack(b'DATA', 1024, 7)  # O(k + B), no cache lookup
 assert len(packed) == HEADER.size == 10  # O(1)
 assert HEADER.unpack(packed) == (b'DATA', 1024, 7)  # O(k + t)
 
-assert HEADER.format == '<4sIH'  # O(m) - built on each access
+assert HEADER.format == '<4sIH'  # O(m), or O(1) from 3.15
 
 # The module-level call compiles and caches its own copy on first use
 assert struct.unpack('<4sIH', packed) == HEADER.unpack(packed)
@@ -247,6 +247,7 @@ assert unframe(message) == b'hello'
 ## Version Notes
 
 - **Python 3.14+**: Added the `F` and `D` format characters for complex numbers
+- **Python 3.15+**: `Struct.format` returns the stored string instead of building a new one, O(1)
 - **All Python 3**: Native mode (`@`, the default) uses the platform's sizes and alignment; the
   standard modes do not
 

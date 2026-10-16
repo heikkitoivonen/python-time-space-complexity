@@ -4,14 +4,17 @@ Modules/fcntlmodule.c is four thin wrappers, and the page's rows are the
 copies they make around the system call, which are all observable without a
 stopwatch:
 
-* `fcntl()` with a bytes-like or str argument copies it into a 1024-byte stack
-  buffer and returns the buffer as a new `bytes` of the argument's length: the
+* `fcntl()` with a bytes-like or str argument of up to 1024 bytes copies it
+  into a 1024-byte stack buffer (from 3.15 a longer one into a buffer of its
+  own length) and returns the buffer as a new `bytes` of the argument's length: the
   result is a distinct object of equal length at 2, 64 and 1,024 bytes (one-byte
   `bytes` objects are interned, so length 1 cannot show the copy), a str
-  comes back as its UTF-8 encoding, and 1,025 bytes raise ValueError. `F_GETFL`
+  comes back as its UTF-8 encoding, and 1,025 bytes raise ValueError through
+  3.14. From 3.15 there is no cap: 1,025 and 65,536 bytes come back as a new
+  `bytes` equal to the argument. `F_GETFL`
   is used as the command because the kernel ignores its argument, so the
-  buffer comes back unchanged at any size. The same limit applies on every
-  supported version (`sizeof buf` before 3.14, `FCNTL_BUFSZ` from 3.14). Before
+  buffer comes back unchanged at any size. Through 3.14 the limit is the same
+  on every version (`sizeof buf` before 3.14, `FCNTL_BUFSZ` in 3.14). Before
   3.14 the argument is parsed with `s#`, which takes str and `bytes` only, so a
   `bytearray` raises TypeError there and is copied like `bytes` from 3.14.
 * `ioctl()` has three shapes. An integer argument is passed by value. A
@@ -22,7 +25,9 @@ stopwatch:
   source hands the caller's buffer to the kernel directly. From Python the
   two mutating paths look the same, so the tests observe the one difference:
   a 1,025-byte bytearray works when mutated and raises ValueError when it is
-  not. `FIONREAD` on a pipe
+  not, through 3.14. From 3.15 the unmutated 1,025-byte `bytes` and
+  `bytearray` come back as new `bytes` carrying the count, the argument
+  untouched. `FIONREAD` on a pipe
   holding five bytes is the request, because the count it writes is checkable,
   and `FIOCLEX` is the integer-free request, checked through the descriptor's
   inheritable flag.
@@ -372,10 +377,27 @@ class TestFcntl:
                 with pytest.raises(TypeError):
                     fcntl.fcntl(f.fileno(), fcntl.F_GETFL, bytearray(b"ab"))
 
-    def test_one_byte_past_the_limit_raises(self, tmp_path: pathlib.Path) -> None:
+    def test_one_byte_past_the_limit_raises_through_3_14(self, tmp_path: pathlib.Path) -> None:
+        if sys.version_info >= (3, 15):
+            pytest.skip("version: from 3.15 the argument has no cap")
         with open(tmp_path / "f", "w") as f:
             with pytest.raises(ValueError):
                 fcntl.fcntl(f.fileno(), fcntl.F_GETFL, bytes(BUFFER_LIMIT + 1))
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="the cap is lifted in 3.15")
+    def test_past_the_limit_is_copied_into_new_bytes_from_3_15(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """O(n) both ways with no cap: a fresh `bytes` of the argument's length."""
+        with open(tmp_path / "f", "w") as f:
+            for length in (BUFFER_LIMIT + 1, 64 * BUFFER_LIMIT):
+                arg = bytes(range(256)) * (length // 256) + bytes(length % 256)
+
+                result = fcntl.fcntl(f.fileno(), fcntl.F_GETFL, arg)
+
+                assert type(result) is bytes
+                assert result is not arg
+                assert result == arg
 
 
 class TestIoctl:
@@ -433,11 +455,29 @@ class TestIoctl:
         assert result == 0
         assert struct.unpack("i", buffer[:INT]) == (len(PIPE_PAYLOAD),)
 
-    def test_the_copying_paths_stop_at_the_limit(self, pipe_holding_bytes: int) -> None:
+    def test_the_copying_paths_stop_at_the_limit_through_3_14(
+        self, pipe_holding_bytes: int
+    ) -> None:
+        if sys.version_info >= (3, 15):
+            pytest.skip("version: from 3.15 the copying paths have no cap")
         with pytest.raises(ValueError):
             fcntl.ioctl(pipe_holding_bytes, termios.FIONREAD, bytes(BUFFER_LIMIT + 1))
         with pytest.raises(ValueError):
             fcntl.ioctl(pipe_holding_bytes, termios.FIONREAD, bytearray(BUFFER_LIMIT + 1), False)
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="the cap is lifted in 3.15")
+    def test_the_copying_paths_take_any_length_from_3_15(self, pipe_holding_bytes: int) -> None:
+        pattern = bytes(range(256)) * 5  # 1,280 bytes, nonzero past the count
+        for arg in (pattern, bytearray(pattern)):
+            mutate = not isinstance(arg, bytearray)
+
+            result = fcntl.ioctl(pipe_holding_bytes, termios.FIONREAD, arg, mutate)
+
+            assert type(result) is bytes
+            assert len(result) == len(pattern)
+            assert struct.unpack("i", result[:INT]) == (len(PIPE_PAYLOAD),)
+            assert result[INT:] == pattern[INT:], "the rest is copied back as it went in"
+            assert arg == pattern, "the argument itself is untouched"
 
 
 class TestFlock:

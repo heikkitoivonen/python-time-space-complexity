@@ -8,16 +8,18 @@ The `str` type is an immutable sequence of Unicode characters. Python strings ha
 |-----------|------|-------|-------|
 | `len()` | O(1) | O(1) | Direct lookup |
 | `access[i]` | O(1) | O(1) | Direct indexing |
-| `in` (substring) | O(n + m) avg | O(1) | Uses Two-Way / fastsearch algorithm in CPython |
+| `in` (substring) | O(n) | O(1), O(m) to widen | Uses Two-Way / fastsearch algorithm in CPython, linear in the worst case; a substring longer than the string returns at once. A multi-character substring stored narrower than the string, such as ASCII in text with CJK characters, is first copied at the string's width, here and in `find()`, `rfind()`, `index()`, `rindex()` and `count()` |
 | `s + s` (concatenation) | O(n+m) | O(n+m) | Creates new string |
 | `s * n` (repetition) | O(n\*len(s)) | O(n\*len(s)) | Creates new string |
 | `slice [::2]` | O(k) | O(k) | k = slice length |
+| `s[:]`, `str(s)`, `copy.copy(s)` | O(1) | O(1) | Return `s` itself when it is an exact `str`, as a string is immutable |
+| `for c in s` | O(n) | O(1) | One single-character string per step |
 | **Search** ||||
-| `find(sub)` | O(n + m) avg | O(1) | Uses Two-Way / fastsearch algorithm in CPython |
-| `rfind(sub)` | O(n*m) worst | O(1) | Uses backward Boyer-Moore-Horspool |
-| `index(sub)` | O(n + m) | O(1) | Like find() but raises ValueError if not found |
-| `rindex(sub)` | O(n*m) worst | O(1) | Like rfind() but raises ValueError if not found |
-| `count(sub)` | O(n + m) avg | O(1) | n = string, m = substring |
+| `find(sub, start, end)` | O(n) | O(1), O(m) to widen | Uses Two-Way / fastsearch algorithm in CPython. n = characters searched: with `start` and `end`, only that region, read in place |
+| `rfind(sub)` | O(n*m) worst | O(1), O(m) to widen | Uses backward Boyer-Moore-Horspool |
+| `index(sub)` | O(n) | O(1), O(m) to widen | Like find() but raises ValueError if not found |
+| `rindex(sub)` | O(n*m) worst | O(1), O(m) to widen | Like rfind() but raises ValueError if not found |
+| `count(sub)` | O(n) | O(1), O(m) to widen | n = string, m = substring |
 | `startswith(prefix)` | O(m) | O(1) | m = prefix length |
 | `endswith(suffix)` | O(m) | O(1) | m = suffix length |
 | **Replace/Translate** ||||
@@ -29,10 +31,10 @@ The `str` type is an immutable sequence of Unicode characters. Python strings ha
 | `removesuffix(suffix)` | O(n) | O(n) | Returns slice if suffix matches |
 | **Split/Join** ||||
 | `split(sep)` | O(n) | O(n) | Single pass |
-| `rsplit(sep)` | O(n) | O(n) | Split from right |
+| `rsplit(sep)` | O(n*m) worst | O(n) | Split from right, searching backwards as `rfind()` does; O(n) with no `sep` or a one-character one |
 | `splitlines()` | O(n) | O(n) | Split on line boundaries |
 | `partition(sep)` | O(n) | O(n) | Split into 3-tuple at first sep |
-| `rpartition(sep)` | O(n) | O(n) | Split into 3-tuple at last sep |
+| `rpartition(sep)` | O(n*m) worst | O(n) | Split into 3-tuple at last sep, searching backwards as `rfind()` does |
 | `join(iterable)` | O(n) | O(n) | n = total output chars |
 | **Case Conversion** ||||
 | `upper()` | O(n) | O(n) | Must process each char |
@@ -67,7 +69,7 @@ The `str` type is an immutable sequence of Unicode characters. Python strings ha
 | `format(*args)` | O(n) | O(n) | n = template length |
 | `format_map(mapping)` | O(n) | O(n) | Like format() with mapping |
 | **Encoding** ||||
-| `encode(encoding)` | O(n) | O(n) | Convert to bytes |
+| `encode(encoding)` | O(n) | O(n) | Convert to bytes; assumes a codec doing constant work per character |
 
 ## Implementation Details
 
@@ -79,9 +81,9 @@ s1 = "hello"
 s2 = "hello"
 print(s1 is s2)  # Likely True - same object
 
-# Large strings are not interned
-s3 = "x" * 1000
-s4 = "x" * 1000
+# Strings built at run time are not interned
+s3 = "".join(["x"] * 1000)
+s4 = "".join(["x"] * 1000)
 print(s3 is s4)  # False - different objects
 ```
 
@@ -115,9 +117,9 @@ result = "".join(str(i) for i in range(10000))
 ### Substring Search
 
 ```python
-# Linear time on average for substring search
+# Linear time for substring search, even in the worst case
 s = "a" * 1000000 + "b"
-result = s.find("b")  # Usually O(n) avg, not O(n²)
+result = s.find("b")  # O(n)
 
 # CPython uses optimized algorithms (similar to Boyer-Moore)
 ```
@@ -148,7 +150,7 @@ Backed by Java strings, similar performance characteristics.
 
 - Use `str.join()` for combining multiple strings
 - Use f-strings for formatting (Python 3.6+)
-- Use `in` for substring checking (O(n) average)
+- Use `in` for substring checking (O(n))
 - Use `.find()` and `.replace()` for efficient manipulation
 
 ❌ **Avoid**:

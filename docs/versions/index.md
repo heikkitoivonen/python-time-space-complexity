@@ -6,21 +6,37 @@ Different Python versions have made various optimizations and changes that affec
 
 | Version | Release | Status | Notes |
 |---------|---------|--------|-------|
-| 3.14 | Oct 2025 | Bugfix | Max-heap support, incremental GC |
-| 3.13 | Oct 2024 | Bugfix | Free-threading (experimental) |
+| 3.15 | Oct 2026 | Bugfix | Lazy imports, frozendict, UTF-8 default |
+| 3.14 | Oct 2025 | Bugfix | Max-heap support |
+| 3.13 | Oct 2024 | Security | Free-threading (experimental) |
 | 3.12 | Oct 2023 | Security | Better specialization |
 | 3.11 | Oct 2022 | Security | Inline caching, 10-60% faster |
 | 3.10 | Oct 2021 | End of life | Pattern matching |
 
 ## Quick Links
 
-- **[Python 3.14](py314.md)** - Latest: max-heap functions, better GC pauses
+- **[Python 3.15](py315.md)** - Latest: lazy imports, frozendict, sentinel, UTF-8 by default
+- **[Python 3.14](py314.md)** - Max-heap functions in heapq
 - **[Python 3.13](py313.md)** - Experimental free-threading, JIT compiler
 - **[Python 3.12](py312.md)** - Comprehension inlining, type parameters
 - **[Python 3.11](py311.md)** - Significant performance improvements (inline caching)
 - **[Python 3.10](py310.md)** - Pattern matching additions (end of life)
 
 ## Key Changes by Version
+
+### Python 3.15 (October 2026)
+
+Lazy imports and new built-in types:
+
+```python
+lazy import json                      # O(1): loaded on first use
+
+config = frozendict(host="localhost")  # O(n) to build, hashable
+cache = {config: "connection"}         # usable as a dict key
+
+data = bytearray(b"payload")
+payload = data.take_bytes()            # O(1): no copy, data left empty
+```
 
 ### Python 3.14 (October 2025)
 
@@ -34,9 +50,6 @@ data = [3, 1, 4, 1, 5, 9]
 heapq.heapify_max(data)        # O(n) - max-heap transform
 heapq.heappush_max(data, 10)   # O(log n)
 max_val = heapq.heappop_max(data)  # O(log n)
-
-# Incremental GC: 10x better pause times for large heaps
-# uuid4(): ~30% faster
 ```
 
 ### Python 3.13 (October 2024)
@@ -114,6 +127,7 @@ match value:
 
 | Version | EOL Date |
 |---------|----------|
+| 3.15 | Oct 2031 |
 | 3.14 | Oct 2030 |
 | 3.13 | Oct 2029 |
 | 3.12 | Oct 2028 |
@@ -126,6 +140,7 @@ Plan upgrades before EOL.
 
 Generally minimal between minor versions, but check:
 
+- [Python 3.15 What's New](https://docs.python.org/3.15/whatsnew/)
 - [Python 3.14 What's New](https://docs.python.org/3.14/whatsnew/)
 - [Python 3.13 What's New](https://docs.python.org/3.13/whatsnew/)
 - [Python 3.12 What's New](https://docs.python.org/3.12/whatsnew/)
@@ -140,10 +155,11 @@ Generally minimal between minor versions, but check:
 Python 3.10 → Python 3.11  10-60% faster (significant!)
 Python 3.11 → Python 3.12  5-10% faster
 Python 3.12 → Python 3.13  Similar (experimental features)
-Python 3.13 → Python 3.14  Better GC pauses, new heapq functions
+Python 3.13 → Python 3.14  New heapq max-heap functions
+Python 3.14 → Python 3.15  Lazy imports, frozendict, Base32/Base85 in C
 ```
 
-**Recommendation**: Use Python 3.11+ for performance, 3.14+ for new heapq max-heap functions.
+**Recommendation**: Use Python 3.11+ for performance, 3.14+ for heapq max-heap functions, 3.15+ for lazy imports and `frozendict`.
 
 ## Feature by Version
 
@@ -159,7 +175,11 @@ Python 3.13 → Python 3.14  Better GC pauses, new heapq functions
 | Free-threading | 3.13+ | Experimental |
 | JIT compiler | 3.13+ | Experimental |
 | Max-heap (heapq) | 3.14+ | Stable |
-| Incremental GC | 3.14+ | Stable |
+| Incremental GC | 3.14.0-3.14.4 | Reverted in 3.14.5 |
+| Lazy imports | 3.15+ | Stable |
+| frozendict, sentinel | 3.15+ | Stable |
+| Unpacking in comprehensions | 3.15+ | Stable |
+| UTF-8 default encoding | 3.15+ | Stable |
 
 ## Complexity Characteristics by Version
 

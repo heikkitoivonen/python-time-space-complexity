@@ -24,7 +24,7 @@ what it emits.
 | `len(b)` | O(1) | O(1) | |
 | `b[i]` | O(1) | O(1) | An `int` in `range(256)`; `b[i] = v` raises `TypeError` |
 | `b[i:j]`, `b[i:j:step]` | O(k) | O(k) | A copy of the k bytes covered; a step-1 slice covering all of `b` is `b` itself, O(1). `memoryview(b)` is the O(1) alternative |
-| `x in b` | O(n + m) | O(1) | `x` is an `int` or bytes-like |
+| `x in b` | O(n) | O(1) | `x` is an `int` or bytes-like; one longer than `b` returns at once |
 | `b + other`, `b += other` | O(n + k) | O(n + k) | `other` is any bytes-like. `+=` cannot grow `b` in place, so a loop of them copies everything accumulated each time |
 | `b * count` | O(n·count) | O(n·count) | O(1) for a count of 1, which returns `b` itself, and for a count of 0 or less, which returns `b''` |
 | `b == other`, `b != other` | O(n) | O(1) | O(1) when the lengths differ; `<` and the other orderings walk to the first difference |
@@ -37,15 +37,16 @@ what it emits.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `find(sub, start, end)`, `index(sub, start, end)` | O(n + m) | O(1) | `sub` is bytes-like or an `int`; `index()` raises `ValueError` when absent |
-| `rfind(sub, start, end)`, `rindex(sub, start, end)` | O(n·m) | O(1) | Worst case, absent patterns included: the reverse search has no linear-time fallback, where the forward one does |
-| `count(sub, start, end)` | O(n + m) | O(1) | Non-overlapping occurrences |
+| `find(sub, start, end)`, `index(sub, start, end)` | O(n) | O(1) | `sub` is bytes-like or an `int`; `index()` raises `ValueError` when absent. With `start` and `end`, n is the region searched, read in place; a `sub` longer than it returns at once |
+| `rfind(sub, start, end)`, `rindex(sub, start, end)` | O(n·m) | O(1) | Worst case, absent patterns included: the reverse search has no linear-time fallback, where the forward one does. n is the region searched, as for `find()` |
+| `count(sub, start, end)` | O(n) | O(1) | Non-overlapping occurrences; n is the region searched, as for `find()` |
 | `startswith(prefix, start, end)`, `endswith(suffix, start, end)` | O(m + q) | O(1) | Independent of n. Either accepts a tuple of q candidates, and then m is their total length |
 
 ### Transforming
 
 Where the Notes say `b` itself, a call that changes nothing returns the receiver rather than a
-copy; the others always build a new object.
+copy; the others always build a new object, except that the case-changing methods and
+`expandtabs()` return the shared empty `bytes` for an empty `b`.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
@@ -83,7 +84,7 @@ copy; the others always build a new object.
 A `bytes` cannot change, so handing back the same object is as good as a copy. Where a method
 finds nothing to do, an exact `bytes` usually returns itself instead of copying, which a
 `bytearray` never does. The case-changing methods and `expandtabs()` are the exceptions: they
-always build a new object.
+always build a new object from a non-empty `bytes`.
 
 ```python
 data = b"Hello"
@@ -202,14 +203,14 @@ each of the receiver's. `rsplit()`, `rpartition()` and `rindex()` search the sam
 haystack = b"a" * 10_000
 needle = b"ab" + b"a" * 98  # mismatches only at its second byte
 
-assert haystack.find(needle) == -1  # O(n + m) - linear in the worst case
+assert haystack.find(needle) == -1  # O(n) - linear in the worst case
 assert haystack.rfind(needle) == -1  # O(n·m) - m comparisons at each of n positions
-assert haystack.count(b"aa") == 5_000  # O(n + m) - non-overlapping
+assert haystack.count(b"aa") == 5_000  # O(n) - non-overlapping
 assert haystack.startswith(b"aaa")  # O(m) - the prefix's length, not the receiver's
 assert 97 in haystack  # O(n) - an int is a byte value
 
 try:
-    haystack.index(b"b")  # O(n + m)
+    haystack.index(b"b")  # O(n)
 except ValueError as error:
     assert "not found" in str(error)
 else:

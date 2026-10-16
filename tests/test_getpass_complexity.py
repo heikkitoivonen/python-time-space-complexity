@@ -34,7 +34,14 @@ Measurement scope:
 * `echo_char` (3.14+) is fed 10,000, 100,000 and 1,000,000 characters
   through `fallback_getpass()`: each 10x step costs under 30x, where
   quadratic concatenation would cost 100x. Every character typed writes one
-  `echo_char`, a backspace removes one character and writes `"\\b \\b"`, and
+  `echo_char`. A backspace removes one character and writes `"\\b \\b"`
+  through 3.14; from 3.15 it writes `\\r`, spaces over the prompt and the
+  line, `\\r`, the prompt and the remaining masks - 2·(p + n) + 1 characters,
+  counted exactly after 10 and 1,000 typed keys with a 10-character prompt,
+  which is the e·(p + n) term. A key inserted after Ctrl+A writes more than
+  2·(p + n) characters, while one typed at the end - quoted with Ctrl+V or
+  not - writes one. 3.15's Ctrl+A, Ctrl+E, Ctrl+K, Ctrl+U, Ctrl+W
+  and Ctrl+V are each checked by the line they leave. And
   a two-character, control, non-ASCII or non-string `echo_char` raises from
   `unix_getpass()` and `fallback_getpass()` before `sys.stdin` is read. On a
   pseudo-terminal, public `getpass(echo_char='*')` returns the edited line,
@@ -408,7 +415,69 @@ class TestEchoCharMasksEachKey:
             result = HELPERS.fallback_getpass("", sink, echo_char="*")
 
         assert result == "ac"
-        assert sink.text.endswith("**\b \b*")
+        if sys.version_info >= (3, 15):
+            # The whole line is cleared and redrawn, then the new key masked.
+            assert sink.text.endswith("**\r  \r**")
+        else:
+            assert sink.text.endswith("**\b \b*")
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="line redraws are 3.15+")
+    def test_each_edit_redraws_the_prompt_and_line_from_3_15(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The e·(p + n) term: an edit writes the prompt and every mask again."""
+        prompt = "Password: "
+
+        def written_by_one_backspace(typed: int) -> int:
+            monkeypatch.setattr(sys, "stdin", io.StringIO("x" * typed + "\x7f\n"))
+            sink = CountingSink()
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", getpass.GetPassWarning)
+                assert HELPERS.fallback_getpass(prompt, sink, echo_char="*") == "x" * (typed - 1)
+            before = sink.text.rindex("*" * typed) + typed
+            return len(sink.text) - before
+
+        for typed in (10, 1_000):
+            # \r, spaces over prompt and line, \r, prompt, the remaining masks
+            assert written_by_one_backspace(typed) == 2 * (len(prompt) + typed) + 1
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="line redraws are 3.15+")
+    def test_an_insertion_before_the_end_redraws_and_one_at_the_end_does_not(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Why e counts insertions away from the end, and not Ctrl+V."""
+        prompt = "Password: "
+
+        def written(keys: str) -> int:
+            monkeypatch.setattr(sys, "stdin", io.StringIO(keys + "\n"))
+            sink = CountingSink()
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", getpass.GetPassWarning)
+                HELPERS.fallback_getpass(prompt, sink, echo_char="*")
+            return len(sink.text)
+
+        typed = 1_000
+        base = written("x" * typed + "\x01")
+        assert written("x" * typed + "\x01Y") - base > 2 * (len(prompt) + typed)
+        assert written("x" * typed + "Y") - written("x" * typed) == 1
+        assert written("x" * typed + "\x16Y") - written("x" * typed) == 1
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="line editing keys are 3.15+")
+    def test_the_editing_keys_from_3_15(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        cases = {
+            "abc\x01X\n": "Xabc",  # Ctrl+A, then insert at the start
+            "abc\x01\x05X\n": "abcX",  # Ctrl+E back to the end
+            "abc\x01\x0b\n": "",  # Ctrl+K kills forward
+            "abc\x15de\n": "de",  # Ctrl+U kills the line
+            "ab cd\x17\n": "ab ",  # Ctrl+W erases a word
+            "a\x16\x7fb\n": "a\x7fb",  # Ctrl+V quotes the next key
+        }
+        for keys, expected in cases.items():
+            monkeypatch.setattr(sys, "stdin", io.StringIO(keys))
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", getpass.GetPassWarning)
+                result = HELPERS.fallback_getpass("", NullSink(), echo_char="*")
+            assert result == expected, repr(keys)
 
     @POSIX_ONLY
     def test_on_a_terminal_each_character_is_masked(self) -> None:
@@ -418,7 +487,11 @@ class TestEchoCharMasksEachKey:
         session = on_terminal(code, b"ab\x7fc\n")
 
         assert session.stdout.decode().strip() == "'ac'"
-        assert b"**\b \b*" in session.stderr, session.stderr
+        if sys.version_info >= (3, 15):
+            redraw = b"**\r" + b" " * len(b"Password: **") + b"\rPassword: **"
+            assert redraw in session.stderr, session.stderr
+        else:
+            assert b"**\b \b*" in session.stderr, session.stderr
         assert b"ab" not in session.screen
         assert session.before[3] & termios.ICANON
         assert session.after == session.before

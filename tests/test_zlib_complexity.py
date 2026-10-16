@@ -73,8 +73,17 @@ Measurement scope:
   and uneven (1, 7, 4,099 ...) chunks gives the one-shot result, starting from
   0 for `crc32()` and 1 for `adler32()`. A 65,536-byte `memoryview` slice
   shares its input and peaks under 1,000 traced bytes.
+* `crc32_combine()` and `adler32_combine()` (3.15+) are asserted to equal
+  the checksum of the concatenation for second pieces of 0, 1, 4,095 and
+  1,000,003 bytes, and to take `len2` up to 2**63 - 1. Their cost does not
+  follow the data: with `len2` = 16,000,000, each runs over 100x faster
+  than checksumming the 16,000,000-byte second piece, and `len2` = 2**62
+  costs under 10x `len2` = 1. The O(log len2) bound of `crc32_combine()`
+  is read from zlib's crc32.c (`x2nmodp()` steps once per bit of `len2`);
+  the timing only shows the practical cost over those lengths.
 * Every fenced block runs in its own subprocess and working directory, and a
-  mutated assertion in the checksum block is asserted to make it fail.
+  mutated assertion in the checksum block is asserted to make it fail. The
+  combining block is skipped before 3.15, where the functions do not exist.
 
 Not settled here:
 
@@ -112,7 +121,7 @@ from typing import Any
 import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "zlib.md"
-EXPECTED_BLOCKS = 11
+EXPECTED_BLOCKS = 12
 
 CHECKSUMS = pytest.mark.parametrize(
     ("checksum", "start"), [(zlib.crc32, 0), (zlib.adler32, 1)], ids=["crc32", "adler32"]
@@ -653,6 +662,61 @@ def _run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[st
     )
 
 
+COMBINES = pytest.mark.parametrize(
+    ("name", "checksum"), [("crc32_combine", zlib.crc32), ("adler32_combine", zlib.adler32)]
+)
+
+
+@pytest.mark.skipif(sys.version_info < (3, 15), reason="added in 3.15")
+class TestCombiningReadsNeitherPiece:
+    """`adler32_combine` | O(1); `crc32_combine` | O(log len2): the checksum
+    of the concatenation, from two checksums and the second piece's length."""
+
+    @COMBINES
+    @pytest.mark.parametrize("size", [0, 1, 4_095, 1_000_003])
+    def test_the_result_is_the_concatenation_s_checksum(
+        self, name: str, checksum: Callable[[bytes], int], size: int
+    ) -> None:
+        combine = getattr(zlib, name)
+        first, second = random.Random(1).randbytes(5_000), random.Random(size).randbytes(size)
+
+        assert combine(checksum(first), checksum(second), size) == checksum(first + second)
+
+    @COMBINES
+    def test_len2_takes_any_ssize_t(self, name: str, checksum: Callable[[bytes], int]) -> None:
+        combine = getattr(zlib, name)
+
+        assert 0 <= combine(1, 2, 2**63 - 1) < 2**32
+        with pytest.raises(OverflowError):
+            combine(1, 2, 2**63)
+
+    @pytest.mark.timing
+    @COMBINES
+    def test_combining_costs_far_less_than_reading_the_piece(
+        self, name: str, checksum: Callable[[bytes], int]
+    ) -> None:
+        combine = getattr(zlib, name)
+        second = b"x" * 16_000_000
+
+        reading = best_ns(lambda: checksum(second))
+        size = len(second)
+        combining = best_ns(lambda: [combine(1, 2, size) for _ in range(1_000)]) / 1_000
+
+        assert combining * 100 < reading, f"{name}: {combining} ns against {reading} ns"
+
+    @pytest.mark.timing
+    @COMBINES
+    def test_a_huge_len2_costs_about_the_same(
+        self, name: str, checksum: Callable[[bytes], int]
+    ) -> None:
+        combine = getattr(zlib, name)
+
+        small = best_ns(lambda: [combine(1, 2, 1) for _ in range(10_000)])
+        huge = best_ns(lambda: [combine(1, 2, 2**62) for _ in range(10_000)])
+
+        assert huge < 10 * small, f"{name}: len2 = 1 cost {small} ns, 2**62 {huge} ns"
+
+
 class TestDocumentedExamples:
     """Each block runs in its own subprocess and working directory."""
 
@@ -663,6 +727,8 @@ class TestDocumentedExamples:
         failures: list[str] = []
         ran = 0
         for line, source in _blocks():
+            if "crc32_combine" in source and not hasattr(zlib, "crc32_combine"):
+                continue  # added in 3.15
             ran += 1
             workdir = tmp_path / f"block{line}"
             workdir.mkdir()
@@ -670,7 +736,7 @@ class TestDocumentedExamples:
             if result.returncode != 0:
                 failures.append(f"{PAGE.name}:{line}\n{result.stderr.strip()}")
 
-        assert ran == EXPECTED_BLOCKS
+        assert ran == EXPECTED_BLOCKS - (0 if hasattr(zlib, "crc32_combine") else 1)
         assert not failures, "\n\n".join(failures)
 
     def test_the_runner_notices_a_broken_assertion(self, tmp_path: pathlib.Path) -> None:

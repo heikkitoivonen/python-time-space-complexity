@@ -26,7 +26,7 @@ another: from Python 3.11 each level of such nesting doubles the cost of writing
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `marshal.version` | O(1) | O(1) | The default format: 4, and 5 from Python 3.14 |
+| `marshal.version` | O(1) | O(1) | The default format: 4, 5 from Python 3.14, and 6 from Python 3.15 |
 
 ## Serializing Values
 
@@ -61,9 +61,9 @@ assert stream.read() == b''
 
 Only built-in values whose meaning does not depend on the running process are supported: `None`,
 `bool`, `int`, `float`, `complex`, `str`, `bytes`, `tuple`, `list`, `dict`, `set`, `frozenset`,
-`Ellipsis`, `StopIteration` and code objects, plus `slice` from format version 5. Other bytes-like
-objects, `bytes` subclasses included, come back as `bytes`; anything else, including a subclass of
-any other supported type, raises `ValueError`.
+`Ellipsis`, `StopIteration` and code objects, plus `slice` from format version 5 and `frozendict`
+from format version 6. Other bytes-like objects, `bytes` subclasses included, come back as
+`bytes`; anything else, including a subclass of any other supported type, raises `ValueError`.
 
 ```python
 import marshal
@@ -199,6 +199,8 @@ assert namespace['total'] == 45
   so the same set built in a different order gives identical bytes
 - **Python 3.13+**: Added the `allow_code` parameter to all four functions
 - **Python 3.14+**: Format version 5, the new default, adds `slice`
+- **Python 3.15+**: Format version 6, the new default, adds `frozendict`. On 3.15.0, `loads()`
+  raises `ValueError` for data in which one `frozendict` object is reached twice
 - **All Python 3**: A code object is only valid on the Python version that wrote it
 
 ## Related Modules

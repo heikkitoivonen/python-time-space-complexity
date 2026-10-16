@@ -95,6 +95,10 @@ Measurement scope:
   is what keeps the tree from drifting as releases add classes. The set of
   classes outside `Exception` is asserted exhaustively against the
   interpreter, so a class joining them cannot be missed.
+* `ImportCycleError` (3.15+) is raised, in a fresh interpreter, by a module
+  that lazily imports a second and uses it while the second imports the
+  first and reads the proxy being resolved; it is an `ImportError` whose
+  only base is `ImportError`, and its `name` is the lazily imported module.
 * Formatting is asserted to cost more than the display shows: a
   `RecursionError` yields over 200 `extract_tb()` entries and renders to
   fewer lines than it has frames, with the fold marker present, and
@@ -732,6 +736,39 @@ class TestNamesAttributesAndImports:
             assert error.path is None
         else:
             raise AssertionError("a missing module imported")
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="ImportCycleError is 3.15+")
+    def test_a_lazy_import_that_needs_itself_raises_importcycleerror(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """`cycle_m` lazily imports `cycle_n` and uses it; `cycle_n` imports
+        `cycle_m` and reads `cycle_m.cycle_n`, the proxy being resolved."""
+        (tmp_path / "cycle_m.py").write_text("lazy import cycle_n\ncycle_n\n", encoding="utf-8")
+        (tmp_path / "cycle_n.py").write_text("import cycle_m\ncycle_m.cycle_n\n", encoding="utf-8")
+        script = textwrap.dedent(
+            """
+            try:
+                import cycle_m
+            except ImportCycleError as error:
+                assert isinstance(error, ImportError)
+                assert ImportCycleError.__bases__ == (ImportError,)
+                print(error.name)
+            else:
+                raise AssertionError("the cycle resolved")
+            """
+        )
+
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "cycle_n"
 
     def test_unboundlocalerror_inherits_name_but_leaves_it_none(self) -> None:
         def read_before_write() -> str | None:

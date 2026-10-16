@@ -16,6 +16,7 @@ can find what you need at a glance.
 | `bytes` | Binary data | O(1) | - | - |
 | `dict` | Key-value mapping | O(1) | O(1) | O(1) |
 | `set` | Unique items | - | O(1) | O(1) |
+| `frozendict` | Immutable key-value mapping (3.15+) | O(1) | - | - |
 | `frozenset` | Immutable unique items | - | - | - |
 
 ### Sequence Types
@@ -31,6 +32,7 @@ can find what you need at a glance.
 
 - **[Dictionary](dict.md)** - Hash-based key-value storage
 - **[Set](set.md)** - Unordered unique items
+- **[Frozendict](frozendict.md)** - Immutable, hashable mapping (Python 3.15+)
 - **[Frozenset](frozenset.md)** - Immutable unique items
 
 ### Numeric & Boolean Types
@@ -132,6 +134,7 @@ under Notes is what you pay to consume it.
 | [`frozenset()`](frozenset_func.md) | O(n) | O(n) | O(1) when the argument is already a frozenset |
 | [`slice()`](slice.md) | O(1) | O(1) | Only stores indices; applying it costs O(k) |
 | [`object()`](object_func.md) | O(1) | O(1) | The base of every class |
+| [`sentinel()`](sentinel.md) | O(1) | O(1) | Python 3.15+; a unique named marker, compared with `is` |
 
 ### Code Execution
 

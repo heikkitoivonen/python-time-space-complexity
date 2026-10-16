@@ -14,6 +14,17 @@ Measurement scope:
   the two documented aliases to be the same object. `UnionType` is asserted to
   be `typing.Union` on 3.14+ and not before, and `CapsuleType` the type of
   `_socket.CAPI` on 3.13+.
+* `FrameLocalsProxyType` (3.15+) is the type of a function frame's
+  `f_locals`; a write through it reaches the local variable, and an
+  `exec`'d module-level frame's `f_locals` is the globals `dict` itself.
+* `LazyImportType` (3.15+) is the type of what an import named in
+  `__lazy_modules__` binds, observed through the namespace `dict`, with no
+  `find_spec` call on a recording meta path finder. `resolve()` makes one
+  search the first time and none the second, returns the same module both
+  times, and leaves the proxy bound; a global read of the name then rebinds
+  it to the module. Both names are asserted absent before 3.15. Only a
+  plain `import` proxy is resolved; a `lazy from` proxy, whose `resolve()`
+  also reads one attribute, is not.
 * `isinstance(obj, types.FunctionType)` is timed on an instance whose MRO has
   3,001 entries against a plain `object()`; the deep miss costs more than 5x
   (x45 on 3.14, x43 on 3.11 locally).
@@ -256,6 +267,59 @@ class TestTypeNames:
         import _socket
 
         assert isinstance(_socket.CAPI, types.CapsuleType)  # type: ignore[attr-defined]
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="added in 3.15")
+    def test_frame_locals_proxy_type_writes_through(self) -> None:
+        def body() -> int:
+            value = 1
+            proxy = sys._getframe().f_locals  # noqa: SLF001
+            assert type(proxy) is types.FrameLocalsProxyType  # type: ignore[attr-defined]
+            proxy["value"] = 2
+            return value
+
+        namespace: dict[str, Any] = {"sys": sys}
+        exec("module_locals = sys._getframe().f_locals", namespace)  # noqa: S102
+
+        assert body() == 2
+        assert namespace["module_locals"] is namespace
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="added in 3.15")
+    def test_lazy_import_type_resolves_once_and_leaves_the_binding(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        (tmp_path / "types_lazy_probe.py").write_text("VALUE = 1\n", encoding="utf-8")
+        searched: list[str] = []
+
+        class Recorder:
+            def find_spec(self, name: str, path: object = None, target: object = None) -> None:
+                searched.append(name)
+
+        recorder = Recorder()
+        sys.path.insert(0, str(tmp_path))
+        sys.meta_path.insert(0, recorder)  # type: ignore[arg-type]
+        try:
+            app: dict[str, Any] = {"__name__": "types_lazy_app"}
+            exec("__lazy_modules__ = ['types_lazy_probe']\nimport types_lazy_probe\n", app)  # noqa: S102
+            proxy = app["types_lazy_probe"]
+            assert type(proxy) is types.LazyImportType  # type: ignore[attr-defined]
+            assert searched == []
+
+            first, second = proxy.resolve(), proxy.resolve()
+
+            assert first is second and first.VALUE == 1
+            assert searched == ["types_lazy_probe"]
+            assert app["types_lazy_probe"] is proxy
+            exec("seen = types_lazy_probe", app)  # noqa: S102
+            assert app["types_lazy_probe"] is first and app["seen"] is first
+        finally:
+            sys.meta_path.remove(recorder)  # type: ignore[arg-type]
+            sys.path.remove(str(tmp_path))
+            sys.modules.pop("types_lazy_probe", None)
+
+    @pytest.mark.skipif(sys.version_info >= (3, 15), reason="added in 3.15")
+    def test_the_315_types_are_absent_before(self) -> None:
+        assert not hasattr(types, "FrameLocalsProxyType")
+        assert not hasattr(types, "LazyImportType")
 
     @pytest.mark.skipif(sys.version_info < (3, 14), reason="changed in 3.14")
     def test_union_type_is_typing_union_from_314(self) -> None:

@@ -1,5 +1,5 @@
 ---
-source_sha: c0bc8604cd865955e9bee5e9ce07ac587f5fc37659a6f2d952c5a11560725f18
+source_sha: 94b8516e62742f8991e48fca56d762ca55a09160a862913d1a31bbcba081e372
 translated: machine
 ---
 
@@ -7,29 +7,34 @@ translated: machine
 
 Tyyppi `tuple` on muuttumaton, järjestetty jono. Muuttumattomuus mahdollistaa monenlaisia optimointeja CPythonissa.
 
+`n` on monikon pituus, `k` on indeksi tai toistokerroin, `i:j` ovat viipaleen rajat ja `len(t1)`,
+`len(t2)` ovat operandien pituudet. Yhden alkion vertailu tai hajautus lasketaan O(1):ksi.
+
 ## Vaativuustaulukko
 
 | Operaatio | Aika | Tila | Huomiot |
 |-----------|------|-------|-------|
-| `len()` | O(1) | O(1) | Suora haku |
-| `access[i]` | O(1) | O(1) | Suora indeksointi |
+| `len(t)` | O(1) | O(1) | Pituus on tallennettu monikkoon, sitä ei lasketa |
+| `t[k]` | O(1) | O(1) | Suora indeksointi |
 | `index(x)` | O(n) | O(1) | Lineaarinen haku |
 | `count(x)` | O(n) | O(1) | Lineaarinen läpikäynti |
-| `in` (jäsenyys) | O(n) | O(1) | Lineaarinen haku |
-| `copy()` | O(1) | O(1) | Kasvattaa vain viittauslaskuria |
-| `x + y` (yhdistäminen) | O(m+n) | O(m+n) | m ja n ovat pituuksia |
-| `t * n` (toisto) | O(n*len(t)) | O(n*len(t)) | Luo uuden monikon |
-| `hash()` | O(n) ensimmäisellä kerralla, O(1) välimuistista | O(1) | Tiiviste lasketaan kerran ja tallennetaan kenttään `ob_hash` |
+| `x in t` (jäsenyys) | O(n) | O(1) | Lineaarinen haku |
+| `tuple(t)`, `copy.copy(t)` | O(1) | O(1) | Palauttaa `t`:n itsensä, kun `t` on täsmälleen `tuple`-tyyppinen; monikoilla ei ole `copy()`-metodia |
+| `t1 + t2` (yhdistäminen) | O(len(t1)+len(t2)) | O(len(t1)+len(t2)) | |
+| `t * k` (toisto) | O(nk) | O(nk) | |
+| `for x in t` (iterointi) | O(n) | O(1) | O(1) askelta kohden |
+| `min(t)`, `max(t)` | O(n) | O(1) | n-1 vertailua |
+| `hash()` | O(n) ensimmäisellä kerralla; sen jälkeen O(1) versiosta 3.14 alkaen | O(1) | 3.14+ tallentaa tiivisteen kenttään `ob_hash`; 3.11-3.13 laskevat sen joka kutsulla uudelleen |
 | `reversed()` | O(1) | O(1) | Iteraattori, ei materialisoida |
-| `tuple()`-konstruktori | O(n) | O(n) | n = iteroituvan pituus |
-| `slice [::2]` | O(k) | O(k) | k = viipaleen pituus |
+| `tuple()`-konstruktori | O(n) | O(n) | n = iteroituvan pituus; täsmälleen `tuple`-tyyppinen monikko palautetaan sellaisenaan |
+| `t[i:j]` (viipalointi) | O(j-i) | O(j-i) | Askeleen kanssa O(tuloksen pituus) |
 
 ## Toteutuksen yksityiskohdat
 
 ### Muuttumattomuuden edut
 
 ```python
-# Tuples are hashable - can be dict keys or set members
+# Tuples of hashable elements are hashable - can be dict keys or set members
 d = {(1, 2): 'point', (3, 4): 'another'}
 s = {(0, 0), (1, 1)}
 
@@ -41,12 +46,13 @@ s = {(0, 0), (1, 1)}
 
 ```python
 # hash() computes hash value by iterating all elements
-t = (1, 2, 3)
+t = tuple([1, 2, 3])  # built at run time, so not hashed yet
 h1 = hash(t)  # O(n) first call - computes by iterating elements
 
-# CPython caches the hash in the tuple's ob_hash field
-# Subsequent calls return the cached value
-h2 = hash(t)  # O(1) - returns cached hash
+# Python 3.14+ caches the hash in the tuple's ob_hash field;
+# 3.11-3.13 recompute it on every call
+h2 = hash(t)  # O(1) on 3.14+, O(n) on 3.11-3.13
+assert h1 == h2
 ```
 
 ### Viittaus vai kopio
@@ -55,7 +61,7 @@ h2 = hash(t)  # O(1) - returns cached hash
 # Tuple "copy" doesn't copy - returns same object
 t1 = (1, 2, 3)
 t2 = tuple(t1)
-print(t1 is t2)  # True - same object in memory!
+assert t1 is t2  # True - same object in memory!
 
 # This is safe because tuples are immutable
 ```
@@ -77,9 +83,9 @@ tup = tuple(lst)  # O(n) - must copy all elements
 
 ## Versiohuomiot
 
-- **Kaikki versiot**: Perusvaativuudet vakaat
 - **Python 3.8+**: Monikoiden purku parantunut joissakin tapauksissa
 - **Python 3.11+**: Mukautuva erikoistaminen voi optimoida toistuvia monikko-operaatioita
+- **Python 3.14+**: `hash()` tallentaa tuloksensa monikkoon, joten toistuvat kutsut ovat O(1)
 
 ## Toteutusten vertailu
 
@@ -105,7 +111,6 @@ Samankaltaiset ominaisuudet, taustalla Javan taulukot.
 
 - Toistuvaa yhdistämistä: `t += (item,)` silmukoissa - käytä sen sijaan listaa
 - Monikoiden luomista suurista iteroituvista silmukan sisällä
-- Oletusta, että monikon kopiointi on nopeaa - se viittaa edelleen samoihin alkioihin
 
 ## Yleisiä ratkaisumalleja
 
@@ -142,7 +147,7 @@ lst = list(range(1000000))
 for i in range(1000):
     x = lst[i]  # O(1)
 
-# Both have same access time; tuple is hashable and immutable
+# Both have O(1) indexing; tuple is hashable and immutable
 ```
 
 ## Liittyvät tyypit

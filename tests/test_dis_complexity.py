@@ -45,7 +45,8 @@ Measurement scope:
   `tb_lasti`; `distb(tb)` produces the same text as `disassemble()` on the
   first entry's frame; `dis()` with no argument produces the same text as
   `from_traceback()` on `sys.last_traceback` (and `sys.last_exc` from 3.12).
-* The opcode collections are asserted to be lists, `opmap` a dict, and the
+* The opcode collections are asserted to be lists, `opmap` a dict (a
+  `frozendict` from 3.15), and the
   version-gated collections, `Positions`, the 3.13 `Instruction` fields,
   `starts_line`'s type and `findlinestarts()` yielding `None` are asserted on
   the versions each row names.
@@ -78,6 +79,7 @@ Not settled here:
 
 from __future__ import annotations
 
+import builtins
 import dis
 import io
 import pathlib
@@ -489,7 +491,9 @@ class TestOpcodeCollections:
 
     def test_the_tables(self) -> None:
         assert isinstance(dis.opname, list)
-        assert isinstance(dis.opmap, dict)
+        # 3.15 builds opmap as a frozendict, which is not a dict subclass.
+        opmap_type = builtins.frozendict if sys.version_info >= (3, 15) else dict
+        assert type(dis.opmap) is opmap_type
         assert isinstance(dis.cmp_op, tuple)
         assert dis.opname[dis.opmap["POP_TOP"]] == "POP_TOP"
         assert dis.EXTENDED_ARG == dis.opmap["EXTENDED_ARG"]

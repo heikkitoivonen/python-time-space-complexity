@@ -1,18 +1,20 @@
 # site Module Complexity
 
 The `site` module runs at interpreter startup, unless Python was started with `-S`. It adds the
-site-packages directories to `sys.path` and processes the `.pth` files in them. Its work is
-filesystem work: it lists each site directory it processes, and checks each `.pth` path line that
-names a path not already known for existence.
+site-packages directories to `sys.path` and processes the `.pth` files in them, and from 3.15 the
+`.start` files too. Its work is filesystem work: it lists each site directory it processes, and
+checks each `.pth` path line that names a path not already known for existence.
 
 `P` is the entries on `sys.path` when a call starts, `e` is the entries in a site directory (every
-name, not only the `.pth` files), `f` is the `.pth` files in it, `L` is the lines in those files,
-`A` is the paths the call adds to `sys.path`, `c` is the characters in the largest `.pth` file,
-`r` is the entries in `site.PREFIXES`, and `M` is the modules in `sys.modules`. For
-`site.main()`, `e`, `f`, `L` and `A` are totals over every site directory it processes. Lines
-and paths are treated as short, so one `stat` call or one path normalisation is O(1). The bounds
-exclude the code an `import` line in a `.pth` file runs, and the `sitecustomize` and
-`usercustomize` imports; those cost whatever their code does.
+name, not only the `.pth` files), `f` is the `.pth` and `.start` files in it, `L` is the lines in
+those files, `A` is the paths the call adds to `sys.path`, `N` is the new paths it records - the
+site directory and each distinct `.pth` path line not already known, whether or not it exists -
+`c` is the characters in the largest `.pth` file, `r` is the entries in `site.PREFIXES`, and `M`
+is the modules in `sys.modules`. For `site.main()`, `e`, `f`, `L`, `A` and `N` are totals over
+every site directory it processes. Lines and paths are treated as short, so one `stat` call or
+one path normalisation is O(1). The bounds exclude the code an `import` line in a `.pth` file or
+an entry point in a `.start` file runs, and the `sitecustomize` and `usercustomize` imports;
+those cost whatever their code does.
 
 ## Complexity Reference
 
@@ -20,8 +22,18 @@ exclude the code an `import` line in a `.pth` file runs, and the `sitecustomize`
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `site.addsitedir(sitedir, known_paths=None)` | O(P + e + f log f + L) | O(P + e + A + c) | Checks every `sys.path` entry for existence first unless `known_paths` is given, lists the whole directory, and processes the `.pth` files in name order |
-| `site.main()` | O(P + M + r + e + f log f + L) | O(P + M + r + e + A + c) | One `addsitedir()` per existing site directory, sharing one set of known paths; in a virtual environment its own site-packages is processed twice. `M` is paid only when a `sys.path` entry is relative, duplicated or not normalised |
+| `site.addsitedir(sitedir, known_paths=None)` | O(P + e + f log f + L), plus O(N·(P + A)) from 3.15 | O(P + e + A + c), plus O(L) from 3.15 | Checks every `sys.path` entry for existence first unless `known_paths` is given, lists the whole directory, and processes the `.pth` files in name order. From 3.15 it records the directory's paths and then applies them, scanning `sys.path`, which grows as paths are appended, once for each new path before appending it; that is the N·(P + A) term. The recorded lines are held until then, the O(L) |
+| `site.main()` | O(P + M + r + e + f log f + L), plus O(N·(P + A)) from 3.15 | O(P + M + r + e + A + c), plus O(L) from 3.15 | Every existing site directory, sharing one set of known paths. Up to 3.14 one `addsitedir()` each, and in a virtual environment its own site-packages is processed twice. From 3.15 one `StartupState` batch: every directory's paths are added before any `import` line or entry point runs, and each directory is processed once. `M` is paid only when a `sys.path` entry is relative, duplicated or not normalised |
+| `site.makepath(*paths)` | O(1) | O(1) | Joins the parts and returns the absolute path with its case-normalised form, the pair the known-path checks compare |
+
+### StartupState
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `site.StartupState(known_paths=None)` | O(P), or O(1) with `known_paths` | O(P) | Python 3.15+. Without `known_paths`, checks every `sys.path` entry for existence to build the set; a set given is used, and updated, in place |
+| `StartupState.addsitedir(sitedir)` | O(e + f log f + L) | O(e + L + c) | Python 3.15+. Lists the directory and reads its `.pth` and `.start` files in name order, recording paths, `import` lines and entry points; nothing reaches `sys.path` or runs yet. A directory already in this batch is skipped |
+| `StartupState.addusersitepackages()`, `StartupState.addsitepackages(prefixes=None)` | O(e + f log f + L), and O(r) more for `addsitepackages` | O(e + L + c), and O(r) more for `addsitepackages` | Python 3.15+. `addsitedir()` on the user site directory when it is enabled and exists, or on each existing directory `getsitepackages()` builds |
+| `StartupState.process()` | O(N·(P + A) + L) | O(1) | Python 3.15+. Appends each recorded path not already on `sys.path`, reporting a missing one on stderr; then runs the `import` lines of every `.pth` file without a `.start` file of the same name; then calls each `.start` entry point. The lines and entry points cost whatever their code does |
 
 ### Locating site directories
 
@@ -50,8 +62,11 @@ exclude the code an `import` line in a `.pth` file runs, and the `sitecustomize`
 
 A `.pth` path line is joined to the site directory and added only if that path exists, so each
 new one costs a `stat`. A path already known is skipped by a set lookup, not a scan of
-`sys.path`. A line starting with `import` and a space or tab is executed when it is reached, so
-it sees the paths the lines above it added.
+`sys.path`; from 3.15 each new path is also checked against `sys.path` once before it is
+appended, and a missing one is reported on stderr. A line starting with `import` and a space or
+tab is executed when it is reached up to 3.14, so it sees the paths the lines above it added;
+from 3.15 it runs after every path in the batch is added, and not at all when a `.start` file
+of the same name sits beside the `.pth` file.
 
 ```python
 import os
@@ -117,8 +132,10 @@ with tempfile.TemporaryDirectory() as sitedir:
 
 `site.main()` runs before your program does, at every start. It lists each site directory,
 reads the `.pth` files in them, runs their `import` lines, and imports `sitecustomize`, and
-`usercustomize` when the user site directory is enabled. In a virtual environment the
-environment's own site-packages goes through that twice, `import` lines included. Each directory
+`usercustomize` when the user site directory is enabled. Up to 3.14, in a virtual environment
+the environment's own site-packages goes through that twice, `import` lines included; from 3.15
+`main()` batches every directory in one `StartupState`, which processes each directory once and
+runs `.start` entry points after the `import` lines. Each directory
 it adds is also one more `sys.path` entry that an import miss searches; see
 [`__import__()`](../builtins/__import__.md). Starting Python with `-S` skips all of it, and
 `site.main()` does the same work later if a program needs it.
@@ -169,6 +186,12 @@ assert site.getuserbase() is site.USER_BASE  # O(1)
 
 ## Version Notes
 
+- **Python 3.15+**: `.start` files name entry points to call at startup, and an `import` line in a
+  `.pth` file is skipped when a `.start` file of the same name exists; `import` lines run after
+  every path of the batch is added rather than when reached, and a missing path line is reported
+  on stderr. `StartupState` and `makepath()` are public, `main()` processes a virtual
+  environment's site-packages once, and applying the recorded paths scans `sys.path` once per new
+  path, the N·(P + A) term
 - **Python 3.12.4+**: `.pth` files are read whole, which is the `c` term, and decoded as UTF-8, a
   byte order mark accepted, falling back to the locale encoding; earlier releases read them a line
   at a time in the locale encoding

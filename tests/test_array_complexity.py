@@ -49,7 +49,7 @@ Measurement scope:
 * Item sizes: `'b'`/`'B'` 1, `'f'` 4, `'d'` 8, and the C-type minimums for
   the other integer codes. The `'w'` code and `clear()` are asserted on
   3.13+, and the `'u'` `DeprecationWarning` on 3.13+.
-* Memory against a list uses 10,000 ints from 1,000 up, so none is a cached
+* Memory against a list uses 10,000 ints from 2,000 up, so none is a cached
   small int: `getsizeof()` of an `'i'` array is under the list's, the list's
   reachable size is over twice its `getsizeof()`, and an array built from a
   list holds at least len·itemsize bytes of payload.
@@ -644,13 +644,14 @@ class TestMemoryAgainstAList:
     """`getsizeof()` of a list counts pointers, not the objects they reach;
     an array's counts its packed items."""
 
-    VALUES = list(range(1_000, 11_000))
+    VALUES = list(range(2_000, 12_000))
 
     def test_the_values_are_distinct_objects(self) -> None:
         def fresh(value: int) -> int:
             return int(str(value))
 
-        assert fresh(1_000) is not fresh(1_000), "1,000 is outside the small-int cache"
+        # The cache ends at 256 before 3.15 and at 1,024 from 3.15.
+        assert fresh(2_000) is not fresh(2_000), "2,000 is outside the small-int cache"
 
     def test_an_int_array_is_smaller_than_the_list_s_pointers(self) -> None:
         packed = array.array("i", self.VALUES)

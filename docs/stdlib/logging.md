@@ -51,7 +51,7 @@ destination.
 | `Logger.getEffectiveLevel()` | O(a) | O(1) | Walks toward the root until a logger with a level set; not cached |
 | `Logger.setLevel(level)` | O(L) | O(1) | Clears the level cache of every registered logger, not just this one |
 | `Logger.hasHandlers()` | O(a) | O(1) | Stops at the first logger with handlers, or the first with `propagate` false |
-| `Logger.addHandler(hdlr)`, `Logger.removeHandler(hdlr)` | O(n) | O(1) | n = handlers already on this logger, scanned for equality; a handler is added once |
+| `Logger.addHandler(hdlr)`, `Logger.removeHandler(hdlr)` | O(n) | O(1), or O(n) for `removeHandler` on Python 3.13+ | n = handlers already on this logger, scanned for equality; a handler is added once. On the 3.13, 3.14 and 3.15 releases this page is tested on, `removeHandler` builds a new list without the handler and replaces `handlers` with it, so a list read earlier still holds it |
 | `Logger.handle(record)` | O(F + a + h) plus handler work | O(1) | Skipped entirely when `disabled`; the logger's filters, then `callHandlers()` |
 | `Logger.callHandlers(record)` | O(a + h) plus each accepting handler's `handle()` | O(1) | Walks toward the root unless `propagate` is false; a record that finds no handler anywhere goes to `logging.lastResort` |
 | `Logger.makeRecord(name, level, fn, lno, msg, args, exc_info, func=None, extra=None, sinfo=None)` | O(p + e) | O(p + e) | The record, then each `extra` key checked against the record's attributes and copied in; a collision raises `KeyError` |
@@ -238,8 +238,8 @@ destination.
 | `HTTPHandler.mapLogRecord(record)` | O(1) | O(1) | Returns the record's own `__dict__`, not a copy |
 | `HTTPHandler.getConnection(host, secure)` | O(1) | O(1) | An `http.client` connection object; the connect happens in the request |
 | `HTTPHandler.emit(record)` | O(A + V) plus one request | O(A + V) | URL-encodes every attribute of the record (A attributes, V characters of values) into the query string or body, sends one request per record and waits for the response |
-| `logging.handlers.NTEventLogHandler(appname, dllname=None, logtype='Application')` | one registry write | O(1) | Windows with pywin32: registers the event source. Elsewhere it prints a notice and every `emit()` is a no-op |
-| `NTEventLogHandler.emit(record)` | O(k) plus one `ReportEvent` | O(k) | Windows only |
+| `logging.handlers.NTEventLogHandler(appname, dllname=None, logtype='Application')` | one registry write | O(1) | Registers the event source on Windows. Through Python 3.14 that needs pywin32, and without it the constructor prints a notice and every `emit()` is a no-op; from Python 3.15 it needs no pywin32, and off Windows the constructor raises `ImportError` |
+| `NTEventLogHandler.emit(record)` | O(k) plus one `ReportEvent` | O(k) | Windows only. From Python 3.15 each call also opens and closes an event-source handle |
 | `NTEventLogHandler.getMessageID(record)`, `NTEventLogHandler.getEventCategory(record)`, `NTEventLogHandler.getEventType(record)` | O(1) | O(1) | Return 1, 0 and a lookup in the level-to-type map |
 | `NTEventLogHandler.close()` | O(1) | O(1) | Leaves the registry entry in place |
 
@@ -799,6 +799,7 @@ assert logging.getLogger().level == logging.WARNING
 - **Python 3.12.6+**: `RotatingFileHandler` never rolls over an empty file and stats the path only when a rollover is due
 - **Python 3.13+**: `LoggerAdapter(merge_extra=True)`; a second `QueueListener.stop()` is a no-op, and from 3.13.4 a second `start()` raises
 - **Python 3.14+**: `QueueListener` is a context manager; `SysLogHandler(timeout=...)`
+- **Python 3.15+**: `NTEventLogHandler` needs no pywin32 on Windows, and raises `ImportError` on construction elsewhere
 - **All Python 3**: `StreamHandler.emit()` flushes after every record
 
 ## Related Modules

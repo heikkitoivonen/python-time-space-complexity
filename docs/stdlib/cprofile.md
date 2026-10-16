@@ -5,7 +5,8 @@ the same running and reporting methods, the same `run()` and `runctx()`, and the
 through `pstats`. While a profiler is enabled, the interpreter calls its C hooks on every call and
 return event, and each one reads a timer and updates a table of per-function totals. The table
 holds one entry per function, not per call, so the memory a run needs follows the program's shape
-rather than its length.
+rather than its length. From Python 3.15 the implementation lives in
+[profiling.tracing](profiling.md), and `cProfile` re-exports its `run()`, `runctx()` and `Profile`.
 
 `c` is the calls the profiled code makes: calls of Python functions, each resumption of a
 generator, and calls of built-in functions and methods; each costs two events. `f` is the distinct
@@ -27,8 +28,8 @@ table and each called function's bytecode size are treated as O(1).
 |-----------|------|-------|-------|
 | `cProfile.run(statement, filename=None, sort=-1)` | O(c + f log f + e) | O(f + e + d) | Runs `statement` in `__main__`'s namespace, then prints the report sorted by `sort`, or writes it to `filename`; returns `None` |
 | `cProfile.runctx(statement, globals, locals, filename=None, sort=-1)` | O(c + f log f + e) | O(f + e + d) | Same, in the namespaces you pass |
-| `cProfile.main()`, `python -m cProfile [-o outfile] [-s sort] (-m module \| script) [args]` | O(c + f log f + e) | O(f + e + d) | The command line: profiles a script, or a module with `-m`, and prints the report sorted by `-s`, or writes it to `-o`; the script is compiled first, unprofiled |
-| `cProfile.label(code)` | O(1) | O(1) | The `(filename, line, name)` key a report files a function under; a built-in gets `('~', 0, name)` |
+| `cProfile.main()` (Python 3.14 and earlier), `python -m cProfile [-o outfile] [-s sort] (-m module \| script) [args]` | O(c + f log f + e) | O(f + e + d) | The command line: profiles a script, or a module with `-m`, and prints the report sorted by `-s`, or writes it to `-o`; the script is compiled first, unprofiled. From Python 3.15 `main()` is `profiling.tracing.main()`, and `python -m cProfile` runs it |
+| `cProfile.label(code)` (Python 3.14 and earlier) | O(1) | O(1) | The `(filename, line, name)` key a report files a function under; a built-in gets `('~', 0, name)`. From Python 3.15 it is `profiling.tracing.label()` |
 
 ### Profile
 
@@ -325,10 +326,12 @@ with tempfile.TemporaryDirectory() as directory:
 - **Python 3.12+**: Events come from `sys.monitoring`. Calls made in every thread are recorded while a profiler is enabled, enabling a second one raises `ValueError` instead of silently taking over from the first, and `enable()` and `disable()` rework what every thread is running (the s term)
 - **Python 3.13+**: `Profile.print_stats()` accepts a tuple of sort keys, and so does the `sort` argument of `run()` and `runctx()`
 - **Python 3.14+**: `enable()` with no arguments turns `subcalls` and `builtins` back on, discarding what was passed to `Profile()`
+- **Python 3.15+**: The implementation moves to `profiling.tracing` (PEP 799); `cProfile` re-exports `run()`, `runctx()` and `Profile`, and `label()` and `main()` are reached through `profiling.tracing`
 
 ## Related Modules
 
-- **[profile](profile.md)** - the same interface in pure Python, for extending the profiler
+- **[profiling](profiling.md)** - `profiling.tracing`, this profiler's home from Python 3.15, and a sampling profiler that adds no per-call work
+- **[profile](profile.md)** - the same interface in pure Python, for extending the profiler; deprecated from Python 3.15
 - **[pstats](pstats.md)** - loads, sorts and prints what a profiler recorded
 - **[timeit](timeit.md)** - times a snippet with no profiler in the way
 - **[sys](sys.md)** - `sys.monitoring`, the event source `cProfile` uses from Python 3.12

@@ -34,10 +34,11 @@ any trailer block, and an iterable body supplies chunks of its own size rather
 than `blocksize` ones; neither is priced here.
 
 Header parsing is bounded rather than linear: `http.client` rejects a header
-line over 65,536 bytes, and rejects a header block once it has collected more
-than 100 lines. The terminating blank line is one of them, so 99 headers is the
-most that parses: 100 headers plus the terminator is 101 lines. Both h and v
-are therefore capped for anything it reads. The cap is per block, not
+line over 65,536 bytes, and rejects a header block of more than 100 lines.
+Through Python 3.14 the terminating blank line is one of them, so 99 headers is
+the most that parses; from Python 3.15 it is not, so 100 headers parse, and an
+`HTTPConnection` built with `max_response_headers` replaces the 100 for its
+responses. Both h and v are therefore capped for anything it reads. The cap is per block, not
 per call: `getresponse()` skips `100 Continue` responses first, each with a
 header block of its own, until a status that is not 100 arrives - a `103`, like
 any other, ends the loop and becomes the response. Patch releases across the
@@ -71,7 +72,7 @@ A `StrEnum` in `http`, Python 3.11+.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `http.client.parse_headers(fp)` | O(n) | O(n) | n = header bytes, capped at 99 headers of 65,536 bytes; reads to the blank line, which counts toward the limit, and hands the block to the `email` parser. Raises `LineTooLong` or `HTTPException` at those limits |
+| `http.client.parse_headers(fp)` | O(n) | O(n) | n = header bytes, capped at 100 lines of 65,536 bytes; reads to the blank line and hands the block to the `email` parser. The blank line counts toward the 100 through Python 3.14, so 99 headers parse there and 100 from Python 3.15. Raises `LineTooLong` or `HTTPException` at those limits |
 | `http.client.responses` | O(1) | O(1) | Status code to reason phrase; a dict lookup, not a scan |
 
 ### HTTPConnection and HTTPSConnection
@@ -81,7 +82,7 @@ parent's.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `HTTPConnection(host, port)` | O(n) | O(n) | n = host string length, which is validated and split from any `:port`; opens nothing |
+| `HTTPConnection(host, port, ..., max_response_headers=None)` | O(n) | O(n) | n = host string length, which is validated and split from any `:port`; opens nothing. `max_response_headers` is Python 3.15+ |
 | `HTTPConnection.connect()` | O(1) + round trip | O(1) | Name resolution and the TCP connect, plus the TLS handshake for `HTTPSConnection` |
 | `HTTPConnection.request(method, url, body, headers)` | O(q + b) | O(q + B), or O(q + b) for a `str` body | q = the serialized request line and headers, method, URL, header names and values together. The space is that block plus one body chunk: a `bytes` body reaches the socket without a copy, an object with `read()` is streamed in `blocksize` chunks, and a `str` body is encoded whole first |
 | `HTTPConnection.putrequest(method, url)` | O(n) | O(n) | n = method and URL length; appended to the header buffer, not sent |
@@ -94,6 +95,7 @@ parent's.
 | `HTTPConnection.get_proxy_response_headers()` | O(n) | O(n) | Python 3.12+; n = the CONNECT response's header bytes, which it parses afresh on every call rather than caching. None when no tunnel was set |
 | `HTTPConnection.set_debuglevel(level)` | O(1) | O(1) | Above 0, every send and header line is printed, which dominates the transfer |
 | `HTTPConnection.blocksize` | O(1) | O(1) | The chunk size above; raising it trades memory for fewer writes |
+| `HTTPConnection.max_response_headers` | O(1) | O(1) | Python 3.15+. The header-count cap for this connection's responses, its tunnel's CONNECT response and a chunked body's trailer block; `None` keeps the default 100. Raising it raises the h every response may carry |
 | `HTTPConnection.default_port`, `HTTPConnection.auto_open`, `HTTPConnection.debuglevel` | O(1) | O(1) | Class attributes: 80, or 443 for `HTTPSConnection`; whether a send reconnects a closed connection; the class-wide default behind `set_debuglevel` |
 
 ### HTTPResponse
@@ -181,13 +183,16 @@ Serves files from `directory`.
 | `SimpleHTTPRequestHandler.send_head()` | O(n·s), plus the listing for a directory | O(n), plus the listing | Translates the path, stats it, and for a directory tries each name in `index_pages` before falling back to `list_directory` - so a request naming a directory carries that row's k and L, not just this row's n and s |
 | `SimpleHTTPRequestHandler.translate_path(path)` | O(n·s) | O(n) | n = path length, s = its components; unquotes and normalises, then joins the surviving components one at a time, recopying the prefix each time. Components that are not plain names are dropped, which is what stops a literal `..` climbing out of the root - it does not stop a symlink inside the root pointing outside it |
 | `SimpleHTTPRequestHandler.list_directory(path)` | O(k·(L·log k + D) + n) | O(k·L + n) | k = entries, L = the longest name, D = the directory's own path, n = the request path, which is unquoted and escaped into the title and heading. Names are lowercased and compared, so a shared prefix costs L per comparison, and each entry's full path is rebuilt for the two stat calls that choose its `/` or `@` mark. The whole listing is built in memory before it is sent |
-| `SimpleHTTPRequestHandler.guess_type(path)` | O(n) | O(n) | n = path length: the extension is split off and lowercased before the `extensions_map` and `mimetypes` lookups, which are themselves O(1). Unknown extensions fall back to `application/octet-stream` |
+| `SimpleHTTPRequestHandler.guess_type(path)` | O(n) | O(n) | n = path length: the extension is split off and lowercased before the `extensions_map` and `mimetypes` lookups, which are themselves O(1). Unknown extensions fall back to `application/octet-stream`, or from Python 3.15 to `default_content_type` |
 | `SimpleHTTPRequestHandler.copyfile(source, outputfile)` | O(b) | O(1) | Chunked copy |
 | `SimpleHTTPRequestHandler.extensions_map`, `SimpleHTTPRequestHandler.index_pages`, `SimpleHTTPRequestHandler.server_version` | O(1) | O(1) | Class attributes; `index_pages` is Python 3.12+ |
+| `SimpleHTTPRequestHandler.default_content_type` | O(1) | O(1) | Python 3.15+; a class attribute, `application/octet-stream` unless overridden |
+| `SimpleHTTPRequestHandler.extra_response_headers` | O(1) | O(1) | Python 3.15+; the `(name, value)` pairs given to the constructor, or `None`. Each file or listing response then sends every pair whose name it did not already send, at O(h + x·v) for x pairs |
 
 ### CGIHTTPRequestHandler
 
-Deprecated since Python 3.13 and removed in Python 3.15.
+Deprecated since Python 3.13 and removed in Python 3.15; the rows below hold
+through Python 3.14.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
@@ -207,23 +212,25 @@ values.
 | `BaseCookie[name]` | O(1) | O(1) | Dict lookup |
 | `BaseCookie[name] = value` | O(v) | O(v) | Encodes the value through `value_encode` |
 | `BaseCookie.output(attrs, header, sep)` | O(c·L·log c + c·v) | O(c·v) | c = cookies held, L = the longest name, v = one rendered cookie's length; the items are sorted by name first, so output is alphabetical rather than in insertion order |
-| `BaseCookie.js_output(attrs)` | O(c·L·log c + c·v) | O(c·v) | The same sorted content, each wrapped in a script element |
+| `BaseCookie.js_output(attrs)` | O(c·L·log c + c·v) | O(c·v) | The same sorted content, each wrapped in a script element. Deprecated in Python 3.15 |
 | `BaseCookie.value_encode(val)`, `BaseCookie.value_decode(val)`, `SimpleCookie.value_encode(val)`, `SimpleCookie.value_decode(val)` | O(v) | O(v) | `BaseCookie` passes the value through; `SimpleCookie` quotes and unquotes it |
 
 ### Morsel
 
-One cookie: its value plus the reserved attributes.
+One cookie: its value plus the reserved attributes. From 3.11.15, 3.12.13, 3.13.12 and 3.14.3,
+and on 3.15, every write below scans the values it is given for control characters and refuses
+them; earlier patch releases store them unscanned.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `Morsel()` | O(1) | O(1) | Every reserved key is created empty, so the key set is fixed and no accessor below grows with anything |
 | `Morsel.set(key, val, coded_val)` | O(len(key) + v) | O(len(key)) | Checks the name against the reserved set, lowercasing it to do so, and against the legal-character set, and scans all three strings for control characters. The values are then stored by reference; the space is the lowercased name |
-| `Morsel[attr] = value` | O(1) | O(1) | Only a reserved attribute; any other key raises `CookieError` |
+| `Morsel[attr] = value` | O(v) | O(1) | Only a reserved attribute; any other key raises `CookieError`. The value is scanned for control characters, which are refused |
 | `Morsel.isReservedKey(K)` | O(len(K)) | O(len(K)) | Lowercases the key, then looks it up; the lookup is the O(1) part, and nothing here follows how many cookies exist |
-| `Morsel.output(attrs, header)`, `Morsel.js_output(attrs)`, `Morsel.OutputString(attrs)` | O(v) | O(v) | The value plus the reserved keys that were set, of which there is a fixed number |
+| `Morsel.output(attrs, header)`, `Morsel.js_output(attrs)`, `Morsel.OutputString(attrs)` | O(v) | O(v) | The value plus the reserved keys that were set, of which there is a fixed number. `js_output` is deprecated in Python 3.15 |
 | `Morsel.copy()` | O(1) | O(1) | A new `Morsel` over the fixed key set, independent of the original |
-| `Morsel.update(values)` | O(u) | O(u) | u = entries supplied, which are collected into a dict before any key is checked, so an invalid batch is allocated before it is refused |
-| `Morsel.setdefault(key, val)` | O(1) | O(1) | Validates the key, then behaves as `dict.setdefault`. On a morsel that still has its full key set it never stores, because every reserved key already exists as an empty string; after `del morsel['domain']` it does |
+| `Morsel.update(values)` | O(u·v) | O(u) | u = entries supplied, which are collected into a dict before any key is checked, so an invalid batch is allocated before it is refused; each value is scanned for control characters |
+| `Morsel.setdefault(key, val)` | O(v) | O(1) | Validates the key and scans the value for control characters, then behaves as `dict.setdefault`. On a morsel that still has its full key set it never stores, because every reserved key already exists as an empty string; after `del morsel['domain']` it does |
 | `Morsel.key`, `Morsel.value`, `Morsel.coded_value` | O(1) | O(1) | The name, the decoded value, and the value as it appears in the header |
 | `Morsel.expires`, `Morsel.path`, `Morsel.comment`, `Morsel.domain`, `Morsel.secure`, `Morsel.httponly`, `Morsel.samesite`, `Morsel.version`, `Morsel.partitioned` | O(1) | O(1) | Reserved *keys*, read as `morsel['path']`: unlike `key`, `value` and `coded_value` they are not attributes, and `morsel.path` raises AttributeError. `max-age` is a key too, spelled with the dash. `partitioned` is Python 3.14+ |
 
@@ -381,10 +388,10 @@ assert len(conn.sock.writes) == 1
 ## Header Parsing Is Bounded
 
 A peer cannot make one header block cost more than a fixed amount.
-`http.client` refuses a header line over 65,536 bytes, and refuses a block once
-it has collected more than 100 lines. The terminating blank line counts as one,
-so a normal block of 100 headers is 101 lines and is already rejected; 99 is the
-most that parses.
+`http.client` refuses a header line over 65,536 bytes, and refuses a block of
+more than 100 lines. Through Python 3.14 the terminating blank line counts as
+one, so 99 headers is the most that parses; from Python 3.15 it does not, and
+100 parse. A block of 101 headers is refused on every version.
 
 `http.server` parses requests with the same code and the same limits, but does
 not surface them the same way: it catches the failure and answers with an error
@@ -402,16 +409,18 @@ import http.client
 headers = http.client.parse_headers(io.BytesIO(b'A: 1\r\nB: 2\r\n\r\n'))
 assert headers['A'] == '1'
 
-# 99 headers plus the blank line is the most that parses
+# 99 headers parse on every version
 most = b''.join(b'X-%d: v\r\n' % i for i in range(99)) + b'\r\n'
 assert http.client.parse_headers(io.BytesIO(most))['X-98'] == 'v'
 
-# 100 headers plus the blank line is already over - refused, not truncated
-too_many = b''.join(b'X-%d: v\r\n' % i for i in range(100)) + b'\r\n'
+# 101 headers are over on every version - refused, not truncated
+too_many = b''.join(b'X-%d: v\r\n' % i for i in range(101)) + b'\r\n'
 try:
     http.client.parse_headers(io.BytesIO(too_many))
 except http.client.HTTPException as error:
     assert 'got more than 100 headers' in str(error)
+else:
+    raise AssertionError('101 headers must be refused')
 
 # A line over 65,536 bytes - LineTooLong
 long_line = b'X: ' + b'v' * 70_000 + b'\r\n\r\n'
@@ -554,6 +563,7 @@ assert policy.allowed_domains() is None               # nothing restricted
 - **Python 3.12+**: `HTTPStatus.is_success` and its four siblings; `HTTPConnection.get_proxy_response_headers()`; `SimpleHTTPRequestHandler.index_pages`
 - **Python 3.13+**: `CGIHTTPRequestHandler` is deprecated; it is removed in Python 3.15
 - **Python 3.14+**: `HTTPSServer` and `ThreadingHTTPSServer`; `Morsel.partitioned`
+- **Python 3.15+**: `CGIHTTPRequestHandler` is removed; the blank line ending a header block no longer counts toward the 100-line cap, so 100 headers parse; `HTTPConnection(max_response_headers=...)` sets that cap per connection; `SimpleHTTPRequestHandler.default_content_type` and `extra_response_headers`; `BaseCookie.js_output()` and `Morsel.js_output()` are deprecated
 
 ## Related Documentation
 

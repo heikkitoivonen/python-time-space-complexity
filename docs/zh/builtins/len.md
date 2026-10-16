@@ -1,5 +1,5 @@
 ---
-source_sha: d121e0a8af5ee71633a5877aead4146b5a677a147d64343c227a3ee27348715b
+source_sha: d678eab417340ad37271b9efd45d109c51c9563b947ffd94873ec76ddb7be4e2
 translated: machine
 ---
 
@@ -12,12 +12,12 @@ translated: machine
 | 类型 | 时间 | 空间 | 备注 |
 |------|------|-------|-------|
 | `list` | O(1) | O(1) | 直接读取长度属性 |
-| `tuple` | O(1) | O(1) | 不可变，已缓存 |
+| `tuple` | O(1) | O(1) | 长度存储在对象中 |
 | `dict` | O(1) | O(1) | 自身维护大小 |
 | `set` | O(1) | O(1) | 自身维护大小 |
-| `str` | O(1) | O(1) | 不可变，已缓存 |
-| `bytes` | O(1) | O(1) | 不可变，已缓存 |
-| `range` | O(1) | O(1) | 计算得出，并不存储 |
+| `str` | O(1) | O(1) | 长度存储在对象中 |
+| `bytes` | O(1) | O(1) | 长度存储在对象中 |
+| `range` | O(1) | O(1) | 已存储：在创建 range 时计算一次 |
 | `deque` | O(1) | O(1) | 自身维护大小 |
 | `defaultdict` | O(1) | O(1) | 继承自字典 |
 | `OrderedDict` | O(1) | O(1) | 自身维护大小 |
@@ -32,13 +32,13 @@ lst = [1, 2, 3, 4, 5]
 length = len(lst)  # O(1) - stored length
 
 tpl = (1, 2, 3)
-length = len(tpl)  # O(1) - immutable
+length = len(tpl)  # O(1) - length stored in the tuple
 
 dct = {'a': 1, 'b': 2}
 length = len(dct)  # O(1) - maintains size
 
 s = "hello"
-length = len(s)    # O(1) - immutable string
+length = len(s)    # O(1) - length stored in the string
 ```
 
 ## 自定义对象
@@ -173,10 +173,10 @@ for i in range(len(items)):
 
 ```python
 # Range length is O(1), not O(n)
-r = range(10**1000)
-length = len(r)  # O(1) - computed from start, stop, step
+r = range(10**9)
+length = len(r)  # O(1) - stored when the range was built
 
-# This is computed, not stored
+# Computed once from start, stop, step, then stored
 # So even huge ranges have O(1) length
 ```
 

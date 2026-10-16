@@ -1,5 +1,5 @@
 ---
-source_sha: 820e00694858fe62e65db7b6bf1626fd70706ad5e93b5d99a554161c563e5a09
+source_sha: c3d0c046d350983f8cbff5f407980822b6c6c9c702dd57ed250866f968c8fa9a
 translated: machine
 ---
 
@@ -56,7 +56,7 @@ Python の操作の計算量に関する総合ガイドへようこそ。本サ�
 
 ## 収録範囲
 
-- **Python バージョン**：3.11-3.14
+- **Python バージョン**：3.11-3.15
 - **実装**：CPython、PyPy、Jython、IronPython
 - **操作**：組み込みと標準ライブラリを合わせて 2,200 以上
 - **更新**：Python の新しいリリースに合わせて定期的に更新
@@ -74,6 +74,7 @@ Python の操作の計算量に関する総合ガイドへようこそ。本サ�
 ## 参考資料
 
 - [Python 公式ドキュメント](https://docs.python.org/3/)
+- [Python 公式の時間計算量ページ](https://docs.python.org/3.15/builtins/time-complexity.html)（Python 3.15+）
 - [TimeComplexity Wiki](https://wiki.python.org/moin/TimeComplexity)
 - [CPython のソースコード](https://github.com/python/cpython)と実装の詳細
 - [性能テスト](https://github.com/heikkitoivonen/python-time-space-complexity/tree/main/tests)とベンチマーク

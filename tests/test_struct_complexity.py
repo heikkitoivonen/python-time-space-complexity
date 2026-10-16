@@ -46,7 +46,9 @@ Measurement scope:
   turn misses on all 101 calls. The measured function is warmed on a format
   already in the cache, or has already run when no warm-up is possible.
 * `Struct.format` of `'<4sIH'` returns an equal but distinct string on each
-  access (one-character strings are shared by CPython, so not every format), and
+  access before 3.15 (one-character strings are shared by CPython, so not
+  every format); from 3.15 it returns the very string passed to `Struct()`,
+  and for a bytes format the same `str` on every access, and
   `Struct.size` equals `calcsize()`.
 * The count and buffer-size checks are observed to run before conversion:
   values whose `__index__` counts its calls are never converted when `pack()`
@@ -420,12 +422,21 @@ class TestTheFormatCache:
 
 
 class TestStructAttributes:
-    """`Struct.format` | O(m) | O(m) and `Struct.size` | O(1) | O(1)."""
+    """`Struct.format` | O(m) | O(m), O(1) from 3.15, and `Struct.size` | O(1) | O(1)."""
 
+    @pytest.mark.skipif(sys.version_info >= (3, 15), reason="3.15 stores the string")
     def test_format_is_a_new_string_on_each_access(self) -> None:
         header = struct.Struct("<4sIH")
         assert header.format == "<4sIH"
         assert header.format is not header.format
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="3.15 stores the string")
+    def test_format_is_the_stored_string_from_315(self) -> None:
+        text = "<4sIH"
+        assert struct.Struct(text).format is text
+        from_bytes = struct.Struct(b"<4sIH")
+        assert from_bytes.format == text
+        assert from_bytes.format is from_bytes.format
 
     def test_size_is_calcsize(self) -> None:
         for fmt in ("i", "3i", "10s", "<ihb", "!IH", "@ci"):

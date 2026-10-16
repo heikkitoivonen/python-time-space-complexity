@@ -2,29 +2,34 @@
 
 The `tuple` type is an immutable, ordered sequence. Being immutable allows various optimizations in CPython.
 
+`n` is the tuple's length, `k` is an index or a repeat count, `i:j` are slice bounds, and
+`len(t1)`, `len(t2)` are operand lengths. Comparing or hashing one element counts as O(1).
+
 ## Complexity Reference
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `len()` | O(1) | O(1) | Direct lookup |
-| `access[i]` | O(1) | O(1) | Direct indexing |
+| `len(t)` | O(1) | O(1) | The length is stored in the tuple, not counted |
+| `t[k]` | O(1) | O(1) | Direct indexing |
 | `index(x)` | O(n) | O(1) | Linear search |
 | `count(x)` | O(n) | O(1) | Linear scan |
-| `in` (membership) | O(n) | O(1) | Linear search |
-| `copy()` | O(1) | O(1) | Just increments reference count |
-| `x + y` (concatenation) | O(m+n) | O(m+n) | m, n are lengths |
-| `t * n` (repetition) | O(n*len(t)) | O(n*len(t)) | Creates new tuple |
-| `hash()` | O(n) first call, O(1) cached | O(1) | Hash computed once then cached in `ob_hash` |
+| `x in t` (membership) | O(n) | O(1) | Linear search |
+| `tuple(t)`, `copy.copy(t)` | O(1) | O(1) | Returns `t` itself when `t` is an exact tuple; tuples have no `copy()` method |
+| `t1 + t2` (concatenation) | O(len(t1)+len(t2)) | O(len(t1)+len(t2)) | |
+| `t * k` (repetition) | O(nk) | O(nk) | |
+| `for x in t` (iteration) | O(n) | O(1) | O(1) per step |
+| `min(t)`, `max(t)` | O(n) | O(1) | n-1 comparisons |
+| `hash()` | O(n) first call; O(1) after it on 3.14+ | O(1) | 3.14+ caches the hash in `ob_hash`; 3.11-3.13 recompute it every call |
 | `reversed()` | O(1) | O(1) | Iterator, not materialized |
-| `tuple()` constructor | O(n) | O(n) | n = iterable length |
-| `slice [::2]` | O(k) | O(k) | k = slice length |
+| `tuple()` constructor | O(n) | O(n) | n = iterable length; an exact tuple is returned as is |
+| `t[i:j]` (slicing) | O(j-i) | O(j-i) | With a step, O(length of the result) |
 
 ## Implementation Details
 
 ### Immutability Advantages
 
 ```python
-# Tuples are hashable - can be dict keys or set members
+# Tuples of hashable elements are hashable - can be dict keys or set members
 d = {(1, 2): 'point', (3, 4): 'another'}
 s = {(0, 0), (1, 1)}
 
@@ -36,12 +41,13 @@ s = {(0, 0), (1, 1)}
 
 ```python
 # hash() computes hash value by iterating all elements
-t = (1, 2, 3)
+t = tuple([1, 2, 3])  # built at run time, so not hashed yet
 h1 = hash(t)  # O(n) first call - computes by iterating elements
 
-# CPython caches the hash in the tuple's ob_hash field
-# Subsequent calls return the cached value
-h2 = hash(t)  # O(1) - returns cached hash
+# Python 3.14+ caches the hash in the tuple's ob_hash field;
+# 3.11-3.13 recompute it on every call
+h2 = hash(t)  # O(1) on 3.14+, O(n) on 3.11-3.13
+assert h1 == h2
 ```
 
 ### Reference vs Copy
@@ -50,7 +56,7 @@ h2 = hash(t)  # O(1) - returns cached hash
 # Tuple "copy" doesn't copy - returns same object
 t1 = (1, 2, 3)
 t2 = tuple(t1)
-print(t1 is t2)  # True - same object in memory!
+assert t1 is t2  # True - same object in memory!
 
 # This is safe because tuples are immutable
 ```
@@ -72,9 +78,9 @@ tup = tuple(lst)  # O(n) - must copy all elements
 
 ## Version Notes
 
-- **All versions**: Core complexity stable
 - **Python 3.8+**: Improved tuple unpacking in some cases
 - **Python 3.11+**: Adaptive specialization may optimize repeated tuple operations
+- **Python 3.14+**: `hash()` caches its result in the tuple, so repeat calls are O(1)
 
 ## Implementation Comparison
 
@@ -100,7 +106,6 @@ Similar characteristics, backed by Java arrays.
 
 - Repeated concatenation: `t += (item,)` in loops - use list instead
 - Creating tuples from large iterables in loops
-- Assuming tuple copy is fast - it still references same elements
 
 ## Common Patterns
 
@@ -137,7 +142,7 @@ lst = list(range(1000000))
 for i in range(1000):
     x = lst[i]  # O(1)
 
-# Both have same access time; tuple is hashable and immutable
+# Both have O(1) indexing; tuple is hashable and immutable
 ```
 
 ## Related Types

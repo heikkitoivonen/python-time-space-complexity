@@ -39,7 +39,7 @@ allocates, and a tree deeper than the recursion limit raises `RecursionError`; `
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `ast.AST` | O(1) | O(1) | Base class of every node; it carries no fields of its own |
-| `ast.Name(id='x', ctx=ast.Load())`, and every other node constructor bar `ast.ExtSlice` | O(1) | O(1) | Each field is stored from its argument and a list field is kept, not copied; the grammar fixes how many fields a class has. From 3.13 an omitted field is filled from a class default - a fresh empty list for a list field, the shared `Load()` for `ctx` - and omitting a required one warns |
+| `ast.Name(id='x', ctx=ast.Load())`, and every other node constructor bar `ast.ExtSlice` | O(1) | O(1) | Each field is stored from its argument and a list field is kept, not copied; the grammar fixes how many fields a class has. From 3.13 an omitted field is filled from a class default - a fresh empty list for a list field, the shared `Load()` for `ctx`. Omitting a required field, or passing a keyword that is neither a field nor a position attribute such as `lineno`, warns on 3.13 and 3.14 and raises `TypeError` from 3.15 |
 | `node.id`, `node.body`, any field | O(1) | O(1) | Ordinary instance attributes; reading a list field hands back the list itself |
 | `ast.AST._fields`, `ast.AST._attributes` | O(1) | O(1) | The class's own tuples, shared by every instance of it |
 | `ast.AST._field_types` | O(1) | O(1) | 3.13+; the class's field annotations, which is how `dump()` knows whether an empty value belongs to a list field it may omit |
@@ -82,7 +82,7 @@ fields the grammar gives each class, and that is a constant.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `ast.dump(node, annotate_fields=True, include_attributes=False, *, indent=None, show_empty=False)` | O(N * h) | O(N + h) | Each node's text is copied into its parent's, so a deep chain costs far more than a wide tree with the same nodes. `indent=` indents every line by its depth: the output becomes O(N * h) characters, which is then the space, and the copying O(N * h²) |
+| `ast.dump(node, annotate_fields=True, include_attributes=False, *, color=False, indent=None, show_empty=False)` | O(N * h) | O(N + h) | `color=` (3.15+) wraps each class name, field name and value in a fixed-length escape sequence, which leaves the bound unchanged. Each node's text is copied into its parent's, so a deep chain costs far more than a wide tree with the same nodes. `indent=` indents every line by its depth: the output becomes O(N * h) characters, which is then the space, and the copying O(N * h²) |
 | `ast.unparse(node)` | O(N * (q + 1) + s * b) | O(N + s * b) | Only statements are indented, each by its own block depth, so ordinary expression depth costs nothing and flat code is O(N) - linear in a depth `dump()` charges for. A `FormattedValue`, and an `Interpolation` with no recorded source text, renders its expression with a fresh unparser and copies the result into the enclosing string; q is how deeply those renderings nest, and text under q of them is copied q times. The copies are made one after another, so only the output is held |
 
 ### Comparing and locating
@@ -422,11 +422,15 @@ assert modules == ["os", "sys", "pathlib"]
 - **Python 3.13+**: `ast.parse(optimize=)` and `PyCF_OPTIMIZED_AST`; `dump(show_empty=)`, and
   with it a default that omits an empty list field rather than printing it;
   `_field_types`; node constructors fill an omitted optional field from a class default, and
-  omitting a required one is a `DeprecationWarning` that becomes an error in 3.15
+  omitting a required one, or passing a keyword that is neither a field nor a position attribute,
+  is a `DeprecationWarning`
 - **Python 3.14+**: `ast.compare()`; `TemplateStr` and `Interpolation` nodes; constant folding
   moves from the AST optimizer to the compiler, so `optimize=` leaves `1 + 2` as a `BinOp`;
   `Num`, `Str`, `Bytes`, `NameConstant` and `Ellipsis` removed (deprecated since 3.8), and with
   them `NodeVisitor.visit_Constant`, the shim that forwarded to their visitor methods
+- **Python 3.15+**: node constructors raise `TypeError` for an omitted required field or a keyword
+  that is neither a field nor a position attribute; instantiating an abstract node class such as `ast.AST` or `ast.expr` is a
+  `DeprecationWarning`; `dump(color=)`
 - **All Python 3**: two syntactic caps bound what the parser accepts - parentheses at 200 levels
   and indentation at 99, so `b` in a parsed tree is at most 99. Nesting that needs neither, such as
   a chain of unary minuses, is bounded instead by the parser's own stack, thousands of levels

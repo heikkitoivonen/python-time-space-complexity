@@ -13,7 +13,8 @@ Measurement scope:
 * Int arguments to the float functions: `floor()`, `ceil()` and `trunc()`
   return a 200,000-bit int as the same object; `log()`, `log2()` and `log10()`
   answer for a 2,001-bit int; every other one-argument callable in the module
-  raises `OverflowError` on it, `isfinite()` included. The conversion is timed
+  raises `OverflowError` on it, `isfinite()` included, and from 3.15
+  `isnormal()`, `issubnormal()` and `signbit()`. The conversion is timed
   on 20,000-, 200,000- and 2,000,000-bit ints through `log()` and `sqrt()`: a
   random int costs the same at all three (x1.1 over 100x the bits on aarch64
   3.14), while `2**w + 1`, whose digits below the leading ones are zero, grows
@@ -70,6 +71,13 @@ Measurement scope:
   gives 0.0 before 3.12 and 1.0 from it, and on
   `[1e16, 1.0, 1e-16, -1e16, -1.0]`, where `sum()` differs from `fsum()`'s
   1e-16 on every version.
+* The 3.15 additions: `fmax()` and `fmin()` return the number when the other
+  argument is NaN in either position, where `max()` and `min()` return a
+  leading NaN, and raise `OverflowError` for a 2,001-bit int in either
+  position; `signbit()` is true for -0.0 and false for 0.0;
+  `isnormal()` and `issubnormal()` split 1.0, 5e-324 and 0.0. Every function
+  in `math.integer` is the same object as its `math` namesake, and it holds
+  exactly the six integer functions.
 * Every fenced Python block runs in its own subprocess, and a mutated
   assertion in one of them is asserted to fail.
 
@@ -109,6 +117,7 @@ Not settled here:
 from __future__ import annotations
 
 import gc
+import importlib
 import math
 import pathlib
 import random
@@ -179,6 +188,7 @@ class TestFloatFunctionsTakeIntArguments:
     NOT_UNARY = frozenset(
         {"atan2", "copysign", "dist", "fma", "fmod", "fsum", "isclose", "ldexp", "nextafter"}
         | {"pow", "prod", "remainder", "sumprod"}
+        | {"fmax", "fmin"}
     )
 
     def test_floor_ceil_and_trunc_return_the_int_unchanged(self) -> None:
@@ -226,6 +236,38 @@ class TestFloatFunctionsTakeIntArguments:
 
         assert math.pow(2, 10) == 1024.0
         assert pow(2, 2000).bit_length() == 2001
+
+
+@pytest.mark.skipif(sys.version_info < (3, 15), reason="added in 3.15")
+class TestAddedIn315:
+    """The 3.15 rows: `fmax`/`fmin`, `isnormal`/`issubnormal`/`signbit` and
+    the `math.integer` module."""
+
+    def test_fmax_and_fmin_prefer_the_number_to_a_nan(self) -> None:
+        nan = float("nan")
+        unchecked: Any = math
+        for first, second in ((nan, 1.0), (1.0, nan)):
+            assert unchecked.fmax(first, second) == 1.0
+            assert unchecked.fmin(first, second) == 1.0
+        assert math.isnan(max(nan, 1.0)) and math.isnan(min(nan, 1.0))
+        big = (1 << 2000) + 1
+        for function in (unchecked.fmax, unchecked.fmin):
+            for args in ((big, 1.0), (1.0, big)):
+                with pytest.raises(OverflowError):
+                    function(*args)
+
+    def test_the_classification_predicates(self) -> None:
+        unchecked: Any = math
+        assert unchecked.signbit(-0.0) and not unchecked.signbit(0.0)
+        assert [unchecked.isnormal(x) for x in (1.0, 5e-324, 0.0)] == [True, False, False]
+        assert [unchecked.issubnormal(x) for x in (1.0, 5e-324, 0.0)] == [False, True, False]
+
+    def test_math_integer_holds_the_same_six_functions(self) -> None:
+        integer = importlib.import_module("math.integer")
+        public = {name for name in dir(integer) if not name.startswith("_")}
+        assert public == {"gcd", "lcm", "isqrt", "factorial", "comb", "perm"}
+        for name in public:
+            assert getattr(integer, name) is getattr(math, name), name
 
 
 class TestIntConversionReadsTheLeadingDigits:

@@ -32,7 +32,15 @@ Measurement scope:
   after it lands, and `hexdigest()` is `digest().hex()`. A copy diverges from
   its original and from a sibling copy, and each equals the MAC of the full
   message. Copying an object keyed with 1,000,000 bytes costs under a tenth
-  of building one from the same key.
+  of building one from the same key before 3.15, and under half from 3.15 with
+  the name `'sha256'`, where the copy also duplicates the key (7.5x measured
+  on 3.15.0 against 1,100x on 3.14.8, OpenSSL 3.5.9).
+* From 3.15 built against OpenSSL 3, with the name `'sha256'`, `copy()` and
+  `digest()` on an object keyed with 10,000,000 bytes cost more than 5x one keyed with 1,000,000
+  bytes (10x measured), and less than 3x otherwise (1x measured on 3.14.8);
+  with the `hashlib.blake2b` constructor they stay under 3x on every version.
+  `ssl.OPENSSL_VERSION_INFO` stands in for the OpenSSL that `_hashlib` links,
+  which exposes no version of its own; every build tested links one library.
 * The attributes are asserted for SHA-256, SHA-512 and MD5 by value, as are
   `hmac.digest_size`, `HMAC.blocksize` and every byte of both translation
   tables. A digest constructor without `block_size` warns with
@@ -66,9 +74,11 @@ Not settled here:
   loops are `_tscmp` in Modules/_operator.c and, with OpenSSL, `CRYPTO_memcmp`
   in Modules/_hashopenssl.c.
 * That the state is O(b) is read from Lib/hmac.py, which holds two hash
-  objects, and Modules/_hashopenssl.c, which holds one `HMAC_CTX`;
-  tracemalloc does not see OpenSSL's allocations, so the tests bound only
-  Python-level allocation, under 10 KB rather than at b.
+  objects, and Modules/_hashopenssl.c, which holds one `HMAC_CTX` before 3.15
+  and one `EVP_MAC_CTX` from 3.15; tracemalloc does not see OpenSSL's
+  allocations, so the tests bound only Python-level allocation, under 10 KB
+  rather than at b. That the 3.15 context's key copy is O(m) space as well as
+  time is inferred from the timing, not observed.
 * That a digest is a snapshot is read from `_hmac_digest`, which copies the
   `HMAC_CTX` before `HMAC_Final`, and from `HMAC._current()`; the tests
   observe the object staying usable and the cost staying flat.
@@ -88,6 +98,7 @@ import hmac
 import pathlib
 import re
 import secrets
+import ssl
 import subprocess
 import sys
 import textwrap
@@ -99,6 +110,8 @@ from typing import Any
 import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "hmac.md"
+# From 3.15, an HMAC built on OpenSSL 3's EVP_MAC keeps the raw key in its context.
+OPENSSL3_HMAC_KEEPS_KEY = sys.version_info >= (3, 15) and ssl.OPENSSL_VERSION_INFO >= (3,)
 EXPECTED_BLOCKS = 8
 
 DIGESTMODS = pytest.mark.parametrize(
@@ -369,7 +382,25 @@ class TestCopyClonesTheKeyedState:
 
         ratio = best_ns(lambda: hmac.new(key, None, digestmod)) / best_ns(keyed.copy)
 
-        assert ratio > 10, f"rekeying with 1 MB cost only {ratio:.1f}x a copy"
+        # From 3.15 an OpenSSL 3 HMAC copies the key along with the state.
+        floor = 2 if OPENSSL3_HMAC_KEEPS_KEY and isinstance(digestmod, str) else 10
+        assert ratio > floor, f"rekeying with 1 MB cost only {ratio:.1f}x a copy"
+
+    @pytest.mark.timing
+    @DIGESTMODS
+    @pytest.mark.parametrize("operation", ["copy", "digest"])
+    def test_an_openssl_snapshot_copies_the_key_from_315(
+        self, digestmod: Any, operation: str
+    ) -> None:
+        short = hmac.new(b"k" * 1_000_000, None, digestmod)
+        long = hmac.new(b"k" * 10_000_000, None, digestmod)
+
+        ratio = best_ns(getattr(long, operation)) / best_ns(getattr(short, operation))
+
+        if OPENSSL3_HMAC_KEEPS_KEY and isinstance(digestmod, str):
+            assert ratio > 5, f"{operation}() with 10x the key cost only {ratio:.1f}x"
+        else:
+            assert ratio < 3, f"{operation}() with 10x the key cost {ratio:.1f}x"
 
 
 class TestAttributesAndConstants:

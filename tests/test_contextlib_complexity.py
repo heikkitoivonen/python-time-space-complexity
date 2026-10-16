@@ -50,7 +50,10 @@ Measurement scope:
   restore the previous value, to work when the same object is nested in
   itself, and to be visible from another thread while the block runs.
 * A `ContextDecorator` subclass used as a decorator is observed entering the
-  same instance on every call. `__enter__` and `__aenter__` of the two
+  same instance on every call. On a generator function its recorded `enter`
+  and `exit` surround the iteration from 3.15, and on a coroutine function
+  the run under `asyncio.run()`; before 3.15 both come and go before the call
+  returns. Async generators and `AsyncContextDecorator` are not exercised. `__enter__` and `__aenter__` of the two
   abstract base classes return `self`; `isinstance()` recognises a class that
   only inherits the two methods, and after the first check deleting a method
   does not change the answer for a class already checked while a new subclass
@@ -749,6 +752,56 @@ class TestBaseClasses:
 
         assert entered == [tracked, tracked]
         assert all(item is tracked for item in entered)
+
+    def test_a_decorated_generator_is_wrapped_across_its_iteration(self) -> None:
+        events: list[str] = []
+
+        class Tracked(ContextDecorator):
+            def __enter__(self) -> Tracked:
+                events.append("enter")
+                return self
+
+            def __exit__(self, *exc: Any) -> None:
+                events.append("exit")
+
+        @Tracked()
+        def numbers() -> Iterator[int]:
+            events.append("body")
+            yield 1
+
+        iterator = numbers()
+        events.append("called")
+        assert list(iterator) == [1]
+
+        if sys.version_info >= (3, 15):
+            assert events == ["called", "enter", "body", "exit"]
+        else:
+            assert events == ["enter", "exit", "called", "body"]
+
+    def test_a_decorated_coroutine_is_wrapped_across_its_await(self) -> None:
+        events: list[str] = []
+
+        class Tracked(ContextDecorator):
+            def __enter__(self) -> Tracked:
+                events.append("enter")
+                return self
+
+            def __exit__(self, *exc: Any) -> None:
+                events.append("exit")
+
+        @Tracked()
+        async def work() -> None:
+            events.append("body")
+            await asyncio.sleep(0)
+
+        coroutine = work()
+        events.append("called")
+        asyncio.run(coroutine)
+
+        if sys.version_info >= (3, 15):
+            assert events == ["called", "enter", "body", "exit"]
+        else:
+            assert events == ["enter", "exit", "called", "body"]
 
     def test_enter_returns_self(self) -> None:
         class Plain(AbstractContextManager):  # type: ignore[type-arg]

@@ -16,7 +16,7 @@ is constant for a given hash.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `hmac.new(key, msg=None, digestmod)` | O(m + n) | O(b) | `digestmod` is required: a `hashlib` name such as `'sha256'` or a constructor such as `hashlib.sha256`. A key longer than `b` is hashed once; a shorter one is padded to `b`. `key` must be `bytes` or `bytearray` |
+| `hmac.new(key, msg=None, digestmod)` | O(m + n) | O(b); O(b + m) from 3.15 for an OpenSSL 3 HMAC | `digestmod` is required: a `hashlib` name such as `'sha256'` or a constructor such as `hashlib.sha256`. A key longer than `b` is hashed once; a shorter one is padded to `b`. `key` must be `bytes` or `bytearray` |
 | `hmac.digest(key, msg, digest)` | O(m + n) | O(b) | The same result as `new(key, msg, digest).digest()` in one call |
 | `hmac.compare_digest(a, b)` | O(c) | O(1) | Walks the whole second argument wherever the first difference lies, and still walks it when the lengths differ. Both arguments must be ASCII `str` or both bytes-like, or it raises `TypeError` |
 
@@ -25,9 +25,9 @@ is constant for a given hash.
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `HMAC.update(msg)` | O(n) | O(1) | Repeated calls equal one call on the concatenation |
-| `HMAC.digest()` | O(b) | O(k) | A snapshot: the state is copied and the copy finalized, so the object stays usable and the cost is independent of what was absorbed |
-| `HMAC.hexdigest()` | O(b) | O(k) | The same snapshot rendered as 2k hex characters |
-| `HMAC.copy()` | O(b) | O(b) | Copies the keyed state without rekeying; the two objects then diverge freely |
+| `HMAC.digest()` | O(b); O(b + m) from 3.15 for an OpenSSL 3 HMAC | O(k); O(k + m) from 3.15 for an OpenSSL 3 HMAC | A snapshot: the state is copied and the copy finalized, so the object stays usable and the cost is independent of what was absorbed. See [OpenSSL HMACs Keep the Key](#openssl-hmacs-keep-the-key) |
+| `HMAC.hexdigest()` | O(b); O(b + m) from 3.15 for an OpenSSL 3 HMAC | O(k); O(k + m) from 3.15 for an OpenSSL 3 HMAC | The same snapshot rendered as 2k hex characters |
+| `HMAC.copy()` | O(b); O(b + m) from 3.15 for an OpenSSL 3 HMAC | O(b); O(b + m) from 3.15 for an OpenSSL 3 HMAC | Copies the keyed state without rekeying; the two objects then diverge freely |
 | `HMAC.digest_size`, `HMAC.block_size`, `HMAC.name` | O(1) | O(1) | `k`, `b`, and `'hmac-'` plus the hash's name |
 
 ### Constants
@@ -69,7 +69,9 @@ else:
 ### Long Keys
 
 A key longer than the hash's block size is replaced by its digest before anything else happens.
-That costs one pass over the key at construction and nothing afterwards.
+That costs one pass over the key at construction, and the key is never hashed again. From 3.15 an
+OpenSSL 3 HMAC also keeps the raw key, which every copy and digest duplicates (see
+[OpenSSL HMACs Keep the Key](#openssl-hmacs-keep-the-key)).
 
 ```python
 import hashlib
@@ -125,6 +127,17 @@ assert first.digest() == hmac.digest(b'secret', b'header:one', 'sha256')
 assert second.digest() == hmac.digest(b'secret', b'header:two', 'sha256')
 assert h.digest() == digest  # the original is untouched
 ```
+
+### OpenSSL HMACs Keep the Key
+
+From Python 3.15, built against OpenSSL 3, an HMAC that OpenSSL computes - `digestmod` a name
+such as `'sha256'`, or a `hashlib` constructor that OpenSSL provides, such as `hashlib.sha256` -
+keeps a copy of the raw key in its state, for O(b + m) space, and every snapshot or copy
+duplicates it. `copy()`, `digest()` and `hexdigest()`
+then cost O(b + m), so with a 1,000,000-byte key each one copies a megabyte. A copy still skips
+hashing the key again, so it stays cheaper than `new()` with the same key. A key of at most `b`
+bytes keeps all three at O(b). A digest that the module computes itself, such as
+`hashlib.blake2b`, does not keep the key.
 
 ## Comparing Digests
 
@@ -236,6 +249,7 @@ assert check_token(b'other', token, now=1_500) is None  # wrong key
 ## Version Notes
 
 - **Python 3.8+**: `digestmod` is required; `hmac.new(key, msg)` raises `TypeError`
+- **Python 3.15+**: built against OpenSSL 3, an OpenSSL HMAC keeps its raw key, so `copy()`, `digest()` and `hexdigest()` also copy the m key bytes
 
 ## Related Modules
 

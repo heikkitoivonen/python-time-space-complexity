@@ -56,10 +56,11 @@ prices. System calls that take no length, such as
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `mmap.size()` | O(1) | O(1) | The size of the file, which can exceed `len(mm)`. On Unix, raises `OSError` for anonymous memory and for a map built with `trackfd=False` |
+| `mmap.size()` | O(1) | O(1) | The size of the file, which can exceed `len(mm)`. For anonymous memory, Python 3.15+ returns the mapped length and earlier versions raise `OSError` on Unix. On Unix a map built with `trackfd=False` raises: `ValueError` from Python 3.15, `OSError` before |
 | `mmap.resize(newsize)` | O(p) | O(1) | Linux remaps without copying the bytes and resizes a mapped file to match. Windows copies anonymous memory, O(min(n, newsize)). Unix without `mremap()`, macOS included, raises `SystemError`. Linux cannot grow shared anonymous memory: Python 3.13+ raises `ValueError`, and earlier versions crash with `SIGBUS` when the new pages are touched |
 | `mmap.flush([offset[, size]])` | O(q) | O(1) | Writes the file's dirty pages in the range back, whichever writer dirtied them; on Unix it waits for the writes. Does nothing for `ACCESS_READ` and `ACCESS_COPY` |
 | `mmap.madvise(option[, start[, length]])` | O(q) | O(1) | What the kernel does with them depends on `option`. Unix only |
+| `mmap.set_name(name)` | O(len(name)) | O(1) | Python 3.15+. On Linux, labels anonymous memory in `/proc/<pid>/maps` when Python runs in development mode or is a debug build, and raises `OSError` there if the kernel lacks the feature; otherwise it does nothing. A file-backed map, or a name over 66 bytes, raises `ValueError`. Other platforms raise `NotImplementedError` |
 
 ### Constants and exceptions
 
@@ -98,7 +99,8 @@ with tempfile.TemporaryFile() as f:
 ### Anonymous Memory
 
 Passing `-1` as the file descriptor maps zero-filled memory with no file behind it. It is still a
-buffer of the length you ask for, and on Unix `size()` has no file to ask.
+buffer of the length you ask for. On Unix `size()` has no file to ask: Python 3.15+ answers with the
+mapped length, and earlier versions raise `OSError`.
 
 ```python
 import mmap
@@ -109,7 +111,9 @@ with mmap.mmap(-1, 4 * mmap.PAGESIZE) as mm:  # O(1) - no page is touched yet
     mm.write(b'hello')  # O(k)
     assert mm[:5] == b'hello'
 
-    if sys.platform != 'win32':
+    if sys.version_info >= (3, 15):
+        assert mm.size() == 4 * mmap.PAGESIZE  # O(1) - the mapped length
+    elif sys.platform != 'win32':
         try:
             mm.size()
         except OSError:
@@ -296,6 +300,8 @@ with tempfile.TemporaryFile() as f:
   O(r·s) to O(r + s); `rfind()` stays O(r·s) in the worst case
 - **Python 3.13+**: Added `seekable()` and the `trackfd` argument; `seek()` returns the new
   position
+- **Python 3.15+**: Added `set_name()`; `size()` of anonymous memory returns its length on Unix
+  rather than raising `OSError`
 
 ## Related Modules
 

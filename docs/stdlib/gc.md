@@ -30,7 +30,7 @@ bounds are for the standard build; the free-threaded build has a different colle
 | `gc.enable()`, `gc.disable()`, `gc.isenabled()` | O(1) | O(1) | Switch automatic collection only; `collect()` still works while disabled |
 | `gc.get_threshold()`, `gc.set_threshold(threshold0[, threshold1[, threshold2]])` | O(1) | O(1) | A `threshold0` of 0 also disables automatic collection |
 | `gc.get_count()` | O(1) | O(1) | The three counters the thresholds are compared against |
-| `gc.get_stats()` | O(1) | O(1) | One dict per generation, three in all |
+| `gc.get_stats()` | O(1) | O(1) | One dict per generation, three in all; each gains `candidates` and `duration` keys from 3.15 |
 
 ### Inspecting objects
 
@@ -114,9 +114,9 @@ gc.callbacks.clear()
 assert runs  # collections ran along the way, without a call to collect()
 
 assert len(gc.get_count()) == 3  # O(1)
-assert [set(stats) for stats in gc.get_stats()] == [  # O(1)
-    {'collections', 'collected', 'uncollectable'}
-] * 3
+stats = gc.get_stats()  # O(1)
+assert len(stats) == 3
+assert all({'collections', 'collected', 'uncollectable'} <= set(s) for s in stats)
 
 gc.disable()  # O(1)
 assert not gc.isenabled()
@@ -268,6 +268,8 @@ assert len(table) == 10_000
   spaces, O(n). Python 3.14.5 restores the three generations
 - **Python 3.14+**: `is_tracked()` is true for every dict; earlier releases untrack a dict whose
   keys and values are all atomic
+- **Python 3.15+**: `get_stats()` entries, and the `info` dict passed to a `gc.callbacks` function
+  at the `"stop"` phase, gain `candidates` and `duration`
 
 ## Related Modules
 

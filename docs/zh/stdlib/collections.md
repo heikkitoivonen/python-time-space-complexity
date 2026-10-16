@@ -1,5 +1,5 @@
 ---
-source_sha: f5c4b3c5bd9a612e361874983042cd25d27aa989a7e7b47532e46516d57e6430
+source_sha: ed4deba4ee0e77fff224572f8c5dbd19bdce146a2f308aed272dddf5c100ef51
 translated: machine
 ---
 
@@ -91,8 +91,8 @@ translated: machine
 | `ud.copy()` | O(n) | O(n) | 普通 `UserDict` 复制 `data`；子类先被浅复制，再通过 `update()` 重新填充 |
 | `UserDict.fromkeys(iterable, value=None)` | O(k) | O(k) | 每个键一次 `__setitem__` 调用 |
 | `ud.pop(key)`, `ud.setdefault(key, default=None)` | O(1) | O(1) | 先 `ud[key]`，再 `del ud[key]` 或 `ud[key] = default` |
-| `ud.popitem()` | O(d) | O(1) | 移除迭代顺序中的第一个键；d 是在它之前被删除的条目数，新的迭代器必须跳过它们 |
-| `ud.clear()` | O(n·(n + d)) | O(1) | 反复 `popitem()` 直到为空，每次调用都要跳过之前调用清空的所有槽位；`ud.data.clear()` 是 O(n) |
+| `ud.popitem()` | O(d) | O(1) | 移除迭代顺序中的第一个键；d 是在它之前被删除的条目数，新的迭代器必须跳过它们。从 3.15 起转发给 `data.popitem()`，移除最后一个键，只跳过它之后被删除的槽位 |
+| `ud.clear()` | O(n·(n + d)) | O(1) | 反复 `popitem()` 直到为空，每次调用都要跳过之前调用清空的所有槽位；从 3.15 起为 O(n + d)。`ud.data.clear()` 是一次 `dict.clear()` 调用 |
 | `ud == other` | O(n + k) | O(n + k) | 把两边都展平成字典再比较，即使 `other` 已经是字典 |
 
 ### UserList
@@ -245,24 +245,29 @@ assert Indexed.reads == 4
 
 ### 清空 UserDict
 
-`UserDict` 没有定义 `clear()`、`popitem()` 或 `pop()`；它们从 `MutableMapping` 继承而来。它的
-`popitem()` 取新迭代器产出的第一个键，而字典的迭代器必须跳过之前的删除清空的每个槽位，因此
-一次 `popitem()` 的开销是 O(d)，通过 `clear()` 清空整个字典的开销是 O(n·(n + d))。请直接
-清空 `data` 字典。
+`UserDict` 没有定义 `clear()` 或 `pop()`；它们从 `MutableMapping` 继承而来，3.15 之前
+`popitem()` 也是继承的。这个 `popitem()` 取新迭代器产出的第一个键，而字典的迭代器必须跳过之前的
+删除清空的每个槽位，因此一次 `popitem()` 的开销是 O(d)，通过 `clear()` 清空整个字典的开销是
+O(n·(n + d))。从 3.15 起 `popitem()` 转发给字典自身的方法，移除最后一个键，只跳过它之后被删除的槽位，因此
+`clear()` 是 O(n + d)。请直接清空 `data` 字典。
 
 ```python
+import sys
 from collections import UserDict
 
 wrapped = UserDict({"a": 1, "b": 2, "c": 3})
 
-assert wrapped.popitem() == ("a", 1)  # O(d) - the first key still present
+if sys.version_info >= (3, 15):
+    assert wrapped.popitem() == ("c", 3)  # O(1) - dict.popitem(), the last key
+else:
+    assert wrapped.popitem() == ("a", 1)  # O(d) - the first key still present
 assert wrapped.popitem() == ("b", 2)
 
 wrapped.data.clear()  # O(n) - the dict's own clear
 assert len(wrapped) == 0
 
 wrapped.update(zip("xyz", range(3)))
-wrapped.clear()  # O(n·(n + d)) - popitem() until empty
+wrapped.clear()  # popitem() until empty: O(n·(n + d)), or O(n + d) from 3.15
 assert len(wrapped) == 0
 ```
 
@@ -319,7 +324,7 @@ assert resolved == {"host": "localhost", "port": 8080, "debug": True}
 
 - 保持 `ChainMap` 简短：每次未命中、落到默认值的 `get()`、以及读取最后一个映射中的键，都要为每个映射付出一次查找
 - 在循环中读取链时，用 `dict(chain)` 展平一次，让逐映射的搜索每个键只发生一次，而不是每次读取一次
-- 通过 `data.clear()` 清空 `UserDict`；继承的 `clear()` 关于条目数及其之前删除的槽位数是平方级的
+- 通过 `data.clear()` 清空 `UserDict`；3.15 之前，继承的 `clear()` 关于条目数及其之前删除的槽位数是平方级的
 - 当热循环不需要子类钩子时，直接使用 `ud.data`、`ul.data` 或 `us.data`
 
 ❌ **避免**：
@@ -332,6 +337,7 @@ assert resolved == {"host": "localhost", "port": 8080, "debug": True}
 ## 版本说明
 
 - **Python 3.12+**：`UserDict.get()` 对缺失的键返回默认值而不调用 `__missing__`；3.12 之前，继承的 `Mapping.get()` 经过 `__getitem__` 并会调用它
+- **Python 3.15+**：`UserDict.popitem()` 转发给 `dict.popitem()`，移除最后一个键而不是第一个键，无需从表头重新扫描，因此继承的 `clear()` 是 O(n + d)
 - **所有 Python 3**：对 `ChainMap` 的 `len()` 和迭代要为每个映射中的每个条目付出开销；链没有任何缓存
 
 ## 相关模块

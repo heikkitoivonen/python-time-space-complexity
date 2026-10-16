@@ -24,12 +24,15 @@ Measurement scope:
   `insert()` at the middle, `remove()` of the first byte, deleting a middle
   slice and a length-changing slice assignment at the front all scale.
 * Deleting from the front traces no allocation while the remainder stays
-  above half the allocation. Crossing that threshold copies the remainder
-  into a new buffer while the old one is still held, on every path that
-  shrinks: `del ba[0]`, `del ba[:1]`, `pop(0)`, `remove()` and a shortening
-  slice assignment each peak at the 500,000 bytes they carry over from a
-  1,000,000-byte buffer, and leave the allocation at the remainder. That is
-  the O(n) side of those rows' space columns. Draining 1,000,000 bytes one `del ba[:1]` at a time costs
+  above half the allocation. Crossing that threshold moves the remainder
+  into a buffer of its own size, on every path that shrinks: `del ba[0]`,
+  `del ba[:1]`, `pop(0)`, `remove()` and a shortening slice assignment each
+  peak at the 500,000 bytes they carry over from a 1,000,000-byte buffer,
+  and leave the allocation at the remainder. That is the O(n) side of those
+  rows' space columns. 3.11-3.14 copy the remainder into a new buffer while
+  the old one is still held; from 3.15 it is moved to the front of the
+  buffer, which is then reallocated down, and tracemalloc counts the
+  reallocated block whether or not the allocator moved it. Draining 1,000,000 bytes one `del ba[:1]` at a time costs
   under thirty times draining 100,000, where draining with `pop(0)` costs
   more than twenty times for a tenfold input. A `pop()` after `del ba[:499]`
   on a 1,000-byte buffer is observed to compact it within three calls, which
@@ -45,8 +48,9 @@ Measurement scope:
   starts in the middle.
 * A one-byte append to a 1,000-byte buffer leaves more allocated than the
   length, where extending an empty bytearray by 1,000,000 bytes leaves
-  exactly the length plus the terminating byte: the two halves of the growth
-  policy. Building start to finish in 100-byte chunks scales with the total
+  exactly the length plus `EXACT_FIT` (the terminating byte, and from 3.15
+  the header of the `bytes` holding the buffer): the two halves of the
+  growth policy. Building start to finish in 100-byte chunks scales with the total
   for `+=` and for `extend()`, as it does for `append()` one byte at a time.
   The append that runs out of buffer traces a peak of the whole new one,
   with the start offset moved or not, where an append with room to spare
@@ -73,10 +77,24 @@ Measurement scope:
   scales; `copy()` traces a full-size peak. `resize()` (3.14+) costs the same
   at both sizes when shrinking by one byte and growing back, and scales when
   halving and regrowing. Shrinking each of those three buffer sizes to one
-  preserves the first byte and leaves at most two bytes allocated, with
-  and without a deleted prefix.
+  preserves the first byte and leaves at most one byte plus `EXACT_FIT`
+  allocated, with and without a deleted prefix.
+* `take_bytes()` (3.15+): taking all 10,000,000 bytes of a buffer traces
+  under 1,000 bytes where `bytes(ba)` traces all of them; taking 10 traces
+  under 1,000 and leaves `__alloc__()` unchanged; taking all but 10 costs
+  under a tenth of `bytes(ba)` on the same fresh 10,000,000-byte buffer,
+  which rests on the allocator shrinking it in place; and
+  after a one-byte `del` prefix taking everything scales between x10 and
+  x1,000 from 100,000 to 10,000,000 bytes. The documented example's values,
+  the `IndexError` outside the size and the `BufferError` under a view are
+  asserted; before 3.15 the method is asserted absent.
 * Searching: `find()`, `rfind()` and `in` for an absent byte, `count()` for a
   present one and `in` with a `bytes` pattern all scale with the buffer.
+  `find()` over a 1,000-byte `start:end` region costs the same in 100,000-
+  and 10,000,000-byte buffers, scales with the region, and traces under
+  1,000 bytes for half of a 10,000,000-byte one. A 100,000- or
+  10,000,000-byte pattern against a 100-byte bytearray costs the same for
+  `find()`, `count()` and `in`.
   `startswith()` costs the same on both buffer sizes and scales with the
   prefix instead. A tuple of 10,000 empty candidates, with `start` past the
   end so none can match, costs more than ten times a tuple of 100, which is
@@ -149,17 +167,24 @@ Not settled here:
   worst-case bounds; it does not require every release to scale with n.
   Objects/bytearrayobject.c (v3.11.14 through v3.14.2) implements `clear()`
   by resizing to zero: one reallocation, or an allocation and free when the
-  start offset has moved, with no bytes copied. A resize to one byte copies
+  start offset has moved, with no bytes copied. From v3.15.0 a resize to
+  zero drops the `bytes` holding the buffer for the shared empty one. A resize to one byte copies
   at most one byte in that path. Portable timing cannot establish the
   allocator's release cost; buffer release is observed through `__alloc__()`.
-* The O(n + m) bound on `find()`, `count()` and `in` follows from the two-way
-  algorithm in Objects/stringlib/fastsearch.h, present since 3.10; only the n
-  term is timed. The reverse search's worst case is measured at one buffer
+* The linear worst case of `find()`, `count()` and `in` follows from the
+  two-way algorithm in Objects/stringlib/fastsearch.h, present since 3.10;
+  only scans that read every byte are timed, and the pattern's length only
+  where it exceeds the region searched. The reverse search's worst case is measured at one buffer
   size, by pattern length alone.
 * The growth policy's threshold and the compaction threshold are read
   from PyByteArray_Resize in Objects/bytearrayobject.c (its body moved to
   bytearray_resize_lock_held in 3.14), the same on every supported branch; the tests observe that reallocations are rare and that
   compaction happens, not the ratios themselves.
+* `take_bytes()` shrinks the buffer it hands over with a reallocation when
+  the buffer was overallocated or the take leaves bytes behind. Whether that
+  moves the block is the allocator's choice; tracemalloc counts the
+  reallocated block either way, so the space of that side is not traced,
+  and only its time is measured, on a buffer with no slack.
 * `strip()`'s (s + 1)·c term is measured with `chars` holding one byte that
   matches; a `chars` where several match earlier lowers the constant without
   changing the term. The three stripping methods share one implementation,
@@ -250,6 +275,14 @@ def peak_bytes(func: Callable[[], Any]) -> int:
 
 def letters(size: int) -> bytearray:
     return bytearray(b"a" * size)
+
+
+# What `__alloc__()` reports beyond the contents of a buffer that fits them
+# exactly. Before 3.15 that is the terminating byte. From 3.15 the buffer is a
+# `bytes` object, and `__alloc__()` adds that object's header and terminating
+# byte, the `sys.getsizeof(b"")` of an empty `bytes`. An empty buffer reports 0
+# from 3.15.
+EXACT_FIT = sys.getsizeof(b"") if sys.version_info >= (3, 15) else 1
 
 
 class TestIndexingIsConstant:
@@ -477,7 +510,7 @@ class TestAppendIsAmortized:
         assert modest.__alloc__() > len(modest) * 1.1, (
             f"a one-byte append took {modest.__alloc__()} for {len(modest)} bytes"
         )
-        assert large.__alloc__() == len(large) + 1, (
+        assert large.__alloc__() == len(large) + EXACT_FIT, (
             f"a 1,000,000-byte extend took {large.__alloc__()}"
         )
 
@@ -625,7 +658,7 @@ class TestFrontDeletionAdvancesTheStart:
             data.pop()
             steps.append((len(data), data.__alloc__()))
 
-        assert any(allocated <= size + 1 for size, allocated in steps), (
+        assert any(allocated <= size + EXACT_FIT for size, allocated in steps), (
             f"the buffer stayed oversized across {steps}"
         )
 
@@ -665,7 +698,9 @@ class TestFrontDeletionAdvancesTheStart:
 
         The buffer is taken to just above half its allocation first, so the
         next shrink of any kind crosses the threshold. The remainder is
-        copied into a new buffer while the old one is still held.
+        copied into a new buffer while the old one is still held on
+        3.11-3.14, and moved to the front of a buffer reallocated down from
+        3.15.
         """
         size = 1_000_000
         data = bytearray(size)
@@ -676,7 +711,9 @@ class TestFrontDeletionAdvancesTheStart:
         peak = peak_bytes(lambda: shrink(data))
 
         assert peak >= remainder - 1, f"{name} compacted {remainder} bytes with a peak of {peak}"
-        assert data.__alloc__() <= remainder, f"{name} left {data.__alloc__()} allocated"
+        assert data.__alloc__() <= len(data) + EXACT_FIT, (
+            f"{name} left {data.__alloc__()} allocated for {len(data)}"
+        )
 
     def test_the_buffer_is_compacted_once_the_remainder_falls_below_half(self) -> None:
         data = bytearray(LARGE)
@@ -685,7 +722,7 @@ class TestFrontDeletionAdvancesTheStart:
         assert data.__alloc__() > LARGE, "a quarter is still above half the allocation"
 
         del data[: LARGE // 2]
-        assert data.__alloc__() <= len(data) + 1, (
+        assert data.__alloc__() <= len(data) + EXACT_FIT, (
             f"{data.__alloc__()} bytes still allocated for {len(data)}"
         )
 
@@ -821,7 +858,9 @@ class TestClearReverseCopyAndResize:
         data.resize(1)  # type: ignore[attr-defined]
 
         assert data == b"a"
-        assert data.__alloc__() <= 2, f"resize(1) kept {data.__alloc__()} bytes allocated"
+        assert data.__alloc__() <= 1 + EXACT_FIT, (
+            f"resize(1) kept {data.__alloc__()} bytes allocated"
+        )
 
     @pytest.mark.skipif(sys.version_info < (3, 14), reason="resize() was added in 3.14")
     @pytest.mark.timing
@@ -845,8 +884,119 @@ class TestClearReverseCopyAndResize:
         assert_linear("halving and regrowing", by_half)
 
 
+@pytest.mark.skipif(sys.version_info < (3, 15), reason="take_bytes() was added in 3.15")
+class TestTakeBytes:
+    """`take_bytes()`, `take_bytes(k)` | O(min(k, n - k)), O(n) worst case |
+    O(min(k, n - k)), O(n) worst case, 3.15+.
+
+    Taking at least half hands the buffer itself over as the result and copies
+    the rest out; taking less copies the k bytes out and advances the start
+    offset. Both are separated from a copy of the whole buffer by traced
+    allocation where the allocator does not move, and by time where it does.
+    """
+
+    def test_the_documented_results(self) -> None:
+        data = bytearray(b"abc\ndef")
+
+        assert data.take_bytes(4) == b"abc\n"  # type: ignore[attr-defined]
+        assert data == bytearray(b"def")
+        assert data.take_bytes(-1) == b"de"  # type: ignore[attr-defined]
+        assert data == bytearray(b"f")
+        taken = data.take_bytes()  # type: ignore[attr-defined]
+        assert type(taken) is bytes and taken == b"f"
+        assert data == bytearray() and data.take_bytes() == b""  # type: ignore[attr-defined]
+        with pytest.raises(IndexError, match="outside size"):
+            bytearray(b"ab").take_bytes(3)  # type: ignore[attr-defined]
+        view_target = bytearray(b"ab")
+        view = memoryview(view_target)
+        with pytest.raises(BufferError):
+            view_target.take_bytes()  # type: ignore[attr-defined]
+        view.release()
+
+    def test_taking_everything_copies_nothing(self) -> None:
+        """The k = n end: the 10,000,000-byte buffer becomes the result, where
+        `bytes(ba)` traces a copy of all of it."""
+        data = bytearray(LARGE)
+        data[-1] = 1
+        control = bytearray(LARGE)
+
+        taken: list[bytes] = []
+        peak = peak_bytes(lambda: taken.append(data.take_bytes()))  # type: ignore[attr-defined]
+        copy_peak = peak_bytes(lambda: bytes(control))
+
+        assert peak < 1_000, f"take_bytes() of {LARGE} bytes traced {peak}"
+        assert copy_peak >= LARGE, f"bytes(ba) traced {copy_peak}"
+        assert len(taken[0]) == LARGE and taken[0][-1] == 1
+        assert len(data) == 0
+
+    def test_taking_a_little_copies_only_that_and_moves_the_start(self) -> None:
+        """The k < n - k side: 10 bytes of 10,000,000 trace under 1,000 and
+        leave the allocation where it was."""
+        data = bytearray(LARGE)
+        allocated = data.__alloc__()
+
+        peak = peak_bytes(lambda: data.take_bytes(10))  # type: ignore[attr-defined]
+
+        assert peak < 1_000, f"take_bytes(10) traced {peak}"
+        assert len(data) == LARGE - 10
+        assert data.__alloc__() == allocated, "the buffer moved for a 10-byte take"
+
+    @pytest.mark.timing
+    def test_leaving_a_little_costs_what_is_left_not_the_buffer(self) -> None:
+        """The k > n - k side: taking all but 10 of 10,000,000 bytes copies
+        the 10 left behind and shrinks the buffer by 10 bytes, under a tenth
+        of what `bytes(ba)` costs to copy it. Whether the shrinking
+        reallocation stays in place is the allocator's choice, so this is
+        evidence for the allocators CI runs, not a portable bound. Each sample
+        takes from a fresh buffer built outside the timing, and keeps the
+        result alive until the clock stops, so no free is timed."""
+
+        def fastest(operation: Callable[[bytearray], object]) -> float:
+            best: float | None = None
+            for _ in range(5):
+                data = bytearray(LARGE)
+                start = time.perf_counter_ns()
+                result = operation(data)
+                elapsed = time.perf_counter_ns() - start
+                del result
+                best = elapsed if best is None else min(best, elapsed)
+            assert best is not None
+            return best
+
+        taking = fastest(lambda data: data.take_bytes(-10))  # type: ignore[attr-defined]
+        copying = fastest(bytes)
+
+        assert taking * 10 < copying, f"take_bytes(-10) {taking:.0f}ns, bytes() {copying:.0f}ns"
+
+    @pytest.mark.timing
+    def test_a_deleted_prefix_makes_taking_everything_move_it(self) -> None:
+        """The O(k) term: after `del ba[:j]` the k bytes are moved to the
+        start of the buffer before it is handed over, so taking everything
+        scales with the buffer."""
+
+        def fastest(size: int) -> float:
+            best: float | None = None
+            for _ in range(5):
+                data = bytearray(size + 1)
+                del data[:1]
+                start = time.perf_counter_ns()
+                result = data.take_bytes()  # type: ignore[attr-defined]
+                elapsed = time.perf_counter_ns() - start
+                del result
+                best = elapsed if best is None else min(best, elapsed)
+            assert best is not None
+            return best
+
+        assert_linear("take_bytes() after a deleted prefix", fastest(LARGE) / fastest(SMALL))
+
+
+@pytest.mark.skipif(sys.version_info >= (3, 15), reason="take_bytes() exists from 3.15")
+def test_take_bytes_is_absent_before_3_15() -> None:
+    assert not hasattr(bytearray, "take_bytes")
+
+
 class TestSearching:
-    """`find()`, `index()`, `count()`, `in` | O(n + m); `startswith()`,
+    """`find()`, `index()`, `count()`, `in` | O(n); `startswith()`,
     `endswith()` | O(m); `rfind()`, `rindex()` | O(n·m) in the worst case."""
 
     def test_the_documented_results(self) -> None:
@@ -878,6 +1028,40 @@ class TestSearching:
 
         for name, ratio in ratios.items():
             assert_linear(name, ratio)
+
+    @pytest.mark.timing
+    def test_n_is_the_region_searched_and_a_longer_pattern_reads_nothing(self) -> None:
+        """With `start` and `end`, n is the region searched, read in place:
+        1,000 bytes cost the same in 100,000- and 10,000,000-byte buffers,
+        100x the region costs 100x, and searching half of a 10,000,000-byte
+        buffer traces no copy of it. A pattern longer than the region returns
+        before either is read, so it costs the same at 100,000 and 10,000,000
+        bytes: the bound is O(n), with no m term."""
+        small, large, tiny = letters(SMALL), letters(LARGE), letters(100)
+        short_pattern, long_pattern = b"a" * SMALL, b"a" * LARGE
+
+        across_buffers = growth(
+            lambda: small.find(b"b", 0, 1_000), lambda: large.find(b"b", 0, 1_000), inner=100
+        )
+        across_regions = growth(
+            lambda: large.find(b"b", 0, SMALL), lambda: large.find(b"b", 0, LARGE)
+        )
+        region_peak = peak_bytes(lambda: large.find(b"b", 0, LARGE // 2))
+        across_patterns = {
+            "find": growth(
+                lambda: tiny.find(short_pattern), lambda: tiny.find(long_pattern), inner=100
+            ),
+            "count": growth(
+                lambda: tiny.count(short_pattern), lambda: tiny.count(long_pattern), inner=100
+            ),
+            "in": growth(lambda: short_pattern in tiny, lambda: long_pattern in tiny, inner=100),
+        }
+
+        assert across_buffers < CONSTANT, f"a 1,000-byte region cost x{across_buffers:.2f}"
+        assert_linear("find() over a region", across_regions)
+        assert region_peak < 1_000, f"searching a region traced {region_peak} bytes"
+        for name, ratio in across_patterns.items():
+            assert ratio < CONSTANT, f"{name}: a 100x longer pattern cost x{ratio:.2f}"
 
     @pytest.mark.timing
     def test_startswith_costs_the_prefix_not_the_buffer(self) -> None:

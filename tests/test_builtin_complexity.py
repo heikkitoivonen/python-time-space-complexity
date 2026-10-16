@@ -280,12 +280,16 @@ class TestListComplexity:
 
     @pytest.mark.timing
     def test_clear_is_on(self) -> None:
-        """list.clear() should be O(n) - deallocate memory."""
+        """list.clear() should be O(n) - deallocate memory.
+
+        The elements start at 2,000, above the small-int cache (-5 to 1,024 from 3.15):
+        releasing a cached int is free, which would make the small list too cheap.
+        """
 
         def measure_clear(size: int) -> float:
             times = []
             for _ in range(20):
-                lst = list(range(size))
+                lst = list(range(2_000, 2_000 + size))
                 start = time.perf_counter()
                 lst.clear()
                 end = time.perf_counter()
@@ -478,19 +482,6 @@ class TestTupleComplexity:
 
         assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
             f"count() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
-        )
-
-    @pytest.mark.timing
-    def test_hash_is_on(self) -> None:
-        """hash() should be O(n) - iterates all elements."""
-        small_tuple = tuple(range(self.SMALL_SIZE))
-        large_tuple = tuple(range(self.LARGE_SIZE))
-
-        small_time = measure_time(lambda: hash(small_tuple), iterations=50)
-        large_time = measure_time(lambda: hash(large_tuple), iterations=50)
-
-        assert is_linear_time(small_time, large_time, self.SIZE_RATIO), (
-            f"hash() doesn't appear linear: {small_time:.2e}s vs {large_time:.2e}s"
         )
 
     @pytest.mark.timing

@@ -4,7 +4,8 @@ The `getpass` module reads a password from the terminal with echo turned off, an
 current user's login name. A prompt reads one line: the module holds that line and nothing else,
 and it restores the terminal settings before it returns.
 
-`n` is the characters typed and `p` is the characters in the prompt. Every bound leaves out the
+`n` is the characters typed, `p` is the characters in the prompt, and `e` is the keys that, while
+masking with `echo_char`, edit the line or insert a character anywhere but at its end. Every bound leaves out the
 time spent waiting for the user. `getuser()` reads at most four environment variables before it
 falls back to one lookup in the user database, whose cost the system's backend decides; a user
 name and an environment variable are priced at O(1).
@@ -16,7 +17,7 @@ name and an environment variable are priced at O(1).
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `getpass.getpass(prompt='Password: ', stream=None, *, echo_char=None)` | O(p + n) | O(n) | Echo is off while the line is read, and the terminal settings are restored even when reading raises; `EOFError` on end of input |
-| `getpass.getpass(..., echo_char='*')` | O(p + n) | O(n) | Python 3.14+: `echo_char` is written for each character typed, and the module rather than the terminal handles backspace; ignored when `getpass()` falls back |
+| `getpass.getpass(..., echo_char='*')` | O(p + n + e·(p + n)) | O(n), or O(p + n) from Python 3.15 | Python 3.14+: `echo_char` is written for each character typed, and the module rather than the terminal handles backspace; ignored when `getpass()` falls back. From Python 3.15 it also handles Ctrl+A, Ctrl+E, Ctrl+K, Ctrl+U, Ctrl+W and Ctrl+V, and a backspace, Ctrl+A, Ctrl+E, Ctrl+K, Ctrl+U, Ctrl+W, or a character inserted before the end, redraws the prompt and the masked line from a string of their length |
 | `getpass.unix_getpass(prompt='Password: ', stream=None)` | O(p + n) | O(n) | What `getpass()` is on Unix: tries `/dev/tty` first, then standard input, and writes the prompt to the terminal or `sys.stderr` unless `stream` is given |
 | `getpass.win_getpass(prompt='Password: ', stream=None)` | O(p + n) | O(n) | What `getpass()` is on Windows: reads console keys with `msvcrt.getwch()`, and falls back when `sys.stdin` has been replaced |
 | `getpass.fallback_getpass(prompt='Password: ', stream=None)` | O(p + n) | O(n) | Used when echo cannot be turned off: issues `GetPassWarning` and reads one line from `sys.stdin` with echo left as it is |
@@ -64,7 +65,9 @@ os.close(controller)
 ### Masking Characters
 
 From Python 3.14, `echo_char` is written for each character typed, so the user can see their
-typing. It must be a single printable ASCII character.
+typing. It must be a single printable ASCII character. A key typed at the end of the line writes
+one mask; from Python 3.15 an edit, or a key inserted before the end, rewrites the whole prompt
+and line, so its cost grows with both.
 
 ```python
 import getpass
@@ -168,6 +171,8 @@ assert not check('guess', salt, expected)
 ## Version Notes
 
 - **Python 3.14+**: Added the `echo_char` keyword argument
+- **Python 3.15+**: With `echo_char`, the module handles the line-editing keys, and each edit
+  or insertion before the end redraws the prompt and the masked line
 - **Python 3.13+**: `getuser()` raises `OSError` when no name is found; before, the
   `KeyError` or `ImportError` from the user database propagated
 

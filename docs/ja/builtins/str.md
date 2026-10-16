@@ -1,5 +1,5 @@
 ---
-source_sha: 98decccd3e9a6fd96ee9439cb758a0c2ae6ad39a0acb29d291e6ae8d31020d6c
+source_sha: 25d20c67983aa9804a0793e87e0afd576db8524bd855c9ea48e968b52107cf06
 translated: machine
 ---
 
@@ -13,16 +13,18 @@ translated: machine
 |-----------|------|-------|-------|
 | `len()` | O(1) | O(1) | 直接参照 |
 | `access[i]` | O(1) | O(1) | 添字による直接アクセス |
-| `in`（部分文字列） | 平均 O(n + m) | O(1) | CPython では Two-Way / fastsearch アルゴリズムを使う |
+| `in`（部分文字列） | O(n) | O(1)、拡幅時 O(m) | CPython では Two-Way / fastsearch アルゴリズムを使い、最悪の場合でも線形。文字列より長い部分文字列はすぐに返る。文字列より狭い幅で格納された複数文字の部分文字列（CJK 文字を含むテキスト中の ASCII など）は、まず文字列の幅にコピーされる。これは `find()`、`rfind()`、`index()`、`rindex()`、`count()` でも同じ |
 | `s + s`（連結） | O(n+m) | O(n+m) | 新しい文字列を作る |
 | `s * n`（繰り返し） | O(n\*len(s)) | O(n\*len(s)) | 新しい文字列を作る |
 | `slice [::2]` | O(k) | O(k) | k はスライスの長さ |
+| `s[:]`, `str(s)`, `copy.copy(s)` | O(1) | O(1) | 厳密な `str` なら `s` 自身を返す。文字列は不変だから |
+| `for c in s` | O(n) | O(1) | 1 ステップごとに 1 文字の文字列 |
 | **探索** ||||
-| `find(sub)` | 平均 O(n + m) | O(1) | CPython では Two-Way / fastsearch アルゴリズムを使う |
-| `rfind(sub)` | 最悪 O(n*m) | O(1) | 後方向の Boyer-Moore-Horspool を使う |
-| `index(sub)` | O(n + m) | O(1) | find() と同じだが、見つからないと ValueError を送出する |
-| `rindex(sub)` | 最悪 O(n*m) | O(1) | rfind() と同じだが、見つからないと ValueError を送出する |
-| `count(sub)` | 平均 O(n + m) | O(1) | n は文字列、m は部分文字列 |
+| `find(sub, start, end)` | O(n) | O(1)、拡幅時 O(m) | CPython では Two-Way / fastsearch アルゴリズムを使う。n は探索する文字数で、`start` と `end` を渡すとその範囲だけをその場で読む |
+| `rfind(sub)` | 最悪 O(n*m) | O(1)、拡幅時 O(m) | 後方向の Boyer-Moore-Horspool を使う |
+| `index(sub)` | O(n) | O(1)、拡幅時 O(m) | find() と同じだが、見つからないと ValueError を送出する |
+| `rindex(sub)` | 最悪 O(n*m) | O(1)、拡幅時 O(m) | rfind() と同じだが、見つからないと ValueError を送出する |
+| `count(sub)` | O(n) | O(1)、拡幅時 O(m) | n は文字列、m は部分文字列 |
 | `startswith(prefix)` | O(m) | O(1) | m は接頭辞の長さ |
 | `endswith(suffix)` | O(m) | O(1) | m は接尾辞の長さ |
 | **置換・変換** ||||
@@ -34,10 +36,10 @@ translated: machine
 | `removesuffix(suffix)` | O(n) | O(n) | 接尾辞が一致すればスライスを返す |
 | **分割・連結** ||||
 | `split(sep)` | O(n) | O(n) | 一度の走査 |
-| `rsplit(sep)` | O(n) | O(n) | 右から分割する |
+| `rsplit(sep)` | 最悪 O(n*m) | O(n) | 右から分割し、`rfind()` と同じく後方向に探索する。`sep` なし、または 1 文字の `sep` なら O(n) |
 | `splitlines()` | O(n) | O(n) | 行の境界で分割する |
 | `partition(sep)` | O(n) | O(n) | 最初の sep で 3 要素のタプルに分割する |
-| `rpartition(sep)` | O(n) | O(n) | 最後の sep で 3 要素のタプルに分割する |
+| `rpartition(sep)` | 最悪 O(n*m) | O(n) | 最後の sep で 3 要素のタプルに分割し、`rfind()` と同じく後方向に探索する |
 | `join(iterable)` | O(n) | O(n) | n は出力全体の文字数 |
 | **大文字・小文字の変換** ||||
 | `upper()` | O(n) | O(n) | すべての文字を処理する必要がある |
@@ -72,7 +74,7 @@ translated: machine
 | `format(*args)` | O(n) | O(n) | n はテンプレートの長さ |
 | `format_map(mapping)` | O(n) | O(n) | マッピングを使う format() と同じ |
 | **エンコーディング** ||||
-| `encode(encoding)` | O(n) | O(n) | バイト列に変換する |
+| `encode(encoding)` | O(n) | O(n) | バイト列に変換する。1 文字あたり一定の処理を行うコーデックを前提とする |
 
 ## 実装の詳細
 
@@ -84,9 +86,9 @@ s1 = "hello"
 s2 = "hello"
 print(s1 is s2)  # Likely True - same object
 
-# Large strings are not interned
-s3 = "x" * 1000
-s4 = "x" * 1000
+# Strings built at run time are not interned
+s3 = "".join(["x"] * 1000)
+s4 = "".join(["x"] * 1000)
 print(s3 is s4)  # False - different objects
 ```
 
@@ -120,9 +122,9 @@ result = "".join(str(i) for i in range(10000))
 ### 部分文字列の探索
 
 ```python
-# Linear time on average for substring search
+# Linear time for substring search, even in the worst case
 s = "a" * 1000000 + "b"
-result = s.find("b")  # Usually O(n) avg, not O(n²)
+result = s.find("b")  # O(n)
 
 # CPython uses optimized algorithms (similar to Boyer-Moore)
 ```
@@ -153,7 +155,7 @@ Java の文字列に支えられており、性能特性はほぼ同じ。
 
 - 複数の文字列をつなぐには `str.join()` を使う
 - 書式化には f-string を使う（Python 3.6+）
-- 部分文字列の判定には `in` を使う（平均 O(n)）
+- 部分文字列の判定には `in` を使う（O(n)）
 - 効率的な加工には `.find()` と `.replace()` を使う
 
 ❌ **避けるべきこと**:

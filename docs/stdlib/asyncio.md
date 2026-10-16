@@ -193,6 +193,7 @@ part of ordinary use.
 | `asyncio.as_completed(aws, timeout=None)` | O(n) setup | O(n) | Yields n results in completion order. Python 3.13+ also supports `async for`, which hands back each input that was already a task or future, and the wrapping task for an input that was a bare coroutine; earlier versions yield wrapper coroutines that must be awaited for the result |
 | `asyncio.TaskGroup()` | O(1) | O(1) | Python 3.11+ |
 | `TaskGroup.create_task(coro)` | O(1) | O(1) | Adds the task to the group's set |
+| `TaskGroup.cancel()` | O(n) | O(n) | Python 3.15+. Cancels every task in the group not yet done and the body; a task suspended on a pending future queues a wakeup on the loop, which is the O(n) space. The group then exits without raising `CancelledError`; called before the group is entered it cancels on entry, and calling it again does nothing |
 | `async with TaskGroup()` exit | O(n) | O(n) | n = tasks created in the group; waits for all, and on failure cancels the rest and collects an `ExceptionGroup` |
 | `asyncio.shield(aw)` | O(1) | O(1) | One outer future; cancelling it leaves the inner awaitable running |
 | `asyncio.wait_for(aw, timeout)` | O(log s) | O(1) | One timer around one awaitable |
@@ -760,6 +761,7 @@ asyncio.run(main())
 - **Python 3.12+**: `eager_task_factory` and `create_eager_task_factory()`; `Handle.get_context()` and `Task.get_context()`; the child watcher API is deprecated
 - **Python 3.13+**: `asyncio.EventLoop`; `Queue.shutdown()` and `QueueShutDown`; `as_completed()` supports `async for`, handing back each task or future it was given; `readuntil()` accepts a tuple of separators; `Server.close_clients()` and `Server.abort_clients()`
 - **Python 3.14+**: `capture_call_graph()`, `format_call_graph()`, `print_call_graph()`, `future_add_to_awaited_by()` and `future_discard_from_awaited_by()`; `get_event_loop()` raises `RuntimeError` when no loop is running and none was set for the thread, instead of creating one - a loop installed with `set_event_loop()` is still returned; a finished task is dropped from the registry `all_tasks()` scans, where earlier versions keep it while it is referenced; the child watcher API and `get_child_watcher()` are removed; `iscoroutinefunction()`, `get_event_loop_policy()` and `set_event_loop_policy()` are deprecated for removal in 3.16
+- **Python 3.15+**: `TaskGroup.cancel()`, which ends a group early without an exception
 
 ## Related Documentation
 

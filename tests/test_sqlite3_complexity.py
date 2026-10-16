@@ -95,7 +95,15 @@ Measurement scope:
 * Version-gated names are checked with `hasattr` on this interpreter against
   the version their row names, and `sqlite3.version` is asserted to warn on
   3.12 and 3.13; the constant families are counted by prefix
-  against the 37, 103, 12 and 16 on the page.
+  against the 37, 103, 12 and 16 on the page. `SQLITE_KEYWORDS` (3.15+) is
+  asserted to be a tuple, the same object on each read, holding `SELECT`
+  without duplicates. On 3.15, `connect()` with a positional `timeout`, and
+  `create_function()`, `create_aggregate()`, `set_authorizer()`,
+  `set_progress_handler()` and `set_trace_callback()` with their leading
+  parameters by keyword, raise `TypeError`; `set_progress_handler(None, n=1)`
+  is accepted. Builds against SQLite older than 3.24, which lack
+  `SQLITE_KEYWORDS`, are not covered: every supported build bundles a newer
+  SQLite.
 * Every fenced block runs in its own subprocess; the Blob and `serialize()`
   blocks are skipped where the interpreter lacks `blobopen()` or
   `serialize()`, and a mutated assertion in one block is asserted to fail.
@@ -225,6 +233,7 @@ VERSION_GATED: list[tuple[Any, str, tuple[int, int] | None, tuple[int, int] | No
     (sqlite3.Connection, "setlimit", (3, 11), None, "Python 3.11+"),
     (sqlite3.Connection, "getconfig", (3, 12), None, "Python 3.12+"),
     (sqlite3.Connection, "autocommit", (3, 12), None, "Python 3.12+"),
+    (sqlite3, "SQLITE_KEYWORDS", (3, 15), None, "Python 3.15+"),
 ]
 
 
@@ -327,7 +336,11 @@ class TestConstantFamilies:
 
     @staticmethod
     def _constants() -> set[str]:
-        return {name for name in dir(sqlite3) if name.startswith("SQLITE_")}
+        return {
+            name
+            for name in dir(sqlite3)
+            if name.startswith("SQLITE_") and name != "SQLITE_KEYWORDS"
+        }
 
     def test_every_constant_falls_into_a_family(self) -> None:
         constants = self._constants()
@@ -351,6 +364,48 @@ class TestConstantFamilies:
         assert "Result codes, 103 names" in text
         assert "Limit categories, 12 names" in text
         assert f"Configuration options, up to {len(DBCONFIG_NAMES)} names" in text
+
+
+class TestKeywordsAreATuple:
+    """`SQLITE_KEYWORDS` | O(1) | O(1): an attribute holding a tuple, so `in`
+    scans it; the keywords are distinct, so a frozenset of them loses none."""
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="added in 3.15")
+    def test_it_is_one_tuple_read_each_time(self) -> None:
+        keywords = sqlite3.SQLITE_KEYWORDS  # type: ignore[attr-defined]
+
+        assert type(keywords) is tuple
+        assert sqlite3.SQLITE_KEYWORDS is keywords  # type: ignore[attr-defined]
+        assert "SELECT" in keywords and "select" not in keywords
+        assert len(set(keywords)) == len(keywords)
+
+
+class TestPorting315Signatures:
+    """The Version Notes' 3.15 signature changes: keyword-only `connect()`
+    parameters and positional-only callback registration."""
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="keyword-only from 3.15")
+    def test_connect_rejects_a_positional_timeout(self) -> None:
+        with pytest.raises(TypeError):
+            sqlite3.connect(":memory:", 5.0)  # type: ignore[misc]
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="positional-only from 3.15")
+    def test_registration_rejects_keywords(self) -> None:
+        connection = sqlite3.connect(":memory:")
+        try:
+            with pytest.raises(TypeError):
+                connection.create_function(name="f", narg=0, func=lambda: 1)  # type: ignore[call-arg]
+            with pytest.raises(TypeError):
+                connection.create_aggregate(name="g", n_arg=0, aggregate_class=None)  # type: ignore[call-arg]
+            with pytest.raises(TypeError):
+                connection.set_authorizer(authorizer_callback=None)  # type: ignore[call-arg]
+            with pytest.raises(TypeError):
+                connection.set_progress_handler(progress_handler=None, n=1)  # type: ignore[call-arg]
+            with pytest.raises(TypeError):
+                connection.set_trace_callback(trace_callback=None)  # type: ignore[call-arg]
+            connection.set_progress_handler(None, n=1)
+        finally:
+            connection.close()
 
 
 class TestConnectDefersTheCheck:

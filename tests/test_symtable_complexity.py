@@ -45,7 +45,14 @@ Measurement scope:
   `SymbolTableType` from 3.13; a `def` and a variable annotation add an
   `__annotate__` table from 3.14 and nothing before, a function-local
   annotation included; the four 3.14 `Symbol`
-  predicates exist from 3.14 only; `python -m symtable` prints tables from 3.13.
+  predicates exist from 3.14 only; `python -m symtable` prints tables from 3.13;
+  lambda and generator-expression tables are named `'<lambda>'` and
+  `'<genexpr>'` from 3.15 and `'lambda'` and `'genexpr'` before.
+* `Function.get_cells()` (3.15+) walks the child list zero times and returns
+  the same tuple twice, naming the parameter and local a nested function
+  reads and the local it assigns through `nonlocal`, and not the local it
+  does not use; `Symbol.is_cell()` is true for those
+  and false for the same name seen free in the nested function.
 * Every fenced Python block runs in its own subprocess, and a mutated
   assertion in one of them is asserted to fail.
 
@@ -416,6 +423,32 @@ class TestClassAndSymbol:
         assert g.lookup("y").is_comp_cell()  # type: ignore[attr-defined]
         assert cls.lookup("y").is_free_class()  # type: ignore[attr-defined]
 
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="added in 3.15")
+    def test_get_cells_scans_no_children_and_caches_and_is_cell_agrees(self) -> None:
+        source = (
+            "def outer(a):\n    b = 1\n    c = 2\n    d = 3\n"
+            "    def inner():\n        nonlocal d\n        d = 4\n        return a + b\n"
+        )
+        outer = build(source).lookup("outer").get_namespace()
+        assert isinstance(outer, symtable.Function)
+        raw = counted(outer)
+
+        cells = outer.get_cells()  # type: ignore[attr-defined]
+
+        assert sorted(cells) == ["a", "b", "d"]  # d is only assigned, through nonlocal
+        assert outer.get_cells() is cells  # type: ignore[attr-defined]
+        assert raw.walks == 0
+        lookup: Any = outer.lookup
+        assert lookup("a").is_cell() and lookup("b").is_cell() and lookup("d").is_cell()
+        assert not lookup("c").is_cell()
+        inner = outer.lookup("inner").get_namespace()
+        assert inner.lookup("b").is_free() and not inner.lookup("b").is_cell()  # type: ignore[attr-defined]
+
+    @pytest.mark.skipif(sys.version_info >= (3, 15), reason="added in 3.15")
+    def test_the_315_methods_are_absent_before(self) -> None:
+        assert not hasattr(symtable.Function, "get_cells")
+        assert not hasattr(symtable.Symbol, "is_cell")
+
     @pytest.mark.skipif(sys.version_info >= (3, 14), reason="added in 3.14")
     def test_the_314_predicates_are_absent_before(self) -> None:
         for name in ("is_type_parameter", "is_free_class", "is_comp_iter", "is_comp_cell"):
@@ -440,7 +473,15 @@ class TestVersionBoundaries:
     def test_generator_expressions_keep_a_table(self) -> None:
         names = [name for name, _ in walk(build("g = (x for x in y)\n"))]
 
-        assert "genexpr" in names
+        assert ("<genexpr>" if sys.version_info >= (3, 15) else "genexpr") in names
+
+    def test_lambda_and_genexpr_tables_are_bracketed_from_315(self) -> None:
+        names = [name for name, _ in walk(build("f = lambda: 0\ng = (x for x in y)\n"))]
+
+        if sys.version_info >= (3, 15):
+            assert names == ["top", "<lambda>", "<genexpr>"]
+        else:
+            assert names == ["top", "lambda", "genexpr"]
 
     @pytest.mark.skipif(sys.version_info < (3, 12), reason="PEP 695 syntax is 3.12+")
     def test_pep_695_table_kinds(self) -> None:

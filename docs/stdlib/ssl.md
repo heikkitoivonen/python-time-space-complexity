@@ -13,8 +13,9 @@ be able to find - the certificates it verifies against.
 `n` is the bytes handed to or taken from one call, `r` is the records they occupy
 (`r = ⌈n / 16384⌉`), `c` is the certificates in a chain - the one a peer presents, or the one you
 load in order to present it - `t` is the certificates in a context's trust store, `k` is the bytes
-in one encoded certificate, `q` is the length of a cipher list, and `p` is the bytes in an ALPN
-protocol list. A public-key operation counts as
+in one encoded certificate, `q` is the length of a cipher list, `p` is the bytes in an ALPN
+protocol list, `g` is the key-agreement groups in a list, and `s` is the signature algorithms in
+one. A public-key operation counts as
 O(1): its cost is set by the key, which is fixed for a given certificate, not by anything the caller
 passes. Network round trips are outside every bound on this page.
 
@@ -35,6 +36,10 @@ passes. Network round trips are outside every bound on this page.
 | `SSLContext.session_stats()` | O(1) | O(1) | A fixed set of counters, whatever the cache holds |
 | `SSLContext.get_ciphers()` | O(q) | O(q) | Not a stored list: a fresh dictionary per enabled cipher on every call |
 | `SSLContext.set_ciphers(ciphers)` | O(q) | O(1) | OpenSSL re-evaluates the cipher string against its table. TLS 1.3 suites are not selected by it |
+| `SSLContext.set_ciphersuites(ciphersuites)` | O(q) | O(q) | Python 3.15+. The TLS 1.3 suites, which `set_ciphers()` does not select; a string naming no usable suite raises `SSLError` |
+| `SSLContext.set_groups(grouplist)` | O(g) | O(g) | Python 3.15+. A colon-separated list OpenSSL parses into the context; an unknown name raises `SSLError` |
+| `SSLContext.get_groups(*, include_aliases=False)` | O(g) | O(g) | Python 3.15+, and OpenSSL 3.5+ (`NotImplementedError` otherwise). A fresh list of names on every call |
+| `SSLContext.set_client_sigalgs(sigalgslist)`, `SSLContext.set_server_sigalgs(sigalgslist)` | O(s) | O(s) | Python 3.15+. Parsed into the context like `set_groups()`; an unknown name raises `SSLError` |
 | `SSLContext.set_alpn_protocols(alpn_protocols)` | O(p) | O(p) | Each name is length-prefixed into one buffer |
 | `SSLContext.set_npn_protocols(npn_protocols)` | O(p) | O(p) | Deprecated since 3.10, and raises `AttributeError` where OpenSSL was built without NPN |
 | `SSLContext.wrap_socket(sock, server_side=False, do_handshake_on_connect=True, suppress_ragged_eofs=True, server_hostname=None, session=None)` | O(1), plus the handshake if `sock` is connected | O(1) | Takes over the descriptor; on an already-connected socket it goes straight into `do_handshake()` unless `do_handshake_on_connect` is false |
@@ -59,12 +64,13 @@ below are the methods TLS changes.
 | `SSLSocket.recv_into(buffer, nbytes=None, flags=0)` | O(min(nbytes, 16384)) | O(1) | Decrypts into the caller's buffer instead of a new one |
 | `SSLSocket.write(data)`, `SSLSocket.send(data, flags=0)` | O(n) | O(1) | Cut into r records, each with its own header and authentication tag, and each handed to the socket before the next is built. Non-zero `flags` raise `ValueError` |
 | `SSLSocket.sendall(data, flags=0)` | O(n) | O(1) | Loops `send()` over a `memoryview` until the whole buffer is gone |
-| `SSLSocket.sendfile(file, offset=0, count=None)` | O(n) | O(1) | The kernel's zero-copy path needs a plain socket, so a TLS socket reads and sends the file in fixed-size blocks |
+| `SSLSocket.sendfile(file, offset=0, count=None)` | O(n) | O(1) | Through Python 3.14 the kernel's zero-copy path needs a plain socket, so a TLS socket reads and sends the file in fixed-size blocks. From Python 3.15 a socket whose sending kernel TLS took over (`OP_ENABLE_KTLS`) uses the zero-copy path; any other still sends blocks |
 | `SSLSocket.pending()` | O(1) | O(1) | Bytes already decrypted and waiting: what is left of the record the last read touched, not what the transport still holds |
 | `SSLSocket.getpeercert(binary_form=False)` | O(k) | O(k) | Builds a fresh dictionary, or a fresh DER copy, on every call |
 | `SSLSocket.get_verified_chain()`, `SSLSocket.get_unverified_chain()` | O(c·k) | O(c·k) | Python 3.13+; re-encodes every certificate in the chain to DER on each call |
 | `SSLSocket.cipher()`, `SSLSocket.version()`, `SSLSocket.compression()`, `SSLSocket.selected_alpn_protocol()` | O(1) | O(1) | Read from the negotiated connection; `None` before the handshake |
 | `SSLSocket.selected_npn_protocol()` | O(1) | O(1) | Returns `None` on every supported version; deprecated since 3.10 |
+| `SSLSocket.group()`, `SSLSocket.client_sigalg()`, `SSLSocket.server_sigalg()` | O(1) | O(1) | Python 3.15+. The negotiated key-agreement group and signature algorithms, `None` where none was used. `group()` needs OpenSSL 3.2+ and the other two 3.5+, raising `NotImplementedError` otherwise. Call `group()` only after the handshake: on 3.15.0 it crashes the interpreter on a connection that has not finished one |
 | `SSLSocket.shared_ciphers()` | O(q²) | O(q) | Server side only: the ciphers both ends have in common, found by scanning one list for each entry of the other. `None` on a client socket |
 | `SSLSocket.get_channel_binding(cb_type='tls-unique')` | O(1) | O(1) | A fixed-size value; `None` before the handshake, `ValueError` for an unknown type |
 | `SSLSocket.verify_client_post_handshake()` | O(1) | O(1) | Only flags the request. The certificate exchange happens on the next write, and the verification cost lands there |
@@ -90,6 +96,7 @@ has no socket methods at all, so there is no `recv`, `sendall` or `sendfile`.
 | `SSLObject.do_handshake()` | O(c·k) | O(c·k) | As on a socket, and raises `SSLWantReadError` each time it needs bytes the incoming BIO does not have yet |
 | `SSLObject.unwrap()` | O(1) | O(1) | Writes `close_notify`; raises `SSLWantReadError` until the peer's arrives |
 | `SSLObject.pending()`, `SSLObject.cipher()`, `SSLObject.version()`, `SSLObject.compression()`, `SSLObject.selected_alpn_protocol()`, `SSLObject.selected_npn_protocol()`, `SSLObject.get_channel_binding(cb_type='tls-unique')`, `SSLObject.verify_client_post_handshake()` | O(1) | O(1) | As on `SSLSocket` |
+| `SSLObject.group()`, `SSLObject.client_sigalg()`, `SSLObject.server_sigalg()` | O(1) | O(1) | Python 3.15+; as on `SSLSocket`, including the crash from `group()` before the handshake |
 | `SSLObject.getpeercert(binary_form=False)` | O(k) | O(k) | A fresh dictionary or DER copy per call |
 | `SSLObject.get_verified_chain()`, `SSLObject.get_unverified_chain()` | O(c·k) | O(c·k) | Python 3.13+ |
 | `SSLObject.shared_ciphers()` | O(q²) | O(q) | Server side only |
@@ -127,6 +134,7 @@ has no socket methods at all, so there is no `recv`, `sendall` or `sendfile`.
 | `ssl.RAND_bytes(num)` | O(num) | O(num) | Cryptographically strong bytes from OpenSSL |
 | `ssl.RAND_add(bytes, entropy)` | O(len(bytes)) | O(1) | Mixes the buffer into OpenSSL's pool |
 | `ssl.RAND_status()` | O(1) | O(1) | Whether the pool is seeded |
+| `ssl.get_sigalgs()` | O(s) | O(s) | Python 3.15+, and OpenSSL 3.4+ (`NotImplementedError` otherwise). Every signature algorithm the library implements, as a fresh list per call |
 | `ssl.get_protocol_name(protocol_code)` | O(1) | O(1) | Dictionary lookup; `'<unknown>'` for an unrecognised code |
 | `ssl.enum_certificates(store_name)`, `ssl.enum_crls(store_name)` | O(t·k) | O(t·k) | Windows only: reads a whole system store |
 
@@ -145,7 +153,7 @@ has no socket methods at all, so there is no `recv`, `sendall` or `sendfile`.
 | `ssl.PROTOCOL_TLS_CLIENT`, `ssl.PROTOCOL_TLS_SERVER`, `ssl.PROTOCOL_TLS`, `ssl.PROTOCOL_SSLv23`, `ssl.PROTOCOL_TLSv1`, `ssl.PROTOCOL_TLSv1_1`, `ssl.PROTOCOL_TLSv1_2` | O(1) | O(1) | Only the first two are current; the rest are deprecated since 3.10. `ssl.PROTOCOL_SSLv3` exists only where OpenSSL was built with SSLv3 |
 | `ssl.OP_ALL`, `ssl.OP_NO_TLSv1_3`, `ssl.OP_NO_TICKET`, `ssl.OP_NO_COMPRESSION`, `ssl.OP_NO_RENEGOTIATION`, `ssl.OP_CIPHER_SERVER_PREFERENCE`, `ssl.OP_SINGLE_DH_USE`, `ssl.OP_SINGLE_ECDH_USE`, `ssl.OP_ENABLE_MIDDLEBOX_COMPAT`, `ssl.OP_ENABLE_KTLS`, `ssl.OP_IGNORE_UNEXPECTED_EOF`, `ssl.OP_LEGACY_SERVER_CONNECT`, and the rest of the `OP_NO_*` family | O(1) | O(1) | Bit flags for `SSLContext.options`; they change what a handshake does, not what setting them costs. `OP_IGNORE_UNEXPECTED_EOF` arrived in 3.10 and `OP_ENABLE_KTLS` and `OP_LEGACY_SERVER_CONNECT` in 3.12. The first two also need an OpenSSL that defines them |
 | `ssl.VERIFY_DEFAULT`, `ssl.VERIFY_CRL_CHECK_LEAF`, `ssl.VERIFY_CRL_CHECK_CHAIN`, `ssl.VERIFY_X509_STRICT`, `ssl.VERIFY_X509_TRUSTED_FIRST`, `ssl.VERIFY_X509_PARTIAL_CHAIN`, `ssl.VERIFY_ALLOW_PROXY_CERTS` | O(1) | O(1) | Bit flags for `SSLContext.verify_flags`. The CRL flags require revocation lists to be checked; OpenSSL does not fetch them, so load them into the store yourself |
-| `ssl.HAS_ALPN`, `ssl.HAS_NPN`, `ssl.HAS_ECDH`, `ssl.HAS_SNI`, `ssl.HAS_PSK`, `ssl.HAS_PHA`, `ssl.HAS_NEVER_CHECK_COMMON_NAME`, `ssl.HAS_SSLv2`, `ssl.HAS_SSLv3`, `ssl.HAS_TLSv1`, `ssl.HAS_TLSv1_1`, `ssl.HAS_TLSv1_2`, `ssl.HAS_TLSv1_3` | O(1) | O(1) | What the linked OpenSSL supports, decided at import |
+| `ssl.HAS_ALPN`, `ssl.HAS_NPN`, `ssl.HAS_ECDH`, `ssl.HAS_SNI`, `ssl.HAS_PSK`, `ssl.HAS_PHA`, `ssl.HAS_NEVER_CHECK_COMMON_NAME`, `ssl.HAS_SSLv2`, `ssl.HAS_SSLv3`, `ssl.HAS_TLSv1`, `ssl.HAS_TLSv1_1`, `ssl.HAS_TLSv1_2`, `ssl.HAS_TLSv1_3`, `ssl.HAS_PSK_TLS13` | O(1) | O(1) | What the linked OpenSSL supports, decided at import. `HAS_PSK_TLS13` is Python 3.15+ |
 | `ssl.OPENSSL_VERSION`, `ssl.OPENSSL_VERSION_INFO`, `ssl.OPENSSL_VERSION_NUMBER` | O(1) | O(1) | The linked library's version, in three shapes |
 | `ssl.CHANNEL_BINDING_TYPES` | O(1) | O(1) | The types `get_channel_binding()` accepts |
 | `ssl.PEM_HEADER`, `ssl.PEM_FOOTER` | O(1) | O(1) | The lines the conversion helpers write and require |
@@ -432,6 +440,11 @@ assert len(der) > 0
   with `set_psk_client_callback()` and `set_psk_server_callback()`, and `create_default_context()`
   sets `VERIFY_X509_PARTIAL_CHAIN` and `VERIFY_X509_STRICT`
 - **Python 3.14+**: `HAS_PHA` reports whether post-handshake client authentication is available
+- **Python 3.15+**: `SSLContext.set_ciphersuites()` selects TLS 1.3 suites; key-agreement groups
+  arrive with `set_groups()`, `get_groups()` and `group()`, and signature algorithms with
+  `get_sigalgs()`, `set_client_sigalgs()`, `set_server_sigalgs()`, `client_sigalg()` and
+  `server_sigalg()`; `HAS_PSK_TLS13` is new; `SSLSocket.sendfile()` uses the zero-copy path when
+  kernel TLS handles sending
 - **All Python 3**: `SSLContext.wrap_socket()` on an already-connected socket performs the
   handshake before it returns, unless `do_handshake_on_connect=False` defers it
 

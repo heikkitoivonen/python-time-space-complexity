@@ -38,7 +38,9 @@ Measurement scope:
   characters equal handlers x (length + 1), and filter calls equal
   (handlers + 1) x filters. `addHandler()` compares a counting `__eq__`
   handler against every existing one: 45 and 4,950 comparisons for 10 and
-  100 handlers, and a repeat is not added. A record with no handler on its
+  100 handlers, and a repeat is not added. `removeHandler()` on 3.13+
+  replaces `handlers` with a new list, leaving the one read before the call
+  whole, and mutates it in place on 3.11 and 3.12. A record with no handler on its
   walk reaches `lastResort`; a handler below the record's level still
   counts as found. A disabled logger calls no filter.
 * `findCaller()` one and 400 frames deep costs under 2x in a timing test;
@@ -148,7 +150,8 @@ Measurement scope:
   record's `__dict__` itself and `emit()` makes one request per record with
   the URL-encoded record as the POST body. `NTEventLogHandler` off Windows
   prints its notice, returns 1 and 0 from the two constant getters and
-  emits nothing.
+  emits nothing through 3.14, and raises `ImportError` on construction
+  from 3.15.
 * `BufferingHandler` holds records unformatted and empties at capacity
   without forwarding; `MemoryHandler` forwards at capacity and at
   `flushLevel`, delivers `INFO` records to an `ERROR` target, keeps 10
@@ -174,7 +177,8 @@ Not settled here:
   name resolution in `SysLogHandler`, an SMTP or HTTP exchange. The tests
   count the operations and never perform them.
 * `NTEventLogHandler` on Windows: the registry write at construction, the
-  `ReportEvent` per record and `getEventType()`'s map. No run this project
+  `ReportEvent` per record (with 3.15's event-source handle opened and
+  closed around it) and `getEventType()`'s map. No run this project
   performs reaches them.
 * The L log L sort in `dictConfig()` and `fileConfig()` and the per-name
   scan being additive: the slice count shows the scan, and the sort is
@@ -753,8 +757,13 @@ class TestHandlersOnALogger:
         logger.addHandler(handlers[0])
         assert len(logger.handlers) == count
 
+        before = logger.handlers
         logger.removeHandler(handlers[0])
         assert len(logger.handlers) == count - 1
+        # 3.13+ replaces the list (an O(n) copy) rather than mutating it.
+        replaced = logger.handlers is not before
+        assert replaced == (sys.version_info >= (3, 13))
+        assert len(before) == (count if replaced else count - 1)
         logger.removeHandler(handlers[0])
         assert len(logger.handlers) == count - 1
 
@@ -2485,6 +2494,7 @@ class TestNTEventLogHandler:
     """`NTEventLogHandler` off Windows: a printed notice and a no-op `emit()`."""
 
     @pytest.mark.skipif(sys.platform == "win32", reason="the no-op path is for other platforms")
+    @pytest.mark.skipif(sys.version_info >= (3, 15), reason="3.15 raises instead off Windows")
     def test_the_getters_are_constants_and_emit_does_nothing(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -2496,6 +2506,12 @@ class TestNTEventLogHandler:
             handler.emit(make_record())
         finally:
             handler.close()
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="the ImportError is for other platforms")
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="through 3.14 it prints a notice")
+    def test_off_windows_construction_raises_from_3_15(self) -> None:
+        with pytest.raises(ImportError):
+            logging.handlers.NTEventLogHandler("app")
 
 
 class TestBufferingAndMemoryHandlers:

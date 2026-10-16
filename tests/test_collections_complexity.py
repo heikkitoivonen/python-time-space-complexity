@@ -7,8 +7,8 @@ touches `maps[0]` alone, `len()` and iteration visit every entry, and each
 nothing, to a `collections.abc` mixin that calls the wrapper's own hooks once
 per item. Call counts on recording maps and subclasses, identity checks and
 traced allocation settle nearly every row; a stopwatch is used only for the
-two growth classes without a counter, the quadratic `UserDict.clear()` and
-the constant `UserString.isascii()`.
+growth classes without a counter: the quadratic `UserDict.clear()` before
+3.15, its deleted-slot term from 3.15, and the constant `UserString.isascii()`.
 
 Measurement scope:
 
@@ -43,9 +43,15 @@ Measurement scope:
   dict's own iterator type, and `items()` and `values()` call a recording
   `__getitem__` once per key. `__missing__` is asserted to run for `ud[key]`
   and, on 3.12+, not for `get()`; before 3.12 `get()` returns what
-  `__missing__` returns. `popitem()` removes the first key in iteration order,
-  `clear()` empties the dict, and a timing test puts `clear()` on 32,000
-  entries above 20x its cost on 4,000, where linear growth would give 8x.
+  `__missing__` returns. Before 3.15 `popitem()` removes the first key in
+  iteration order, and a timing test puts `clear()` on 32,000 entries above
+  20x its cost on 4,000, where linear growth would give 8x. From 3.15
+  `popitem()` removes the last key, and `clear()` on 1,000 entries calls a
+  recording `data.popitem()` exactly 1,001 times (the last call raises
+  `KeyError`), and a timing test puts `clear()` of one live key followed by
+  1,000,000 deleted slots above 10x the cost with 10,000 (x106 measured on
+  aarch64 3.15.0), the d in O(n + d). `clear()` empties the dict on every
+  version.
   `ud == dict` over 100,000 entries peaks above 1 MB, against zero for
   `ud.data == dict`.
 * `UserList`: construction copies a list and a `UserList` and consumes a
@@ -79,8 +85,8 @@ Not settled here:
   int page's digit conversion.
 * Key hashing and comparison are treated as O(1); an expensive `__hash__` on
   a key multiplies every mapping row.
-* `UserDict.popitem()` is priced in the entries deleted before the one it
-  removes. The timing test shows the quadratic total of `clear()`; that the
+* Before 3.15, `UserDict.popitem()` is priced in the entries deleted before
+  the one it removes. The timing test shows the quadratic total of `clear()`; that the
   per-call cost is the skipped slots is read from Objects/dictobject.c's
   iterator, which scans entries from the start of the table.
 * The `deque`, `defaultdict`, `Counter`, `namedtuple` and `OrderedDict` pages
@@ -591,18 +597,69 @@ class TestUserDictGoesThroughItsHooks:
 
 
 class TestUserDictEmptying:
-    """`popitem()` | O(d) and `clear()` | O(n·(n + d)): the mixin pops the first key
-    of a fresh iterator each time."""
+    """`popitem()` | O(d) and `clear()` | O(n·(n + d)): before 3.15 the mixin pops
+    the first key of a fresh iterator each time; from 3.15 `popitem()` is the
+    dict's own, which skips only the deleted slots after the last key, and
+    `clear()` is O(n + d)."""
 
     SMALL = 4_000
     LARGE = 32_000
 
+    @pytest.mark.skipif(sys.version_info >= (3, 15), reason="3.15 forwards to dict.popitem()")
     def test_popitem_removes_the_first_key_in_iteration_order(self) -> None:
         wrapped = UserDict({"a": 1, "b": 2, "c": 3})
 
         assert wrapped.popitem() == ("a", 1)
         assert wrapped.popitem() == ("b", 2)
         assert wrapped.data == {"c": 3}
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="3.15 forwards to dict.popitem()")
+    def test_popitem_removes_the_last_key_from_315(self) -> None:
+        wrapped = UserDict({"a": 1, "b": 2, "c": 3})
+
+        assert wrapped.popitem() == ("c", 3)
+        assert wrapped.popitem() == ("b", 2)
+        assert wrapped.data == {"a": 1}
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="3.15 forwards to dict.popitem()")
+    def test_clear_pops_from_the_dict_once_per_entry_from_315(self) -> None:
+        class Recording(dict[int, int]):
+            calls = 0
+
+            def popitem(self) -> tuple[int, int]:
+                Recording.calls += 1
+                return super().popitem()
+
+        wrapped: UserDict[int, int] = UserDict()
+        wrapped.data = Recording({index: index for index in range(1_000)})
+
+        wrapped.clear()
+
+        assert wrapped.data == {}
+        assert Recording.calls == 1_001
+
+    @pytest.mark.timing
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="3.15 forwards to dict.popitem()")
+    def test_clear_skips_the_deleted_slots_from_315(self) -> None:
+        """One live key followed by d deleted slots: O(n + d) predicts 100x
+        for 100x the deleted slots, a constant-time pop 1x."""
+
+        def clear(deleted: int) -> float:
+            best: float | None = None
+            for _ in range(5):
+                wrapped = UserDict({index: index for index in range(deleted + 1)})
+                for index in range(1, deleted + 1):
+                    del wrapped.data[index]
+                start = time.perf_counter_ns()
+                wrapped.clear()
+                elapsed = time.perf_counter_ns() - start
+                best = elapsed if best is None else min(best, elapsed)
+            assert best is not None
+            return best
+
+        small_ns, large_ns = clear(10_000), clear(1_000_000)
+
+        assert large_ns > small_ns * 10, f"x{large_ns / small_ns:.1f} for 100x the deleted slots"
 
     def test_clear_empties_the_dict(self) -> None:
         wrapped = UserDict({"a": 1, "b": 2})
@@ -612,6 +669,7 @@ class TestUserDictEmptying:
         assert wrapped.data == {}
 
     @pytest.mark.timing
+    @pytest.mark.skipif(sys.version_info >= (3, 15), reason="3.15 forwards to dict.popitem()")
     def test_clear_grows_faster_than_the_dict(self) -> None:
         """Eight times the entries costs far more than eight times the time."""
 

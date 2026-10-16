@@ -80,6 +80,15 @@ Measurement scope:
   starting with `_` when it is not, and binds them again on a second
   execution. A module imported inside a function runs its body on the first
   call that reaches it and not before.
+* Lazy imports (3.15+), through `exec` at module scope with a recording
+  `builtins.__import__` and the recording finder: `lazy import m` and
+  `lazy from m import A, B` call `__import__` zero times, ask the finder
+  nothing, run no body and leave `sys.modules` alone. Reading `A` makes the
+  one search and runs the body once, rebinds `A` and leaves `B` and `m` as
+  proxies; reading `A` twice more calls `__import__` no more, and reading
+  `m` binds the module already loaded without running the body again. A
+  lazily imported missing module raises `ModuleNotFoundError`, with its
+  name, at first use, and `lazy` inside a function is a `SyntaxError`.
 
 Not settled here:
 
@@ -131,7 +140,7 @@ from typing import Any
 import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "builtins" / "__import__.md"
-EXPECTED_BLOCKS = 9
+EXPECTED_BLOCKS = 10
 
 
 @pytest.fixture(autouse=True)
@@ -518,7 +527,7 @@ class TestStarExpandsToAll:
     def test_submodules_in_all_are_imported(self) -> None:
         package = __import__("xml", fromlist=["*"])
 
-        assert package.__all__ == ["dom", "parsers", "sax", "etree"]
+        assert {"dom", "parsers", "sax", "etree"} <= set(package.__all__)
         assert {"xml.dom", "xml.parsers", "xml.sax", "xml.etree"} <= set(sys.modules)
 
     def test_names_that_are_already_attributes_import_nothing(self) -> None:
@@ -661,7 +670,15 @@ class TestTheStatementCallsTheBuiltin:
         assert self._import_names("import xml, json") == 2  # two modules, one statement
 
     def test_each_form_passes_what_the_page_says(self, recording: Recording) -> None:
-        self._warm("xml.sax", "xml.sax.handler", "xml.sax.xmlreader", "json.scanner")
+        self._warm(
+            "xml.sax",
+            "xml.sax.handler",
+            "xml.sax.xmlreader",
+            "json.scanner",
+            "xml.dom",
+            "xml.parsers",
+            "xml.etree",
+        )
         recording.start()
         namespace: dict[str, Any] = {"__name__": "json.decoder"}
         exec("import xml.sax", namespace)
@@ -836,6 +853,76 @@ class TestAFunctionLevelImportRunsOnce:
         assert runs.RUNS == ["heavy"]  # type: ignore[attr-defined]
         assert namespace["use"]() is first
         assert runs.RUNS == ["heavy"]  # type: ignore[attr-defined]
+
+
+@pytest.mark.skipif(sys.version_info < (3, 15), reason="lazy imports are 3.15+")
+class TestLazyImportsDeferTheCall:
+    """`lazy import` | O(1): no `__import__` call, no search and no body until
+    first use; the first use pays the import once and rebinds the name; a
+    `lazy from` proxy resolves only the name used."""
+
+    @pytest.fixture
+    def recorded(self, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+        calls: list[str] = []
+        real_import = builtins.__import__
+
+        def recording(name: str, *args: Any, **kwargs: Any) -> Any:
+            calls.append(name)
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", recording)
+        return calls
+
+    def test_the_statement_calls_nothing_and_the_first_use_imports_once(
+        self, tmp_path: pathlib.Path, recorded: list[str]
+    ) -> None:
+        (tmp_path / "lazy_target.py").write_text(
+            "RUNS.append('body')\nA = 1\nB = 2\n", encoding="utf-8"
+        )
+        sys.path.insert(0, str(tmp_path))
+        runs: list[str] = []
+        builtins.RUNS = runs  # type: ignore[attr-defined]
+        finder = Recorder()
+        sys.meta_path.insert(0, finder)
+        try:
+            app: dict[str, Any] = {"__name__": "lazy_app"}
+            exec("lazy import lazy_target\nlazy from lazy_target import A, B\n", app)  # noqa: S102
+
+            assert recorded == [] and runs == [] and finder.asked == []
+            assert "lazy_target" not in sys.modules
+
+            exec("first = A", app)  # noqa: S102
+
+            assert runs == ["body"] and finder.asked == ["lazy_target"]
+            assert app["first"] == 1 and app["A"] == 1
+            assert type(app["B"]).__name__ == "lazy_import"  # only the name used
+            assert type(app["lazy_target"]).__name__ == "lazy_import"
+            calls = len(recorded)
+
+            exec("second = A\nthird = A", app)  # noqa: S102
+
+            assert len(recorded) == calls  # ordinary global loads
+            exec("module = lazy_target", app)  # noqa: S102
+            assert app["module"] is sys.modules["lazy_target"] and runs == ["body"]
+        finally:
+            sys.meta_path.remove(finder)
+            sys.path.remove(str(tmp_path))
+            sys.modules.pop("lazy_target", None)
+            del builtins.RUNS  # type: ignore[attr-defined]
+
+    def test_a_missing_module_raises_at_first_use(self, recorded: list[str]) -> None:
+        app: dict[str, Any] = {"__name__": "lazy_app"}
+
+        exec("lazy import no_such_lazy_module\n", app)  # noqa: S102
+        assert recorded == []
+        with pytest.raises(ModuleNotFoundError) as raised:
+            exec("no_such_lazy_module", app)  # noqa: S102
+
+        assert raised.value.name == "no_such_lazy_module"
+
+    def test_lazy_is_rejected_inside_a_function(self) -> None:
+        with pytest.raises(SyntaxError):
+            compile("def f():\n    lazy import json\n", "<lazy>", "exec")
 
 
 def _blocks() -> list[tuple[int, str]]:

@@ -302,6 +302,9 @@ assert restored.utcoffset() is not None
 - **Python 3.12.8+ and 3.13.1+**: compiling a `strptime()` format is O(f); earlier releases
   build its regular expression in O(f·d) for a format of d ≥ 1 directives
 - **Python 3.14+**: Added `date.strptime()` and `time.strptime()`
+- **Python 3.15+**: `strptime()` raises `ValueError` for a format with a day of the month (`%d`)
+  but no year directive; 3.13 and 3.14 parse it, warning `DeprecationWarning` when they compile
+  the format
 
 ## Related Modules
 

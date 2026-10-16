@@ -99,7 +99,7 @@ the library and the platform: every bound here is the part `ctypes` adds.
 | `ctypes.byref(obj, offset=0)` | O(1) | O(1) | Builds no pointer type or instance |
 | `ctypes.cast(obj, type)` | O(1) | O(1) | Shares the address and keeps `obj` alive |
 | `ctypes.addressof(obj)`, `ctypes.sizeof(obj_or_type)`, `ctypes.alignment(obj_or_type)` | O(1) | O(1) | |
-| `ctypes.SetPointerType(pointer, cls)` | O(1) | O(1) | Completes an incomplete pointer type; deprecated in 3.13 |
+| `ctypes.SetPointerType(pointer, cls)` | O(1) | O(1) | Completes an incomplete pointer type; deprecated in 3.13, removed in 3.15 |
 
 ### Sharing and copying memory
 
@@ -449,6 +449,7 @@ assert results == [b"1", b"22", b"333"]
   O(f²); added `memoryview_at()`, `ctypes.util.dllist()`, `Structure._layout_`, the public
   `CField` type with its byte and bit attributes, and the complex types where libffi supports
   them
+- **Python 3.15+**: `SetPointerType` is removed
 
 ## Related Modules
 

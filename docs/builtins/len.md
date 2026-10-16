@@ -7,12 +7,12 @@ The `len()` function returns the number of items in a container object.
 | Type | Time | Space | Notes |
 |------|------|-------|-------|
 | `list` | O(1) | O(1) | Direct length attribute |
-| `tuple` | O(1) | O(1) | Immutable, cached |
+| `tuple` | O(1) | O(1) | Length stored in the object |
 | `dict` | O(1) | O(1) | Maintains size |
 | `set` | O(1) | O(1) | Maintains size |
-| `str` | O(1) | O(1) | Immutable, cached |
-| `bytes` | O(1) | O(1) | Immutable, cached |
-| `range` | O(1) | O(1) | Computed, not stored |
+| `str` | O(1) | O(1) | Length stored in the object |
+| `bytes` | O(1) | O(1) | Length stored in the object |
+| `range` | O(1) | O(1) | Stored: computed once, when the range is built |
 | `deque` | O(1) | O(1) | Maintains size |
 | `defaultdict` | O(1) | O(1) | Inherits from dict |
 | `OrderedDict` | O(1) | O(1) | Maintains size |
@@ -27,13 +27,13 @@ lst = [1, 2, 3, 4, 5]
 length = len(lst)  # O(1) - stored length
 
 tpl = (1, 2, 3)
-length = len(tpl)  # O(1) - immutable
+length = len(tpl)  # O(1) - length stored in the tuple
 
 dct = {'a': 1, 'b': 2}
 length = len(dct)  # O(1) - maintains size
 
 s = "hello"
-length = len(s)    # O(1) - immutable string
+length = len(s)    # O(1) - length stored in the string
 ```
 
 ## Custom Objects
@@ -168,10 +168,10 @@ for i in range(len(items)):
 
 ```python
 # Range length is O(1), not O(n)
-r = range(10**1000)
-length = len(r)  # O(1) - computed from start, stop, step
+r = range(10**9)
+length = len(r)  # O(1) - stored when the range was built
 
-# This is computed, not stored
+# Computed once from start, stop, step, then stored
 # So even huge ranges have O(1) length
 ```
 

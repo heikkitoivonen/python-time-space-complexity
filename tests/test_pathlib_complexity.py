@@ -35,8 +35,8 @@ Measurement scope:
   sizes before.
   On every version the peak stays under 5,000 B plus 50 B per component.
 * `is_reserved()` is exercised on `PureWindowsPath`: `CON/file.txt` is
-  reserved from 3.13 and not before, `x/CON` on every version, and the call
-  warns from 3.13.
+  reserved from 3.13 and not before, `x/CON` on every version through 3.14,
+  and the call warns from 3.13; from 3.15 the method is gone.
 * Predicates, `stat()`, `lstat()`, `samefile()`, `owner()`, `group()`,
   `chmod()`, `unlink()` and `rmdir()` are counted at the os layer: one call
   each, two for `samefile()`, none for `absolute()`, and no directory read. On
@@ -642,19 +642,26 @@ class TestMatchSpace:
 class TestPureRowsWithVersionMarkers:
     """The pure rows whose note names a version."""
 
+    @pytest.mark.skipif(sys.version_info >= (3, 15), reason="is_reserved() is removed in 3.15")
     def test_is_reserved_checks_every_component_from_313(self) -> None:
         windows = pathlib.PureWindowsPath
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            inner = windows("CON/file.txt").is_reserved()
-            final = windows("x/CON").is_reserved()
-            posix = pathlib.PurePosixPath("CON").is_reserved()
+            inner = getattr(windows("CON/file.txt"), "is_reserved")()  # noqa: B009 - gone in 3.15
+            final = getattr(windows("x/CON"), "is_reserved")()  # noqa: B009 - gone in 3.15
+            posix = getattr(pathlib.PurePosixPath("CON"), "is_reserved")()  # noqa: B009
 
         deprecated = [w for w in caught if issubclass(w.category, DeprecationWarning)]
         assert final is True
         assert inner is (sys.version_info >= (3, 13))
         assert bool(deprecated) is (sys.version_info >= (3, 13))
         assert posix is False
+
+    def test_is_reserved_is_removed_from_315(self) -> None:
+        if sys.version_info < (3, 15):
+            pytest.skip("version: present through 3.14")
+
+        assert not hasattr(pathlib.PurePath, "is_reserved")
 
     def test_purepath_as_uri_is_deprecated_in_314(self) -> None:
         with warnings.catch_warnings(record=True) as caught:

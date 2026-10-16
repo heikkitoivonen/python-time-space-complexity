@@ -38,7 +38,7 @@ name comparisons are O(1).
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `doctest.DocTestSuite(module=None, globs=None, extraglobs=None, test_finder=None, **options)` | O(o + d + (t + 1)·g + t log t + n·(c + 1)) | O(o + d + (t + 1)·g + n) | One test case per docstring that has examples; nothing runs until the suite does |
-| Running one case of a `DocTestSuite` | O(e + g + x) | O(g + w + a) | Restores the `DocTest`'s globals from a saved copy afterwards |
+| Running one case of a `DocTestSuite` | O(e + g + x) | O(g + w + a) | Restores the `DocTest`'s globals from a saved copy afterwards. From 3.15 each example is reported to the result as a subtest, so every failing or skipped example gets its own entry until `REPORT_ONLY_FIRST_FAILURE` stops reporting after the first failure; before, a case is one failure carrying the whole report |
 | `doctest.DocFileSuite(*paths, module_relative=True, package=None, setUp=None, tearDown=None, globs=None, optionflags=0, parser=DocTestParser(), encoding=None)` | O(s + g) per file | O(s + g) per file | Reads and parses every file when the suite is built |
 | `doctest.set_unittest_reportflags(flags)` | O(1) | O(1) | Returns the previous flags; raises `ValueError` for a flag that is not a reporting flag |
 
@@ -74,6 +74,7 @@ name comparisons are O(1).
 | `doctest.DocTestRunner(checker=None, verbose=None, optionflags=0)` | O(1) | O(1) | |
 | `DocTestRunner.run(test, compileflags=None, out=None, clear_globs=True)` | O(e + g + x) | O(w + a) | For the largest single example: output is captured per example and discarded once it has been checked |
 | `DocTestRunner.summarize(verbose=None)` | O(r log r) | O(r) | Sorts the names for the report |
+| `DocTestRunner.report_skip(out, test, example)` | O(1) | O(1) | Python 3.15+. Called once per skipped example, except where `REPORT_ONLY_FIRST_FAILURE` silences reporting after a failure; writes nothing |
 | `DocTestRunner.report_start(out, test, example)` | O(1) | O(1) | Writes nothing unless verbose; verbose, it echoes the example's source and `want`, O(w) |
 | `DocTestRunner.report_success(out, test, example, got)` | O(1) | O(1) | Writes `ok` when verbose, nothing otherwise |
 | `DocTestRunner.report_failure(out, test, example, got)` | O(w + a) | O(w + a) | A header quoting the example's source, then `OutputChecker.output_difference()`, whose diff flags cost more |
@@ -436,6 +437,10 @@ assert '## [1, 2, 3]' in script
 - **Python 3.13+**: `TestResults.skipped` and `DocTestRunner.skips` count skipped examples, which
   `attempted` and `tries` now include; a `DocTestSuite` case whose examples are all skipped is
   reported as skipped
+- **Python 3.15+**: a `DocTestSuite` case reports each example to the `unittest` result as a
+  subtest, so each failing example is its own failure and each skipped example its own skip,
+  up to the first failure under `REPORT_ONLY_FIRST_FAILURE`.
+  `DocTestRunner.report_skip()` added
 
 ## Related Modules
 

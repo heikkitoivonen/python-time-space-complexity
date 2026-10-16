@@ -2,7 +2,7 @@
 
 > Comprehensive documentation of time and space complexity for Python built-in operations and standard library modules.
 
-This site documents the Big-O time and space complexity of Python operations across built-in types, built-in functions, and standard library modules. It covers CPython 3.11–3.14, with notes on PyPy, Jython, and IronPython.
+This site documents the Big-O time and space complexity of Python operations across built-in types, built-in functions, and standard library modules. It covers CPython 3.11–3.15, with notes on PyPy, Jython, and IronPython.
 
 ## Built-in Types
 
@@ -12,6 +12,7 @@ This site documents the Big-O time and space complexity of Python operations acr
 - [Tuples](https://pythoncomplexity.com/builtins/tuple/): Complexity for tuple operations (indexing, slicing, membership)
 - [Strings](https://pythoncomplexity.com/builtins/str/): Complexity for string operations (find, replace, split, join, slicing)
 - [Bytes & Bytearray](https://pythoncomplexity.com/builtins/bytes/): Complexity for bytes and bytearray operations
+- [Frozendict](https://pythoncomplexity.com/builtins/frozendict/): Complexity for frozendict operations (Python 3.15+)
 - [Frozenset](https://pythoncomplexity.com/builtins/frozenset/): Complexity for frozenset operations
 - [Range](https://pythoncomplexity.com/builtins/range/): Complexity for range operations (O(1) membership testing)
 - [Integer](https://pythoncomplexity.com/builtins/int/): Complexity for arbitrary-precision integer arithmetic
@@ -34,6 +35,7 @@ This site documents the Big-O time and space complexity of Python operations acr
 - [any()](https://pythoncomplexity.com/builtins/any/): O(n) short-circuit
 - [hash()](https://pythoncomplexity.com/builtins/hash/): Varies by type
 - [isinstance()](https://pythoncomplexity.com/builtins/isinstance/): O(n) MRO lookup
+- [sentinel()](https://pythoncomplexity.com/builtins/sentinel/): O(1) unique named marker (Python 3.15+)
 
 ## Standard Library (Key Modules)
 
@@ -66,6 +68,7 @@ This site documents the Big-O time and space complexity of Python operations acr
 - [string](https://pythoncomplexity.com/stdlib/string/): String constants and templates
 - [struct](https://pythoncomplexity.com/stdlib/struct/): Binary data packing/unpacking
 - [typing](https://pythoncomplexity.com/stdlib/typing/): Type hint support
+- [profiling](https://pythoncomplexity.com/stdlib/profiling/): Tracing profiler (cost per call) and sampling profiler (cost per sample) (Python 3.15+)
 
 ## Python Implementations
 
@@ -76,6 +79,7 @@ This site documents the Big-O time and space complexity of Python operations acr
 
 ## Python Versions
 
+- [Python 3.15](https://pythoncomplexity.com/versions/py315/): Complexity changes in 3.15
 - [Python 3.14](https://pythoncomplexity.com/versions/py314/): Complexity changes in 3.14
 - [Python 3.13](https://pythoncomplexity.com/versions/py313/): Complexity changes in 3.13
 - [Python 3.12](https://pythoncomplexity.com/versions/py312/): Complexity changes in 3.12

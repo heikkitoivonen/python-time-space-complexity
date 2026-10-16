@@ -81,7 +81,8 @@ Measurement scope:
   argument unchanged. A reply line of 8,192 bytes, CRLF included, is read
   and one of 8,193 raises `SMTPResponseException` with code 500.
 * Connection rows: a greeting other than `220` raises `SMTPConnectError`;
-  `connect('host:2525')` connects to port 2525; `SMTP()` with no host calls
+  `connect('host:2525')` connects to port 2525, and a subclass whose
+  `default_port` is 2526 connects there when given no port; `SMTP()` with no host calls
   `socket.getfqdn()` once and with `local_hostname` not at all; leaving a
   `with` block sends `QUIT`, and does not raise when the server has already
   closed; `quit()` sends `QUIT` and clears the `EHLO` state; `close()` sends
@@ -561,6 +562,18 @@ class TestConnecting:
 
         assert code == 220
         assert network.addresses == [("smtp.example.com", 2525)]
+        smtp.close()
+
+    def test_port_zero_falls_back_to_default_port(self, network: Network) -> None:
+        """`SMTP.default_port` | The port `connect()` uses when given 0."""
+
+        class OtherDefault(smtplib.SMTP):
+            default_port = 2526
+
+        smtp = OtherDefault(local_hostname=CLIENT)
+        smtp.connect("smtp.example.com")
+
+        assert network.addresses == [("smtp.example.com", 2526)]
         smtp.close()
 
     def test_the_local_name_is_looked_up_unless_given(
@@ -1327,6 +1340,13 @@ class TestModuleFunctions:
 
     def test_the_ports(self) -> None:
         assert (smtplib.SMTP_PORT, smtplib.SMTP_SSL_PORT, smtplib.LMTP_PORT) == (25, 465, 2003)
+
+    def test_default_port_is_a_class_attribute(self) -> None:
+        """`SMTP.default_port`, `SMTP_SSL.default_port` | O(1) | Class attributes."""
+        assert smtplib.SMTP.default_port == smtplib.SMTP_PORT
+        assert smtplib.SMTP_SSL.default_port == smtplib.SMTP_SSL_PORT
+        assert "default_port" in vars(smtplib.SMTP)
+        assert "default_port" in vars(smtplib.SMTP_SSL)
 
 
 class TestExceptions:

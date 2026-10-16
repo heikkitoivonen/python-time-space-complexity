@@ -8,8 +8,11 @@ Most of them can be settled by observation:
   stored as attributes, a list field is kept rather than copied, and `_fields`
   and `_attributes` are the class tuples themselves. From 3.13 an omitted
   optional field comes from a class default - a fresh list per instance for a
-  list field, one shared `Load()` for `ctx` - and an omitted required one
-  warns; on 3.11 and 3.12 the attribute is simply absent;
+  list field, one shared `Load()` for `ctx`. An omitted required field or a
+  keyword that is neither a field nor a position attribute (`lineno` is
+  accepted) warns on 3.13 and 3.14 and raises `TypeError`
+  from 3.15, and instantiating `ast.AST` or `ast.expr` warns from 3.15; on
+  3.11 and 3.12 an omitted `Module.body` or `Name.ctx` is simply absent;
 * the page's grouping of the node classes is checked against the runtime class
   hierarchy: every class a row lists is a subclass of the abstract group its
   Notes name;
@@ -72,6 +75,8 @@ CPython 3.14.7 with 1,000 then 4,000 assignment statements unless stated:
 * `walk`: x4.3; `NodeVisitor.visit`: x4.0; `NodeTransformer.visit`: x4.0;
   `fix_missing_locations`: x4.3; `increment_lineno`: x4.3; `compare`: x4.4
   on 3.14; `literal_eval` of a 1,000-then-4,000-item list: x5.4;
+* `dump(color=True)` on 3.15 is the plain text plus escapes whose total
+  length grows 16x for 16x the nodes in a wide tree and in a deep chain;
 * `dump` of the wide tree: x4.3 (x4.2 with `indent=2`), but of a chain 1,000
   then 16,000 deep: x137-x151 (x158-x169 on 3.11.17), the N * h shape;
   a 4,000-deep chain against a
@@ -121,8 +126,8 @@ Not settled here:
 
 Scope of the constructor bound: it covers the fields the grammar declares.
 A node constructor also accepts arbitrary extra keyword attributes and sets
-each one, which costs what the caller passes; that path warns from 3.13 and is
-not priced here.
+each one, which costs what the caller passes on 3.11 and 3.12; that path
+warns on 3.13 and 3.14, raises from 3.15, and is not priced here.
 
 Not varied: node kinds, and the length of string fields. The wide trees are
 assignment statements and the deep trees unary operators; the bounds do not
@@ -521,6 +526,23 @@ class TestDump:
         growth = in_deep_stack(measure)
 
         assert growth > 128, f"x{growth:.1f} for 8x the depth; N * h would be 64, N * h² 512"
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="dump(color=) is 3.15+")
+    def test_color_adds_a_fixed_escape_per_name(self) -> None:
+        """`color=True` is the plain text with escapes added, and the added
+        characters grow 16x for 16x the nodes in both a wide tree (100 to
+        1,600 statements) and a deep chain (50 to 800 levels): a fixed-length
+        escape per name and value. This bounds the output, not the copying,
+        which the uncolored deep-chain tests measure."""
+        escape = re.compile(r"\x1b\[[0-9;]*m")
+        for small, large in ((wide_tree(100), wide_tree(1_600)), (deep_chain(50), deep_chain(800))):
+            added = []
+            for tree in (small, large):
+                plain = ast.dump(tree)
+                colored = ast.dump(tree, color=True)  # pyright: ignore[reportCallIssue]
+                assert escape.sub("", colored) == plain
+                added.append(len(colored) - len(plain))
+            assert 15 < added[1] / added[0] < 17, added
 
     def test_documented_output(self) -> None:
         text = ast.dump(ast.parse("x = 1 + 2"))
@@ -1151,10 +1173,28 @@ class TestNodeObjects:
         assert ast.Name(id="x").ctx is ast.Name(id="y").ctx
         assert ast.Name._field_types == {"id": str, "ctx": ast.expr_context}
 
-    @pytest.mark.skipif(sys.version_info < (3, 13), reason="constructors warn from 3.13")
-    def test_omitting_a_required_field_warns_from_313(self) -> None:
+    @pytest.mark.skipif(
+        not (3, 13) <= sys.version_info < (3, 15), reason="constructors warn on 3.13 and 3.14"
+    )
+    def test_a_missing_field_or_unknown_keyword_warns_on_313_and_314(self) -> None:
         with pytest.warns(DeprecationWarning, match="missing 1 required positional argument"):
             ast.Name()  # type: ignore[call-arg]
+        with pytest.warns(DeprecationWarning, match="unexpected keyword argument 'bogus'"):
+            ast.Name(id="x", bogus=1)  # type: ignore[call-arg]
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="constructors raise from 3.15")
+    def test_a_missing_field_or_unknown_keyword_raises_from_315(self) -> None:
+        with pytest.raises(TypeError, match="missing 1 required positional argument"):
+            ast.Name()  # type: ignore[call-arg]
+        with pytest.raises(TypeError, match="unexpected keyword argument 'bogus'"):
+            ast.Name(id="x", bogus=1)  # type: ignore[call-arg]
+        assert ast.Name(id="x", lineno=1).lineno == 1
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="abstract nodes warn from 3.15")
+    def test_instantiating_an_abstract_node_warns_from_315(self) -> None:
+        for abstract in (ast.AST, ast.expr):
+            with pytest.warns(DeprecationWarning, match="abstract AST node"):
+                abstract()
 
     def test_index_returns_its_value_and_extslice_copies_its_dims(self) -> None:
         """The two deprecated classes that are not plain constructors."""

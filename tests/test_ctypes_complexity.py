@@ -54,7 +54,8 @@ Measurement scope:
 * An anonymous member of 100 fields is asserted to give the outer structure
   a descriptor for each of them.
 * `SetPointerType()` completes an incomplete pointer to a self-referencing
-  structure; from 3.13 it is asserted to warn `DeprecationWarning`.
+  structure; on 3.13 and 3.14 it is asserted to warn `DeprecationWarning`,
+  and from 3.15 to be absent.
 * `byref()` is asserted to return something that is not a `_Pointer`, and
   the byte-order classes by the bytes they produce. `CField` attributes
   (3.14+), `_align_` (3.13+), `c_time_t` (3.12+)
@@ -858,7 +859,7 @@ class TestErrno:
 
 class TestSetPointerType:
     """`SetPointerType(pointer, cls)` completes an incomplete pointer type,
-    and is deprecated from 3.13."""
+    is deprecated from 3.13 and removed in 3.15."""
 
     @staticmethod
     def incomplete(name: str) -> Any:
@@ -882,7 +883,9 @@ class TestSetPointerType:
 
         assert pointer._type_ is node  # noqa: SLF001
 
-    @pytest.mark.skipif(sys.version_info < (3, 13), reason="deprecated from 3.13")
+    @pytest.mark.skipif(
+        not (3, 13) <= sys.version_info < (3, 15), reason="deprecated on 3.13 and 3.14"
+    )
     def test_it_warns_and_completes_the_type(self) -> None:
         pointer = self.incomplete("NodeB")
 
@@ -890,6 +893,10 @@ class TestSetPointerType:
             node = self.complete(pointer)
 
         assert pointer._type_ is node  # noqa: SLF001
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="removed in 3.15")
+    def test_it_is_removed_in_315(self) -> None:
+        assert not hasattr(ctypes, "SetPointerType")
 
 
 @WINDOWS

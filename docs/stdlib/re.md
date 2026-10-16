@@ -34,7 +34,7 @@ such as `(?:ab)*`, which records each iteration.
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `re.compile(pattern, flags=0)` | O(n + u) | O(n) | u = the code points the pattern's character-class ranges span below U+10000: 20,992 for `[\u4e00-\u9fff]`. O(n²) when the alternatives of a group share a long common prefix, or when a long run of `(?:...)` groups sits at one level; O(n·d) when groups nest d deep, since a level can copy what it holds; see [sre_parse](sre_parse.md) and [sre_compile](sre_compile.md). A cache hit returns the same `Pattern` without compiling, except with `re.DEBUG` |
-| `Pattern.match(string[, pos[, endpos]])` | O(m) | O(c) | One attempt, at `pos` |
+| `Pattern.match(string[, pos[, endpos]])`, `Pattern.prefixmatch(string[, pos[, endpos]])` | O(m) | O(c) | One attempt, at `pos`; `prefixmatch` is Python 3.15+, the same operation under a clearer name |
 | `Pattern.fullmatch(string[, pos[, endpos]])` | O(m) | O(c) | One attempt, which must end at `endpos` |
 | `Pattern.search(string[, pos[, endpos]])` | O(s) | O(c) | Retries at successive start positions until one matches |
 | `Pattern.findall(string[, pos[, endpos]])` | O(s + g) | O(k + g) | One string per match, or a tuple of c group strings when there are two or more groups, O(k·c + g) |
@@ -50,7 +50,7 @@ such as `(?:ab)*`, which records each iteration.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `re.match(pattern, string, flags=0)`, `re.fullmatch(pattern, string, flags=0)`, `re.search(pattern, string, flags=0)` | `re.compile` + the method | `re.compile` + the method | The pattern is compiled on a cache miss and looked up on a hit |
+| `re.match(pattern, string, flags=0)`, `re.prefixmatch(pattern, string, flags=0)`, `re.fullmatch(pattern, string, flags=0)`, `re.search(pattern, string, flags=0)` | `re.compile` + the method | `re.compile` + the method | The pattern is compiled on a cache miss and looked up on a hit; `re.prefixmatch` is Python 3.15+, and `re.match` is the same function |
 | `re.findall(pattern, string, flags=0)`, `re.finditer(pattern, string, flags=0)` | `re.compile` + the method | `re.compile` + the method | As above |
 | `re.sub(pattern, repl, string, count=0, flags=0)`, `re.subn(pattern, repl, string, count=0, flags=0)` | `re.compile` + the method | `re.compile` + the method | As above |
 | `re.split(pattern, string, maxsplit=0, flags=0)` | `re.compile` + the method | `re.compile` + the method | As above |
@@ -321,6 +321,8 @@ assert tokens == [('name', 'x'), ('op', '='), ('num', '12'), ('op', '+'), ('name
 - **Python 3.11+**: A `search()` whose pattern starts with `\A`, or with `^` without
   `re.MULTILINE`, stops after the first attempt instead of retrying at every position
 - **Python 3.13+**: `re.PatternError` is the exception's name, with `re.error` kept as an alias
+- **Python 3.15+**: `re.prefixmatch()` and `Pattern.prefixmatch()` are the same operations as
+  `match()`, which is soft deprecated in their favour but not scheduled for removal
 
 ## Related Modules
 

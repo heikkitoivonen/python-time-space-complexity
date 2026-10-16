@@ -68,7 +68,7 @@ def test_archive_is_reproducible_and_usable_outside_checkout(
     assert (installed / "LICENSE.txt").read_bytes() == (ROOT / "LICENSE.txt").read_bytes()
     manifest = json.loads((installed / "manifest.json").read_text())
     assert manifest["source_revision"] == "a" * 40
-    assert manifest["supported_python"] == ["3.11", "3.12", "3.13", "3.14"]
+    assert manifest["supported_python"] == ["3.11", "3.12", "3.13", "3.14", "3.15"]
 
 
 @pytest.mark.parametrize("mutation", ["delete", "corrupt", "extra"])

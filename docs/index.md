@@ -51,7 +51,7 @@ See [Lists](builtins/list.md) for detailed analysis.
 
 ## Coverage
 
-- **Python Versions**: 3.11-3.14
+- **Python Versions**: 3.11-3.15
 - **Implementations**: CPython, PyPy, Jython, IronPython
 - **Operations**: 2,200+ built-in and stdlib operations
 - **Updates**: Regularly updated with new Python releases
@@ -69,6 +69,7 @@ Found an inaccuracy or want to add content? See our [Contributing Guidelines](ht
 ## Sources
 
 - [Python Official Documentation](https://docs.python.org/3/)
+- [Python Official Time Complexity Page](https://docs.python.org/3.15/builtins/time-complexity.html) (Python 3.15+)
 - [TimeComplexity Wiki](https://wiki.python.org/moin/TimeComplexity)
 - [CPython source code](https://github.com/python/cpython) and implementation details
 - [Performance testing](https://github.com/heikkitoivonen/python-time-space-complexity/tree/main/tests) and benchmarking

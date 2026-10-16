@@ -58,8 +58,8 @@ Measurement scope:
   one table; `with` returns the profiler and records nothing after the block.
   `runcall()` returns the function's result, `Profile.runctx()` returns the
   profiler, `Profile.run()` resolves names in `__main__`, and `clear()`
-  leaves `getstats()` empty. `cProfile.label()` is asserted on a code object
-  and a built-in's name.
+  leaves `getstats()` empty. `cProfile.label()`, `profiling.tracing.label()`
+  from 3.15, is asserted on a code object and a built-in's name.
 * Flags passed to `Profile()`: `Profile(subcalls=False, builtins=False)`
   followed by `runcall()` records no built-in and no caller before 3.14, and
   both on 3.14; passed to `enable()` they hold on every version.
@@ -111,14 +111,18 @@ Not settled here:
   Modules/_lsprof.c; the depth test uses one thread.
 * `dump_stats()`'s round trip compares keys only, not call counts or caller
   records.
-* Name coverage: the official inventory files these APIs under `profile`, so
-  the page audit checks no `cProfile` names and lists all 16 under needs
-  classification - `Profile`, its eleven public methods, `label`, `main`,
-  `run` and `runctx`. Each has a row on the page.
+* Name coverage: before 3.15 the official inventory files these APIs under
+  `profile`, so the page audit checks no `cProfile` names and lists all 16
+  under needs classification - `Profile`, its eleven public methods, `label`,
+  `main`, `run` and `runctx`. Each has a row on the page. From 3.15 the
+  inventory files them under `profiling.tracing`, which docs/stdlib/profiling.md
+  covers, and `cProfile` keeps only `Profile`, `run` and `runctx`: asserted
+  by identity, with `label` and `main` asserted absent.
 """
 
 from __future__ import annotations
 
+import importlib
 import json
 import pathlib
 import re
@@ -780,19 +784,33 @@ class TestSwitchingOnAndOff:
         assert result[1] == []
 
     def test_label_is_the_report_key(self) -> None:
-        import cProfile
+        home = "profiling.tracing" if sys.version_info >= (3, 15) else "cProfile"
+        label = importlib.import_module(home).label
 
         def located() -> None:
             pass
 
         code = located.__code__
 
-        assert cProfile.label(code) == (code.co_filename, code.co_firstlineno, "located")
-        assert cProfile.label("<built-in method builtins.len>") == (
+        assert label(code) == (code.co_filename, code.co_firstlineno, "located")
+        assert label("<built-in method builtins.len>") == (
             "~",
             0,
             "<built-in method builtins.len>",
         )
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="profiling.tracing is new in 3.15")
+    def test_from_315_the_module_re_exports_profiling_tracing(self) -> None:
+        import cProfile
+
+        tracing = importlib.import_module("profiling.tracing")
+
+        assert cProfile.Profile is tracing.Profile
+        assert cProfile.run is tracing.run
+        assert cProfile.runctx is tracing.runctx
+        assert not hasattr(cProfile, "label")
+        assert not hasattr(cProfile, "main")
+        assert callable(tracing.main)
 
 
 class TestFlagsBelongOnEnable:

@@ -1,5 +1,5 @@
 ---
-source_sha: c6154a41633b0dafdf4bb3ac41f14320d86f817db41733076e5819994eab88ce
+source_sha: 5dba3dc173101e68a7cbc10e0a5d6d5346073fdd0b7f80b959387e60cdedbb75
 translated: machine
 ---
 
@@ -19,6 +19,7 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 | `bytes` | 二进制数据 | O(1) | - | - |
 | `dict` | 键值映射 | O(1) | O(1) | O(1) |
 | `set` | 唯一元素 | - | O(1) | O(1) |
+| `frozendict` | 不可变的键值映射（3.15+） | O(1) | - | - |
 | `frozenset` | 不可变的唯一元素 | - | - | - |
 
 ### 序列类型
@@ -34,6 +35,7 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 
 - **[字典](dict.md)** - 基于哈希的键值存储
 - **[集合](set.md)** - 无序的唯一元素
+- **[Frozendict](frozendict.md)** - 不可变、可哈希的映射（Python 3.15+）
 - **[Frozenset](frozenset.md)** - 不可变的唯一元素
 
 ### 数值与布尔类型
@@ -134,6 +136,7 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 | [`frozenset()`](frozenset_func.md) | O(n) | O(n) | 参数已经是 frozenset 时为 O(1) |
 | [`slice()`](slice.md) | O(1) | O(1) | 只保存索引；实际应用时为 O(k) |
 | [`object()`](object_func.md) | O(1) | O(1) | 所有类的基类 |
+| [`sentinel()`](sentinel.md) | O(1) | O(1) | Python 3.15+；唯一的具名标记值，用 `is` 比较 |
 
 ### 代码执行
 

@@ -1,13 +1,16 @@
 # binascii Module Complexity
 
 The `binascii` module converts between binary data and ASCII encodings - hex, base64,
-quoted-printable and uuencode - and computes CRC-32 and CRC-CCITT checksums. It is C code, and
+quoted-printable and uuencode, plus Base32, Ascii85 and Base85 from Python 3.15 - and computes
+CRC-32 and CRC-CCITT checksums. It is C code, and
 each function converts the whole buffer it is given in one call. The checksums take the previous
 result as a starting value, so a stream can be checksummed a chunk at a time.
 
 `n` is the length of the input: bytes for a bytes-like argument, characters for the ASCII-only
 `str` that the `a2b_*` functions also accept. Every encoder and decoder is linear in n and produces
-output at most a fixed multiple of n long; the checksums return an `int` in O(1) space.
+output at most a fixed multiple of n long; the checksums return an `int` in O(1) space. The
+`ignorechars` argument the 3.15 decoders take is a short set of bytes and is priced at O(1), as is
+a custom `alphabet`, which has a fixed length.
 
 ## Complexity Reference
 
@@ -17,15 +20,31 @@ output at most a fixed multiple of n long; the checksums return an `int` in O(1)
 |-----------|------|-------|-------|
 | `binascii.hexlify(data[, sep[, bytes_per_sep=1]])` | O(n) | O(n) | Two hex digits per byte, plus one `sep` between each group of `bytes_per_sep` bytes when a separator is given |
 | `binascii.b2a_hex(data[, sep[, bytes_per_sep=1]])` | O(n) | O(n) | Same as `hexlify()` |
-| `binascii.unhexlify(hexstr)` | O(n) | O(n) | One byte per two digits; an odd length or a non-hex digit raises `binascii.Error` |
-| `binascii.a2b_hex(hexstr)` | O(n) | O(n) | Same as `unhexlify()` |
+| `binascii.unhexlify(hexstr, *, ignorechars=b'')` | O(n) | O(n) | One byte per two digits; an odd number of digits or a non-hex digit raises `binascii.Error`. Python 3.15+ skips the bytes listed in `ignorechars` |
+| `binascii.a2b_hex(hexstr, *, ignorechars=b'')` | O(n) | O(n) | Same as `unhexlify()` |
 
 ### Base64
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `binascii.b2a_base64(data, *, newline=True)` | O(n) | O(n) | Four characters per three bytes, as one line: nothing is wrapped. `newline=False` drops the trailing `\n` |
-| `binascii.a2b_base64(string, /, *, strict_mode=False)` | O(n) | O(n) | Characters outside the base64 alphabet are skipped; `strict_mode=True` (Python 3.11+) raises `binascii.Error` instead |
+| `binascii.b2a_base64(data, *, padded=True, wrapcol=0, newline=True, alphabet=BASE64_ALPHABET)` | O(n) | O(n) | Four characters per three bytes, as one line unless `wrapcol` breaks it into lines of at most `wrapcol` characters. `newline=False` drops the trailing `\n`. `padded`, `wrapcol` and `alphabet` are Python 3.15+ |
+| `binascii.a2b_base64(string, /, *, padded=True, alphabet=BASE64_ALPHABET, strict_mode=False, ignorechars=b'', canonical=False)` | O(n) | O(n) | Characters outside the base64 alphabet are skipped; `strict_mode=True` (Python 3.11+) raises `binascii.Error` instead. Python 3.15+: passing `ignorechars` makes `strict_mode` default to on, and strict mode then skips those bytes; `canonical=True` rejects non-zero padding bits |
+
+### Base32
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `binascii.b2a_base32(data, /, *, padded=True, wrapcol=0, alphabet=BASE32_ALPHABET)` | O(n) | O(n) | Python 3.15+. Eight characters per five bytes, padded with `=` unless `padded=False`; `wrapcol` breaks the output into lines of at most `wrapcol` characters |
+| `binascii.a2b_base32(data, /, *, padded=True, alphabet=BASE32_ALPHABET, ignorechars=b'', canonical=False)` | O(n) | O(n) | Python 3.15+. Any byte outside the alphabet that `ignorechars` does not list raises `binascii.Error`, lowercase letters included |
+
+### Ascii85 and Base85
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `binascii.b2a_ascii85(data, /, *, foldspaces=False, wrapcol=0, pad=False, adobe=False)` | O(n) | O(n) | Python 3.15+. Five characters per four bytes; an all-zero group is written as `z`, and four spaces as `y` with `foldspaces=True`. `adobe=True` adds the `<~` `~>` frame |
+| `binascii.a2b_ascii85(data, /, *, foldspaces=False, adobe=False, ignorechars=b'', canonical=False)` | O(n) | O(n) | Python 3.15+. Each `z` (or `y` with `foldspaces=True`) becomes four bytes, so the output is at most 4n bytes. Whitespace raises `binascii.Error` unless `ignorechars` lists it |
+| `binascii.b2a_base85(data, /, *, pad=False, wrapcol=0, alphabet=BASE85_ALPHABET)` | O(n) | O(n) | Python 3.15+. Five characters per four bytes; `alphabet=binascii.Z85_ALPHABET` gives Z85 |
+| `binascii.a2b_base85(data, /, *, alphabet=BASE85_ALPHABET, ignorechars=b'', canonical=False)` | O(n) | O(n) | Python 3.15+. Any byte outside the alphabet that `ignorechars` does not list raises `binascii.Error` |
 
 ### Quoted-printable
 
@@ -71,25 +90,30 @@ assert binascii.unhexlify(encoded) == data  # O(n)
 assert binascii.unhexlify('0A0b') == b'\n\x0b'  # an ASCII str works too
 
 try:
-    binascii.unhexlify(b'abc')
-except binascii.Error as error:
-    assert 'Odd-length' in str(error)
+    binascii.unhexlify(b'abc')  # the message names the odd length
+except binascii.Error:
+    pass
 else:
     raise AssertionError('an odd-length string was decoded')
 ```
 
 ## Base64 Encoding
 
-`b2a_base64()` returns the whole input as one line, so wrapping it for MIME is the caller's job.
+`b2a_base64()` returns the whole input as one line, so wrapping it for MIME is the caller's job
+before Python 3.15, where `wrapcol` does it in the same pass.
 `a2b_base64()` skips characters outside the alphabet unless `strict_mode` asks it to reject them.
 
 ```python
 import binascii
+import sys
 
 encoded = binascii.b2a_base64(b'abc')  # O(n)
 assert encoded == b'YWJj\n'
 assert binascii.b2a_base64(b'abc', newline=False) == b'YWJj'
 assert binascii.b2a_base64(b'x' * 300).count(b'\n') == 1  # one line, however long
+if sys.version_info >= (3, 15):
+    wrapped = binascii.b2a_base64(b'x' * 300, wrapcol=76)  # O(n): a newline per 76 characters
+    assert max(len(line) for line in wrapped.splitlines()) == 76
 
 assert binascii.a2b_base64(encoded) == b'abc'  # O(n)
 assert binascii.a2b_base64(b'YW!J\nj') == b'abc'  # '!' and the newline are skipped
@@ -100,6 +124,34 @@ except binascii.Error as error:
     assert 'Only base64 data' in str(error)
 else:
     raise AssertionError('strict mode accepted a non-base64 character')
+```
+
+### Base32, Ascii85 and Base85
+
+From Python 3.15 these are C functions here too, and the `base64` module's Base32, Ascii85,
+Base85 and Z85 functions call them.
+
+```python
+import binascii
+import sys
+
+if sys.version_info >= (3, 15):
+    assert binascii.b2a_base32(b'Hello') == b'JBSWY3DP'  # O(n)
+    assert binascii.a2b_base32(b'JBSWY3DP') == b'Hello'  # O(n)
+    assert binascii.b2a_base32(b'Hi', padded=False) == b'JBUQ'
+
+    assert binascii.b2a_ascii85(b'\0' * 8) == b'zz'  # one character per zero group
+    assert binascii.a2b_ascii85(b'zz') == b'\0' * 8   # O(n) - and four bytes per z
+    assert binascii.b2a_base85(b'Hello') == b'NM&qnZv'  # O(n)
+
+    # Whitespace is an error unless ignorechars lists it
+    assert binascii.a2b_base32(b'JBSW Y3DP', ignorechars=b' ') == b'Hello'
+    try:
+        binascii.a2b_ascii85(b'87cU RDZ')
+    except binascii.Error:
+        pass
+    else:
+        raise AssertionError('a space was accepted')
 ```
 
 ## Quoted-printable Encoding
@@ -203,11 +255,18 @@ with tempfile.TemporaryDirectory() as directory:
 - **Python 3.11+**: `a2b_hqx()`, `b2a_hqx()`, `rlecode_hqx()` and `rledecode_hqx()` are removed,
   along with the `binhex` module; on 3.10 each raises a `DeprecationWarning`
 - **Python 3.11+**: `a2b_base64()` gains `strict_mode`
+- **Python 3.15+**: Added `b2a_base32()`, `a2b_base32()`, `b2a_ascii85()`, `a2b_ascii85()`,
+  `b2a_base85()` and `a2b_base85()`
+- **Python 3.15+**: `b2a_base64()` gains `padded`, `wrapcol` and `alphabet`; `a2b_base64()` gains
+  `padded`, `alphabet`, `ignorechars` and `canonical`; `unhexlify()` and `a2b_hex()` gain
+  `ignorechars`
+- **Python 3.15+**: `unhexlify()` reports an odd number of digits as "Odd number of hexadecimal
+  digits", counted after `ignorechars` are skipped; earlier versions say "Odd-length string"
 
 ## Related Modules
 
 - **[base64](base64.md)** - Base64, Base32, Base16 and Base85 encoders with line handling and
-  URL-safe alphabets
+  URL-safe alphabets; on Python 3.15+ all of them call this module
 - **[quopri](quopri.md)** - quoted-printable encoding of files
 - **[uu](uu.md)** - uuencoding whole files, a line at a time; removed in Python 3.13
 - **[zlib](zlib.md)** - the same CRC-32 as `zlib.crc32()`, plus Adler-32

@@ -1,5 +1,5 @@
 ---
-source_sha: c6154a41633b0dafdf4bb3ac41f14320d86f817db41733076e5819994eab88ce
+source_sha: 5dba3dc173101e68a7cbc10e0a5d6d5346073fdd0b7f80b959387e60cdedbb75
 translated: machine
 ---
 
@@ -21,6 +21,7 @@ löydät etsimäsi yhdellä silmäyksellä.
 | `bytes` | Binääridata | O(1) | - | - |
 | `dict` | Avain-arvo-kuvaus | O(1) | O(1) | O(1) |
 | `set` | Uniikit alkiot | - | O(1) | O(1) |
+| `frozendict` | Muuttumaton avain-arvo-kuvaus (3.15+) | O(1) | - | - |
 | `frozenset` | Muuttumattomat uniikit alkiot | - | - | - |
 
 ### Jonotyypit
@@ -36,6 +37,7 @@ löydät etsimäsi yhdellä silmäyksellä.
 
 - **[Sanakirja](dict.md)** - Hajautukseen perustuva avain-arvo-säilö
 - **[Joukko](set.md)** - Järjestämättömät uniikit alkiot
+- **[Frozendict](frozendict.md)** - Muuttumaton, hajautettava kuvaus (Python 3.15+)
 - **[Frozenset](frozenset.md)** - Muuttumattomat uniikit alkiot
 
 ### Luku- ja totuusarvotyypit
@@ -137,6 +139,7 @@ mainittu kustannus on se, minkä maksat iteraattorin läpikäynnistä.
 | [`frozenset()`](frozenset_func.md) | O(n) | O(n) | O(1) kun argumentti on jo frozenset |
 | [`slice()`](slice.md) | O(1) | O(1) | Tallettaa vain indeksit; sen soveltaminen maksaa O(k) |
 | [`object()`](object_func.md) | O(1) | O(1) | Jokaisen luokan perusta |
+| [`sentinel()`](sentinel.md) | O(1) | O(1) | Python 3.15+; yksilöllinen nimetty merkkiarvo, jota verrataan `is`-operaattorilla |
 
 ### Koodin suoritus
 

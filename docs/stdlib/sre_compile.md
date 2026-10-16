@@ -2,10 +2,14 @@
 
 The `sre_compile` module turns a regular expression into the list of integer codes the C matcher
 runs, and wraps that list in a `Pattern`. Given a string it parses it first with
-[sre_parse](sre_parse.md); given a parse tree it compiles the tree as it is. From Python 3.11 it
-is a deprecated alias: importing it issues a `DeprecationWarning` and copies the names of the
-private `re._compiler` module that [re](re.md) itself uses. The module has never been documented,
-so it carries no stability guarantee.
+[sre_parse](sre_parse.md); given a parse tree it compiles the tree as it is. From Python 3.11 to
+3.14 it is a deprecated alias: importing it issues a `DeprecationWarning` and copies the names of
+the private `re._compiler` module that [re](re.md) itself uses. The module has never been
+documented, so it carries no stability guarantee.
+
+!!! warning "Removed in Python 3.15"
+    Removed in Python 3.15, where `import sre_compile` raises `ModuleNotFoundError`. This page
+    covers Python 3.11 to 3.14; `re` keeps the same code in its private `re._compiler` module.
 
 Nothing here is cached. `re.compile()` looks a pattern up in its cache before it compiles
 anything; `sre_compile.compile()` parses and compiles on every call.
@@ -21,7 +25,7 @@ ranges.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `import sre_compile` | O(1) | O(1) | Python 3.11+: warns on the first import only; the names are the same objects as `re._compiler`'s |
+| `import sre_compile` | O(1) | O(1) | Python 3.11 to 3.14: warns on the first import only; the names are the same objects as `re._compiler`'s |
 | `sre_compile.compile(p, flags=0)` | O(n + r) | O(n) | A string is parsed first, with the O(n²) and O(n·d) shapes of `sre_parse.parse()`; a tree from `parse()` costs O(w + r) and yields a `Pattern` whose `.pattern` is `None`. Groups nested d deep around a leading literal cost O(n·d), since each level copies the literal prefix. Each call returns a new `Pattern` |
 | `sre_compile.isstring(obj)` | O(1) | O(1) | `True` for `str` and `bytes`, the two things `compile()` parses |
 | `sre_compile.dis(code)` | O(c·d) | O(c) | Prints a code list, indenting each line by its depth, and keeps the set of jump targets it has seen; `compile()` calls it under `re.DEBUG` |
@@ -129,7 +133,8 @@ assert astral.match('\U0001f600')
 
 - `sre_compile.compile()` in a loop over the same pattern - unlike `re.compile()`, it redoes all
   the work each time
-- New code that imports the module - it warns, and nothing in it is promised to stay
+- New code that imports the module - it is gone from Python 3.15, it warns before that, and
+  nothing in it is promised to stay
 - Wide character-class ranges below U+10000 in a pattern compiled often; each range costs the code
   points it spans
 
@@ -138,7 +143,8 @@ assert astral.match('\U0001f600')
 - **Python 3.11+**: A deprecated alias for `re._compiler`; importing it issues a
   `DeprecationWarning`, and `re` no longer imports it
 - **Python 3.13+**: `PatternError` is the exception's name, with `error` kept as an alias
-- **All Python 3**: Undocumented; the deprecation names no removal release
+- **Python 3.15+**: Removed; `import sre_compile` raises `ModuleNotFoundError`
+- **All Python 3**: Undocumented
 
 ## Related Modules
 

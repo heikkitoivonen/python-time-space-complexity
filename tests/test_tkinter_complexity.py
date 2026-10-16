@@ -182,7 +182,7 @@ INSTANCE_ATTRIBUTES: set[tuple[str, str, str]] = {
     ("tkinter", "Event", field)
     for field in (
         "serial num focus height width keycode state time x y x_root y_root "
-        "char send_event keysym keysym_num type widget delta"
+        "char send_event keysym keysym_num type widget delta detail user_data"
     ).split()
 }
 
@@ -198,6 +198,17 @@ VERSION_GATED: dict[tuple[str, str, str], tuple[tuple[int, int], str]] = {
     ("tkinter", "PhotoImage", "copy_replace"): ((3, 13), "Python 3.13+"),
     ("tkinter", "PhotoImage", "read"): ((3, 13), "Python 3.13+"),
     ("tkinter", "PhotoImage", "data"): ((3, 13), "Python 3.13+"),
+    ("tkinter", "Misc", "pack_content"): ((3, 15), "Python 3.15+"),
+    ("tkinter", "Misc", "place_content"): ((3, 15), "Python 3.15+"),
+    ("tkinter", "Misc", "grid_content"): ((3, 15), "Python 3.15+"),
+    ("tkinter", "Misc", "content"): ((3, 15), "Python 3.15+"),
+    ("tkinter", "Pack", "content"): ((3, 15), "Python 3.15+"),
+    ("tkinter", "Pack", "pack_content"): ((3, 15), "Python 3.15+"),
+    ("tkinter", "Grid", "content"): ((3, 15), "Python 3.15+"),
+    ("tkinter", "Grid", "grid_content"): ((3, 15), "Python 3.15+"),
+    ("tkinter", "Place", "content"): ((3, 15), "Python 3.15+"),
+    ("tkinter", "Place", "place_content"): ((3, 15), "Python 3.15+"),
+    ("tkinter", "Text", "search_all"): ((3, 15), "Python 3.15+"),
 }
 
 PY = sys.executable
@@ -845,6 +856,62 @@ class TestSmallRows:
         names = ["cget", "option", "addbitmapdir", "filedialog"]
         names += ["getbitmap", "getimage", "resetoptions"]
         assert calls == repr([("tix", name) for name in names])
+
+
+@pytest.mark.skipif(sys.version_info < (3, 15), reason="the rows are Python 3.15+")
+class TestRowsAddedIn315:
+    """`*_content()`, `Text.search_all()` and `Event.detail`/`Event.user_data`.
+
+    Each is driven through Tcl procs standing in for the Tk commands, so the
+    Python side - which command it issues, what it returns - is observed
+    without a display.
+    """
+
+    def test_content_issues_the_content_subcommand_and_maps_names(self) -> None:
+        root = cast(Any, _tcl())
+        root.tk.eval(FAKE_WIDGET_PROCS)
+        first, second = tkinter.Frame(root), tkinter.Frame(root)
+        for manager in ("pack", "place", "grid"):
+            root.tk.eval(
+                f"proc {manager} {{args}} {{ lappend ::calls $args; "
+                "return [list .!frame .!frame2] }"
+            )
+        assert tkinter.Misc.content is tkinter.Misc.pack_content  # type: ignore[attr-defined]
+        assert tkinter.Pack.content is tkinter.Misc.pack_content  # type: ignore[attr-defined]
+        assert tkinter.Grid.content is tkinter.Misc.grid_content  # type: ignore[attr-defined]
+        assert tkinter.Place.content is tkinter.Misc.place_content  # type: ignore[attr-defined]
+
+        assert root.pack_content() == [first, second]
+        assert root.place_content() == [first, second]
+        assert root.grid_content(row=1) == [first, second]
+
+        calls = root.tk.eval('join $::calls "|"').split("|")
+        assert calls == ["content .", "content .", "content . -row 1"]
+
+    def test_search_all_returns_every_start_index(self) -> None:
+        root = cast(Any, _tcl())
+        root.tk.eval("proc .text {args} { set ::searched $args; return [list 1.0 1.4 2.0] }")
+        text = cast(Any, tkinter.Text.__new__(tkinter.Text))
+        text.tk = root.tk
+        text._w = ".text"
+
+        found = text.search_all("ab", "1.0", "end", overlap=True)
+
+        assert found == ("1.0", "1.4", "2.0")
+        assert root.tk.eval("set ::searched") == "search -all -overlap ab 1.0 end"
+
+    def test_event_detail_and_user_data_come_from_one_substitution(self) -> None:
+        root = cast(Any, _tcl())
+        fields = dict.fromkeys(tkinter.Misc._subst_format, "??")  # type: ignore[attr-defined]
+        fields.update({"%#": "1", "%W": ".", "%d": "payload"})
+
+        fields["%T"] = str(int(tkinter.EventType.VirtualEvent))
+        (virtual,) = root._substitute(*fields.values())
+        fields["%T"] = str(int(tkinter.EventType.Enter))
+        (enter,) = root._substitute(*fields.values())
+
+        assert (virtual.user_data, virtual.detail) == ("payload", "??")
+        assert (enter.user_data, enter.detail) == ("??", "payload")
 
 
 @pytest.mark.timing

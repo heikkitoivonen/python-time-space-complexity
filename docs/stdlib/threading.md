@@ -9,7 +9,9 @@ Every blocking call costs the time it spends blocked, `w`: the wait for another 
 timeout. `u` is the operating system's thread start-up latency, `s` is the stack size of a new
 thread, `q` is the number of threads queued on the primitive, `T` is the number of live threads,
 `n` is the count passed to `notify(n)` or `release(n)`, and `f` is a function the caller supplies,
-whose time and space are its own. A wait whose timeout expires removes itself from the
+whose time and space are its own. For the iterator wrappers, `g` is one step of the wrapped
+iterator, `k` is the number of copies `concurrent_tee()` makes, and `d` is how many items the
+furthest-ahead copy has taken that the furthest-behind one has not. A wait whose timeout expires removes itself from the
 primitive's waiter queue, which is the O(q) term in the wait rows.
 
 ## Complexity Reference
@@ -94,6 +96,16 @@ primitive's waiter queue, which is the O(q) term in the wait rows.
 |-----------|------|-------|-------|
 | `local()` | O(1) | O(1) | |
 | `local` attribute access | O(1) | O(1) | Each thread that touches the object gets its own attribute dict; the first access in a thread also re-runs a subclass's `__init__` with the original arguments, at that `__init__`'s own cost |
+
+### Iterator wrappers
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `serialize_iterator(iterable)` | O(1) | O(1) | Python 3.15+. Calls `iter()` once and pairs the iterator with a new `Lock`; nothing is consumed yet |
+| `next()` on a `serialize_iterator`, `serialize_iterator.send(value)`, `serialize_iterator.throw(...)`, `serialize_iterator.close()` | O(w + g) | O(g) | Python 3.15+. One call at a time, through a non-reentrant lock; `send()`, `throw()` and `close()` raise `AttributeError` when the wrapped iterator lacks them |
+| `synchronized_iterator(func)` | O(1) | O(1) | Python 3.15+. Returns a wrapper that calls `func` and wraps each iterator it returns in a `serialize_iterator`; usable as a decorator on a generator function |
+| `concurrent_tee(iterable, n=2)` | O(k) | O(k) | Python 3.15+. Returns a tuple of k = n iterators sharing one lock; `()` for 0, `ValueError` for a negative n |
+| `next()` on a `concurrent_tee` iterator | O(w + g) for the copy that takes an item from the source; O(1) for a copy reaching an item already taken, or O(w) if it arrives while that item is being taken | O(d) across the copies | Python 3.15+. Each item is taken from the source once and kept until the furthest-behind copy has passed it. Each copy is safe only in one thread; share one copy between threads through `serialize_iterator` |
 
 ### Module functions
 
@@ -298,6 +310,58 @@ assert context.user == "default"  # the worker's assignment stayed in its thread
 assert inits == ["default", "default"]
 ```
 
+## Sharing an Iterator Between Threads
+
+A generator raises `ValueError` when two threads advance it at once. From 3.15,
+`serialize_iterator` puts one lock around every step, so each thread waits for the step in
+progress and every item goes to exactly one consumer. `concurrent_tee` instead gives each thread
+its own copy of the stream: each item is read from the source once, and held until every copy
+has passed it.
+
+```python
+import sys
+import threading
+
+if sys.version_info >= (3, 15):
+    def numbers():
+        yield from range(10_000)
+
+    shared = threading.serialize_iterator(numbers())  # O(1) - nothing consumed yet
+    taken = []
+
+    def drain():
+        for value in shared:  # O(w + g) per item - one step at a time
+            taken.append(value)
+
+    threads = [threading.Thread(target=drain) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert sorted(taken) == list(range(10_000))  # each item went to exactly one thread
+
+    pulls = []
+
+    def source():
+        for value in range(1_000):
+            pulls.append(value)
+            yield value
+
+    copies = threading.concurrent_tee(source(), 3)  # O(k)
+    totals = []
+
+    def total(copy):
+        totals.append(sum(copy))  # each copy is read in one thread only
+
+    threads = [threading.Thread(target=total, args=(copy,)) for copy in copies]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert totals == [sum(range(1_000))] * 3
+    assert pulls == list(range(1_000))  # the source was read once, not once per copy
+```
+
 ## Common Patterns
 
 ### A Background Worker With a Stop Event
@@ -350,6 +414,8 @@ assert not worker.is_alive()
 - **Python 3.13+**: the optional free-threaded build runs Python code in parallel without the GIL;
   the default build still runs bytecode in one thread at a time
 - **Python 3.14+**: `RLock.locked()` added; passing arguments to `RLock()` is deprecated
+- **Python 3.15+**: `serialize_iterator`, `synchronized_iterator` and `concurrent_tee` added;
+  passing arguments to `RLock()` raises `TypeError`
 
 ## Related Modules
 

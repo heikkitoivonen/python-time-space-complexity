@@ -2,23 +2,31 @@
 
 The `frozenset` type is an immutable set that can be hashed and used as a dictionary key or set member.
 
+`n` is the number of elements in the frozenset and `m` is the number of elements in the other
+operand or in the iterable it is built from. Element hashing and comparison are treated as O(1).
+
 ## Complexity Reference
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `frozenset(iterable)` | O(n) | O(n) | Create from iterable |
+| `frozenset(iterable)` | O(m) | O(n) | Create from iterable |
 | `len()` | O(1) | O(1) | Direct count |
 | `in` (membership) | O(1) avg, O(n) worst | O(1) | Hash lookup; worst case with hash collisions |
 | `union(\|)` | O(n+m) | O(n+m) | Combine sets |
-| `intersection(&)` | O(min(n,m)) | O(min(n,m)) | Common elements |
-| `difference(-)` | O(n) | O(n) | Elements in first |
+| `intersection(&)` | O(min(n,m)); O(m) if `other` is not a set | O(min(n,m)) | Common elements |
+| `difference(-)` | O(n); O(n+m) if `other` is not a set | O(n) | Elements in first |
 | `symmetric_difference(^)` | O(n+m) | O(n+m) | Exclusive elements |
-| `issubset()` | O(n) | O(1) | Check containment |
+| `issubset()` | O(n); O(n+m) if `other` is not a set | O(1); O(m) if `other` is not a set | Check containment |
 | `issuperset()` | O(m) | O(1) | Check containment |
-| `isdisjoint()` | O(min(n,m)) | O(1) | Check overlap |
-| `copy()` | O(1) | O(1) | Returns same object (immutable) |
+| `isdisjoint()` | O(min(n,m)); O(m) if `other` is not a set | O(1) | Check overlap |
+| `copy()` | O(1) | O(1) | Returns same object (immutable); an instance of a subclass is copied in O(n) |
 | `hash()` | O(n) first call, O(1) cached | O(1) | Hash value computed once, then cached |
 | `frozenset(set)` | O(n) | O(n) | Convert from set |
+| `frozenset(fs)` | O(1) | O(1) | Returns `fs` itself when it is an exact frozenset |
+
+The operators accept only sets and frozensets; the methods also take any iterable. In the worst
+case, when every element hashes to the same value, the O(1) operations take O(n), and operations
+that look up every element of one set in another degrade accordingly.
 
 ## Implementation Details
 
@@ -34,7 +42,12 @@ s = {fs1, fs2}                      # Works!
 
 # Set is not hashable
 regular_set = {1, 2, 3}
-d[regular_set] = 'value'            # TypeError: unhashable type
+try:
+    d[regular_set] = 'value'
+except TypeError as error:
+    assert 'unhashable' in str(error)
+else:
+    raise AssertionError('a set cannot be a dict key')
 ```
 
 ### Immutability Benefits
@@ -134,7 +147,7 @@ def process_items(items):
     return sum(items)
 
 # Calling with frozenset
-result = process_items(frozenset([1, 2, 3]))  # O(1) hash
+result = process_items(frozenset([1, 2, 3]))  # O(n) hash on the first call, then cached
 ```
 
 ## Memory Considerations
@@ -164,7 +177,7 @@ print(fs1 is fs2)             # True
 | Mutable | Yes | No |
 | Dict key | No | Yes |
 | Copy cost | O(n) | O(1) |
-| Hash cost | - | O(1) |
+| Hash cost | - | O(n) first call, O(1) after |
 | Memory | Similar | Similar |
 
 ## Version Notes

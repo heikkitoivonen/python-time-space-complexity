@@ -80,6 +80,7 @@ exception, since the constructor walks the collection it is handed rather than j
 | `AttributeError`, `AttributeError.name`, `AttributeError.obj` | O(1) | O(1) | `obj` is a reference to the object searched, so a caught `AttributeError` keeps it alive |
 | `ImportError`, `ImportError.name`, `ImportError.path` | O(1) | O(1) | `path` is the file of the module the import reached, set when one was found — including a loaded module that simply lacks the requested name; it is `None` when nothing was found |
 | `ModuleNotFoundError` | O(1) | O(1) | An `ImportError` subclass raised when the import found no module to load |
+| `ImportCycleError` | O(1) | O(1) | Python 3.15+. An `ImportError` subclass raised when resolving a lazy import needs that same lazy import, directly or through the modules it imports; `name` is the module the proxy stands for |
 
 ### OSError
 
@@ -168,6 +169,7 @@ BaseException
     ├── EOFError
     ├── ExceptionGroup            (also a BaseExceptionGroup)
     ├── ImportError
+    │   ├── ImportCycleError
     │   └── ModuleNotFoundError
     ├── LookupError
     │   ├── IndexError
@@ -905,6 +907,7 @@ assert issubclass(ValidationError, AppError)
 
 ## Version Notes
 
+- **Python 3.15+**: `ImportCycleError`, for a lazy import whose resolution needs itself
 - **Python 3.13+**: `PythonFinalizationError`, for operations blocked during interpreter shutdown;
   the operations it covered on arrival raised a plain `RuntimeError` before that, and 3.14 added
   `threading.Thread.join()` to them

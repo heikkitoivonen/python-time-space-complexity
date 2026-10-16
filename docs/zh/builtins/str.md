@@ -1,5 +1,5 @@
 ---
-source_sha: 98decccd3e9a6fd96ee9439cb758a0c2ae6ad39a0acb29d291e6ae8d31020d6c
+source_sha: 25d20c67983aa9804a0793e87e0afd576db8524bd855c9ea48e968b52107cf06
 translated: machine
 ---
 
@@ -13,16 +13,18 @@ translated: machine
 |-----------|------|-------|-------|
 | `len()` | O(1) | O(1) | 直接查询 |
 | `access[i]` | O(1) | O(1) | 直接索引 |
-| `in` (substring) | O(n + m) avg | O(1) | CPython 中使用 Two-Way / fastsearch 算法 |
+| `in` (substring) | O(n) | O(1)，加宽时 O(m) | CPython 中使用 Two-Way / fastsearch 算法，最坏情况下也是线性的；比字符串更长的子串会立即返回。以比字符串更窄的宽度存储的多字符子串（例如含 CJK 字符的文本中的 ASCII 子串）会先按字符串的宽度复制一份，这里以及 `find()`、`rfind()`、`index()`、`rindex()` 和 `count()` 都是如此 |
 | `s + s` (concatenation) | O(n+m) | O(n+m) | 创建新字符串 |
 | `s * n` (repetition) | O(n\*len(s)) | O(n\*len(s)) | 创建新字符串 |
 | `slice [::2]` | O(k) | O(k) | k = 切片长度 |
+| `s[:]`, `str(s)`, `copy.copy(s)` | O(1) | O(1) | 对精确的 `str` 返回 `s` 本身，因为字符串不可变 |
+| `for c in s` | O(n) | O(1) | 每步一个单字符字符串 |
 | **查找** ||||
-| `find(sub)` | O(n + m) avg | O(1) | CPython 中使用 Two-Way / fastsearch 算法 |
-| `rfind(sub)` | O(n*m) worst | O(1) | 使用反向 Boyer-Moore-Horspool 算法 |
-| `index(sub)` | O(n + m) | O(1) | 与 find() 相同，但找不到时抛出 ValueError |
-| `rindex(sub)` | O(n*m) worst | O(1) | 与 rfind() 相同，但找不到时抛出 ValueError |
-| `count(sub)` | O(n + m) avg | O(1) | n = 字符串，m = 子串 |
+| `find(sub, start, end)` | O(n) | O(1)，加宽时 O(m) | CPython 中使用 Two-Way / fastsearch 算法。n = 被查找的字符数：给出 `start` 和 `end` 时只是该区域，原地读取 |
+| `rfind(sub)` | O(n*m) worst | O(1)，加宽时 O(m) | 使用反向 Boyer-Moore-Horspool 算法 |
+| `index(sub)` | O(n) | O(1)，加宽时 O(m) | 与 find() 相同，但找不到时抛出 ValueError |
+| `rindex(sub)` | O(n*m) worst | O(1)，加宽时 O(m) | 与 rfind() 相同，但找不到时抛出 ValueError |
+| `count(sub)` | O(n) | O(1)，加宽时 O(m) | n = 字符串，m = 子串 |
 | `startswith(prefix)` | O(m) | O(1) | m = 前缀长度 |
 | `endswith(suffix)` | O(m) | O(1) | m = 后缀长度 |
 | **替换与转换** ||||
@@ -34,10 +36,10 @@ translated: machine
 | `removesuffix(suffix)` | O(n) | O(n) | 后缀匹配时返回切片 |
 | **拆分与拼接** ||||
 | `split(sep)` | O(n) | O(n) | 单次遍历 |
-| `rsplit(sep)` | O(n) | O(n) | 从右侧拆分 |
+| `rsplit(sep)` | O(n*m) worst | O(n) | 从右侧拆分，像 `rfind()` 一样反向查找；没有 `sep` 或 `sep` 为单个字符时为 O(n) |
 | `splitlines()` | O(n) | O(n) | 按行边界拆分 |
 | `partition(sep)` | O(n) | O(n) | 在第一个分隔符处拆成三元组 |
-| `rpartition(sep)` | O(n) | O(n) | 在最后一个分隔符处拆成三元组 |
+| `rpartition(sep)` | O(n*m) worst | O(n) | 在最后一个分隔符处拆成三元组，像 `rfind()` 一样反向查找 |
 | `join(iterable)` | O(n) | O(n) | n = 输出字符总数 |
 | **大小写转换** ||||
 | `upper()` | O(n) | O(n) | 需要处理每个字符 |
@@ -72,7 +74,7 @@ translated: machine
 | `format(*args)` | O(n) | O(n) | n = 模板长度 |
 | `format_map(mapping)` | O(n) | O(n) | 与 format() 相同，但接受映射 |
 | **编码** ||||
-| `encode(encoding)` | O(n) | O(n) | 转换为字节 |
+| `encode(encoding)` | O(n) | O(n) | 转换为字节；假定编解码器对每个字符做常数量的工作 |
 
 ## 实现细节
 
@@ -84,9 +86,9 @@ s1 = "hello"
 s2 = "hello"
 print(s1 is s2)  # Likely True - same object
 
-# Large strings are not interned
-s3 = "x" * 1000
-s4 = "x" * 1000
+# Strings built at run time are not interned
+s3 = "".join(["x"] * 1000)
+s4 = "".join(["x"] * 1000)
 print(s3 is s4)  # False - different objects
 ```
 
@@ -120,9 +122,9 @@ result = "".join(str(i) for i in range(10000))
 ### 子串查找
 
 ```python
-# Linear time on average for substring search
+# Linear time for substring search, even in the worst case
 s = "a" * 1000000 + "b"
-result = s.find("b")  # Usually O(n) avg, not O(n²)
+result = s.find("b")  # O(n)
 
 # CPython uses optimized algorithms (similar to Boyer-Moore)
 ```
@@ -153,7 +155,7 @@ JIT 编译为重复操作提供额外优化。
 
 - 用 `str.join()` 合并多个字符串
 - 使用 f-string 做格式化（Python 3.6+）
-- 用 `in` 检查子串（平均 O(n)）
+- 用 `in` 检查子串（O(n)）
 - 用 `.find()` 和 `.replace()` 做高效处理
 
 ❌ **避免**：

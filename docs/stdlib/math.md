@@ -49,6 +49,7 @@ multiplies large ints with Karatsuba, so big operands can beat them.
 | `math.frexp(x)`, `math.ldexp(x, i)` | O(1) | O(1) | |
 | `math.nextafter(x, y, steps=None)`, `math.ulp(x)` | O(1) | O(1) | `steps` is Python 3.12+, and any number of steps is one jump rather than a walk |
 | `math.fma(x, y, z)` | O(1) | O(1) | Python 3.13+ |
+| `math.fmax(x, y)`, `math.fmin(x, y)` | O(1) | O(1) | Python 3.15+; a NaN loses to a number in either position, where `max()` and `min()` return a leading NaN |
 
 ### Rounding and classification
 
@@ -56,6 +57,7 @@ multiplies large ints with Karatsuba, so big operands can beat them.
 |-----------|------|-------|-------|
 | `math.floor(x)`, `math.ceil(x)`, `math.trunc(x)` | O(1) | O(1) | An int argument is returned unchanged, however many digits it has |
 | `math.isfinite(x)`, `math.isinf(x)`, `math.isnan(x)` | O(1) | O(1) | An int beyond the float range raises `OverflowError` rather than answering |
+| `math.isnormal(x)`, `math.issubnormal(x)`, `math.signbit(x)` | O(1) | O(1) | Python 3.15+; `signbit(-0.0)` is true. An int beyond the float range raises `OverflowError`, as for the other predicates |
 | `math.isclose(a, b, *, rel_tol=1e-09, abs_tol=0.0)` | O(1) | O(1) | |
 
 ### Sums and products
@@ -78,6 +80,7 @@ multiplies large ints with Karatsuba, so big operands can beat them.
 | `math.factorial(n)` | O(d²) | O(d) | d grows as n log n |
 | `math.comb(n, k)` | O(d²) | O(d) | Driven by min(k, n - k): `comb(n, n - k)` costs what `comb(n, k)` does |
 | `math.perm(n, k=None)` | O(d²) | O(d) | Driven by k, with no mirror; `perm(n)` is `factorial(n)` |
+| `math.integer.gcd()`, `math.integer.lcm()`, `math.integer.isqrt()`, `math.integer.factorial()`, `math.integer.comb()`, `math.integer.perm()` | As above | As above | Python 3.15+; the `math.integer` module holds the same function objects as the `math` rows above |
 
 ## Float Functions
 
@@ -284,6 +287,8 @@ assert math.lgamma(10**6 + 1) > 1.2e7  # O(1)
 - **Python 3.12+**: `math.sumprod()` added; the builtin `sum()` compensates when adding floats,
   which narrows its accuracy gap to `fsum()` without closing it
 - **Python 3.13+**: `math.fma()` added
+- **Python 3.15+**: `math.fmax()`, `math.fmin()`, `math.isnormal()`, `math.issubnormal()` and
+  `math.signbit()` added, and the `math.integer` module, which holds the integer functions
 
 ## Related Modules
 

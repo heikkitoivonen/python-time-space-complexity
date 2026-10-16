@@ -10,7 +10,9 @@ observation of outputs and exceptions.
 
 Measurement scope:
 
-* Space: every encoder and decoder except the uuencode pair is a
+* Space: every encoder and decoder except the uuencode pair (on 3.15 also
+  the Base32, Ascii85 and Base85 pairs, `b2a_base64()` with `wrapcol=76` and
+  `a2b_base64()` with `ignorechars=b"\\n"` on wrapped input) is a
   `tracemalloc` peak at inputs of 200,000 and
   2,000,000 bytes; the larger peaks more than 5x the smaller, and each peak
   is at least the length of the result and under twice the input plus result
@@ -19,9 +21,13 @@ Measurement scope:
   peak under 1,000 bytes at 2,000,000 bytes of input. Each call is warmed
   once before it is measured; the tests are `serial`, so no xdist thread
   allocates inside the measurement.
-* Time: the same operations at 50,000, 500,000 and 5,000,000 bytes, fastest
-  of seven runs; each 10x step must cost between 3x and 30x, which excludes a
-  constant cost (x1) and a quadratic one (x100). `b2a_uu()` is not measured
+* Time: the same operations at 5,000, 50,000 and 500,000 bytes, fastest
+  of eleven runs of 500,000 bytes' worth of calls; each 10x step must cost
+  between 3x and 30x, which excludes a constant cost (x1) and a quadratic one
+  (x100). The sizes stay under the CPU cache: on the aarch64 dev box, 3.15's
+  `hexlify()` with a separator, `a2b_uu()` and `a2b_base32()` cost 25x to 56x
+  more from 500,000 to 5,000,000 bytes, against 9x to 11x for the smaller
+  steps. `b2a_uu()` is not measured
   for space or time: its input is capped at 45 bytes, and its output length
   is asserted exactly instead. `hexlify()`, `b2a_base64()` and `a2b_uu()` are
   `builtin_function_or_method` objects, the C implementation the
@@ -29,13 +35,31 @@ Measurement scope:
 * `hexlify()` and `b2a_hex()` give the same output, two digits per byte and
   one separator per `bytes_per_sep` bytes from the right (from the left when
   negative); `unhexlify()` and `a2b_hex()` give the same output, accept an
-  ASCII `str`, and raise `binascii.Error` on an odd length and on a non-hex
-  digit.
+  ASCII `str`, and raise `binascii.Error` on an odd length ("Odd-length
+  string" before 3.15, "Odd number of hexadecimal digits" on 3.15) and on a
+  non-hex digit. On 3.15, `ignorechars` bytes are skipped before digits are
+  paired, so `0 1 2` with a space ignored is odd, and a space not listed
+  raises.
 * `b2a_base64()` output is 4·ceil(n/3) characters plus one `\\n`, one line
   at 300,000 bytes, and has no `\\n` with `newline=False`. `a2b_base64()`
   skips a `!` and a newline inside the data; with `strict_mode=True` (3.11+)
   the same input raises `binascii.Error`. Joining encodings of 1,000-byte
   chunks differs from the encoding of the whole; 999-byte chunks match it.
+  On 3.15, `wrapcol=76` splits 300 bytes into five 76-character lines and
+  one of 20 that join to the unwrapped encoding; `padded=False` drops `=`;
+  the URL-safe `alphabet` round-trips; `ignorechars` turns strict mode on,
+  so an unlisted `!` or newline raises; `canonical=True` rejects `YR==`.
+* On 3.15, `b2a_base32()` output is 8·ceil(n/5) characters for n of 0, 1,
+  4, 5, 6 and 100,000, round-tripped by `a2b_base32()`; `padded=False`,
+  `wrapcol=16` and the base32hex alphabet are checked on one input each; a
+  lowercase letter or space raises unless `ignorechars` lists it.
+* On 3.15, `b2a_ascii85()` and `b2a_base85()` output is 5 characters per
+  whole 4-byte group plus one more than the remainder, on input without a
+  zero group, round-tripped; 4,000 zero bytes encode to 1,000 `z` and
+  decode back (four bytes per character), and `y` folds four spaces;
+  `adobe`, `pad`, `wrapcol` and the Z85 alphabet (equal to
+  `base64.z85encode()`) are checked on one input each; a space raises unless
+  `ignorechars` lists it.
 * `b2a_qp()` of 30,000 bytes of 0xFF is lines of 76 characters or fewer, each
   byte escaped as three characters; `a2b_qp()` round-trips it and, with
   `header=True`, decodes `_` as a space.
@@ -60,6 +84,11 @@ Not settled here:
 * That nothing raises `binascii.Incomplete` on 3.11+ is read from
   Modules/binascii.c, v3.11.14 to v3.14.2: the module creates the exception
   and nothing sets it.
+* Pricing `ignorechars` and a custom `alphabet` at O(1) is read from
+  Modules/binascii.c at v3.15.0: an ignored byte is found with one `memchr()`
+  over `ignorechars` and then remembered in a 256-bit set, and a decoding
+  alphabet's reverse table is built once per alphabet object and cached;
+  neither is varied in size here.
 * The O(1) rows for `binascii.Error` and `binascii.Incomplete` are
   definitional: naming an exception class is an attribute lookup.
 * The Related Modules descriptions summarise the linked pages, whose own
@@ -72,6 +101,7 @@ Not settled here:
 
 from __future__ import annotations
 
+import base64
 import binascii
 import importlib.util
 import pathlib
@@ -88,9 +118,12 @@ from typing import Any
 import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "binascii.md"
-EXPECTED_BLOCKS = 6
+EXPECTED_BLOCKS = 7
 
 HQX_FUNCTIONS = ("a2b_hqx", "b2a_hqx", "rlecode_hqx", "rledecode_hqx")
+
+PY315 = sys.version_info >= (3, 15)
+NEEDS_315 = pytest.mark.skipif(not PY315, reason="version: added in Python 3.15")
 
 
 def best_ns(func: Callable[[], Any], repeats: int = 7, inner: int = 1) -> float:
@@ -138,6 +171,32 @@ LINEAR_OUTPUT: dict[str, tuple[Callable[[bytes], Any], Callable[[int], bytes]]] 
     "b2a_qp": (binascii.b2a_qp, payload),
     "a2b_qp": (binascii.a2b_qp, lambda n: binascii.b2a_qp(payload(n // 3))),
 }
+if PY315:
+    LINEAR_OUTPUT |= {
+        "b2a_base64 with wrapcol": (
+            lambda data: binascii.b2a_base64(data, wrapcol=76),  # type: ignore[call-arg]
+            payload,
+        ),
+        "a2b_base64 with ignorechars": (
+            lambda data: binascii.a2b_base64(data, ignorechars=b"\n"),  # type: ignore[call-arg]
+            lambda n: binascii.b2a_base64(payload(n * 3 // 4), wrapcol=76),  # type: ignore[call-arg]
+        ),
+        "b2a_base32": (binascii.b2a_base32, payload),  # type: ignore[attr-defined]
+        "a2b_base32": (
+            binascii.a2b_base32,  # type: ignore[attr-defined]
+            lambda n: binascii.b2a_base32(payload(n * 5 // 8)),  # type: ignore[attr-defined]
+        ),
+        "b2a_ascii85": (binascii.b2a_ascii85, payload),  # type: ignore[attr-defined]
+        "a2b_ascii85": (
+            binascii.a2b_ascii85,  # type: ignore[attr-defined]
+            lambda n: binascii.b2a_ascii85(payload(n * 4 // 5)),  # type: ignore[attr-defined]
+        ),
+        "b2a_base85": (binascii.b2a_base85, payload),  # type: ignore[attr-defined]
+        "a2b_base85": (
+            binascii.a2b_base85,  # type: ignore[attr-defined]
+            lambda n: binascii.b2a_base85(payload(n * 4 // 5)),  # type: ignore[attr-defined]
+        ),
+    }
 
 CONSTANT_SPACE: dict[str, tuple[Callable[[bytes], Any], Callable[[int], bytes]]] = {
     "crc32": (binascii.crc32, payload),
@@ -184,7 +243,7 @@ class TestChecksumsAndUuDecodeUseConstantSpace:
 class TestEveryOperationIsLinearInTime:
     """Every row's O(n) time: three sizes in 10x steps, each step x3 to x30."""
 
-    SIZES = (50_000, 500_000, 5_000_000)
+    SIZES = (5_000, 50_000, 500_000)
 
     @pytest.mark.timing
     @pytest.mark.parametrize("name", [*LINEAR_OUTPUT, *CONSTANT_SPACE])
@@ -194,7 +253,8 @@ class TestEveryOperationIsLinearInTime:
         for size in self.SIZES:
             data = make(size)
             operation(data)
-            durations.append(best_ns(lambda d=data: operation(d), inner=3))  # type: ignore[misc]
+            inner = 500_000 // size
+            durations.append(best_ns(lambda d=data: operation(d), repeats=11, inner=inner))  # type: ignore[misc]
 
         ratios = [durations[i + 1] / durations[i] for i in range(len(durations) - 1)]
         assert all(3 < ratio < 30 for ratio in ratios), (
@@ -227,10 +287,20 @@ class TestHex:
         assert binascii.unhexlify("0A0b") == binascii.a2b_hex("0A0b")
 
     def test_odd_lengths_and_non_hex_digits_raise(self) -> None:
-        with pytest.raises(binascii.Error, match="Odd-length"):
+        message = "Odd number of hexadecimal digits" if PY315 else "Odd-length string"
+        with pytest.raises(binascii.Error, match=message):
             binascii.unhexlify(b"abc")
         with pytest.raises(binascii.Error, match="Non-hexadecimal"):
             binascii.a2b_hex(b"zz")
+
+    @NEEDS_315
+    def test_ignorechars_are_skipped_before_digits_are_paired(self) -> None:
+        assert binascii.unhexlify(b"01 02:ff", ignorechars=b" :") == b"\x01\x02\xff"  # type: ignore[call-arg]
+        assert binascii.a2b_hex(b"0 1", ignorechars=b" ") == b"\x01"  # type: ignore[call-arg]
+        with pytest.raises(binascii.Error, match="Odd number"):
+            binascii.unhexlify(b"0 1 2", ignorechars=b" ")  # type: ignore[call-arg]
+        with pytest.raises(binascii.Error, match="Non-hexadecimal"):
+            binascii.unhexlify(b"01 02")
 
 
 class TestBase64:
@@ -255,6 +325,32 @@ class TestBase64:
         with pytest.raises(binascii.Error, match="Only base64 data"):
             binascii.a2b_base64(b"YW!Jj", strict_mode=True)  # type: ignore[call-arg]
 
+    @NEEDS_315
+    def test_wrapcol_padded_and_alphabet(self) -> None:
+        wrapped = binascii.b2a_base64(b"x" * 300, wrapcol=76)  # type: ignore[call-arg]
+        lines = wrapped.splitlines()
+        assert [len(line) for line in lines] == [76] * 5 + [20]
+        assert b"".join(lines) + b"\n" == binascii.b2a_base64(b"x" * 300)
+        assert binascii.b2a_base64(b"Hi", padded=False) == b"SGk\n"  # type: ignore[call-arg]
+        urlsafe = binascii.URLSAFE_BASE64_ALPHABET  # type: ignore[attr-defined]
+        assert binascii.b2a_base64(b"\xfb\xff", alphabet=urlsafe) == b"-_8=\n"  # type: ignore[call-arg]
+        assert binascii.a2b_base64(b"-_8=", alphabet=urlsafe) == b"\xfb\xff"  # type: ignore[call-arg]
+
+    @NEEDS_315
+    def test_ignorechars_turns_strict_mode_on(self) -> None:
+        assert binascii.a2b_base64(b"YW!Jj", ignorechars=b"!") == b"abc"  # type: ignore[call-arg]
+        with pytest.raises(binascii.Error, match="Only base64 data"):
+            binascii.a2b_base64(b"YW!Jj", ignorechars=b"")  # type: ignore[call-arg]
+        with pytest.raises(binascii.Error, match="Only base64 data"):
+            binascii.a2b_base64(b"YW J\nj", ignorechars=b" ")  # type: ignore[call-arg]
+
+    @NEEDS_315
+    def test_canonical_rejects_non_zero_padding_bits(self) -> None:
+        assert binascii.a2b_base64(b"YR==") == b"a"
+        assert binascii.a2b_base64(b"YQ==", canonical=True) == b"a"  # type: ignore[call-arg]
+        with pytest.raises(binascii.Error, match="padding bits"):
+            binascii.a2b_base64(b"YR==", canonical=True)  # type: ignore[call-arg]
+
     def test_chunks_must_be_a_multiple_of_three_bytes(self) -> None:
         data = payload(100_000)
         whole = binascii.b2a_base64(data, newline=False)
@@ -265,6 +361,84 @@ class TestBase64:
 
         assert chunked(999) == whole
         assert chunked(1_000) != whole
+
+
+@NEEDS_315
+class TestBase32:
+    """`b2a_base32` | O(n): eight characters per five bytes, padded unless
+    `padded=False`, wrapped by `wrapcol`; `a2b_base32` | O(n) rejects any byte
+    outside the alphabet that `ignorechars` does not list, lowercase too."""
+
+    @pytest.mark.parametrize("size", [0, 1, 4, 5, 6, 100_000])
+    def test_eight_characters_per_five_bytes(self, size: int) -> None:
+        encoded = binascii.b2a_base32(payload(size))  # type: ignore[attr-defined]
+
+        assert len(encoded) == 8 * -(-size // 5)
+        assert binascii.a2b_base32(encoded) == payload(size)  # type: ignore[attr-defined]
+
+    def test_padding_and_wrapping(self) -> None:
+        assert binascii.b2a_base32(b"Hi") == b"JBUQ===="  # type: ignore[attr-defined]
+        assert binascii.b2a_base32(b"Hi", padded=False) == b"JBUQ"  # type: ignore[attr-defined]
+        assert binascii.a2b_base32(b"JBUQ", padded=False) == b"Hi"  # type: ignore[attr-defined]
+        wrapped = binascii.b2a_base32(b"x" * 50, wrapcol=16)  # type: ignore[attr-defined]
+        assert [len(line) for line in wrapped.split(b"\n")] == [16] * 5
+
+    def test_anything_outside_the_alphabet_raises_unless_ignored(self) -> None:
+        for bad in (b"jbswy3dp", b"JBSW Y3DP"):
+            with pytest.raises(binascii.Error, match="Only base32 data"):
+                binascii.a2b_base32(bad)  # type: ignore[attr-defined]
+        assert binascii.a2b_base32(b"JBSW Y3DP", ignorechars=b" ") == b"Hello"  # type: ignore[attr-defined]
+
+    def test_the_hex_alphabet(self) -> None:
+        alphabet = binascii.BASE32HEX_ALPHABET  # type: ignore[attr-defined]
+        assert binascii.b2a_base32(b"Hello", alphabet=alphabet) == b"91IMOR3F"  # type: ignore[attr-defined]
+
+
+@NEEDS_315
+class TestAscii85AndBase85:
+    """`b2a_ascii85`, `b2a_base85` | O(n): five characters per four bytes, `z`
+    for a zero group and `y` for four spaces with `foldspaces`;
+    `a2b_ascii85` | O(n) space with at most four bytes per character;
+    whitespace raises unless `ignorechars` lists it."""
+
+    @pytest.mark.parametrize("size", [0, 1, 3, 4, 5, 100_000])
+    def test_five_characters_per_four_bytes(self, size: int) -> None:
+        data = bytes(range(1, 256)) * (size // 255 + 1)  # no zero group
+        data = data[:size]
+        for encode, decode in (
+            (binascii.b2a_ascii85, binascii.a2b_ascii85),  # type: ignore[attr-defined]
+            (binascii.b2a_base85, binascii.a2b_base85),  # type: ignore[attr-defined]
+        ):
+            encoded = encode(data)
+            assert len(encoded) == size // 4 * 5 + (size % 4 + 1 if size % 4 else 0)
+            assert decode(encoded) == data
+
+    def test_one_character_decodes_to_four_bytes(self) -> None:
+        assert binascii.b2a_ascii85(b"\0" * 4000) == b"z" * 1000  # type: ignore[attr-defined]
+        assert binascii.a2b_ascii85(b"z" * 1000) == b"\0" * 4000  # type: ignore[attr-defined]
+        assert binascii.b2a_ascii85(b" " * 8, foldspaces=True) == b"yy"  # type: ignore[attr-defined]
+        assert binascii.a2b_ascii85(b"yy", foldspaces=True) == b" " * 8  # type: ignore[attr-defined]
+
+    def test_framing_padding_and_wrapping(self) -> None:
+        assert binascii.b2a_ascii85(b"Hello", adobe=True) == b"<~87cURDZ~>"  # type: ignore[attr-defined]
+        assert binascii.a2b_ascii85(b"<~87cURDZ~>", adobe=True) == b"Hello"  # type: ignore[attr-defined]
+        assert binascii.b2a_ascii85(b"x", pad=True) == b"GQ7^D"  # type: ignore[attr-defined]
+        wrapped = binascii.b2a_base85(b"x" * 20, wrapcol=10)  # type: ignore[attr-defined]
+        assert wrapped.split(b"\n") == [b"czAetczAet", b"czAetczAet", b"czAet"]
+
+    def test_whitespace_raises_unless_ignored(self) -> None:
+        with pytest.raises(binascii.Error):
+            binascii.a2b_ascii85(b"87cU RDZ")  # type: ignore[attr-defined]
+        with pytest.raises(binascii.Error):
+            binascii.a2b_base85(b"NM&q nZv")  # type: ignore[attr-defined]
+        assert binascii.a2b_ascii85(b"87cU RDZ", ignorechars=b" ") == b"Hello"  # type: ignore[attr-defined]
+        assert binascii.a2b_base85(b"NM&q nZv", ignorechars=b" ") == b"Hello"  # type: ignore[attr-defined]
+
+    def test_the_z85_alphabet(self) -> None:
+        alphabet = binascii.Z85_ALPHABET  # type: ignore[attr-defined]
+        encoded = binascii.b2a_base85(b"Hello", alphabet=alphabet)  # type: ignore[attr-defined]
+        assert encoded == base64.z85encode(b"Hello")  # type: ignore[attr-defined]
+        assert binascii.a2b_base85(encoded, alphabet=alphabet) == b"Hello"  # type: ignore[attr-defined]
 
 
 class TestQuotedPrintable:

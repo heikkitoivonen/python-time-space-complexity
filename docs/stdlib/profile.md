@@ -11,6 +11,11 @@ which makes `profile` far slower per event than `cProfile`, which does the same 
 behind the same functions and report format. Use `profile` when you need to extend the profiler in
 Python; measure with `cProfile`.
 
+!!! warning "Deprecated in Python 3.15"
+    Deprecated in Python 3.15 by PEP 799 and scheduled for removal in Python 3.17; importing it
+    issues a `DeprecationWarning`. [profiling.tracing](profiling.md), which `cProfile` re-exports,
+    provides the same interface.
+
 `c` is the calls the profiled code makes: calls of Python functions, each resumption of a
 generator, and calls of built-in functions and methods; each costs two events. `f` is the distinct
 functions among them, keyed by file, first line and name, `e` the distinct caller-callee pairs, and `d` the deepest nesting of calls.
@@ -246,7 +251,8 @@ with tempfile.TemporaryDirectory() as directory:
 
 ✅ **Do**:
 
-- Measure with `cProfile`; reach for `profile` when you need to subclass or change the profiler in Python
+- Measure with `cProfile`; reach for `profile` only to subclass or change the profiler in Python,
+  and not in code that must run on Python 3.17
 - Profile one call with `runcall()` rather than a whole program, so c counts only the calls you care about
 - Create a new `Profile` for each `runcall()` whose report should stand alone
 - Calibrate once per machine and pass the result as `bias`, if you compare functions that make many short calls
@@ -261,10 +267,12 @@ with tempfile.TemporaryDirectory() as directory:
 ## Version Notes
 
 - **Python 3.13+**: `Profile.print_stats()` accepts a tuple of sort keys, and so does the `sort` argument of `run()` and `runctx()`
+- **Python 3.15+**: Deprecated by PEP 799, for removal in Python 3.17; importing the module issues a `DeprecationWarning`
 
 ## Related Modules
 
 - **[cProfile](cprofile.md)** - the same interface and report, with the per-event work done in C
+- **[profiling](profiling.md)** - `profiling.tracing`, the home of `cProfile` from Python 3.15, and a sampling profiler
 - **[pstats](pstats.md)** - loads, sorts and prints what a profiler recorded
 - **[timeit](timeit.md)** - times a snippet with no profiler in the way
 - **[sys](sys.md)** - `sys.setprofile()`, the hook `profile` is built on

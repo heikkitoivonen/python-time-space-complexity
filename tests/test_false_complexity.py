@@ -16,7 +16,8 @@ Measurement scope:
   `type(False)` is `bool`, a subclass of `int`; calling `bool.__new__` with
   `0` and pickling, `copy.copy()` and `copy.deepcopy()` return the singleton;
 * the keyword: assigning to `False` is a SyntaxError; `False` compiles to a
-  constant, with no LOAD_NAME, LOAD_GLOBAL, LOAD_FAST or LOAD_DEREF
+  constant load (LOAD_CONST or RETURN_CONST before 3.15, LOAD_COMMON_CONSTANT
+  from 3.15), with no LOAD_NAME, LOAD_GLOBAL, LOAD_FAST or LOAD_DEREF
   instruction, in module and function bodies; a namespace whose
   `__builtins__` maps 'False' to another object still reads the singleton;
 * three tests for False over [False, 0, 0.0, None, '', [], ()]: `not v` is true
@@ -72,6 +73,11 @@ EXPECTED_BLOCKS = 4
 
 FALSY_VALUES: list[object] = [False, 0, 0.0, None, "", [], ()]
 NAME_LOADS = {"LOAD_NAME", "LOAD_GLOBAL", "LOAD_FAST", "LOAD_DEREF"}
+# 3.15 loads False with LOAD_COMMON_CONSTANT, from a table shared by all code
+# objects; earlier versions read it from the code object's own co_consts.
+CONSTANT_LOADS = (
+    {"LOAD_COMMON_CONSTANT"} if sys.version_info >= (3, 15) else {"LOAD_CONST", "RETURN_CONST"}
+)
 
 
 class Falsy:
@@ -147,7 +153,7 @@ class TestKeyword:
         instructions = list(dis.get_instructions(code))
 
         assert not NAME_LOADS & {i.opname for i in instructions}
-        assert any(i.opname == "LOAD_CONST" and i.argval is False for i in instructions)
+        assert any(i.opname in CONSTANT_LOADS and i.argval is False for i in instructions)
 
     def test_function_code_loads_no_name(self) -> None:
         def returns_false() -> bool:
@@ -157,9 +163,7 @@ class TestKeyword:
 
         assert not NAME_LOADS & {i.opname for i in instructions}
         assert "False" not in returns_false.__code__.co_names
-        assert any(
-            i.opname in {"LOAD_CONST", "RETURN_CONST"} and i.argval is False for i in instructions
-        )
+        assert any(i.opname in CONSTANT_LOADS and i.argval is False for i in instructions)
         assert returns_false() is False
 
     def test_shadowed_builtins_do_not_change_it(self) -> None:

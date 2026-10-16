@@ -53,8 +53,18 @@ def test_collections_types_have_one_documentation_owner() -> None:
     ],
 )
 def test_package_overviews_delegate_api_details(page: str, targets: list[str]) -> None:
+    """The overview names no submodule API. A package with functions of its own
+    (`xml.is_valid_name()` from 3.15) prices them after the overview, under
+    `## Complexity Reference`, and that section names only `xml.<function>`."""
     text = (DOCS / page).read_text(encoding="utf-8")
-    assert "```" not in text and "|" not in text
+    overview, _, local = text.partition("\n## Complexity Reference\n")
+    assert "```" not in overview and "|" not in overview
+    package = page.removesuffix(".md")
+    for row in (line for line in local.splitlines() if line.startswith("| `")):
+        operation = row.split(" | ")[0]
+        names = re.findall(r"`([\w.]+)\(", operation)
+        assert names, row
+        assert all(re.fullmatch(rf"{package}\.\w+", name) for name in names), row
     for target in targets:
         assert f"]({target})" in text
         assert (DOCS / target).is_file()

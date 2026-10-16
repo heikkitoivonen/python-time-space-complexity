@@ -1,5 +1,5 @@
 ---
-source_sha: 820e00694858fe62e65db7b6bf1626fd70706ad5e93b5d99a554161c563e5a09
+source_sha: c3d0c046d350983f8cbff5f407980822b6c6c9c702dd57ed250866f968c8fa9a
 translated: machine
 ---
 
@@ -56,7 +56,7 @@ Tarkempi analyysi löytyy osiosta [Listat](builtins/list.md).
 
 ## Kattavuus
 
-- **Python-versiot**: 3.11-3.14
+- **Python-versiot**: 3.11-3.15
 - **Toteutukset**: CPython, PyPy, Jython, IronPython
 - **Operaatiot**: yli 2 200 sisäänrakennettua ja standardikirjaston operaatiota
 - **Päivitykset**: päivitetään säännöllisesti uusien Python-julkaisujen myötä
@@ -74,6 +74,7 @@ Löysitkö virheen tai haluatko lisätä sisältöä? Katso [osallistumisohjeet]
 ## Lähteet
 
 - [Pythonin virallinen dokumentaatio](https://docs.python.org/3/)
+- [Pythonin virallinen aikavaativuussivu](https://docs.python.org/3.15/builtins/time-complexity.html) (Python 3.15+)
 - [TimeComplexity-wiki](https://wiki.python.org/moin/TimeComplexity)
 - [CPythonin lähdekoodi](https://github.com/python/cpython) ja toteutuksen yksityiskohdat
 - [Suorituskykymittaukset](https://github.com/heikkitoivonen/python-time-space-complexity/tree/main/tests) ja vertailut

@@ -252,6 +252,8 @@ assert time.monotonic() >= deadline
 
 - **Python 3.13+**: `strptime()` issues a `DeprecationWarning` for a format with a day of the
   month but no year
+- **Python 3.15+**: `strptime()` raises `ValueError` for a format with a day of the month but no
+  year, instead of warning
 - **All Python 3**: `time()` follows the system clock and can go backwards when it is set
 
 ## Related Modules

@@ -42,7 +42,7 @@ the entries in a zip archive.
 | `importlib.util.spec_from_file_location(name, location, *, loader=None, submodule_search_locations=...)` | O(s) | O(s) | Picks the loader by suffix, building each loader's suffix tuple; nothing is read |
 | `importlib.util.spec_from_loader(name, loader, *, origin=None, is_package=None)` | O(1) | O(1) | Asks the loader `is_package()` when not told |
 | `importlib.util.resolve_name(name, package)` | O(1) | O(1) | Strips one package level per leading dot; raises `ImportError` past the top |
-| `importlib.util.cache_from_source(path, debug_override=None, *, optimization=None)`, `importlib.util.source_from_cache(path)` | O(1) | O(1) | Path arithmetic; neither file need exist |
+| `importlib.util.cache_from_source(path, *, optimization=None)`, `importlib.util.source_from_cache(path)` | O(1) | O(1) | Path arithmetic; neither file need exist. Up to 3.14 `cache_from_source()` also takes a deprecated `debug_override` second argument |
 | `importlib.util.decode_source(source_bytes)` | O(n) | O(n) | Detects the encoding from the first two lines, decodes and normalises newlines |
 | `importlib.util.source_hash(source_bytes)` | O(n) | O(1) | The 8-byte hash stored in hash-based `.pyc` files |
 | `importlib.util.LazyLoader(loader)`, `LazyLoader.factory(loader)` | O(1) | O(1) | Wraps a loader that defines `exec_module()` |
@@ -57,11 +57,13 @@ the entries in a zip archive.
 | `importlib.machinery.ModuleSpec(name, loader, *, origin=None, loader_state=None, is_package=None)` | O(1) | O(1) | |
 | `ModuleSpec.name`, `ModuleSpec.loader`, `ModuleSpec.origin`, `ModuleSpec.loader_state`, `ModuleSpec.submodule_search_locations`, `ModuleSpec.has_location`, `ModuleSpec.parent` | O(1) | O(1) | Attributes; `parent` is a split of `name` |
 | `ModuleSpec.cached` | O(1) | O(1) | Derived from `origin` on first access and stored |
+| `PathFinder.discover(parent=None)` | O(p + Σ e·s) | O(p + Σ e) | Python 3.15+. A generator: nothing is looked at until it is consumed, then each distinct entry of `sys.path`, or of `parent`'s search locations, runs its finder's `discover()`, which the sum adds up; each directory's finder, and the listing its `find_spec()` fills, stays in `sys.path_importer_cache`. `ValueError` for a `parent` that is not a package |
 | `importlib.machinery.PathFinder.find_spec(fullname, path=None, target=None)` | O(p·s) | O(1) | One path entry finder per entry, stopping at the first hit, plus O(e) for each directory listed for the first time or since it changed; a namespace package visits every entry and collects its portions, O(p) |
 | `PathFinder.invalidate_caches()` | O(c) | O(c) | Snapshots `sys.path_importer_cache`, drops relative entries and calls each cached finder's `invalidate_caches()` |
 | `PathFinder.find_distributions(context)` | O(p + d) | O(d) | Delegates to `importlib.metadata.MetadataPathFinder` below |
 | `importlib.machinery.FileFinder(path, *loader_details)` | O(s) | O(s) | Nothing is listed yet |
 | `FileFinder.find_spec(fullname, target=None)` | O(s) | O(e) | One `stat()` of the directory, a set probe per suffix and an `isfile()` per candidate the listing holds, or per suffix for the `__init__` of a name that is a directory; O(e) to relist when the directory's mtime changed, and the listing is kept |
+| `FileFinder.discover(parent=None)` | O(e·s) | O(e) | Python 3.15+. A generator over the directory's modules and packages, one `find_spec()` each on every call |
 | `FileFinder.invalidate_caches()` | O(1) | O(1) | Forgets the mtime, so the next search relists |
 | `FileFinder.path_hook(*loader_details)`, `FileFinder.path` | O(1) | O(1) | The hook it returns does one `isdir()` per path entry |
 | `PathFinder.find_module(fullname, path=None)` | O(p·s) | O(1) | Python 3.11 only, deprecated: costs what `PathFinder.find_spec()` does, then returns its loader or `None` |
@@ -73,13 +75,14 @@ the entries in a zip archive.
 | `SourceFileLoader.exec_module(module)` | O(n + m) | O(n + m) | `get_code()`, then the body |
 | `SourceFileLoader.get_source(fullname)`, `SourceFileLoader.get_data(path)` | O(n) | O(n) | The whole file; `get_source()` also decodes it |
 | `SourceFileLoader.set_data(path, data)` | O(n) | O(1) | Writes the bytes it is given to a temporary file and renames it into place, creating missing directories |
-| `SourceFileLoader.source_to_code(data, path)` | O(n) | O(n) | `compile()` |
+| `SourceFileLoader.source_to_code(data, path, fullname=None)` | O(n) | O(n) | `compile()`; `fullname` is Python 3.15+ |
 | `SourceFileLoader.get_filename(fullname)`, `SourceFileLoader.is_package(fullname)`, `SourceFileLoader.path_stats(path)`, `SourceFileLoader.create_module(spec)`, `SourceFileLoader.get_resource_reader(module)`, `SourceFileLoader.name`, `SourceFileLoader.path` | O(1) | O(1) | `path_stats()` is one `stat()`; `create_module()` returns `None` |
-| `SourceFileLoader.load_module(fullname)` | O(n + m) | O(n + m) | Deprecated; `exec_module()` behind a spec |
+| `SourceFileLoader.load_module(fullname)` | O(n + m) | O(n + m) | Removed in 3.15; up to 3.14 deprecated, warning, and `exec_module()` behind a spec |
 | `SourcelessFileLoader.get_code(fullname)` | O(n) | O(n) | Reads and unmarshals; there is no source to check against |
 | `SourcelessFileLoader.get_source(fullname)`, `SourcelessFileLoader.name`, `SourcelessFileLoader.path` | O(1) | O(1) | `get_source()` is always `None` |
 | `ExtensionFileLoader.create_module(spec)`, `ExtensionFileLoader.exec_module(module)` | O(1) | O(1) | Python-side; `create_module()` loads the shared library and runs its init function, `exec_module()` its exec slots |
 | `ExtensionFileLoader.get_code(fullname)`, `ExtensionFileLoader.get_source(fullname)`, `ExtensionFileLoader.get_filename(fullname)`, `ExtensionFileLoader.is_package(fullname)`, `ExtensionFileLoader.name`, `ExtensionFileLoader.path` | O(1) | O(1) | `get_code()` and `get_source()` are always `None`; `is_package()` compares the filename against each suffix, O(s) |
+| `importlib.machinery.NamespacePath(name, path, path_finder)` | O(p) | O(p) | The type of a namespace package's `__path__`, public from 3.15. Construction copies the parent path; iterating it, `len()` and `in` compare that copy with the parent path, O(p), and call `path_finder` again, O(p·s), only when the parent path changed or `importlib.invalidate_caches()` ran |
 | `importlib.machinery.NamespaceLoader` | O(1) | O(1) | Constructing one snapshots the parent path, O(p); `create_module()` and `exec_module()` do nothing; `get_source()` is `''`, `get_code()` compiles it, `is_package()` is `True`; the package's `__path__` is recomputed, O(p·s), whenever `sys.path` or the parent's `__path__` changes |
 | `importlib.machinery.WindowsRegistryFinder.find_spec(fullname, path=None, target=None)` | O(s) | O(1) | Windows only: one registry lookup, one `stat()` and a suffix match |
 | `importlib.machinery.AppleFrameworkLoader.create_module(spec)`, `AppleFrameworkLoader.name`, `AppleFrameworkLoader.path` | O(1) | O(1) | iOS only, Python 3.13+: `create_module()` reads the `.fwork` redirect, then loads as `ExtensionFileLoader` does |
@@ -94,18 +97,19 @@ the entries in a zip archive.
 | `importlib.abc.MetaPathFinder`, `importlib.abc.PathEntryFinder`, `importlib.abc.Loader`, `importlib.abc.ResourceLoader`, `importlib.abc.InspectLoader`, `importlib.abc.ExecutionLoader`, `importlib.abc.FileLoader`, `importlib.abc.SourceLoader` | O(1) | O(1) | Ordinary class creation to subclass; the concrete machinery classes are registered with them, so `isinstance()` and `issubclass()` hold for a `FileFinder` or `SourceFileLoader` |
 | `MetaPathFinder.find_spec(fullname, path, target=None)`, `PathEntryFinder.find_spec(fullname, target=None)`, `Loader.exec_module(module)` | Defined by the subclass | Defined by the subclass | The ABCs leave them undefined; the import system pays whatever the subclass does, once per search or load |
 | `MetaPathFinder.invalidate_caches()`, `PathEntryFinder.invalidate_caches()`, `Loader.create_module(spec)` | O(1) | O(1) | Default no-ops |
+| `MetaPathFinder.discover(parent=None)`, `PathEntryFinder.discover(parent=None)` | O(1) | O(1) | Python 3.15+. The default returns an empty tuple; `PathFinder` and `FileFinder` override it to list modules, at the costs in their rows. From 3.15 formatting a `ModuleNotFoundError` calls it on every meta path finder to suggest a name |
 | `Finder.find_module(fullname, path=None)`, `PathEntryFinder.find_module(fullname)` | Defined by the subclass | Defined by the subclass | Python 3.11 only, deprecated: `Finder` leaves it abstract; `PathEntryFinder`'s goes through `find_loader()` to the subclass's `find_spec()` and returns the loader |
 | `Loader.module_repr(module)` | O(1) | O(1) | Python 3.11 only, deprecated: raises `NotImplementedError`, so `repr()` of the module falls back to the module type's own |
-| `Loader.load_module(fullname)`, `InspectLoader.load_module(fullname)`, `FileLoader.load_module(fullname)` | O(n + m) | O(n + m) | Deprecated shim: builds a spec, then `exec_module()`; a `Loader` that defines no `exec_module()` raises `ImportError` instead |
+| `Loader.load_module(fullname)`, `InspectLoader.load_module(fullname)`, `FileLoader.load_module(fullname)` | O(n + m) | O(n + m) | Removed in 3.15. Up to 3.14 a deprecated shim: builds a spec, then `exec_module()`; a `Loader` that defines no `exec_module()` raises `ImportError` instead |
 | `ResourceLoader.get_data(path)`, `InspectLoader.get_source(fullname)`, `ExecutionLoader.get_filename(fullname)` | Defined by the subclass | Defined by the subclass | Abstract |
 | `InspectLoader.get_code(fullname)`, `ExecutionLoader.get_code(fullname)` | O(n) | O(n) | `get_source()` then `source_to_code()`: a compile on every call, with no bytecode cache at this level |
-| `InspectLoader.source_to_code(data, path='<string>')` | O(n) | O(n) | `compile()` |
+| `InspectLoader.source_to_code(data, path='<string>', fullname=None)` | O(n) | O(n) | `compile()`; `fullname` is Python 3.15+, and `get_code()` passes all three arguments from 3.15, so an override must accept them |
 | `InspectLoader.is_package(fullname)` | O(1) | O(1) | Raises `ImportError` unless overridden |
 | `FileLoader.get_data(path)` | O(n) | O(n) | The whole file |
 | `FileLoader.get_filename(fullname)`, `FileLoader.get_resource_reader(module)`, `FileLoader.name`, `FileLoader.path` | O(1) | O(1) | |
 | `SourceLoader.get_code(fullname)` | O(n) | O(n) | `path_stats()` on the source, `get_data()` on the cache path and then the source, `set_data()` to write the cache; each is the subclass's method |
 | `SourceLoader.get_source(fullname)` | O(n) | O(n) | `get_data()` then `decode_source()` |
-| `SourceLoader.source_to_code(data, path)` | O(n) | O(n) | `compile()` |
+| `SourceLoader.source_to_code(data, path, fullname=None)` | O(n) | O(n) | `compile()`; `fullname` is Python 3.15+ |
 | `SourceLoader.is_package(fullname)`, `SourceLoader.path_mtime(path)`, `SourceLoader.path_stats(path)`, `SourceLoader.set_data(path, data)` | O(1) | O(1) | `path_mtime()` raises `OSError` and `set_data()` does nothing unless overridden; `path_stats()` wraps `path_mtime()` |
 
 ### importlib.resources
@@ -136,13 +140,13 @@ the entries in a zip archive.
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `importlib.metadata.distributions(**kwargs)`, `Distribution.discover(**kwargs)` | O(p + d) | O(d) | Lazy; consuming it visits every path entry. Each directory is listed once, O(e), and the listing reused until its mtime changes, from a cache that holds 128 path entries |
-| `importlib.metadata.distribution(distribution_name)`, `Distribution.from_name(name)` | O(p) | O(1) | A dictionary probe per path entry until the first match, on the same cached listings; no metadata is read |
-| `importlib.metadata.version(distribution_name)`, `importlib.metadata.metadata(distribution_name)`, `importlib.metadata.requires(distribution_name)` | O(p + h) | O(h) | Find, then read and parse the whole `METADATA` file |
-| `importlib.metadata.files(distribution_name)` | O(p + F) | O(F) | `RECORD` parsed, and from Python 3.12 one `stat()` per listed file, with the missing ones dropped |
+| `importlib.metadata.distribution(distribution_name)`, `Distribution.from_name(name)` | O(p), O(p + h) from 3.15 | O(1), O(h) from 3.15 | A dictionary probe per path entry until the first match, on the same cached listings. Up to 3.14 no metadata is read. From 3.15 the match's metadata file is read and parsed to prefer a distribution that has one: a match without one is passed over for a later match on the path |
+| `importlib.metadata.version(distribution_name)`, `importlib.metadata.metadata(distribution_name)`, `importlib.metadata.requires(distribution_name)` | O(p + h) | O(h) | Find, then read and parse the whole `METADATA` file; from 3.15 that is a second parse after the one `distribution()` does |
+| `importlib.metadata.files(distribution_name)` | O(p + F), O(p + h + F) from 3.15 | O(F), O(h + F) from 3.15 | `RECORD` parsed, and from Python 3.12 one `stat()` per listed file, with the missing ones dropped; from 3.15 the lookup also parses `METADATA`, as `distribution()` does |
 | `importlib.metadata.entry_points(**params)` | O(p + d + E) | O(d + E) | Reads the `entry_points.txt` of every distinctly named distribution, whatever the selection; the filter runs afterwards over all of them, after a sort by group on Python 3.11, O(E log E) |
 | `importlib.metadata.packages_distributions()` | O(p + d + q·h + F) | O(d + q + h + F) | `top_level.txt` per distribution, or its `RECORD` where that is missing, with a `stat()` per file from 3.12; the `METADATA` name is parsed again for every name declared |
 | `importlib.metadata.Distribution` | O(1) | O(1) | Abstract; `Distribution.at(path)` wraps a path without reading it |
-| `Distribution.metadata`, `Distribution.name`, `Distribution.version`, `Distribution.requires` | O(h) | O(h) | Read and parsed from the file on every access; nothing is kept on the object. `requires` falls back to an egg-info `requires.txt`, linear in its lines |
+| `Distribution.metadata`, `Distribution.name`, `Distribution.version`, `Distribution.requires` | O(h) | O(h) | Read and parsed from the file on every access; nothing is kept on the object. `requires` falls back to an egg-info `requires.txt`, linear in its lines. With no metadata file, `metadata` raises `MetadataNotFound` from 3.15 and is empty before |
 | `Distribution.origin` | O(n) | O(n) | Parses `direct_url.json` on every access, or `None` without one; Python 3.13+ |
 | `Distribution.entry_points` | O(E) | O(E) | Parses `entry_points.txt` on every access |
 | `Distribution.files` | O(F) | O(F) | Parses `RECORD`, or the egg-info file list, on every access, with a `stat()` per file from Python 3.12 |
@@ -153,9 +157,9 @@ the entries in a zip archive.
 | `PackageMetadata.get_all(name, failobj=None)`, `iter(metadata)` | O(h) | O(h) | The scan, keeping every match or every name |
 | `len(metadata)` | O(1) | O(1) | The stored header count |
 | `PackageMetadata.json` | O(h²) | O(h) | One scan per header, and a `get_all()` scan for each multi-use key |
-| `importlib.metadata.EntryPoint(name, value, group)` | O(1) | O(1) | |
+| `importlib.metadata.EntryPoint(name, value, group)` | O(1) | O(1) | From 3.15 matches `value` against `pattern` here, raising `ValueError` for a malformed one |
 | `EntryPoint.name`, `EntryPoint.value`, `EntryPoint.group`, `EntryPoint.dist`, `EntryPoint.pattern` | O(1) | O(1) | |
-| `EntryPoint.module`, `EntryPoint.attr`, `EntryPoint.extras` | O(1) | O(1) | The regex over `value` runs again on every access |
+| `EntryPoint.module`, `EntryPoint.attr`, `EntryPoint.extras` | O(1) | O(1) | Up to 3.14 the regex over `value` runs again on every access; from 3.15 the match made at construction is kept |
 | `EntryPoint.matches(**params)` | O(1) | O(1) | One attribute compare per keyword |
 | `EntryPoint.load()` | O(1) | O(1) | `import_module()` and a `getattr()` per dotted attribute; the import's own cost if the module is not loaded |
 | `importlib.metadata.EntryPoints(iterable)` | O(E) | O(E) | A tuple from Python 3.12, a list before |
@@ -164,6 +168,8 @@ the entries in a zip archive.
 | `PackagePath.read_text(encoding='utf-8')`, `PackagePath.read_binary()` | O(n) | O(n) | The whole file |
 | `PackagePath.locate()` | O(1) | O(1) | `dist.locate_file()` |
 | `importlib.metadata.PackageNotFoundError`, `PackageNotFoundError.name` | O(1) | O(1) | Raised by every by-name lookup that finds nothing |
+| `importlib.metadata.MetadataNotFound` | O(1) | O(1) | Python 3.15+; a `FileNotFoundError` raised by `Distribution.metadata`, and the lookups built on it, for a distribution with no metadata file |
+| `importlib.metadata.SimplePath` | O(1) | O(1) | The path protocol `Distribution.locate_file()` returns; in `importlib.metadata.__all__` from 3.15 |
 | `importlib.metadata.DistributionFinder`, `DistributionFinder.Context(**kwargs)`, `Context.name`, `Context.path` | O(1) | O(1) | `path` defaults to `sys.path` |
 | `DistributionFinder.find_distributions(context)` | Defined by the subclass | Defined by the subclass | Abstract |
 | `importlib.metadata.MetadataPathFinder.find_distributions(context)` | O(p + d) | O(d) | The `sys.meta_path` finder behind `distributions()` |
@@ -293,7 +299,7 @@ with tempfile.TemporaryDirectory() as tmp:
     sys.path.insert(0, tmp)
     try:
         module = importlib.import_module('compiled_once')  # O(n + m) - compiles and caches
-        cached = Path(module.__cached__)
+        cached = Path(module.__spec__.cached)
         assert cached == Path(importlib.util.cache_from_source(str(source)))  # O(1)
         assert cached.exists()
         assert cached.read_bytes()[:4] == importlib.util.MAGIC_NUMBER
@@ -542,7 +548,8 @@ with tempfile.TemporaryDirectory() as tmp:
 ### Finding a Distribution
 
 `distribution()` and everything built on it probe the cached listing of each path entry in turn,
-so the lookup is O(p) with no metadata read. Reading `version` then parses the whole `METADATA`
+so the lookup is O(p). Up to 3.14 it reads no metadata; from 3.15 it also parses the match's
+`METADATA`, O(h), to prefer a distribution that has one. Reading `version` then parses the whole
 file, and parses it again on every access.
 
 ```python
@@ -563,7 +570,7 @@ with tempfile.TemporaryDirectory() as site:
 
     sys.path.insert(0, site)
     try:
-        dist = importlib.metadata.distribution('demo-dist')  # O(p) - no file read yet
+        dist = importlib.metadata.distribution('demo-dist')  # O(p), and O(h) more from 3.15
         assert importlib.metadata.version('demo-dist') == '1.2'  # O(p + h)
         assert dist.metadata['Name'] == 'demo-dist'  # O(h) - parsed on this access
         assert dist.requires == ['other>=1']  # O(h) - parsed again
@@ -690,6 +697,7 @@ assert registry._by_name == {}
 - **Python 3.12+**: Removed `importlib.find_loader()`, `importlib.abc.Finder`, `MetaPathFinder.find_module()`, `PathEntryFinder.find_loader()`, `PathEntryFinder.find_module()`, `Loader.module_repr()`, `PathFinder.find_module()`, `FileFinder.find_loader()` and the `importlib.util` decorators `set_package()`, `set_loader()` and `module_for_loader()`; `EntryPoints` is a tuple rather than a list, and `entry_points()` with no selector returns one rather than a dict-like `SelectableGroups`; `files()` takes an `anchor`, which may be a plain module or omitted; added `Anchor`; `Distribution.files` drops entries whose file is missing; added `_incompatible_extension_module_restrictions`
 - **Python 3.13+**: The functional resources API accepts several path names, and `contents()` alone is deprecated; added `Distribution.origin` and `AppleFrameworkLoader`; `EntryPoint` is no longer indexable as a tuple
 - **Python 3.14+**: Removed `importlib.abc.ResourceReader`, `Traversable` and `TraversableResources`, which live in `importlib.resources.abc`; deprecated `SourceLoader.path_mtime()`, `DEBUG_BYTECODE_SUFFIXES` and `OPTIMIZED_BYTECODE_SUFFIXES`
+- **Python 3.15+**: Removed `load_module()` from `Loader`, `InspectLoader`, `FileLoader`, `SourceFileLoader` and `NamespaceLoader`, and `cache_from_source()`'s `debug_override`; the import system no longer sets a module's `__cached__`, which `__spec__.cached` replaces; `source_to_code()` takes a `fullname`; added `MetaPathFinder.discover()`, `PathEntryFinder.discover()` and the public `NamespacePath`; `importlib.metadata` adds `MetadataNotFound`, raised where a distribution has no metadata file, and `distribution()` reads the match's metadata to prefer one that has it; an `EntryPoint` validates its value once, at construction
 - **All Python 3**: A timestamp-based `.pyc`, the default, is trusted while the source's mtime and size match what it recorded, so an edit within the same second that keeps the size is not recompiled
 
 ## Related Modules

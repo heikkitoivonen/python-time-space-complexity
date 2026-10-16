@@ -1,5 +1,5 @@
 ---
-source_sha: f5c4b3c5bd9a612e361874983042cd25d27aa989a7e7b47532e46516d57e6430
+source_sha: ed4deba4ee0e77fff224572f8c5dbd19bdce146a2f308aed272dddf5c100ef51
 translated: machine
 ---
 
@@ -94,8 +94,8 @@ olevan sanakirjoja, ja `data`-oliolle välitetty operaatio maksaa sen, mitä
 | `ud.copy()` | O(n) | O(n) | Tavallinen `UserDict` kopioi `data`-sanakirjan; aliluokka kopioidaan pinnallisesti ja täytetään sitten uudelleen `update()`-kutsulla |
 | `UserDict.fromkeys(iterable, value=None)` | O(k) | O(k) | Yksi `__setitem__`-kutsu per avain |
 | `ud.pop(key)`, `ud.setdefault(key, default=None)` | O(1) | O(1) | `ud[key]` ja sitten `del ud[key]` tai `ud[key] = default` |
-| `ud.popitem()` | O(d) | O(1) | Poistaa iterointijärjestyksen ensimmäisen avaimen; d on sitä ennen poistettujen alkioiden määrä, jotka uuden iteraattorin on ohitettava |
-| `ud.clear()` | O(n·(n + d)) | O(1) | `popitem()` tyhjäksi asti, ja jokainen kutsu ohittaa kaikki aiempien tyhjentämät paikat; `ud.data.clear()` on O(n) |
+| `ud.popitem()` | O(d) | O(1) | Poistaa iterointijärjestyksen ensimmäisen avaimen; d on sitä ennen poistettujen alkioiden määrä, jotka uuden iteraattorin on ohitettava. Versiosta 3.15 alkaen se välittää kutsun `data.popitem()`-metodille, joka poistaa viimeisen avaimen ja ohittaa vain sen jälkeiset poistetut paikat |
+| `ud.clear()` | O(n·(n + d)) | O(1) | `popitem()` tyhjäksi asti, ja jokainen kutsu ohittaa kaikki aiempien tyhjentämät paikat; versiosta 3.15 alkaen O(n + d). `ud.data.clear()` on yksi `dict.clear()`-kutsu |
 | `ud == other` | O(n + k) | O(n + k) | Litistää molemmat puolet sanakirjoiksi ja vertaa niitä, vaikka `other` olisi jo sanakirja |
 
 ### UserList
@@ -251,25 +251,32 @@ assert Indexed.reads == 4
 
 ### UserDict-olion tyhjentäminen
 
-`UserDict` ei määrittele metodeja `clear()`, `popitem()` eikä `pop()`; se perii ne
-`MutableMapping`-luokalta. Sen `popitem()` ottaa ensimmäisen avaimen, jonka uusi iteraattori tuottaa,
-ja sanakirjan iteraattorin on ohitettava jokainen paikka, jonka aiemmat poistot tyhjensivät, joten
-`popitem()` maksaa O(d) ja koko sanakirjan tyhjentäminen `clear()`-kutsulla maksaa O(n·(n + d)).
+`UserDict` ei määrittele metodeja `clear()` eikä `pop()`; se perii ne `MutableMapping`-luokalta,
+ja ennen versiota 3.15 se perii myös `popitem()`-metodin. Tuo `popitem()` ottaa ensimmäisen avaimen,
+jonka uusi iteraattori tuottaa, ja sanakirjan iteraattorin on ohitettava jokainen paikka, jonka
+aiemmat poistot tyhjensivät, joten `popitem()` maksaa O(d) ja koko sanakirjan tyhjentäminen
+`clear()`-kutsulla maksaa O(n·(n + d)). Versiosta 3.15 alkaen `popitem()` välittää kutsun
+sanakirjan omalle metodille, joka poistaa viimeisen avaimen ja ohittaa vain sen jälkeiset poistetut
+paikat, joten `clear()` on O(n + d).
 Tyhjennä `data`-sanakirja suoraan.
 
 ```python
+import sys
 from collections import UserDict
 
 wrapped = UserDict({"a": 1, "b": 2, "c": 3})
 
-assert wrapped.popitem() == ("a", 1)  # O(d) - the first key still present
+if sys.version_info >= (3, 15):
+    assert wrapped.popitem() == ("c", 3)  # O(1) - dict.popitem(), the last key
+else:
+    assert wrapped.popitem() == ("a", 1)  # O(d) - the first key still present
 assert wrapped.popitem() == ("b", 2)
 
 wrapped.data.clear()  # O(n) - the dict's own clear
 assert len(wrapped) == 0
 
 wrapped.update(zip("xyz", range(3)))
-wrapped.clear()  # O(n·(n + d)) - popitem() until empty
+wrapped.clear()  # popitem() until empty: O(n·(n + d)), or O(n + d) from 3.15
 assert len(wrapped) == 0
 ```
 
@@ -329,7 +336,7 @@ assert resolved == {"host": "localhost", "port": 8080, "debug": True}
 
 - Pidä `ChainMap` lyhyenä: jokainen huti, `get()` oletusarvolla ja viimeisessä kuvauksessa olevan avaimen luku maksaa yhden haun per kuvaus
 - Litistä `dict(chain)`-kutsulla kerran, kun ketjua luetaan silmukassa, jotta kuvauskohtainen haku tapahtuu kerran per avain eikä kerran per luku
-- Tyhjennä `UserDict` `data.clear()`-kutsulla; peritty `clear()` on neliöllinen alkioiden ja niitä ennen poistettujen paikkojen määrässä
+- Tyhjennä `UserDict` `data.clear()`-kutsulla; ennen versiota 3.15 peritty `clear()` on neliöllinen alkioiden ja niitä ennen poistettujen paikkojen määrässä
 - Käytä `ud.data`-, `ul.data`- tai `us.data`-attribuuttia, kun kuuma silmukka ei tarvitse aliluokan koukkuja
 
 ❌ **Vältä**:
@@ -342,6 +349,7 @@ assert resolved == {"host": "localhost", "port": 8080, "debug": True}
 ## Versiohuomautukset
 
 - **Python 3.12+**: `UserDict.get()` palauttaa oletusarvon puuttuvalle avaimelle kutsumatta `__missing__`-metodia; ennen 3.12:ta peritty `Mapping.get()` kulki `__getitem__`-metodin läpi ja kutsui sitä
+- **Python 3.15+**: `UserDict.popitem()` välittää kutsun `dict.popitem()`-metodille ja poistaa ensimmäisen avaimen sijaan viimeisen käymättä taulukkoa uudelleen läpi alusta, joten peritty `clear()` on O(n + d)
 - **Kaikki Python 3 -versiot**: `len()` ja iterointi `ChainMap`-olion yli maksavat jokaisen alkion jokaisessa kuvauksessa; ketjusta ei välimuistiteta mitään
 
 ## Liittyvät moduulit

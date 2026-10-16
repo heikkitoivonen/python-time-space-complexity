@@ -17,11 +17,31 @@ Measurement scope:
 * In a timing test each of those functions is run on 3,000, 30,000 and
   300,000 bytes; each 10x step costs between 4x and 30x, which excludes a
   constant (x1) and a quadratic (x100) at every interval.
-* That Base32 and the 85 family loop in Python while Base64 runs in C is
-  settled by a timing test on 300,000 random bytes: each of their encoders and
-  decoders costs more than 5x `b64encode()` or `b64decode()` on the same data.
-  Base16's encoder is held under 5x Base64's, and its decoder under 5x from
-  3.14 and under 25x before, where it adds a `re.search()` validation pass.
+* That Base32 and the 85 family loop in Python before 3.15 while Base64 runs
+  in C is settled by a timing test on 300,000 random bytes: each of their
+  encoders and decoders costs more than 5x `b64encode()` or `b64decode()` on
+  the same data (38x to 190x measured on 3.11 and 3.14). On 3.15, where all
+  of them call `binascii`, each is held under 30x (1.2x to 6.4x measured on
+  the aarch64 dev box). Base16's encoder is held under 5x Base64's, and its
+  decoder under 5x on 3.14 and under 25x before, where it adds a
+  `re.search()` validation pass; on 3.15, whose Base64 is faster, both are
+  held under 15x.
+* Before 3.15, `a85encode()`, `b85encode()` and `z85encode()` peak at over
+  5x their output on 1,000,000 random bytes (about 34x measured on 3.14).
+  On 3.15 every Base32 and 85-family encoder and decoder peaks between its
+  result's length and that plus 4,096 bytes on the same input, so no
+  intermediate copy is made.
+* On 3.15, `padded=False` is checked on `b64encode()`, `b64decode()`,
+  `b32encode()` and `b32decode()`; `wrapcol` of 10 and 11 is asserted to
+  split 100 bytes into lines of at most that many characters that join to
+  the unwrapped encoding, for Base64, Base32, base32hex, Base16 and Base85;
+  `ignorechars` is checked on the Base64, Base32, Base16 and Base85 decoders,
+  and an unlisted byte raises from `b64decode()`; `canonical=True` rejects
+  `YR==` and Ascii85's `!!!!!`; `z85encode(pad=True)` keeps a whole group.
+  `urlsafe_b64decode()` accepts missing padding on 3.15 (unless
+  `padded=True`) and raises before. A `+` or `/` the alphabet replaced warns
+  on 3.15 - `FutureWarning`, or `DeprecationWarning` from `b64decode()` with
+  `validate=True` - and not before.
 * `encode()` peaks under 4 KB and within 2x across 10,000 and 1,000,000 input
   bytes, and writes lines of at most 76 characters, identical to
   `encodebytes()`. `decode()` peaks under 4 KB on `encodebytes()` output of
@@ -67,6 +87,7 @@ import sys
 import textwrap
 import time
 import tracemalloc
+import warnings
 from collections.abc import Callable
 from itertools import pairwise
 from typing import Any
@@ -77,6 +98,7 @@ PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "base64.md"
 EXPECTED_BLOCKS = 7
 
 HAS_Z85 = sys.version_info >= (3, 13)
+PY315 = sys.version_info >= (3, 15)
 Z85 = pytest.mark.skipif(not HAS_Z85, reason="z85 was added in 3.13")
 
 # (encoder, decoder, encoded characters per input byte)
@@ -205,9 +227,10 @@ class TestEveryFunctionIsLinear:
             )
 
 
-class TestPythonLoopsAreSlowerThanBinascii:
-    """Base32 and the 85 family loop over groups in Python; Base64 and Base16
-    run in C. Same O(n), a wide gap per byte."""
+class TestBase32AndThe85FamilyRunInCFrom315:
+    """Before 3.15, Base32 and the 85 family loop over groups in Python while
+    Base64 and Base16 run in C: same O(n), a wide gap per byte. From 3.15 all
+    of them are `binascii` calls, and the gap closes."""
 
     DATA = os.urandom(300_000)
 
@@ -219,31 +242,141 @@ class TestPythonLoopsAreSlowerThanBinascii:
 
     @pytest.mark.timing
     @pytest.mark.parametrize("family", SLOW)
-    def test_the_python_loops_cost_more_than_five_times_base64(self, family: str) -> None:
+    def test_the_gap_to_base64_is_wide_before_3_15_and_narrow_after(self, family: str) -> None:
         encoded = coder(f"{family}encode")(self.DATA)
         b64_encoded = base64.b64encode(self.DATA)
 
         encode_ratio = self._ns(f"{family}encode", self.DATA) / self._ns("b64encode", self.DATA)
         decode_ratio = self._ns(f"{family}decode", encoded) / self._ns("b64decode", b64_encoded)
 
-        assert encode_ratio > 5, f"{family}encode is only x{encode_ratio:.1f} b64encode"
-        assert decode_ratio > 5, f"{family}decode is only x{decode_ratio:.1f} b64decode"
+        if PY315:
+            assert encode_ratio < 30, f"{family}encode is x{encode_ratio:.1f} b64encode"
+            assert decode_ratio < 30, f"{family}decode is x{decode_ratio:.1f} b64decode"
+        else:
+            assert encode_ratio > 5, f"{family}encode is only x{encode_ratio:.1f} b64encode"
+            assert decode_ratio > 5, f"{family}decode is only x{decode_ratio:.1f} b64decode"
 
     @pytest.mark.timing
     def test_base16_stays_close_to_base64(self) -> None:
         """Before 3.14, `b16decode()` validates with `re.search()` before
         `unhexlify()`: a second C pass, measured at x9.4-x10.3 `b64decode()`
         on 3.11.17 with 300,000 bytes, where the Python-loop decoders measured
-        x36 and up."""
+        x36 and up. On 3.15, whose Base64 is two to three times faster,
+        `b16encode()` measured x3.2 and `b16decode()` x6.4 on the aarch64 dev
+        box."""
         encoded = base64.b16encode(self.DATA)
         b64_encoded = base64.b64encode(self.DATA)
-        decode_bound = 5 if sys.version_info >= (3, 14) else 25
+        if PY315:
+            encode_bound, decode_bound = 15, 15
+        else:
+            encode_bound, decode_bound = 5, (5 if sys.version_info >= (3, 14) else 25)
 
         encode_ratio = self._ns("b16encode", self.DATA) / self._ns("b64encode", self.DATA)
         decode_ratio = self._ns("b16decode", encoded) / self._ns("b64decode", b64_encoded)
 
-        assert encode_ratio < 5, f"b16encode is x{encode_ratio:.1f} b64encode"
+        assert encode_ratio < encode_bound, f"b16encode is x{encode_ratio:.1f} b64encode"
         assert decode_ratio < decode_bound, f"b16decode is x{decode_ratio:.1f} b64decode"
+
+
+@pytest.mark.serial
+class TestThe85FamilyPeakFollowsTheOutput:
+    """Before 3.15 the 85 family's Python loops peak at many times their
+    output; from 3.15 Base32 and the 85 family write their result directly,
+    so the peak is the result."""
+
+    DATA = os.urandom(1_000_000)
+
+    @pytest.mark.skipif(PY315, reason="version: the Python loops are gone in 3.15")
+    @pytest.mark.parametrize("family", [name for name in SLOW if name not in ("b32", "b32hex")])
+    def test_the_python_encoders_peak_at_many_times_the_output(self, family: str) -> None:
+        encode = coder(f"{family}encode")
+        output = encode(self.DATA)
+
+        peak = peak_bytes(lambda: encode(self.DATA))
+
+        assert peak > 5 * len(output), f"{family}encode peaked at {peak} for {len(output)}"
+
+    @pytest.mark.skipif(not PY315, reason="version: C implementations from 3.15")
+    @pytest.mark.parametrize("family", SLOW)
+    def test_the_c_coders_peak_at_their_result(self, family: str) -> None:
+        encode, decode = coder(f"{family}encode"), coder(f"{family}decode")
+        encoded = encode(self.DATA)
+        decode(encoded)
+
+        encode_peak = peak_bytes(lambda: encode(self.DATA))
+        decode_peak = peak_bytes(lambda: decode(encoded))
+
+        assert len(encoded) <= encode_peak < len(encoded) + 4_096, encode_peak
+        assert len(self.DATA) <= decode_peak < len(self.DATA) + 4_096, decode_peak
+
+
+@pytest.mark.skipif(not PY315, reason="version: keyword arguments added in 3.15")
+class TestKeywordArgumentsAddedIn315:
+    """`padded`, `wrapcol`, `ignorechars`, `canonical` and `pad` change no
+    bound: each is checked for behaviour on one short input."""
+
+    def test_padded_drops_or_stops_requiring_padding(self) -> None:
+        assert base64.b64encode(b"Hi", padded=False) == b"SGk"  # type: ignore[call-arg]
+        assert base64.b64decode(b"SGk", padded=False) == b"Hi"  # type: ignore[call-arg]
+        assert base64.b32encode(b"Hi", padded=False) == b"JBUQ"  # type: ignore[call-arg]
+        assert base64.b32decode(b"JBUQ", padded=False) == b"Hi"  # type: ignore[call-arg]
+        with pytest.raises(binascii.Error):
+            base64.b64decode(b"SGk")
+
+    def test_wrapcol_bounds_each_line(self) -> None:
+        for name in ("b64encode", "b32encode", "b32hexencode", "b16encode", "b85encode"):
+            encode: Any = getattr(base64, name)
+            for wrapcol in (10, 11):
+                lines = encode(b"x" * 100, wrapcol=wrapcol).split(b"\n")
+                assert len(lines) > 1 and max(map(len, lines)) <= wrapcol, (name, wrapcol)
+                assert b"".join(lines) == encode(b"x" * 100), (name, wrapcol)
+
+    def test_ignorechars_names_the_bytes_a_decoder_skips(self) -> None:
+        assert base64.b64decode(b"SGVs bG8=", ignorechars=b" ") == b"Hello"  # type: ignore[call-arg]
+        with pytest.raises(binascii.Error):
+            base64.b64decode(b"SGVs!bG8=", ignorechars=b" ")  # type: ignore[call-arg]
+        assert base64.b32decode(b"JBSW Y3DP", ignorechars=b" ") == b"Hello"  # type: ignore[call-arg]
+        assert base64.b16decode(b"48 65", ignorechars=b" ") == b"He"  # type: ignore[call-arg]
+        assert base64.b85decode(b"NM&q nZv", ignorechars=b" ") == b"Hello"  # type: ignore[call-arg]
+
+    def test_canonical_rejects_what_binascii_would_not_write(self) -> None:
+        assert base64.b64decode(b"YR==") == b"a"
+        with pytest.raises(binascii.Error):
+            base64.b64decode(b"YR==", canonical=True)  # type: ignore[call-arg]
+        with pytest.raises(binascii.Error):
+            base64.a85decode(b"!!!!!", canonical=True)  # type: ignore[call-arg]
+        assert base64.a85decode(b"z", canonical=True) == b"\0" * 4  # type: ignore[call-arg]
+
+    def test_z85encode_pad(self) -> None:
+        assert base64.z85encode(b"x") == b"CM"  # type: ignore[attr-defined]
+        assert len(base64.z85encode(b"x", pad=True)) == 5  # type: ignore[attr-defined]
+
+
+class TestUrlsafeDecodingAndReplacedCharacters:
+    """`urlsafe_b64decode()` accepts missing padding from 3.15 only; a `+` or
+    `/` the alphabet replaced warns from 3.15 only."""
+
+    def test_missing_padding(self) -> None:
+        if PY315:
+            assert base64.urlsafe_b64decode(b"-_8") == b"\xfb\xff"
+            with pytest.raises(binascii.Error):
+                base64.urlsafe_b64decode(b"-_8", padded=True)  # type: ignore[call-arg]
+        else:
+            with pytest.raises(binascii.Error):
+                base64.urlsafe_b64decode(b"-_8")
+
+    def test_replaced_characters_warn_from_3_15(self) -> None:
+        cases: list[tuple[Callable[[], bytes], type[Warning]]] = [
+            (lambda: base64.urlsafe_b64decode(b"+/8="), FutureWarning),
+            (lambda: base64.b64decode(b"+/8=", altchars=b"-_"), FutureWarning),
+            (lambda: base64.b64decode(b"+/8=", altchars=b"-_", validate=True), DeprecationWarning),
+        ]
+        for call, category in cases:
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                assert call() == b"\xfb\xff"
+            categories = [warning.category for warning in caught]
+            assert categories == ([category] if PY315 else []), categories
 
 
 class TestInputTypes:

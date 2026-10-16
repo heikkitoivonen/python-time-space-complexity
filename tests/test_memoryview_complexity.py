@@ -39,7 +39,10 @@ step in size (100,000 to 10,000,000 bytes) on the pinned interpreter
 
 * copying rows scale: x208 for `bytes(mv)`, x102
   for `==`, x101 for a first `hash()`, x103 for iteration and `in`, x103 for
-  `count()` and a missing `index()`;
+  `count()` and a missing `index()`, and x100 for `index()` bounded by
+  `stop` at 100,000 and 10,000,000 elements, where a 1,000-element region
+  costs the same in both views; `count()` over a view costs about x60
+  `bytes.count()` over the same 10,000,000 bytes, asserted above x10;
 * the exporter's hash is part of a first `hash()`: a two-byte slice of a fresh
   `bytes` costs x100 more over a 10,000,000-byte exporter than over a
   100,000-byte one, and x0.4 once the exporter's own hash is cached;
@@ -786,6 +789,43 @@ class TestCountAndIndex:
         )
         assert LINEAR_FLOOR < searching < LINEAR_CEILING, (
             f"x100 in n cost x{searching:.1f} for a missing index()"
+        )
+
+    @pytest.mark.timing
+    def test_unpacking_each_element_is_far_slower_than_the_bytes_method(
+        self, buffers: tuple[bytes, bytes]
+    ) -> None:
+        """`count()` over a view of 10,000,000 zero bytes against
+        `bytes.count()` over the same bytes: about x60 measured, asserted
+        above x10."""
+        data = buffers[1]
+        view = memoryview(data)
+
+        unpacking = best_time(lambda: count(view, 1), repeats=3)
+        native = best_time(lambda: data.count(1), repeats=3)
+
+        assert unpacking > native * 10, f"view {unpacking:.2e}s against bytes {native:.2e}s"
+
+    @pytest.mark.timing
+    def test_start_and_stop_bound_the_scan(self, buffers: tuple[bytes, bytes]) -> None:
+        """n is the region: 1,000 elements cost the same in both views, and
+        100x the region costs 100x."""
+        small, large = memoryview(buffers[0]), memoryview(buffers[1])
+
+        def missing(view: memoryview, stop: int) -> None:
+            try:
+                index(view, 1, 0, stop)
+            except ValueError:
+                pass
+
+        across_views = growth(
+            lambda: missing(small, 1_000), lambda: missing(large, 1_000), loops=10
+        )
+        across_regions = growth(lambda: missing(large, SMALL), lambda: missing(large, LARGE))
+
+        assert across_views < FLAT_CEILING, f"a 1,000-element region cost x{across_views:.2f}"
+        assert LINEAR_FLOOR < across_regions < LINEAR_CEILING, (
+            f"x100 in the region cost x{across_regions:.1f}"
         )
 
     @pytest.mark.timing

@@ -9,7 +9,7 @@ The `dict()` function creates dictionaries from various sources.
 | Empty dict | O(1) | O(1) | dict() |
 | From keyword arguments | O(n) avg, O(n^2) worst | O(n) | n = number of kwargs |
 | From list of pairs | O(n) avg, O(n^2) worst | O(n) | n = number of pairs |
-| From another dict | O(n) avg, O(n^2) worst | O(n) | n = dict size |
+| From another dict | O(n) avg, O(n^2) worst | O(n) | n = dict size; a source that had most of its items deleted costs its former size (see [dict](dict.md)) |
 | From iterable of pairs | O(n) avg, O(n^2) worst | O(n) | n = number of pairs |
 
 ## Basic Usage
@@ -229,8 +229,10 @@ d = dict(a=1)          # {'a': 1}
 pairs = [("a", 1), ("a", 2), ("a", 3)]
 d = dict(pairs)  # {'a': 3} - last value
 
-# Same with kwargs
-d = dict(a=1, b=2, a=3)  # {'a': 3, 'b': 2}
+# A keyword argument overrides the same key in the positional argument
+d = dict({"a": 1, "b": 2}, a=3)
+assert d == {'a': 3, 'b': 2}
+# Repeating a keyword, dict(a=1, a=3), is a SyntaxError
 ```
 
 ### Non-hashable Keys

@@ -1,5 +1,5 @@
 ---
-source_sha: 699f54d0f15380f0acf2cc37e53cc5f55cb222c850ade1649086deaeb841be2c
+source_sha: d24b620768bc53a40c6d0d39a6858400af74f38f08b069d06c242fea93ad2429
 translated: machine
 ---
 
@@ -85,6 +85,7 @@ bisect.insort(arr, 4)  # O(n) - must shift
 - **Python 3.7+**: `dict` の挿入順序が保たれる
 - **Python 3.8+**: 代入式（ウォルラス演算子）
 - **Python 3.10+**: データクラスに対するパターンマッチング
+- **Python 3.15+**: [profiling](profiling.md) パッケージ: 呼び出しごとにコストがかかるトレース型プロファイラと、サンプルごとにコストがかかるサンプリング型プロファイラ
 
 ## 関連項目
 

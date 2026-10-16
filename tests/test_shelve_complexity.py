@@ -5,8 +5,9 @@ is a stated number of backend calls plus one pickle or unpickle, and only
 iteration, `popitem()`, `clear()` and the writeback cache do more. Those
 counts are settled by observation, not timing: the backend is wrapped in a
 recording mapping that counts every call and the keys each `keys()` call
-returned, and `shelve.Pickler` and `shelve.Unpickler` are replaced by
-counting subclasses. Per-value space is settled by traced allocation over an
+returned, and `shelve.Pickler` and `shelve.Unpickler` (through 3.14) or
+`shelve.dumps` and `shelve.loads` (from 3.15) are replaced by counting
+stand-ins. Per-value space is settled by traced allocation over an
 in-memory shelf, so disk I/O plays no part.
 
 Measurement scope:
@@ -54,6 +55,12 @@ Measurement scope:
   importable `dbm` backends has `first()` or `set_location()`.
 * Every fenced Python block runs in its own subprocess and temporary working
   directory, and a mutated assertion in one of them is asserted to fail.
+* 3.15's `reorganize()` re-pickles the three cached entries, empties the
+  cache and calls the backend's `reorganize()` once; over a backend without
+  one it makes only the backend's `sync()`; through a real `dbm.dumb`
+  database it reaches that backend's method. A custom serializer and
+  deserializer are each called once for one store and one read, and either
+  alone raises `ShelveError`.
 
 Not settled here:
 
@@ -206,8 +213,21 @@ def counters(monkeypatch: pytest.MonkeyPatch) -> Counters:
             counts.unpickles += 1
             return super().load()
 
-    monkeypatch.setattr(shelve, "Pickler", CountingPickler)
-    monkeypatch.setattr(shelve, "Unpickler", CountingUnpickler)
+    if sys.version_info >= (3, 15):
+        # 3.15 pickles through `dumps`/`loads`, read when the shelf is built.
+        def counting_dumps(obj: Any, protocol: Any = None) -> bytes:
+            counts.pickles += 1
+            return pickle.dumps(obj, protocol)
+
+        def counting_loads(data: bytes) -> Any:
+            counts.unpickles += 1
+            return pickle.loads(data)
+
+        monkeypatch.setattr(shelve, "dumps", counting_dumps)
+        monkeypatch.setattr(shelve, "loads", counting_loads)
+    else:
+        monkeypatch.setattr(shelve, "Pickler", CountingPickler)
+        monkeypatch.setattr(shelve, "Unpickler", CountingUnpickler)
     return counts
 
 
@@ -723,6 +743,74 @@ class FakeCursorDatabase(dict[bytes, bytes]):
     def set_location(self, key: bytes) -> tuple[bytes, bytes]:
         self.position = self.order.index(key)
         return self._pair()
+
+
+@pytest.mark.skipif(sys.version_info < (3, 15), reason="the rows are Python 3.15+")
+class TestAddedIn315:
+    """`Shelf.reorganize()`, `ShelveError` and the `serializer` pair."""
+
+    def test_reorganize_syncs_then_calls_the_backends_once(self, counters: Counters) -> None:
+        shelf, backend = recorded_shelf(3, writeback=True)
+        backend.reorganize = lambda: backend.calls.append("reorganize")  # type: ignore[attr-defined]
+        shelf["k0"]
+        counters.pickles = 0
+        backend.calls.clear()
+
+        shelf.reorganize()
+
+        assert counters.pickles == 3, "sync() re-pickled every cached entry first"
+        assert shelf.cache == {}
+        assert backend.calls == ["setitem"] * 3 + ["sync", "reorganize"]
+
+    def test_reorganize_without_backend_support_only_syncs(self) -> None:
+        shelf, backend = recorded_shelf(3)
+
+        shelf.reorganize()
+
+        assert backend.calls == ["sync"], "the backend's sync(), and nothing else"
+
+    def test_reorganize_reaches_dbm_dumb(self, tmp_path: pathlib.Path) -> None:
+        import dbm.dumb
+
+        calls: list[int] = []
+        database: Any = dbm.dumb.open(str(tmp_path / "data"), "c")
+        original = database.reorganize  # type: ignore[attr-defined]
+        database.reorganize = lambda: (calls.append(1), original())  # type: ignore[attr-defined]
+        with shelve.Shelf(database) as shelf:
+            shelf["a"] = 1
+            del shelf["a"]
+            shelf.reorganize()  # type: ignore[attr-defined]
+        assert calls == [1]
+
+    def test_a_custom_pair_replaces_pickle(self) -> None:
+        dumped: list[Any] = []
+        loaded: list[bytes] = []
+
+        def serializer(value: Any, protocol: Any) -> bytes:
+            dumped.append(value)
+            return repr(value).encode()
+
+        def deserializer(data: bytes) -> Any:
+            loaded.append(data)
+            return data.decode()
+
+        shelf: Any = shelve.Shelf(
+            {},
+            serializer=serializer,  # type: ignore[call-arg]
+            deserializer=deserializer,  # type: ignore[call-arg]
+        )
+        shelf["k"] = [1, 2]
+
+        assert shelf["k"] == "[1, 2]"
+        assert dumped == [[1, 2]] and loaded == [b"[1, 2]"]
+
+    def test_one_without_the_other_raises_shelve_error(self) -> None:
+        shelve_error = getattr(shelve, "ShelveError")  # noqa: B009 - 3.15+
+        assert issubclass(shelve_error, Exception)
+        with pytest.raises(shelve_error):
+            shelve.Shelf({}, serializer=pickle.dumps)  # type: ignore[call-arg]
+        with pytest.raises(shelve_error):
+            shelve.Shelf({}, deserializer=pickle.loads)  # type: ignore[call-arg]
 
 
 class TestBsdDbShelf:

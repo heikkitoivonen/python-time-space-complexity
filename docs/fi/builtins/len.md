@@ -1,5 +1,5 @@
 ---
-source_sha: d121e0a8af5ee71633a5877aead4146b5a677a147d64343c227a3ee27348715b
+source_sha: d678eab417340ad37271b9efd45d109c51c9563b947ffd94873ec76ddb7be4e2
 translated: machine
 ---
 
@@ -12,12 +12,12 @@ Funktio `len()` palauttaa säiliöolion sisältämien alkioiden lukumäärän.
 | Tyyppi | Aika | Tila | Huomiot |
 |------|------|-------|-------|
 | `list` | O(1) | O(1) | Suora pituusattribuutti |
-| `tuple` | O(1) | O(1) | Muuttumaton, välimuistissa |
+| `tuple` | O(1) | O(1) | Pituus tallennettu olioon |
 | `dict` | O(1) | O(1) | Ylläpitää kokoa |
 | `set` | O(1) | O(1) | Ylläpitää kokoa |
-| `str` | O(1) | O(1) | Muuttumaton, välimuistissa |
-| `bytes` | O(1) | O(1) | Muuttumaton, välimuistissa |
-| `range` | O(1) | O(1) | Laskettu, ei tallennettu |
+| `str` | O(1) | O(1) | Pituus tallennettu olioon |
+| `bytes` | O(1) | O(1) | Pituus tallennettu olioon |
+| `range` | O(1) | O(1) | Tallennettu: lasketaan kerran, kun range luodaan |
 | `deque` | O(1) | O(1) | Ylläpitää kokoa |
 | `defaultdict` | O(1) | O(1) | Peritty sanakirjalta |
 | `OrderedDict` | O(1) | O(1) | Ylläpitää kokoa |
@@ -32,13 +32,13 @@ lst = [1, 2, 3, 4, 5]
 length = len(lst)  # O(1) - stored length
 
 tpl = (1, 2, 3)
-length = len(tpl)  # O(1) - immutable
+length = len(tpl)  # O(1) - length stored in the tuple
 
 dct = {'a': 1, 'b': 2}
 length = len(dct)  # O(1) - maintains size
 
 s = "hello"
-length = len(s)    # O(1) - immutable string
+length = len(s)    # O(1) - length stored in the string
 ```
 
 ## Omat oliot
@@ -173,10 +173,10 @@ for i in range(len(items)):
 
 ```python
 # Range length is O(1), not O(n)
-r = range(10**1000)
-length = len(r)  # O(1) - computed from start, stop, step
+r = range(10**9)
+length = len(r)  # O(1) - stored when the range was built
 
-# This is computed, not stored
+# Computed once from start, stop, step, then stored
 # So even huge ranges have O(1) length
 ```
 

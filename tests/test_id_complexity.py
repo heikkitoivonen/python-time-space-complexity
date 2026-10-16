@@ -16,8 +16,8 @@ Direct observation settles the behavioral and space claims without a stopwatch:
   recycling: `id([]) == id([])` evaluates to True in CPython while `[] is []` is False;
 * The `is` operator performs direct pointer comparison at the bytecode level (`IS_OP`) and
   allocates 0 auxiliary bytes in tracemalloc, whereas `id(a) == id(b)` allocates integer objects;
-* CPython caches small integers (-5 to 256) and singletons like `None`, so references to them
-  share identity;
+* CPython caches small integers (-5 to 256; -5 to 1024 from 3.15) and singletons like
+  `None`, so references to them share identity;
 * Cycle detection tracks active ancestors separately from completed nodes, accepting shared
   acyclic containers and visiting each container once;
 * Using raw `id()` values as cache keys can collide once objects are collected, whereas

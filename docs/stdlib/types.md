@@ -27,6 +27,9 @@ assume the proxied mapping is a `dict`; the proxy adds O(1) to whatever its mapp
 | `types.NoneType`, `types.EllipsisType`, `types.NotImplementedType` | O(1) | O(1) | The types of the three singletons |
 | `types.GenericAlias`, `types.UnionType` | O(1) | O(1) | What `list[int]` and `int \| str` build; `UnionType` is `typing.Union` from Python 3.14 |
 | `types.CapsuleType` | O(1) | O(1) | Python 3.13+ |
+| `types.FrameLocalsProxyType` | O(1) | O(1) | Python 3.15+. The type of a function frame's `f_locals`, a write-through view of the frame's variables rather than a copy; a module frame's `f_locals` is its globals `dict` |
+| `types.LazyImportType` | O(1) | O(1) | Python 3.15+. The proxy a lazy import binds. Reading the name it is bound to as a global loads the module and rebinds the name; finding it through `globals()` or a module's `__dict__` loads nothing |
+| `LazyImportType.resolve()` | O(1) once imported; the import's cost the first time | O(1), or the import's | Python 3.15+. Imports and returns the object the proxy stands for, a `sys.modules` probe once the module is loaded; the name the proxy is bound to is left as it is |
 | `isinstance(obj, types.FunctionType)`, or any name above | O(d) | O(1) | An exact type match is one comparison; see [isinstance](../builtins/isinstance.md) |
 
 ### Constructors
@@ -310,6 +313,7 @@ assert config.debug is False
 - **Python 3.13+**: Added `CapsuleType`; `SimpleNamespace` accepts a mapping or an iterable of
   pairs as a positional argument, and supports `copy.replace()`
 - **Python 3.14+**: `UnionType` is `typing.Union`, so `typing.Union[int, str]` is an instance too
+- **Python 3.15+**: Added `FrameLocalsProxyType` and `LazyImportType`
 
 ## Related Modules
 

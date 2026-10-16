@@ -17,8 +17,8 @@ the matches returned.
 | `glob.escape(pathname)` | O(n) | O(n) | n = name length; wraps each metacharacter in a character class |
 | `glob.has_magic(s)` | O(n) | O(1) | n = string length; one regex search for `*?[` |
 | `glob.translate(pat, *, recursive, include_hidden, seps)` | O(n) | O(n) | Python 3.13+; n = pattern length, producing a regex |
-| `glob.glob0(dirname, pattern)` | O(1) | O(1) | Deprecated in 3.13; one `lexists` check, no pattern matching |
-| `glob.glob1(dirname, pattern)` | O(e) | O(e + m) | Deprecated in 3.13; lists one directory and filters it |
+| `glob.glob0(dirname, pattern)` | O(1) | O(1) | Deprecated in 3.13 and removed in Python 3.15; one `lexists` check, no pattern matching |
+| `glob.glob1(dirname, pattern)` | O(e) | O(e + m) | Deprecated in 3.13 and removed in Python 3.15; lists one directory and filters it |
 | `glob.magic_check`, `glob.magic_check_bytes` | O(1) | O(1) | The compiled patterns `has_magic()` and `escape()` use |
 
 The first two space bounds apply to patterns confined to one directory, such as `*.py`.
@@ -269,29 +269,36 @@ with tempfile.TemporaryDirectory() as folder:
 
 ### The Deprecated Pair
 
-`glob0()` and `glob1()` are left over from an older API and have been deprecated since Python
-3.13, which points you at `glob(pattern, root_dir=...)` instead. They are worth a look only
+`glob0()` and `glob1()` are left over from an older API, deprecated since Python 3.13 and
+removed in Python 3.15; use `glob(pattern, root_dir=...)` instead. They are worth a look only
 because they show the split the table describes: `glob0` never matches a pattern, and `glob1` is
 the one-directory listing that `iglob` is built on.
 
 ```python
 import glob
 import os
+import sys
 import tempfile
 import warnings
 
 with tempfile.TemporaryDirectory() as folder:
     open(os.path.join(folder, 'a.py'), 'w').close()
 
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore', DeprecationWarning)
+    # glob(pattern, root_dir=...) is the replacement on every version
+    assert glob.glob('*.py', root_dir=folder) == ['a.py']
 
-        # glob0 checks one literal name - O(1)
-        assert glob.glob0(folder, 'a.py') == ['a.py']
-        assert glob.glob0(folder, '*.py') == []
+    if sys.version_info < (3, 15):
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
 
-        # glob1 lists the directory and filters it - O(e)
-        assert glob.glob1(folder, '*.py') == ['a.py']
+            # glob0 checks one literal name - O(1)
+            assert glob.glob0(folder, 'a.py') == ['a.py']
+            assert glob.glob0(folder, '*.py') == []
+
+            # glob1 lists the directory and filters it - O(e)
+            assert glob.glob1(folder, '*.py') == ['a.py']
+    else:
+        assert not hasattr(glob, 'glob0') and not hasattr(glob, 'glob1')
 ```
 
 ## Version Notes
@@ -299,6 +306,7 @@ with tempfile.TemporaryDirectory() as folder:
 - **Python 3.11+**: `include_hidden` on `glob()` and `iglob()`
 - **Python 3.13+**: `glob.translate()`; `glob0()` and `glob1()` are deprecated in favour of
   `glob(pattern, root_dir=...)`
+- **Python 3.15+**: `glob0()` and `glob1()` are removed
 
 ## Limitations
 

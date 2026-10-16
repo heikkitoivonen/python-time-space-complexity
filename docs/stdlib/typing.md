@@ -33,7 +33,7 @@ are all type variables, include it.
 | `typing.assert_never(arg)` | O(r) | O(r) | Python 3.11+; always raises. r = length of `repr(arg)`, built in full before the message is cut short |
 | `typing.evaluate_forward_ref(forward_ref, *, owner=None, globals=None, locals=None, type_params=None, format=None)` | O(e + t) | O(e + t) | Python 3.14+; e = the cost of evaluating the expression, t = the size of the type it resolves to, which is walked to resolve nested forward references |
 | `typing.no_type_check(arg)` | O(a log a) | O(a) | Visits every name `dir()` lists for a class, inherited ones included, and recurses into nested classes |
-| `typing.no_type_check_decorator(decorator)` | O(1) | O(1) | Wraps `decorator`; deprecated since 3.13 |
+| `typing.no_type_check_decorator(decorator)` | O(1) | O(1) | Removed in 3.15; up to 3.14 it wraps `decorator`, deprecated since 3.13 |
 
 ### Building parameterized types
 
@@ -49,6 +49,7 @@ keeps only recent subscriptions, which is why identity is not guaranteed.
 | `typing.Callable[[...], R]`, `typing.Concatenate[...]` | O(p) | O(p) | p = parameter types |
 | `typing.ClassVar[X]`, `typing.Final[X]`, `typing.Required[X]`, `typing.NotRequired[X]`, `typing.ReadOnly[X]` | O(1) | O(1) | `Required`/`NotRequired` are 3.11+, `ReadOnly` 3.13+ |
 | `typing.TypeGuard[X]`, `typing.TypeIs[X]`, `typing.Unpack[X]` | O(1) | O(1) | `Unpack` is 3.11+, `TypeIs` 3.13+ |
+| `typing.TypeForm[X]`, `typing.TypeForm(x)` | O(1) | O(1) | Python 3.15+. Subscripting builds an alias through the same cache; calling it returns `x` itself |
 
 ### Declaring types
 
@@ -87,6 +88,7 @@ keeps only recent subscriptions, which is why identity is not guaranteed.
 | `typing.final(f)`, `typing.override(m)` | O(1) | O(1) | Sets one attribute; `override` is 3.12+ |
 | `typing.runtime_checkable(cls)` | O(1) before 3.12.2; O(m) from 3.12.2 | O(1) before 3.12.2; O(m) from 3.12.2 | From 3.12.2 it records which members are not methods |
 | `typing.dataclass_transform(...)` | O(1) | O(1) | Python 3.11+; records its arguments for the type checker |
+| `typing.disjoint_base(cls)` | O(1) | O(1) | Python 3.15+; sets one attribute on the class and returns it |
 
 ### Markers with no parameters
 
@@ -94,6 +96,7 @@ keeps only recent subscriptions, which is why identity is not guaranteed.
 |-----------|------|-------|-------|
 | `typing.Any`, `typing.AnyStr`, `typing.NoReturn`, `typing.Never`, `typing.Self`, `typing.LiteralString`, `typing.NoDefault` | O(1) | O(1) | Module singletons; `Never`, `Self` and `LiteralString` are 3.11+, `NoDefault` 3.13+ |
 | `typing.TYPE_CHECKING` | O(1) | O(1) | `False` at runtime, always |
+| `typing.NoExtraItems` | O(1) | O(1) | Python 3.15+; a sentinel, what a `TypedDict` without `extra_items` reports as its `__extra_items__` |
 
 ### Aliases of concrete and abstract collections
 
@@ -104,7 +107,8 @@ parameterized forms, such as `List[int]` and `Mapping[str, int]`, raise `TypeErr
 |-----------|------|-------|-------|
 | `typing.List`, `typing.Dict`, `typing.Set`, `typing.FrozenSet`, `typing.Tuple`, `typing.Type`, `typing.Text` | O(1) | O(1) | Deprecated in favour of `list`, `dict` and friends |
 | `typing.Deque`, `typing.DefaultDict`, `typing.OrderedDict`, `typing.ChainMap`, `typing.Counter` | O(1) | O(1) | The `collections` equivalents |
-| `typing.AbstractSet`, `typing.MutableSet`, `typing.Mapping`, `typing.MutableMapping`, `typing.Sequence`, `typing.MutableSequence`, `typing.ByteString` | O(1) | O(1) | The `collections.abc` equivalents |
+| `typing.AbstractSet`, `typing.MutableSet`, `typing.Mapping`, `typing.MutableMapping`, `typing.Sequence`, `typing.MutableSequence` | O(1) | O(1) | The `collections.abc` equivalents |
+| `typing.ByteString` | O(1) | O(1) | The `collections.abc` equivalent, deprecated; from 3.15 it is left out of `typing.__all__` and every access warns `DeprecationWarning` |
 | `typing.MappingView`, `typing.ItemsView`, `typing.KeysView`, `typing.ValuesView` | O(1) | O(1) | The view types a mapping returns |
 | `typing.Iterable`, `typing.Iterator`, `typing.Generator`, `typing.Reversible`, `typing.Container`, `typing.Collection`, `typing.Hashable`, `typing.Sized` | O(1) | O(1) | |
 | `typing.Awaitable`, `typing.Coroutine`, `typing.AsyncIterable`, `typing.AsyncIterator`, `typing.AsyncGenerator`, `typing.ContextManager`, `typing.AsyncContextManager` | O(1) | O(1) | |
@@ -352,6 +356,9 @@ assert fields_of(Row) is fields_of(Row)  # O(1) after the first call
   `has_default()`
 - **Python 3.14+**: `evaluate_forward_ref`; annotations are evaluated lazily, `ForwardRef` no
   longer compiles its string when built, and `Union[X, Y]` produces `X | Y` and is not cached
+- **Python 3.15+**: `TypeForm`, `disjoint_base`, `NoExtraItems`, and `TypedDict`'s `closed` and
+  `extra_items`; `no_type_check_decorator` removed; `ByteString` warns on access and is no longer
+  in `typing.__all__`
 
 ## Related Modules
 

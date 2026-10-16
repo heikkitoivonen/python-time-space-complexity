@@ -80,6 +80,7 @@ bisect.insort(arr, 4)  # O(n) - must shift
 - **Python 3.7+**: `dict` insertion order preserved
 - **Python 3.8+**: Assignment expressions (walrus operator)
 - **Python 3.10+**: Pattern matching with dataclasses
+- **Python 3.15+**: The [profiling](profiling.md) package: a tracing profiler that costs per call and a sampling profiler that costs per sample
 
 ## See Also
 

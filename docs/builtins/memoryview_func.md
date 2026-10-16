@@ -38,8 +38,8 @@ O(1) as they are for numbers; a Python `__buffer__()` or a value with its own
 | `cast(format, shape)` | O(1) | O(1) | Reinterprets the same memory. C-contiguous views only, one side a byte format, the total byte size unchanged, and either the source or the new `shape` 1-D |
 | `toreadonly()` | O(1) | O(1) | A new read-only view of the same buffer |
 | `release()` | O(1) | O(1) | Reading or writing through the view afterwards raises `ValueError`; until then a `bytearray` exporter cannot be resized |
-| `count(value)` | O(n) | O(1) | 3.14+. Compares every element; 1-D views only |
-| `index(value, start, stop)` | O(n) | O(1) | 3.14+. Stops at the first match; `ValueError` when absent. 1-D views only |
+| `count(value)` | O(n) | O(1) | 3.14+. Compares every element; 1-D views only. Each element is unpacked into a Python object to be compared, so this is far slower than `bytes.count()` over the same memory |
+| `index(value, start, stop)` | O(n) | O(1) | 3.14+. Stops at the first match; `ValueError` when absent. 1-D views only. With `start` and `stop`, n is the elements between them, read in place. Unpacks elements as `count()` does |
 
 ## Attributes
 

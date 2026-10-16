@@ -1,5 +1,8 @@
+import json
 import math
+import subprocess
 import sys
+import textwrap
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -25,12 +28,15 @@ def linear_time_list(data: list[int]):
     distinct ints (about 8 MB at n = 256,000), so the per-element cost would
     rise with each cache level the data outgrows and push the fitted exponent
     towards the O(n log n) boundary. Counting to len(data) keeps the work per
-    element the same at every n.
+    element the same at every n. Both the loop and the count stay above the
+    small-int cache (-5 to 1,024 from 3.15), or at n = 1,000 every step would
+    reuse cached ints and the smallest size would skip the allocations every
+    other size pays.
     """
-    x = 0
-    for _ in range(len(data)):
+    x = 2_000
+    for _ in range(2_000, 2_000 + len(data)):
         x += 1
-    return x
+    return x - 2_000
 
 
 def heuristic_func(n):
@@ -180,15 +186,34 @@ class TestComplexityEstimator:
         fastest of 25 two-call batches: a batch short enough to run between
         interruptions keeps a loaded machine from inflating the largest sizes
         most. On a 4-core box at load 5, 30 runs gave slopes of 1.00-1.02.
+
+        The sizes are timed in a fresh interpreter. On 3.15.0, after the
+        timing tests of the 60 files collected before this one, the same
+        in-process measurement fitted O(n log n) in about one run in three,
+        and no single earlier file was enough to cause it.
         """
         n_values = [1000, 4000, 16000, 64000, 256000]
-        times = []
-        for n in n_values:
-            t = min(
-                estimate_complexity.measure_execution_time(linear_time_list, n, iterations=2)
-                for _ in range(25)
-            )
-            times.append(t)
+        child = textwrap.dedent(
+            f"""
+            import json, sys
+            sys.path[:0] = [{str(scripts_dir)!r}, {str(Path(__file__).parent)!r}]
+            import estimate_complexity
+            from test_complexity_estimator_feature import linear_time_list
+            print(json.dumps([
+                min(
+                    estimate_complexity.measure_execution_time(
+                        linear_time_list, n, iterations=2
+                    )
+                    for _ in range(25)
+                )
+                for n in {n_values!r}
+            ]))
+            """
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", child], capture_output=True, text=True, check=True
+        )
+        times = json.loads(result.stdout.splitlines()[-1])
 
         complexity, _ = estimate_complexity.detect_complexity(n_values, times)
         assert complexity == "O(n) (Linear)"

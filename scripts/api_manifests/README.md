@@ -5,7 +5,7 @@ Sphinx object inventory. Each entry records a documented name, kind, and source
 link. The metadata records the documentation release and the input SHA-256.
 
 Snapshots are included for every supported minor version: Python 3.11, 3.12,
-3.13, and 3.14. The running interpreter selects its matching snapshot;
+3.13, 3.14, and 3.15. The running interpreter selects its matching snapshot;
 APIs added or removed in another minor version do not enter its inventory.
 
 To audit a specific supported version without changing the project environment:

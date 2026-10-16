@@ -48,7 +48,7 @@ print(id(x) == id(y))    # False - non-overlapping lifetimes are required for re
 
 ### Singletons and Cached Values
 
-CPython caches small integers (-5 to 256), interned strings, and built-in
+CPython caches small integers (-5 to 256; -5 to 1024 from 3.15), interned strings, and built-in
 singletons like `None`, `True`, and `False`. References to these values share
 the same object identity.
 

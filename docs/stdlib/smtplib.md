@@ -25,12 +25,14 @@ outside every bound, and the Notes count the exchanges instead.
 | `SMTP.set_debuglevel(level)` | O(1) | O(1) | 1 writes every command and reply to standard error; 2 adds timestamps |
 | `SMTP.quit()` | O(n) | O(n) | Sends `QUIT`, forgets the `EHLO` answer and closes |
 | `SMTP.close()` | O(1) | O(1) | Closes the socket without sending `QUIT` |
+| `SMTP.default_port` | O(1) | O(1) | Class attribute, `SMTP_PORT`: the port `connect()` uses when given 0 |
 
 ### SMTP_SSL
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `smtplib.SMTP_SSL(host='', port=0, local_hostname=None, *, timeout=..., source_address=None, context=None)` | O(n) | O(n) | An `SMTP` that speaks TLS from the first byte, on port 465 by default. Without `context`, the server's certificate is not verified |
+| `SMTP_SSL.default_port` | O(1) | O(1) | Class attribute, `SMTP_SSL_PORT` |
 
 ### LMTP
 

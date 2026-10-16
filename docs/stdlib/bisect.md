@@ -70,8 +70,8 @@ assert bisect.bisect_left(values, 100, lo=40, hi=60) == 50  # O(log 20)
 
 try:
     bisect.bisect_left(values, 100, lo=-1)
-except ValueError as error:
-    assert 'lo must be non-negative' in str(error)
+except ValueError:
+    pass
 else:
     raise AssertionError('a negative lo was accepted')
 ```

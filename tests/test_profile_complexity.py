@@ -69,6 +69,9 @@ Measurement scope:
   cost more than 4x as much under `profile` as under `cProfile`, and the
   slowdown `profile` imposes on those calls is more than 10x the slowdown it
   imposes on 100,000 additions inside one frame.
+* The 3.15 deprecation is observed in a fresh interpreter importing the
+  module under `warnings.simplefilter('always')`: one `DeprecationWarning`
+  naming 3.17 on 3.15+, and none before.
 * Every fenced Python block runs in its own subprocess, and a mutated
   assertion in one of them is asserted to fail.
 
@@ -837,6 +840,42 @@ def _run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[st
         stdin=subprocess.DEVNULL,
         check=False,
     )
+
+
+class TestDeprecation:
+    """Python 3.15+: importing `profile` issues a `DeprecationWarning`
+    naming its removal in 3.17; earlier versions import it silently."""
+
+    @staticmethod
+    def import_warnings() -> list[str]:
+        source = (
+            "import warnings\n"
+            "with warnings.catch_warnings(record=True) as caught:\n"
+            "    warnings.simplefilter('always')\n"
+            "    import profile\n"
+            "print('\\n'.join(str(w.message) for w in caught\n"
+            "                 if issubclass(w.category, DeprecationWarning)))\n"
+        )
+        completed = subprocess.run(
+            [sys.executable, "-c", source],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            stdin=subprocess.DEVNULL,
+            check=True,
+        )
+        return [line for line in completed.stdout.splitlines() if line]
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="the deprecation starts in 3.15")
+    def test_importing_it_warns_from_315(self) -> None:
+        messages = self.import_warnings()
+
+        assert len(messages) == 1, messages
+        assert "3.17" in messages[0]
+
+    @pytest.mark.skipif(sys.version_info >= (3, 15), reason="3.15+ warns")
+    def test_importing_it_is_silent_before_315(self) -> None:
+        assert self.import_warnings() == []
 
 
 class TestDocumentedExamples:

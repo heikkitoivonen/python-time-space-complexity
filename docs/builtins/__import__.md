@@ -56,6 +56,8 @@ The costs here are what the statement adds to it.
 | `import pkg.mod as name` | O(1) | O(1) | Also an empty `fromlist`, then one attribute load for `mod`, which falls back to `sys.modules['pkg.mod']` when the attribute is not there yet |
 | `from pkg.mod import x, y` | O(f) | O(1) | `fromlist` is the names, so the call returns `pkg.mod`; then one attribute load per name, with the same `sys.modules` fallback |
 | `from . import x` | O(1) | O(1) | `level` is the number of leading dots and `name` is what follows, so the module's own `globals` resolve it |
+| `lazy import pkg.mod`, `lazy from pkg.mod import x` | O(1) | O(1) | Python 3.15+, at module level only. Binds a proxy without calling `__import__`: no finder runs, no body runs and nothing enters `sys.modules`, so a missing module is not noticed here. A module listed in `__lazy_modules__`, or a module-level import other than `from ... import *` under `sys.set_lazy_imports('all')`, behaves the same |
+| First use of a lazily imported name | The import's own cost, once | The import's own | The `__import__` call the eager statement would have made, then the global is rebound to the module or, for `from`, to that one name, so later reads are ordinary global loads. A failed import raises here, not at the statement |
 | `from pkg import *` | O(a), or O(g) with no `__all__` | O(a), or O(g) with no `__all__` | `fromlist` is `('*',)`, then every name in `__all__` - or, with no `__all__`, every name in the namespace that does not start with `_` - is bound in the importing namespace |
 
 ## A Probe Before a Search
@@ -185,7 +187,7 @@ assert __import__("json", fromlist=["*"]).__name__ == "json"  # O(a) checks, no 
 assert set(sys.modules) == loaded
 
 xml_package = __import__("xml", fromlist=["*"])  # O(a) checks, and four imports
-assert xml_package.__all__ == ["dom", "parsers", "sax", "etree"]
+assert {"dom", "parsers", "sax", "etree"} <= set(xml_package.__all__)
 assert {"xml.dom", "xml.parsers", "xml.sax", "xml.etree"} <= set(sys.modules)
 
 # A package with no __all__ has nothing to expand
@@ -276,6 +278,53 @@ finally:
     builtins.__import__ = original
 ```
 
+## Lazy Imports
+
+From 3.15 a `lazy` import binds a proxy and defers the whole call above to the first time the
+name is used, so a module-level dependency that a run never touches costs nothing. The first use
+pays the import once and rebinds the name; a module that cannot be found raises there.
+
+```python
+import sys
+
+if sys.version_info >= (3, 15):
+    import builtins
+    import types
+
+    calls = []
+    real_import = builtins.__import__
+
+    def recording(name, *args, **kwargs):
+        calls.append(name)
+        return real_import(name, *args, **kwargs)
+
+    builtins.__import__ = recording
+    try:
+        app = {'__name__': 'app'}
+        exec('lazy import difflib\n', app)  # O(1) - binds a proxy
+        assert calls == []  # __import__ was not called
+        assert 'difflib' not in sys.modules
+        assert type(app['difflib']) is types.LazyImportType
+
+        exec('matcher = difflib.SequenceMatcher', app)  # the import runs on first use
+        assert calls[0] == 'difflib'
+        assert type(app['difflib']) is types.ModuleType  # the proxy was replaced
+
+        seen = len(calls)
+        exec('again = difflib.SequenceMatcher', app)  # an ordinary global load now
+        assert len(calls) == seen
+
+        exec('lazy import no_such_module_here\n', app)  # O(1) - nothing is searched for
+        try:
+            exec('no_such_module_here', app)
+        except ModuleNotFoundError as error:
+            assert error.name == 'no_such_module_here'  # raised at first use
+        else:
+            raise AssertionError('a missing module imported')
+    finally:
+        builtins.__import__ = real_import
+```
+
 ## Common Patterns
 
 ### Importing a Computed Name
@@ -304,7 +353,8 @@ assert importlib.import_module(name).__name__ == name
 - Let repeated imports hit `sys.modules` instead of caching modules yourself - the probe is a
   dict lookup and it is what the statement already does
 - Import inside a function when a heavy dependency is used on one rare path; the module body
-  runs once, on the first call that reaches it
+  runs once, on the first call that reaches it. From 3.15 a module-level `lazy import` defers it
+  the same way and keeps the import at the top of the file
 
 ❌ **Avoid**:
 
@@ -321,6 +371,9 @@ assert importlib.import_module(name).__name__ == name
 - **Python 3.12+**: a `globals` whose `__package__` disagrees with `__spec__.parent` raises
   `DeprecationWarning` on a relative import; 3.10 and 3.11 raise `ImportWarning`. `__package__`
   wins either way
+- **Python 3.15+**: `lazy import` and `lazy from ... import` bind a proxy and run the import on
+  first use, and `__lazy_modules__` does the same for the names it lists; the import system no
+  longer sets a module's `__cached__`
 - **All Python 3**: `locals` is ignored, and `globals` is read only when `level` is positive
 - **All Python 3**: a dotted name with an empty `fromlist` returns the head of the name - the
   top-level package for an absolute import, and the first component under the anchor for a

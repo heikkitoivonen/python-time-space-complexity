@@ -37,7 +37,7 @@ operation that needs it pays O(L) once.
 | `str(path)`, `PurePath.as_posix()` | O(L) | O(L) | `str()` is cached after its first call |
 | `PurePath.as_uri()` | O(L) | O(L) | Deprecated on `PurePath` in 3.14; call it on a `Path` |
 | `PurePath.is_absolute()` | O(1) | O(1) | Reads the anchor |
-| `PurePath.is_reserved()` | O(L) | O(L) | Windows names only; deprecated in 3.13, which also made it check every component rather than the final one |
+| `PurePath.is_reserved()` | O(L) | O(L) | Windows names only; deprecated in 3.13, which also made it check every component rather than the final one, and removed in Python 3.15 in favour of `os.path.isreserved()` |
 | `PurePath.parser` | O(1) | O(1) | Python 3.13+; the `posixpath` or `ntpath` module behind the flavour |
 
 ### Path
@@ -66,7 +66,7 @@ operation that needs it pays O(L) once.
 | `Path.glob(pattern)` | O(E) | O(w) | For a pattern without `**`; E counts every entry scanned, matching or not |
 | `Path.glob('**/' + pattern)`, `Path.rglob(pattern)` | O(E) | O(w + P); O(A + Y) through 3.11 | `rglob(pattern)` is `glob('**/' + pattern)`. Through 3.11 it holds the listing of every directory on the branch being scanned (A = the total length of those entries' paths) and every path it has yielded (Y = their total length); bounds are for one `**` |
 | `Path.walk(top_down=True, on_error=None, follow_symlinks=False)` | O(E) | O(w + P) | Python 3.12+; `top_down=False` also holds every ancestor's listing until its subtree is done |
-| `Path.mkdir(mode=0o777, parents=False, exist_ok=False)` | O(1); O(k·L) with `parents=True` | O(1); O(k·L) with `parents=True` | Recurses once per missing component, like `os.makedirs()` |
+| `Path.mkdir(mode=0o777, parents=False, exist_ok=False, *, parent_mode=None)` | O(1); O(k·L) with `parents=True` | O(1); O(k·L) with `parents=True` | Recurses once per missing component, like `os.makedirs()`; `parent_mode`, the mode for those created parents, is Python 3.15+ |
 | `Path.rmdir()` | O(1) | O(1) | The directory must be empty |
 
 ### Files and links
@@ -470,6 +470,7 @@ with tempfile.TemporaryDirectory() as tmp:
 - **Python 3.14+**: `Path.copy()`, `Path.copy_into()`, `Path.move()`, `Path.move_into()`,
   `Path.info` and `pathlib.types` added; `PurePath.as_uri()` deprecated in favour of
   `Path.as_uri()`
+- **Python 3.15+**: `PurePath.is_reserved()` removed
 
 ## Related Modules
 

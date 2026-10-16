@@ -81,6 +81,7 @@ nav:
     - Float: builtins/float.md
     - float(): builtins/float_func.md
     - Format: builtins/format.md
+    - Frozendict: builtins/frozendict.md
     - Frozenset: builtins/frozenset.md
     - frozenset(): builtins/frozenset_func.md
     - Getattr: builtins/getattr.md
@@ -120,6 +121,7 @@ nav:
     - Repr: builtins/repr.md
     - Reversed: builtins/reversed.md
     - Round: builtins/round.md
+    - Sentinel: builtins/sentinel.md
     - Set: builtins/set_func.md
     - Setattr: builtins/setattr.md
     - Sets: builtins/set.md
@@ -276,6 +278,7 @@ nav:
     - Posixpath: stdlib/posixpath.md
     - Pprint: stdlib/pprint.md
     - Profile: stdlib/profile.md
+    - Profiling: stdlib/profiling.md
     - Pstats: stdlib/pstats.md
     - Pty: stdlib/pty.md
     - Pwd: stdlib/pwd.md
@@ -378,6 +381,7 @@ nav:
     - PyPy: implementations/pypy.md
   - Versions:
     - Versions Overview: versions/index.md
+    - Python 3.15: versions/py315.md
     - Python 3.14: versions/py314.md
     - Python 3.13: versions/py313.md
     - Python 3.12: versions/py312.md

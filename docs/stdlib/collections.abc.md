@@ -325,6 +325,7 @@ assert type(store.keys() & {"x"}) is set  # the Set mixins build a plain set
 ## Version Notes
 
 - **Python 3.12+**: `Buffer` is added, and `ByteString` is deprecated: checking against it or subclassing it emits a `DeprecationWarning`
+- **Python 3.15+**: `ByteString` is left out of `collections.abc.__all__`, and the first read of the attribute, or import of the name, in a process also emits a `DeprecationWarning`
 - **All Python 3**: the negative cache of every ABC is invalidated by any `register()` call that adds a new relationship, through the token `abc.get_cache_token()` exposes
 
 ## Related Modules

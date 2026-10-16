@@ -65,6 +65,13 @@ Measurement scope:
   growth is collecting and sorting the names. `format_exception()` of a
   `NameError` peaks more than 8 bytes higher per extra global from 100 to
   20,000 globals.
+* A `ModuleNotFoundError` with no traceback, for a name absent everywhere,
+  is turned into a `TracebackException` with one extra directory on
+  `sys.path` holding 10 and then 1,000 empty modules. `FileFinder.find_spec`
+  is counted: the two runs differ by exactly 990 calls from 3.15, one per
+  added module, and both make none before 3.15. A name one transposition
+  from a module in that directory is suggested, and a standard-library
+  name makes no lookups. `-S` and dotted names are not exercised.
 * The remaining rows are asserted by result: `format_tb()` equal to the
   formatted `extract_tb()`, `format_list()` and `print_list()` on tuples and
   `FrameSummary` objects, `from_list()` keeping `FrameSummary` objects by
@@ -105,6 +112,8 @@ Not settled here:
 from __future__ import annotations
 
 import gc
+import importlib
+import importlib.machinery
 import io
 import linecache
 import pathlib
@@ -132,7 +141,7 @@ EXPECTED_BLOCKS = 9
 # Blocks that need a newer interpreter than the oldest supported one, keyed by
 # a line only they contain.
 MINIMUM_VERSION = {
-    "Did you mean: 'timeout'?": (3, 12),
+    "Config().timeuot": (3, 12),
 }
 
 
@@ -887,7 +896,12 @@ class TestSuggestions:
         name = raised(lambda: exec("lenn", {}))  # noqa: S102 - needs its traceback
         imported = raised(lambda: exec("from os import getcdw", {}))  # noqa: S102
 
-        assert "Did you mean: 'timeout'?" in traceback.format_exception_only(attribute)[-1]
+        hint = (
+            "Did you mean '.timeout' instead of '.timeuot'?"
+            if sys.version_info >= (3, 15)
+            else "Did you mean: 'timeout'?"
+        )
+        assert hint in traceback.format_exception_only(attribute)[-1]
         assert "Did you mean: 'len'?" in traceback.format_exception(name)[-1]
         assert "Did you mean: 'getcwd'?" in traceback.format_exception_only(imported)[-1]
 
@@ -923,6 +937,79 @@ class TestSuggestions:
         ratio = durations[1] / durations[0]
 
         assert ratio > 20, f"100x the attributes cost x{ratio:.1f}"
+
+
+class TestAMissingModuleListsTheSearchPath:
+    """Module-name suggestion for a `ModuleNotFoundError` | O(E) | O(E),
+    Python 3.15+: building the `TracebackException` turns every entry of
+    every directory on `sys.path` into a spec. Counted at the finder, so the
+    test separates a walk of the directory from a single lookup."""
+
+    @staticmethod
+    def find_spec_calls(
+        monkeypatch: pytest.MonkeyPatch, directory: pathlib.Path, error: BaseException
+    ) -> int:
+        monkeypatch.syspath_prepend(str(directory))
+        importlib.invalidate_caches()
+        original = importlib.machinery.FileFinder.find_spec
+        calls = 0
+
+        def counting(self: Any, *args: Any, **kwargs: Any) -> Any:
+            nonlocal calls
+            calls += 1
+            return original(self, *args, **kwargs)
+
+        monkeypatch.setattr(importlib.machinery.FileFinder, "find_spec", counting)
+        traceback.TracebackException.from_exception(error)
+        monkeypatch.undo()
+        return calls
+
+    @staticmethod
+    def directory_of(tmp_path: pathlib.Path, name: str, modules: int) -> pathlib.Path:
+        directory = tmp_path / name
+        directory.mkdir()
+        for index in range(modules):
+            (directory / f"module_{index}.py").touch()
+        return directory
+
+    def test_each_entry_on_the_path_is_looked_up_from_3_15(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+    ) -> None:
+        """10 against 1,000 modules in one extra `sys.path` directory: the
+        lookups differ by one per added module from 3.15, and are zero before."""
+        error = ModuleNotFoundError("No module named 'absent_module'", name="absent_module")
+
+        small = self.find_spec_calls(monkeypatch, self.directory_of(tmp_path, "a", 10), error)
+        large = self.find_spec_calls(monkeypatch, self.directory_of(tmp_path, "b", 1_000), error)
+
+        if sys.version_info >= (3, 15):
+            assert large - small == 990, f"10 and 1,000 modules cost {small} and {large} lookups"
+        else:
+            assert (small, large) == (0, 0)
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="module suggestions are 3.15+")
+    def test_a_close_name_is_suggested(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+    ) -> None:
+        directory = self.directory_of(tmp_path, "c", 3)
+        (directory / "inventory.py").touch()
+        monkeypatch.syspath_prepend(str(directory))
+        importlib.invalidate_caches()
+        error = ModuleNotFoundError("No module named 'inventroy'", name="inventroy")
+
+        message = traceback.format_exception_only(error)[-1]
+
+        assert "Did you mean: 'inventory'?" in message
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="module suggestions are 3.15+")
+    def test_a_standard_library_name_is_not_searched_for(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+    ) -> None:
+        directory = self.directory_of(tmp_path, "d", 100)
+        assert "tkinter" in sys.stdlib_module_names
+        error = ModuleNotFoundError("No module named 'tkinter'", name="tkinter")
+
+        assert self.find_spec_calls(monkeypatch, directory, error) == 0
 
 
 def _blocks() -> list[tuple[int, str]]:

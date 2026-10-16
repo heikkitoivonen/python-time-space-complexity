@@ -1,5 +1,5 @@
 ---
-source_sha: 820e00694858fe62e65db7b6bf1626fd70706ad5e93b5d99a554161c563e5a09
+source_sha: c3d0c046d350983f8cbff5f407980822b6c6c9c702dd57ed250866f968c8fa9a
 translated: machine
 ---
 
@@ -56,7 +56,7 @@ translated: machine
 
 ## 覆盖范围
 
-- **Python 版本**：3.11-3.14
+- **Python 版本**：3.11-3.15
 - **实现**：CPython、PyPy、Jython、IronPython
 - **操作**：2200 多项内置与标准库操作
 - **更新**：随 Python 新版本发布定期更新
@@ -74,6 +74,7 @@ translated: machine
 ## 参考来源
 
 - [Python 官方文档](https://docs.python.org/3/)
+- [Python 官方时间复杂度页面](https://docs.python.org/3.15/builtins/time-complexity.html)（Python 3.15+）
 - [TimeComplexity 维基页面](https://wiki.python.org/moin/TimeComplexity)
 - [CPython 源代码](https://github.com/python/cpython)及实现细节
 - [性能测试](https://github.com/heikkitoivonen/python-time-space-complexity/tree/main/tests)与基准测试

@@ -5,14 +5,21 @@ Base32, Base16, Ascii85, Base85 and Z85. Every encoder and decoder is linear in 
 returns a new `bytes` object, so each costs its input length in time and in memory. The legacy
 `encode()` and `decode()` copy between files and hold one line.
 
-How fast that pass runs depends on the encoding. Base64, Base16 and the legacy file functions
-hand the work to `binascii`, which is C; Base32, Ascii85, Base85 and Z85 loop over each 5- or
-4-byte group in Python, so they are many times slower per byte at the same O(n).
+From Python 3.15 every encoding hands its pass to `binascii`, which is C. Before 3.15 only
+Base64, Base16 and the legacy file functions do; Base32, Ascii85, Base85 and Z85 loop over each
+5- or 4-byte group in Python, so they are many times slower per byte at the same O(n), and the
+85 family's peak memory is many times its output.
 
 `n` is the input length: bytes for an encoder, encoded characters for a decoder. An encoder's
-output is at most a fixed multiple of its input, plus padding - 4/3 for Base64, 8/5 for Base32, 2
+unwrapped output is at most a fixed multiple of its input, plus padding - 4/3 for Base64, 8/5 for Base32, 2
 for Base16 and 5/4 for the 85 family. `L` is the longest line in a file passed to `decode()`. The
 legacy functions' space is working memory; it excludes what the output file keeps.
+
+Python 3.15 adds keyword arguments that change no bound: `padded=False` drops the `=` padding
+when encoding and stops requiring it when decoding, `wrapcol` breaks the output into lines of at
+most `wrapcol` characters, `ignorechars` names bytes a decoder skips, and `canonical=True`
+rejects an encoding `binascii` would not have produced. `ignorechars` is a short set of bytes and
+is priced at O(1).
 
 ## Complexity Reference
 
@@ -20,17 +27,17 @@ legacy functions' space is working memory; it excludes what the output file keep
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `base64.b64encode(s, altchars=None)` | O(n) | O(n) | `altchars` replaces `+` and `/` with one extra translation pass |
+| `base64.b64encode(s, altchars=None)` | O(n) | O(n) | `altchars` replaces `+` and `/` |
 | `base64.b64decode(s, altchars=None, validate=False)` | O(n) | O(n) | Discards characters outside the alphabet; `validate=True` raises `binascii.Error` instead |
 | `base64.standard_b64encode(s)`, `base64.standard_b64decode(s)` | O(n) | O(n) | `b64encode()` and `b64decode()` with the standard alphabet |
-| `base64.urlsafe_b64encode(s)`, `base64.urlsafe_b64decode(s)` | O(n) | O(n) | `-` and `_` instead of `+` and `/` |
+| `base64.urlsafe_b64encode(s)`, `base64.urlsafe_b64decode(s)` | O(n) | O(n) | `-` and `_` instead of `+` and `/`; from Python 3.15 the decoder accepts input without its `=` padding |
 
 ### Base32 and Base16
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `base64.b32encode(s)` | O(n) | O(n) | A Python loop over 5-byte groups |
-| `base64.b32decode(s, casefold=False, map01=None)` | O(n) | O(n) | A Python loop over 8-character groups |
+| `base64.b32encode(s)` | O(n) | O(n) | `binascii.b2a_base32()` from Python 3.15; a Python loop over 5-byte groups before |
+| `base64.b32decode(s, casefold=False, map01=None)` | O(n) | O(n) | `binascii.a2b_base32()` from Python 3.15; a Python loop over 8-character groups before |
 | `base64.b32hexencode(s)`, `base64.b32hexdecode(s, casefold=False)` | O(n) | O(n) | Base32 with the extended hex alphabet |
 | `base64.b16encode(s)` | O(n) | O(n) | Uppercase hexadecimal |
 | `base64.b16decode(s, casefold=False)` | O(n) | O(n) | Rejects lowercase unless `casefold=True` |
@@ -39,10 +46,10 @@ legacy functions' space is working memory; it excludes what the output file keep
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `base64.a85encode(b, *, foldspaces=False, wrapcol=0, pad=False, adobe=False)` | O(n) | O(n) | A Python loop over 4-byte groups |
-| `base64.a85decode(b, *, foldspaces=False, adobe=False, ignorechars=b' \t\n\r\v')` | O(n) | O(n) | A Python loop over each character; skips `ignorechars` |
-| `base64.b85encode(b, pad=False)`, `base64.b85decode(b)` | O(n) | O(n) | The same loops with the Base85 alphabet |
-| `base64.z85encode(s)`, `base64.z85decode(s)` | O(n) | O(n) | Base85 plus one translation pass; Python 3.13+ |
+| `base64.a85encode(b, *, foldspaces=False, wrapcol=0, pad=False, adobe=False)` | O(n) | O(n) | `binascii.b2a_ascii85()` from Python 3.15; a Python loop over 4-byte groups before |
+| `base64.a85decode(b, *, foldspaces=False, adobe=False, ignorechars=b' \t\n\r\v')` | O(n) | O(n) | Skips `ignorechars`; `binascii.a2b_ascii85()` from Python 3.15, a Python loop over each character before |
+| `base64.b85encode(b, pad=False)`, `base64.b85decode(b)` | O(n) | O(n) | `binascii.b2a_base85()` and `a2b_base85()` from Python 3.15; Python loops before |
+| `base64.z85encode(s)`, `base64.z85decode(s)` | O(n) | O(n) | Python 3.13+. Base85 with the Z85 alphabet: one `binascii` call from Python 3.15, the Base85 loops plus one translation pass on 3.13 and 3.14 |
 
 ### Legacy interface
 
@@ -206,14 +213,15 @@ assert base64.b64decode(body) == image  # O(n)
 
 ✅ **Do**:
 
-- Use Base64 or Base16 for bulk data: they run in C, while the other encodings loop in Python
+- Before Python 3.15, use Base64 or Base16 for bulk data: they run in C, while the other
+  encodings loop in Python. From 3.15 all of them run in C
 - Stream large files with `encode()` and `decode()` when 76-character lines are acceptable output
 - Pass `validate=True` when stray characters in the input should be an error
 - Use the URL-safe alphabet for data that goes into URLs or file names
 
 ❌ **Avoid**:
 
-- Base32 or the 85 family for large payloads unless the format requires them
+- Base32 or the 85 family for large payloads before Python 3.15, unless the format requires them
 - Encoding a large file in fixed-size chunks with `b64encode()` and joining the pieces: a chunk
   whose length is not a multiple of 3 puts padding in the middle
 - Treating Base64 as protection: anyone can decode it
@@ -221,9 +229,18 @@ assert base64.b64decode(body) == image  # O(n)
 ## Version Notes
 
 - **Python 3.13+**: Added `z85encode()` and `z85decode()`
+- **Python 3.15+**: Base32, Ascii85, Base85 and Z85 run in C, through `binascii`
+- **Python 3.15+**: Added the `padded`, `wrapcol`, `ignorechars` and `canonical` keyword arguments
+  across the encoders and decoders, and `pad` to `z85encode()`
+- **Python 3.15+**: `urlsafe_b64decode()` no longer requires padding; pass `padded=True` to
+  require it
+- **Python 3.15+**: a `+` or `/` that the alphabet in use replaced, in the input of
+  `urlsafe_b64decode()` or of `b64decode()` with `altchars`, emits `FutureWarning`, or
+  `DeprecationWarning` from `b64decode()` with `validate=True`
 
 ## Related Modules
 
-- **[binascii](binascii.md)** - The C conversions under Base64 and Base16
+- **[binascii](binascii.md)** - The C conversions under Base64 and Base16, and under every
+  encoding from Python 3.15
 - **[codecs](codecs.md)** - `codecs.encode(data, 'base64')` uses `encodebytes()`
 - **[json](json.md)** - Carrying encoded binary data in text

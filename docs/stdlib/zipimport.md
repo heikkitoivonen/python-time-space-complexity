@@ -29,7 +29,7 @@ member at O(b); running a module's body is the module's own cost and is not pric
 | `zipimporter.get_source(fullname)` | O(b) | O(b) | Reads the `.py` member; `None` when the archive holds only bytecode for the module |
 | `zipimporter.get_data(pathname)` | O(b) | O(b) | Opens the archive and reads the member on every call; `OSError` if there is no such member |
 | `zipimporter.is_package(fullname)` | O(1) | O(1) | Name lookups only; raises `ZipImportError` if the module is not in the archive |
-| `zipimporter.load_module(fullname)` | O(b) | O(b) | Deprecated, and warns; reads and decodes the member once, then runs the module body |
+| `zipimporter.load_module(fullname)` | O(b) | O(b) | Removed in 3.15; use `exec_module()`. Up to 3.14 it warns, reads and decodes the member once, then runs the module body |
 | `zipimporter.invalidate_caches()` | O(1) | O(1) | Drops the cached directory, and the next lookup rereads it, O(n). Python 3.11 and 3.12 reread it here, O(n) |
 | `zipimporter.get_resource_reader(fullname)` | O(1) | O(1) | Each `files()` call on the reader opens the archive with `zipfile` and reads its central directory again, O(n) |
 | `zipimporter.archive`, `zipimporter.prefix` | O(1) | O(1) | The archive's path, and the subpath inside it: `''`, or ending in a separator |
@@ -200,6 +200,7 @@ with tempfile.TemporaryDirectory() as tmp:
   entries
 - **Python 3.14+**: A directory that has no entry of its own in the archive is found as a
   namespace package
+- **Python 3.15+**: `zipimporter.load_module()` was removed; use `exec_module()`
 
 ## Related Modules
 

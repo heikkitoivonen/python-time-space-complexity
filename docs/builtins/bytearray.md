@@ -11,7 +11,9 @@ its contents start, so removing a prefix moves that offset rather than the tail,
 `del` or by assigning a shorter slice at the front - which still costs the bytes it copies in.
 A change of length anywhere else shifts everything after it. Growing past the buffer copies
 the contents into a larger one; so does falling below half of it, which compacts them into a
-smaller one. Those are the two places a change of length allocates.
+smaller one. Those are the two places a change of length allocates, apart from `take_bytes()`
+(Python 3.15+): taking at least half of the contents gives the buffer away as the result, and
+what is left is copied into a new one.
 
 `n` is the bytes in the bytearray, `k` is the bytes in the other operand (the data copied in,
 the slice covered, or the items of an iterable), `m` is the bytes in a pattern (`sub`, `prefix`,
@@ -31,7 +33,7 @@ their input, as the byte-oriented codecs are. A structured codec can cost more.
 | `ba[a:b]`, `ba[a:b:step]` | O(k) | O(k) | A new `bytearray` of the k bytes covered; `memoryview(ba)` is the O(1) alternative |
 | `ba[a:b] = data` | O(n + k) | O(k), O(n) when the buffer grows or compacts | O(k) when the slice keeps its length; a change of length shifts the tail, except when it shortens a slice at the front, where the start offset moves instead. `data` is copied to a temporary unless it is another `bytearray` |
 | `del ba[i]`, `del ba[a:b]` | O(n) | O(1), O(n) on compaction | Shifts the tail; deleting a prefix advances the start offset instead, amortized O(1) |
-| `x in ba` | O(n + m) | O(1) | `x` is an `int` or bytes-like |
+| `x in ba` | O(n) | O(1) | `x` is an `int` or bytes-like; one longer than the bytearray returns at once |
 | `ba + other` | O(n + k) | O(n + k) | A new `bytearray` |
 | `ba += other` | O(k) amortized | O(k) amortized | In place; `other` is any bytes-like |
 | `ba * count` | O(n·count) | O(n·count) | A new `bytearray`; an empty one, at O(1), for a count of 0 or less |
@@ -56,14 +58,15 @@ their input, as the byte-oriented codecs are. A structured codec can cost more.
 | `copy()` | O(n) | O(n) | |
 | `reverse()` | O(n) | O(1) | In place |
 | `resize(size)` | O(n + size) worst case | O(size) | Python 3.14+. Added bytes are zeros; shrinking can be O(1), depending on reallocation and allocator costs. A negative size raises `ValueError` |
+| `take_bytes()`, `take_bytes(k)` | O(min(k, n - k)), O(n) worst case | O(min(k, n - k)), O(n) worst case | Python 3.15+. Removes the first k bytes, all of them by default, and returns them as a `bytes`; a negative argument counts from the end, so k is the bytes actually taken. Taking less than half copies the k bytes out and advances the start offset. Taking at least half copies the rest out and hands the buffer itself over, shrunk to k bytes: the worst case is a deleted prefix, which moves the k bytes to the buffer's start first, or an allocator that moves the buffer to shrink it. `BufferError` under a live `memoryview` |
 
 ### Searching
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `find(sub, start, end)`, `index(sub, start, end)` | O(n + m) | O(1) | `sub` is bytes-like or an `int`; `index()` raises `ValueError` when absent |
-| `rfind(sub, start, end)`, `rindex(sub, start, end)` | O(n·m) | O(1) | Worst case, absent patterns included: the reverse search has no linear-time fallback, where the forward one does |
-| `count(sub, start, end)` | O(n + m) | O(1) | Non-overlapping occurrences |
+| `find(sub, start, end)`, `index(sub, start, end)` | O(n) | O(1) | `sub` is bytes-like or an `int`; `index()` raises `ValueError` when absent. With `start` and `end`, n is the region searched, read in place; a `sub` longer than it returns at once |
+| `rfind(sub, start, end)`, `rindex(sub, start, end)` | O(n·m) | O(1) | Worst case, absent patterns included: the reverse search has no linear-time fallback, where the forward one does. n is the region searched, as for `find()` |
+| `count(sub, start, end)` | O(n) | O(1) | Non-overlapping occurrences; n is the region searched, as for `find()` |
 | `startswith(prefix, start, end)`, `endswith(suffix, start, end)` | O(m + q) | O(1) | Independent of n. Either accepts a tuple of q candidates, and then m is their total length |
 
 ### Transforming
@@ -208,14 +211,14 @@ length at each of the buffer's. `rsplit()` and `rpartition()` search the same wa
 haystack = bytearray(b"a" * 10_000)
 needle = b"ab" + b"a" * 98  # mismatches only at its second byte
 
-assert haystack.find(needle) == -1  # O(n + m) - linear in the worst case
+assert haystack.find(needle) == -1  # O(n) - linear in the worst case
 assert haystack.rfind(needle) == -1  # O(n·m) - m comparisons at each of n positions
-assert haystack.count(b"aa") == 5_000  # O(n + m) - non-overlapping
+assert haystack.count(b"aa") == 5_000  # O(n) - non-overlapping
 assert haystack.startswith(b"aaa")  # O(m) - the prefix's length, not the buffer's
 assert 97 in haystack  # O(n) - an int is a byte value
 
 try:
-    haystack.index(b"b")  # O(n + m)
+    haystack.index(b"b")  # O(n)
 except ValueError as error:
     assert "not found" in str(error)
 else:
@@ -254,7 +257,7 @@ lines = []
 
 for chunk in chunks:
     buffer += chunk  # O(k) amortized
-    while (end := buffer.find(b"\r\n")) != -1:  # O(n + m)
+    while (end := buffer.find(b"\r\n")) != -1:  # O(n)
         lines.append(bytes(buffer[:end]))  # O(k)
         del buffer[: end + 2]  # O(1) amortized - the start offset advances
 
@@ -283,6 +286,7 @@ assert bytes(message) == b"\x01\x00\x07payload\x00"  # O(n) - freeze it once, at
 - Build with `append()`, `+=` or `extend()` and call `bytes()` once at the end; the total stays linear, where `bytes + bytes` copies everything already accumulated every time
 - Drop a consumed prefix with `del buffer[:k]`, which is amortized O(1); `pop(0)` in a loop shifts the whole buffer every time
 - Read a region through `memoryview(ba)` when it does not need to be copied; a slice copies its k bytes
+- On Python 3.15+, finish with `take_bytes()`, which hands the buffer itself over as the `bytes`, where `bytes(ba)` copies all n bytes into a new one
 - Prefer the forward `find()`, `index()`, `split()` and `partition()` to their `r` counterparts on input you do not control; only the forward search is linear in the worst case
 
 ❌ **Avoid**:
@@ -294,6 +298,7 @@ assert bytes(message) == b"\x01\x00\x07payload\x00"  # O(n) - freeze it once, at
 
 ## Version Notes
 
+- **Python 3.15+**: Added `take_bytes()`
 - **Python 3.14+**: Added `resize()`
 - **All Python 3**: A bytearray is unhashable, and a live `memoryview` of it blocks every change of length with `BufferError`
 

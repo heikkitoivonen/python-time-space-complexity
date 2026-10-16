@@ -54,6 +54,20 @@ Measurement scope:
   the `January`/`February` deprecation warnings are guarded on
   `sys.version_info`, and the plain-int weekday constants on the versions
   before.
+* 3.15 only: `standalone_month_name` and `standalone_month_abbr` hold 13
+  names with `''` at 0, equal to `month_name` and `month_abbr` in the C
+  locale, and join the per-access counting test above. Substituted name
+  lists show `formatmonthname()` (text and HTML) taking the standalone name
+  on 3.15 and the plain one before. With Monday named `Mon` and the other
+  days 12 characters, `formatweekday(0, 9)` gives the abbreviation on 3.15
+  and `Mon` before; with every name under nine characters, width 4 gives the
+  full name on 3.15 and the abbreviation before. So the threshold follows
+  the longest name on 3.15 and stays 9 before.
+* `formatyearpage()` starts with `<!DOCTYPE html>` and carries
+  `<meta charset>` for the given encoding, UTF-8 by default, on 3.15, and
+  starts with the XML declaration before; the year table and its twelve
+  month tables carry `border`, `cellpadding` and `cellspacing` before 3.15
+  only.
 * Every fenced Python block runs in its own subprocess, so the module-level
   first weekday and the locale cannot leak between them, and a mutated
   assertion in one of them is asserted to fail.
@@ -75,7 +89,8 @@ Not settled here:
   `str.center()` and per-line joins; only `formatmonth()` is timed. `m` above
   12 widens the centered year title before it is stripped, and is outside the
   bounds.
-* `calendar.main()` (the `python -m calendar` interface), `different_locale`,
+* `HTMLCalendar.formatmonthpage()` (3.15), `calendar.main()` (the
+  `python -m calendar` interface), `different_locale`,
   `format()`, `formatstring()`, `mdays` and the shared calendar `c` are not
   in the module's documented API and are left off the page.
 * That the locale classes are not thread-safe follows from `LC_TIME` being
@@ -343,6 +358,31 @@ class TestTextLayoutGrows:
         assert self.text.formatweekday(2, 2) == "We"
         assert self.text.formatweekheader(3).split() == list(calendar.day_abbr)
 
+    def test_the_full_name_threshold_is_the_longest_name_from_3_15(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        new = sys.version_info >= (3, 15)
+        monkeypatch.setattr(calendar, "day_abbr", ["Ab"] * 7)
+
+        # Monday is short; another day's name sets the threshold.
+        monkeypatch.setattr(calendar, "day_name", ["Mon", *(["L" * 12] * 6)])
+        assert self.text.formatweekday(0, 9) == ("Ab".center(9) if new else "Mon".center(9))
+        assert self.text.formatweekday(0, 12) == "Mon".center(12)
+
+        # Every name shorter than nine: the threshold falls below nine from 3.15.
+        monkeypatch.setattr(calendar, "day_name", ["Mo", *(["Long"] * 6)])
+        assert self.text.formatweekday(0, 4) == ("Mo".center(4) if new else "Ab".center(4))
+
+    def test_month_headings_use_the_standalone_names_from_3_15(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        names = ["", *(f"S{month}" for month in range(1, 13))]
+        monkeypatch.setattr(calendar, "standalone_month_name", names, raising=False)
+
+        expected = "S2 2024" if sys.version_info >= (3, 15) else "February 2024"
+        assert self.text.formatmonthname(2024, 2, 0) == expected
+        assert expected in calendar.HTMLCalendar().formatmonthname(2024, 2)
+
     def test_widths_below_the_minimum_are_raised(self) -> None:
         assert self.text.formatmonth(2024, 2, 0, 0) == self.text.formatmonth(2024, 2, 2, 1)
 
@@ -457,7 +497,14 @@ class TestHTMLCalendar:
         page = self.html.formatyearpage(2024, encoding="ascii")
 
         assert isinstance(page, bytes)
-        assert b'encoding="ascii"' in page
+        default = self.html.formatyearpage(2024)
+        if sys.version_info >= (3, 15):
+            assert page.startswith(b"<!DOCTYPE html>\n")
+            assert b'<meta charset="ascii">' in page and b"<?xml" not in page
+            assert b'<meta charset="utf-8">' in default
+        else:
+            assert page.startswith(b'<?xml version="1.0" encoding="ascii"?>')
+            assert default.startswith(b'<?xml version="1.0" encoding="utf-8"?>')
         assert b'href="calendar.css"' in page
         assert b"<link" not in self.html.formatyearpage(2024, css=None)
 
@@ -475,7 +522,12 @@ class TestHTMLCalendar:
 
         for fragment in ['class="empty"', 'class="d3"', 'class="h0"', 'class="m"', 'class="mh"']:
             assert fragment in year
-        assert year.startswith('<table border="0" cellpadding="0" cellspacing="0" class="y">')
+        first_line = year.splitlines()[0]
+        assert first_line.startswith("<table") and first_line.endswith('class="y">')
+        old = sys.version_info < (3, 15)
+        assert year.count("<table") == 13
+        for attribute in ("border=", "cellpadding=", "cellspacing="):
+            assert year.count(attribute) == (13 if old else 0), attribute
         assert 'class="yh"' in year
         assert 'class="empty"' not in self.html.formatyear(2024)
 
@@ -558,6 +610,14 @@ class TestNamesAreFormattedPerAccess:
             (calendar.day_abbr, "_localized_day", "_days", 4),
             (calendar.month_name, "_localized_month", "_months", 1),
             (calendar.month_abbr, "_localized_month", "_months", 12),
+            *(
+                [
+                    (calendar.standalone_month_name, "_localized_month", "_months", 2),
+                    (calendar.standalone_month_abbr, "_localized_month", "_months", 11),
+                ]
+                if sys.version_info >= (3, 15)
+                else []
+            ),
         ],
     )
     def test_every_access_calls_the_formatter(
@@ -592,6 +652,17 @@ class TestNamesAreFormattedPerAccess:
         assert calendar.month_name[0] == calendar.month_abbr[0] == ""
         assert list(calendar.day_name)[6] == "Sunday"
         assert list(calendar.month_abbr)[12] == "Dec"
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="added in 3.15")
+    def test_the_standalone_names(self) -> None:
+        module: Any = calendar  # typeshed does not list the 3.15 names yet
+        name = module.standalone_month_name
+        abbr = module.standalone_month_abbr
+
+        assert len(name) == len(abbr) == 13 and name[0] == abbr[0] == ""
+        # The C and POSIX locales have no separate standalone forms.
+        assert list(name) == list(calendar.month_name)
+        assert list(abbr) == list(calendar.month_abbr)
 
 
 DAY_NAMES = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]

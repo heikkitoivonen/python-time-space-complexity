@@ -1,11 +1,13 @@
 ---
-source_sha: 017611c2d2bcc901231a4ffb2170bb79a9c5ea0033777a6cac77c8344e2faf84
+source_sha: 65a8e42df7b8e94caa84a3882f8713b92843278026321b9aa5d0c0ff5c017968
 translated: machine
 ---
 
 # 集合操作的复杂度
 
 `set` 类型是由唯一元素组成的无序集合。在 CPython 中它以哈希表实现，与字典类似。
+
+`n` 是集合中的元素个数，`m` 是另一个操作数中的元素个数。元素的哈希和比较视为 O(1)。
 
 ## 复杂度参考
 
@@ -19,17 +21,21 @@ translated: machine
 | `clear()` | O(n) | O(1) | 释放全部 |
 | `x in set` | 平均 O(1)，最坏 O(n) | O(1) | 哈希查找；冲突会导致 O(n) |
 | `copy()` | O(n) | O(n) | 浅拷贝 |
-| `union(other)` | O(n+m) | O(n+m) | n、m = 集合大小 |
-| `intersection(other)` | O(min(n,m)) | O(min(n,m)) | 遍历较小的集合 |
-| `difference(other)` | O(n) | O(n) | n = 集合大小 |
-| `symmetric_difference(other)` | O(n+m) | O(n+m) | 组合的集合操作 |
-| `issubset()` | O(n) | O(1) | 检查所有元素 |
+| `union(other)`, `s \| other` | O(n+m) | O(n+m) | n、m = 集合大小 |
+| `intersection(other)`, `s & other` | O(min(n,m))；若 `other` 不是集合则为 O(m) | O(min(n,m)) | 遍历较小的集合 |
+| `difference(other)`, `s - other` | O(n)；若 `other` 不是集合则为 O(n+m) | O(n) | n = 集合大小 |
+| `symmetric_difference(other)`, `s ^ other` | O(n+m) | O(n+m) | 组合的集合操作 |
+| `issubset()` | O(n)；若 `other` 不是集合则为 O(n+m) | O(1)；若 `other` 不是集合则为 O(m) | 检查所有元素 |
 | `issuperset()` | O(m) | O(1) | m = 另一个集合的大小 |
-| `isdisjoint()` | O(min(n,m)) | O(1) | 可提前终止 |
-| `update(other)` | O(m) | O(1) | 原地并集；m = len(other) |
-| `difference_update(other)` | O(min(n,m)) | O(1) | 原地差集，遍历较小的一侧 |
-| `intersection_update(other)` | O(n) | O(1) | 原地交集；会重建集合 |
-| `symmetric_difference_update(other)` | O(m) | O(1) | 原地对称差集 |
+| `isdisjoint()` | O(min(n,m))；若 `other` 不是集合则为 O(m) | O(1) | 可提前终止 |
+| `update(other)`, `s \|= other` | O(m) | O(1) | 原地并集；m = len(other) |
+| `difference_update(other)`, `s -= other` | O(min(n,m))；若 `other` 不是集合则为 O(m) | O(n) | 原地差集，遍历较小的一侧 |
+| `intersection_update(other)`, `s &= other` | O(n)；若 `other` 不是集合则为 O(n+m) | O(min(n,m)) | 原地交集；重建集合并释放旧表，因此即使 `other` 很小也是 O(n) |
+| `symmetric_difference_update(other)`, `s ^= other` | O(m) | O(1)；若 `other` 不是集合则为 O(m) | 原地对称差集 |
+
+运算符形式只接受 set 和 frozenset；方法还接受任意可迭代对象。最坏情况下，当所有元素的哈希值相同时，O(1) 操作需要 O(n)，而在一个集合中查找另一个集合全部元素的操作也会相应变慢。
+
+用 `remove()`、`discard()` 或 `pop()` 删除元素不会缩小哈希表。删除大部分元素后，遍历表的操作（迭代、`copy()`、`|`、`-`、`^`、比较和 `set(s)`）仍然耗费与集合先前大小成正比的时间，直到之后的插入触发重新调整大小。`len()` 和成员测试不受影响，用 `-=`、`&=` 或其对应方法删除大部分元素则会留下紧凑的表。
 
 ## 实现细节
 
@@ -57,6 +63,25 @@ translated: machine
 {1, 2} ^ {2, 3}  # {1, 3} - O(len(s1) + len(s2))
 ```
 
+### 删除不会缩小哈希表
+
+```python
+import sys
+
+s = set(range(100_000))
+full = sys.getsizeof(s)
+for i in range(10, 100_000):
+    s.discard(i)                   # O(1) each
+
+assert len(s) == 10                # O(1)
+assert sys.getsizeof(s) == full    # still sized for 100,000 elements
+items = list(s)                    # O(100,000): walks the old table
+
+s = s.copy()                       # O(100,000) once
+assert sys.getsizeof(s) < full     # sized for 10 elements
+assert sorted(s) == sorted(items)  # O(10)
+```
+
 ### 成员检测
 
 ```python
@@ -81,7 +106,6 @@ numbers_set = {1, 2, 3, 4, 5}
 ## 版本说明
 
 - **所有 Python 3 版本**：核心复杂度未变
-- **Python 3.9+**：新增集合并集/交集运算符
 
 ## 各实现对比
 
@@ -114,6 +138,8 @@ JIT 编译可能带来额外优化。
 ### 去重
 
 ```python
+items = [3, 1, 3, 2, 1]
+
 # Bad: preserves list, but O(n²)
 unique = []
 for item in items:
@@ -142,7 +168,7 @@ filtered = [x for x in large_list if x not in exclusions_set]
 
 ## 相关类型
 
-- **[Frozenset](index.md)** - 不可变集合
+- **[Frozenset](frozenset.md)** - 不可变集合
 - **[Dict](dict.md)** - 可变映射
 - **[Deque](../stdlib/collections.md#deque)** - 有序容器
 

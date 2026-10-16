@@ -66,7 +66,9 @@ Measurement scope:
   there through a second collection. Three registered callbacks receive six
   calls per collection, `'start'` then `'stop'`.
 * `get_threshold()` round-trips `set_threshold()`, `get_count()` has three
-  entries, `get_stats()` three dicts with the same keys, and an
+  entries, `get_stats()` three dicts with the same keys (`candidates` and
+  `duration` added from 3.15, which a `gc.callbacks` hook also sees in its
+  `'stop'` info on 3.15 and not before), and an
   out-of-range generation raises `ValueError` from `collect()` and
   `get_objects()`.
 * Every fenced Python block runs in its own subprocess, and a mutated
@@ -478,7 +480,29 @@ class TestSettingsAndCounters:
         assert len(gc.get_count()) == 3
         stats = gc.get_stats()
         assert len(stats) == 3
-        assert all(set(s) == {"collections", "collected", "uncollectable"} for s in stats)
+        keys = {"collections", "collected", "uncollectable"}
+        if sys.version_info >= (3, 15):
+            keys |= {"candidates", "duration"}
+        assert all(set(s) == keys for s in stats)
+
+    def test_callbacks_see_the_same_keys_at_stop(self) -> None:
+        seen: list[set[str]] = []
+
+        def record(phase: str, info: dict[str, Any]) -> None:
+            if phase == "stop":
+                seen.append(set(info))
+
+        gc.callbacks.append(record)
+        try:
+            gc.collect(0)
+        finally:
+            gc.callbacks.remove(record)
+        added = {"candidates", "duration"}
+        assert seen
+        if sys.version_info >= (3, 15):
+            assert all(added <= keys for keys in seen)
+        else:
+            assert all(added.isdisjoint(keys) for keys in seen)
 
     def test_an_invalid_generation_raises(self) -> None:
         with pytest.raises(ValueError):

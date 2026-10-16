@@ -50,7 +50,7 @@ Measurement scope:
 * On Linux, `mac_ver()`, `win32_ver()`, `win32_edition()`, `win32_is_iot()`,
   `ios_ver()` and `android_ver()` are asserted to return their defaults with
   no command run and no file opened; `java_ver()` its defaults, with a
-  `DeprecationWarning` on 3.13+. On macOS, `mac_ver()` is asserted to open
+  `DeprecationWarning` on 3.13 and 3.14, and is absent from 3.15. On macOS, `mac_ver()` is asserted to open
   `SystemVersion.plist` on each of two calls.
 * Every fenced Python block runs in its own subprocess, so the module's caches
   start cold in each, and a mutated assertion in one of them is asserted to
@@ -489,12 +489,20 @@ class TestOtherOperatingSystems:
         assert commands == []
         assert opened[0] == []
 
+    @pytest.mark.skipif(sys.version_info >= (3, 15), reason="java_ver() is removed in 3.15")
     def test_java_ver_returns_defaults(self) -> None:
+        java_ver = getattr(platform, "java_ver")  # noqa: B009 - gone in 3.15
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            assert platform.java_ver() == ("", "", ("", "", ""), ("", "", ""))
+            assert java_ver() == ("", "", ("", "", ""), ("", "", ""))
         deprecated = [w for w in caught if issubclass(w.category, DeprecationWarning)]
         assert len(deprecated) == (1 if sys.version_info >= (3, 13) else 0)
+
+    def test_java_ver_is_removed_from_3_15(self) -> None:
+        if sys.version_info < (3, 15):
+            pytest.skip("version: present through 3.14")
+
+        assert not hasattr(platform, "java_ver")
 
     @pytest.mark.skipif(sys.platform != "darwin", reason="macOS-only plist")
     def test_mac_ver_reads_the_plist_every_call(self, opened: tuple[list[str], list[int]]) -> None:

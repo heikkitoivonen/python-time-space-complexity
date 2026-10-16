@@ -32,8 +32,9 @@ Measurement scope:
   entry rather than six, so the cache is emptied rather than evicted; seven
   formats used in rotation for 70 calls find their format missing on every
   call; and `datetime.datetime.strptime()` fills the same dictionary.
-* The 3.13 `DeprecationWarning` for `%m-%d` without a year is asserted
-  present on 3.13+ and absent before it, guarded on `sys.version_info`.
+* The `DeprecationWarning` for `%m-%d` without a year is asserted present
+  on 3.13 and 3.14 and absent before them; from 3.15 the same format raises
+  `ValueError`, guarded on `sys.version_info`.
 * `sleep()` is asserted to block for at least the requested 0.05 s. For
   sleeps of 0.2 s and 1 s, the least `process_time()` across three samples
   must be under one quarter of the requested wait. These durations allow
@@ -695,13 +696,20 @@ class TestStrptimeCache:
 
         assert fmt in _strptime._regex_cache
 
-    def test_a_day_without_a_year_warns_from_313(self) -> None:
+    @pytest.mark.skipif(sys.version_info >= (3, 15), reason="3.15 raises instead")
+    def test_a_day_without_a_year_warns_on_313_and_314(self) -> None:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             time.strptime("01-30", "%m-%d")
 
         deprecations = [w for w in caught if issubclass(w.category, DeprecationWarning)]
         assert len(deprecations) == (1 if sys.version_info >= (3, 13) else 0)
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="3.15 raises instead")
+    def test_a_day_without_a_year_raises_from_315(self) -> None:
+        with pytest.raises(ValueError, match="without a year directive"):
+            time.strptime("01-30", "%m-%d")
+        assert time.strptime("2024-01-30", "%Y-%m-%d").tm_mday == 30
 
 
 class TestTimezoneAttributes:

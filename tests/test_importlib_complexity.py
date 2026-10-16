@@ -41,7 +41,9 @@ Measurement scope:
   the `.pyc` path then the source; the second import in the same process
   reads only the `.pyc` and compiles nothing; a rewrite that keeps the size
   and the mtime is served stale from the `.pyc`; a changed mtime at the same
-  size compiles again, and so does a changed size at the same mtime. `get_code()` from a valid `.pyc` over 1,000 and 20,000
+  size compiles again, and so does a changed size at the same mtime. The
+  module's `__spec__.cached` is the `cache_from_source()` path, and the
+  module has a `__cached__` attribute before 3.15 and none from 3.15. `get_code()` from a valid `.pyc` over 1,000 and 20,000
   assignment lines costs more than 5x in a timing test. `cache_from_source()`
   and `source_from_cache()` round-trip a path that does not exist.
   `source_hash()` is 8 bytes and, over 100 KB against 10 MB, costs between
@@ -70,7 +72,17 @@ Measurement scope:
   one, without `invalidate_caches()`. A directory without `__init__.py` on
   the first entry loses to a regular module of the same name on the second. `NamespaceLoader` returns `''`, a code
   object, `True` and `None` from `get_source()`, `get_code()`,
-  `is_package()` and `create_module()`.
+  `is_package()` and `create_module()`. From 3.15 a namespace package's
+  `__path__` is a `NamespacePath`; one built directly with a counting
+  finder answers iteration, `len()` and `in` without calling it, calls it
+  once after `sys.path` grows however often it is then iterated, and once
+  more after `importlib.invalidate_caches()`.
+* From 3.15 the `discover()` defaults return `()`. `FileFinder.discover()`
+  over 10 and 1,000 modules yields every module and calls `find_spec()`
+  once per module per call: 20 and 2,000 calls for two calls each.
+  `PathFinder.discover()` resolves no path entry until consumed, then
+  yields the one module on a one-entry `sys.path`, and raises `ValueError`
+  for a module spec as `parent`. The names are asserted absent before 3.15.
 * `InspectLoader.get_code()` calls `get_source()` and `source_to_code()` on
   every call and returns a fresh code object each time; `ExecutionLoader.get_code()` stamps
   `get_filename()` into it. A `SourceLoader` subclass's `get_code()` calls
@@ -79,8 +91,12 @@ Measurement scope:
   `MAGIC_NUMBER`; when `get_data()` returns the bytes just written, the
   second call reads no source and compiles nothing. Default methods return
   `None`, raise `ImportError` or `OSError` as the rows say, and the
-  machinery classes are registered with the ABCs. `load_module()` warns
-  `DeprecationWarning` and runs the body. `SourcelessFileLoader.get_code()`
+  machinery classes are registered with the ABCs. Before 3.15
+  `load_module()` warns `DeprecationWarning` and runs the body; from 3.15 it
+  is absent from `Loader`, `InspectLoader`, `FileLoader`,
+  `SourceFileLoader` and `NamespaceLoader`. `InspectLoader.get_code()`
+  passes `source_to_code()` a third argument, the name `'mod'`, from 3.15
+  only. `SourcelessFileLoader.get_code()`
   returns the code from a `.pyc` and `get_source()` `None`;
   `ExtensionFileLoader` returns `None` from `get_code()` and `get_source()`
   without loading. `BuiltinImporter` and `FrozenImporter` find a built-in
@@ -118,8 +134,21 @@ Measurement scope:
   `DeprecationWarning` on 3.11+, and `TraversableResources` resolves
   `open_resource()`, `is_resource()` and `contents()` through `files()`
   while `resource_path()` raises `FileNotFoundError`.
-* `distribution()` calls `PathDistribution.read_text` zero times;
-  `version()` once, twice for two calls; `dist.version` then `dist.name`
+* `distribution()` calls `PathDistribution.read_text` zero times before
+  3.15 and once, for `METADATA`, from 3.15; `version()` once per call
+  before 3.15 and twice from 3.15. With a `gamma` distribution lacking any
+  metadata file on the first path entry and one with `METADATA` on a later
+  entry, `distribution()` returns the first and reads nothing before 3.15;
+  from 3.15 it reads `METADATA`, `PKG-INFO` and `''` from the first and
+  `METADATA` from the second, and returns the second. The bare one's
+  `metadata` is empty before 3.15 and raises `MetadataNotFound`, a
+  `FileNotFoundError`, from 3.15. Through a counting stand-in for
+  `EntryPoint.pattern`, building an `EntryPoint` and reading `module`,
+  `attr` and `extras` three times matches 0 and 9 times before 3.15 and 1
+  and 1 from 3.15, where a malformed value raises `ValueError` at
+  construction. `importlib.metadata.files()` reads `RECORD` alone before
+  3.15 and `METADATA` then `RECORD` from 3.15. On every version
+  `dist.version` then `dist.name`
   once each; `dist.files`, `dist.entry_points` and `dist.origin` twice for
   two accesses on one object. `Distribution.at()` reads nothing. `distributions()` calls
   `os.listdir` once per path entry the first time it is consumed, not at
@@ -247,7 +276,7 @@ import warnings
 import zipfile
 from collections.abc import Callable, Iterator
 from importlib.machinery import FileFinder, ModuleSpec, SourceFileLoader
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -721,9 +750,11 @@ class TestBytecodeCaching:
         pyc = os.path.basename(importlib.util.cache_from_source(str(source)))
 
         module = importlib.import_module("cached_mod")
-        assert module.VALUE == 1 and module.__cached__ == importlib.util.cache_from_source(
+        assert module.__spec__ is not None
+        assert module.VALUE == 1 and module.__spec__.cached == importlib.util.cache_from_source(
             str(source)
         )
+        assert hasattr(module, "__cached__") is (sys.version_info < (3, 15))
         assert compiled == ["cached_mod.py"]
         assert read == [pyc, "cached_mod.py"]
 
@@ -1102,6 +1133,124 @@ class TestNamespacePackages:
         assert loader.exec_module(package) is None
 
 
+NEEDS_315 = pytest.mark.skipif(sys.version_info < (3, 15), reason="Python 3.15+ API")
+
+
+@NEEDS_315
+class TestNamespacePathRecomputesOnChange:
+    """`NamespacePath(name, path, path_finder)` | O(p): the finder runs again
+    only when the parent path changed or the import caches were invalidated."""
+
+    def test_the_finder_runs_only_after_a_change(self, tmp_path: pathlib.Path) -> None:
+        calls: list[tuple[str, tuple[str, ...]]] = []
+
+        def finder(name: str, path: Any) -> Any:
+            calls.append((name, tuple(path)))
+            return None
+
+        namespace = cast("Any", importlib.machinery).NamespacePath(
+            "ns_counted", [str(tmp_path / "a")], finder
+        )
+
+        assert list(namespace) == [str(tmp_path / "a")] and len(namespace) == 1
+        assert str(tmp_path / "a") in namespace
+        assert calls == []
+        sys.path.append(str(tmp_path / "b"))
+        list(namespace)
+        list(namespace)
+        assert len(calls) == 1 and calls[0][1][-1] == str(tmp_path / "b")
+        importlib.invalidate_caches()
+        list(namespace)
+        assert len(calls) == 2
+
+    def test_a_namespace_package_path_is_one(self, tmp_path: pathlib.Path) -> None:
+        (tmp_path / "ns_public").mkdir()
+        sys.path.insert(0, str(tmp_path))
+
+        package = importlib.import_module("ns_public")
+
+        assert type(package.__path__) is cast("Any", importlib.machinery).NamespacePath
+
+
+class TestDiscoverListsModules:
+    """`MetaPathFinder.discover()` and `PathEntryFinder.discover()` | O(1)
+    default; `FileFinder.discover()` | O(e·s) with a `find_spec()` per module;
+    `PathFinder.discover()` a generator over the path."""
+
+    @NEEDS_315
+    def test_the_defaults_are_empty(self) -> None:
+        class Finder(importlib.abc.MetaPathFinder):
+            pass
+
+        class EntryFinder(importlib.abc.PathEntryFinder):
+            pass
+
+        assert cast("Any", Finder()).discover() == ()
+        assert cast("Any", EntryFinder()).discover() == ()
+
+    @NEEDS_315
+    def test_file_finder_looks_up_each_module(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """10 and 1,000 modules: one `find_spec()` per module, every call."""
+        original = FileFinder.find_spec
+        calls = 0
+
+        def counting(self: Any, *args: Any, **kwargs: Any) -> Any:
+            nonlocal calls
+            calls += 1
+            return original(self, *args, **kwargs)
+
+        monkeypatch.setattr(FileFinder, "find_spec", counting)
+        found: dict[int, list[str]] = {}
+        lookups: dict[int, int] = {}
+        for count in (10, 1_000):
+            directory = tmp_path / str(count)
+            directory.mkdir()
+            for index in range(count):
+                write_module(directory, f"discovered_{index}", "")
+            finder: Any = FileFinder(
+                str(directory), (SourceFileLoader, importlib.machinery.SOURCE_SUFFIXES)
+            )
+            calls = 0
+            found[count] = sorted(spec.name for spec in finder.discover())
+            assert sorted(spec.name for spec in finder.discover()) == found[count]
+            lookups[count] = calls
+
+        assert found[10] == sorted(f"discovered_{index}" for index in range(10))
+        assert len(found[1_000]) == 1_000
+        assert lookups == {10: 20, 1_000: 2_000}
+
+    @NEEDS_315
+    def test_path_finder_discover_is_lazy_and_rejects_a_module(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        write_module(tmp_path, "discovered_top", "")
+        monkeypatch.setattr(sys, "path", [str(tmp_path)])
+        hooks: list[str] = []
+        original = importlib.machinery.PathFinder._path_importer_cache  # type: ignore[attr-defined]
+
+        def counting(entry: str) -> Any:
+            hooks.append(entry)
+            return original(entry)
+
+        monkeypatch.setattr(importlib.machinery.PathFinder, "_path_importer_cache", counting)
+
+        walk = cast("Any", importlib.machinery.PathFinder).discover()
+        assert hooks == []
+        assert [spec.name for spec in walk] == ["discovered_top"]
+        assert hooks == [str(tmp_path)]
+        module_spec = importlib.util.spec_from_file_location("m", str(tmp_path / "m.py"))
+        with pytest.raises(ValueError):
+            list(cast("Any", importlib.machinery.PathFinder).discover(module_spec))
+
+    @pytest.mark.skipif(sys.version_info >= (3, 15), reason="discover() is 3.15+")
+    def test_absent_before_3_15(self) -> None:
+        for owner in (importlib.abc.MetaPathFinder, importlib.abc.PathEntryFinder, FileFinder):
+            assert not hasattr(owner, "discover")
+        assert not hasattr(importlib.machinery, "NamespacePath")
+
+
 class TestLoaderAbcs:
     """`importlib.abc` rows: `get_code()` compiles per call at the
     `InspectLoader` level, `SourceLoader.get_code()` drives the subclass's
@@ -1116,9 +1265,9 @@ class TestLoaderAbcs:
                 return None if fullname == "empty" else "X = 1\n"
 
             @staticmethod
-            def source_to_code(data: Any, path: Any = "<string>") -> Any:
-                calls.append("compile")
-                return importlib.abc.InspectLoader.source_to_code(data, path)
+            def source_to_code(data: Any, path: Any = "<string>", *args: Any) -> Any:
+                calls.append(f"compile {args}")
+                return importlib.abc.InspectLoader.source_to_code(data, path, *args)
 
         loader = Loader()
         first, second = loader.get_code("mod"), loader.get_code("mod")
@@ -1126,7 +1275,8 @@ class TestLoaderAbcs:
         assert isinstance(first, types.CodeType) and first is not second
         assert first.co_filename == "<string>"
         assert loader.get_code("empty") is None
-        assert calls == ["mod", "compile", "mod", "compile", "empty"]
+        compiled = "compile ('mod',)" if sys.version_info >= (3, 15) else "compile ()"
+        assert calls == ["mod", compiled, "mod", compiled, "empty"]
         with pytest.raises(ImportError):
             loader.is_package("mod")
 
@@ -1213,8 +1363,9 @@ class TestLoaderAbcs:
         assert Finder().invalidate_caches() is None
         assert EntryFinder().invalidate_caches() is None
         assert Loader().create_module(ModuleSpec("x", None)) is None
-        with pytest.raises(ImportError):
-            Loader().load_module("x")
+        if sys.version_info < (3, 15):
+            with pytest.raises(ImportError):
+                cast("Any", Loader()).load_module("x")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
             with pytest.raises(OSError):
@@ -1233,22 +1384,42 @@ class TestLoaderAbcs:
         assert issubclass(importlib.machinery.ExtensionFileLoader, importlib.abc.ExecutionLoader)
         assert issubclass(importlib.machinery.SourcelessFileLoader, importlib.abc.FileLoader)
 
+    @pytest.mark.skipif(sys.version_info >= (3, 15), reason="load_module() is removed in 3.15")
     def test_load_module_is_a_deprecated_shim_that_runs_the_body(
         self, tmp_path: pathlib.Path
     ) -> None:
         write_module(tmp_path, "shimmed", "VALUE = 7\n")
-        loader = SourceFileLoader("shimmed", str(tmp_path / "shimmed.py"))
+        loader: Any = SourceFileLoader("shimmed", str(tmp_path / "shimmed.py"))
 
         with pytest.warns(DeprecationWarning):
             module = loader.load_module("shimmed")
 
         assert sys.modules["shimmed"] is module and module.VALUE == 7
+        assert module.__spec__ is not None and module.__spec__.loader is loader
+
+    def test_load_module_is_removed_from_3_15(self) -> None:
+        owners = [
+            importlib.abc.Loader,
+            importlib.abc.InspectLoader,
+            importlib.abc.FileLoader,
+            SourceFileLoader,
+            importlib.machinery.NamespaceLoader,
+        ]
+
+        for owner in owners:
+            assert hasattr(owner, "load_module") is (sys.version_info < (3, 15)), owner
+
+    def test_the_source_file_loader_reads_and_compiles(self, tmp_path: pathlib.Path) -> None:
+        write_module(tmp_path, "shimmed", "VALUE = 7\n")
+        loader = SourceFileLoader("shimmed", str(tmp_path / "shimmed.py"))
+        spec = importlib.util.spec_from_loader("shimmed", loader)
+        assert spec is not None
+
         assert loader.get_filename("shimmed") == str(tmp_path / "shimmed.py")
         assert loader.name == "shimmed" and loader.path == str(tmp_path / "shimmed.py")
         assert loader.get_data(str(tmp_path / "shimmed.py")) == b"VALUE = 7\n"
         assert loader.path_stats(str(tmp_path / "shimmed.py"))["size"] == 10
-        spec = module.__spec__
-        assert spec is not None and loader.create_module(spec) is None
+        assert loader.create_module(spec) is None
         assert isinstance(loader.source_to_code(b"X = 1\n", "x.py"), types.CodeType)
 
     def test_sourceless_loader_reads_bytecode_only(self, tmp_path: pathlib.Path) -> None:
@@ -1630,16 +1801,18 @@ class TestMetadataLookups:
         sys.path.insert(0, str(site))
         return site
 
-    def test_finding_reads_no_file_and_each_property_reads_the_metadata(
+    def test_finding_and_each_property_read_the_metadata_at_versioned_counts(
         self, site: pathlib.Path, reads: list[str]
     ) -> None:
+        per_find = ["METADATA"] if sys.version_info >= (3, 15) else []
         dist = importlib.metadata.distribution("alpha")
         assert isinstance(dist, importlib.metadata.PathDistribution)
-        assert reads == []
+        assert reads == per_find
 
+        reads.clear()
         assert importlib.metadata.version("alpha") == "1.2"
         assert importlib.metadata.version("alpha") == "1.2"
-        assert reads == ["METADATA", "METADATA"]
+        assert reads == (per_find + ["METADATA"]) * 2
 
         reads.clear()
         assert dist.version == "1.2" and dist.name == "alpha"
@@ -1647,6 +1820,38 @@ class TestMetadataLookups:
         assert dist.requires == ["beta>=1"]
         assert importlib.metadata.requires("alpha") == ["beta>=1"]
         assert importlib.metadata.metadata("alpha")["Version"] == "1.2"
+
+    def test_a_match_without_metadata_is_passed_over_from_3_15(
+        self, site: pathlib.Path, tmp_path: pathlib.Path, reads: list[str]
+    ) -> None:
+        """Two `gamma` distributions, the first on the path with no metadata
+        file: from 3.15 `distribution()` tries the first (`METADATA`,
+        `PKG-INFO` and the egg-info fallback) and returns the second, whose
+        `metadata` is then readable; before, it returns the first and reads
+        nothing. A distribution with no metadata file raises
+        `MetadataNotFound` from 3.15 and has empty metadata before."""
+        empty = tmp_path / "empty"
+        (empty / "gamma-1.0.dist-info").mkdir(parents=True)
+        make_dist(site, "gamma", version="2.0")
+        sys.path.insert(0, str(empty))
+        importlib.invalidate_caches()
+        try:
+            dist = importlib.metadata.distribution("gamma")
+            bare = importlib.metadata.Distribution.at(empty / "gamma-1.0.dist-info")
+            if sys.version_info >= (3, 15):
+                assert reads == ["METADATA", "PKG-INFO", "", "METADATA"]
+                assert dist.version == "2.0"
+                not_found = cast("Any", importlib.metadata).MetadataNotFound
+                assert issubclass(not_found, FileNotFoundError)
+                with pytest.raises(not_found):
+                    bare.metadata  # noqa: B018 - the property access is the subject
+            else:
+                assert reads == []
+                assert pathlib.Path(str(cast("Any", dist)._path)).parent == empty
+                assert len(bare.metadata) == 0
+        finally:
+            sys.path.remove(str(empty))
+            importlib.invalidate_caches()
 
     def test_a_missing_distribution_raises_with_its_name(self, site: pathlib.Path) -> None:
         with pytest.raises(importlib.metadata.PackageNotFoundError) as info:
@@ -1807,6 +2012,32 @@ class TestEntryPointsReadEveryDistribution:
         )
         assert importlib.metadata.EntryPoint.pattern.match(spelled.value) is not None
 
+    def test_the_value_is_matched_per_access_until_3_15_and_once_after(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        pattern = importlib.metadata.EntryPoint.pattern
+        matches = 0
+
+        class Counting:
+            def match(self, value: str) -> Any:
+                nonlocal matches
+                matches += 1
+                return pattern.match(value)
+
+        monkeypatch.setattr(importlib.metadata.EntryPoint, "pattern", Counting())
+
+        entry = importlib.metadata.EntryPoint("n", "pkg.mod:obj [x]", "g")
+        built = matches
+        for _ in range(3):
+            assert (entry.module, entry.attr, entry.extras) == ("pkg.mod", "obj", ["x"])
+
+        if sys.version_info >= (3, 15):
+            assert (built, matches) == (1, 1)
+            with pytest.raises(ValueError):
+                importlib.metadata.EntryPoint("n", "not a reference!", "g")
+        else:
+            assert (built, matches) == (0, 9)
+
     @pytest.mark.timing
     def test_select_and_indexing_are_linear(self) -> None:
         costs: dict[int, tuple[float, float, float]] = {}
@@ -1871,6 +2102,10 @@ class TestDistributionFiles:
         dist = importlib.metadata.Distribution.at(info)
         assert dist.files == dist.files == files
         assert reads == ["RECORD", "RECORD"]
+        reads.clear()
+        assert importlib.metadata.files("recorded") == files
+        found = ["METADATA"] if sys.version_info >= (3, 15) else []
+        assert reads == [*found, "RECORD"]  # from 3.15 the lookup parses METADATA first
 
     def test_packages_distributions_reads_top_level_before_record(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch

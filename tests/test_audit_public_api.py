@@ -833,7 +833,7 @@ def test_documented_c_type_aliases_share_identity() -> None:
     assert not second["errors"]
     context = {item["name"]: item["identity"] for item in first["items"]}
     types = {item["name"]: item["identity"] for item in second["items"]}
-    assert context["contextlib.MethodType"] == types["types.MethodType"]
+    assert context["contextlib.GenericAlias"] == types["types.GenericAlias"]
 
 
 def test_inspection_uses_stdlib_distutils() -> None:

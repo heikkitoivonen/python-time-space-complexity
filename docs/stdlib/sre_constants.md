@@ -2,11 +2,15 @@
 
 The `sre_constants` module holds the vocabulary shared by [sre_parse](sre_parse.md),
 [sre_compile](sre_compile.md) and the C matcher: the opcodes a parse tree and a compiled code list
-are made of, the flag bits, the engine's limits, and the exception class. From Python 3.11 it is a
-deprecated alias: importing it issues a `DeprecationWarning` and copies the names of the private
-`re._constants` module that [re](re.md) itself uses. The module has never been documented, and
-opcode values change between releases, so nothing here is safe to store or compare across Python
+are made of, the flag bits, the engine's limits, and the exception class. From Python 3.11 to 3.14
+it is a deprecated alias: importing it issues a `DeprecationWarning` and copies the names of the
+private `re._constants` module that [re](re.md) itself uses. The module has never been documented,
+and opcode values change between releases, so nothing here is safe to store or compare across Python
 versions.
+
+!!! warning "Removed in Python 3.15"
+    Removed in Python 3.15, where `import sre_constants` raises `ModuleNotFoundError`. This page
+    covers Python 3.11 to 3.14; `re` keeps the same code in its private `re._constants` module.
 
 Every name is a value computed at import, so reading one is O(1). The opcodes are `int`
 subclasses that print as their name; the tables that map one opcode to another are dicts, and the
@@ -18,7 +22,7 @@ lists are indexed by opcode value.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `import sre_constants` | O(1) | O(1) | Python 3.11+: warns on the first import only; the names are the same objects as `re._constants`'s |
+| `import sre_constants` | O(1) | O(1) | Python 3.11 to 3.14: warns on the first import only; the names are the same objects as `re._constants`'s |
 | `sre_constants.OPCODES`, `sre_constants.ATCODES`, `sre_constants.CHCODES` | O(1) | O(1) | Lists of the opcodes, anchor codes and category codes; indexing one by an opcode's value gives that opcode back |
 | `sre_constants.LITERAL`, `sre_constants.IN`, `sre_constants.BRANCH`, `sre_constants.SUBPATTERN`, `sre_constants.MAX_REPEAT`, `sre_constants.MIN_REPEAT` and the other opcode names | O(1) | O(1) | `int` subclasses with a `.name`; the parser tests them with `is`. `MIN_REPEAT` and `MAX_REPEAT` appear only in parse trees and are left out of `OPCODES` |
 | `sre_constants.AT_BEGINNING`, `sre_constants.CATEGORY_DIGIT` and the other anchor and category names | O(1) | O(1) | The members of `ATCODES` and `CHCODES` |
@@ -90,7 +94,8 @@ assert sre_constants.error is re.error
 ❌ **Avoid**:
 
 - Storing opcode numbers, or `MAGIC`, across Python versions - both change between releases
-- New code that imports the module - it warns, and nothing in it is promised to stay
+- New code that imports the module - it is gone from Python 3.15, it warns before that, and
+  nothing in it is promised to stay
 
 ## Version Notes
 
@@ -99,7 +104,8 @@ assert sre_constants.error is re.error
   opcodes are added and `CALL` is removed
 - **Python 3.13+**: `PatternError` is the exception's name, with `error` kept as an alias, and
   `SRE_FLAG_TEMPLATE` is gone
-- **All Python 3**: Undocumented; the deprecation names no removal release
+- **Python 3.15+**: Removed; `import sre_constants` raises `ModuleNotFoundError`
+- **All Python 3**: Undocumented
 
 ## Related Modules
 

@@ -109,6 +109,9 @@ Python 3.12+. Six tool slots, each with its own callbacks and event mask.
 | `sys.builtin_module_names` | O(1) | O(1) | A tuple, so `name in sys.builtin_module_names` is O(b) |
 | `sys.stdlib_module_names` | O(1) | O(1) | A frozenset, so membership is O(1) average |
 | `sys.dont_write_bytecode`, `sys.pycache_prefix` | O(1) | O(1) | Where compiled bytecode goes, and whether it is written at all |
+| `sys.set_lazy_imports(mode)`, `sys.get_lazy_imports()` | O(1) | O(1) | Python 3.15+. `'normal'` makes only `lazy import` statements and the names in a module's `__lazy_modules__` lazy; `'all'` makes ordinary module-level imports lazy too, so each binds a proxy and nothing is found or run until the name is first used; imports inside functions and `from ... import *` stay eager. Any other mode raises `ValueError` |
+| `sys.set_lazy_imports_filter(filter)`, `sys.get_lazy_imports_filter()` | O(1) | O(1) | Python 3.15+. Storing it is O(1); the filter is then called once for each import that the mode would make lazy, with the importing module's name, the imported module's name and the `fromlist` or `None`, and a false result makes that import eager. `None` removes it |
+| `sys.lazy_modules` | O(1) | O(1) | Python 3.15+. A set of the names lazily imported and not yet loaded, for introspection; a name leaves it when its first use loads it. Membership is O(1) average |
 
 ### Standard streams and interactive hooks
 
@@ -144,7 +147,7 @@ Python 3.12+. Six tool slots, each with its own callbacks and event mask.
 | `sys.version_info`, `sys.version_info.major`, `sys.version_info.minor`, `sys.version_info.micro`, `sys.version_info.releaselevel`, `sys.version_info.serial` | O(1) | O(1) | A struct sequence; each field is an index read |
 | `sys.implementation`, `sys.implementation.name`, `sys.implementation.version`, `sys.implementation.hexversion`, `sys.implementation.cache_tag`, `sys.implementation.supports_isolated_interpreters` | O(1) | O(1) | Fixed at startup; `supports_isolated_interpreters` is Python 3.14+ |
 | `sys.flags` | O(1) | O(1) | The command-line and environment switches, fixed at startup - except `int_max_str_digits`, which `set_int_max_str_digits()` rewrites from Python 3.14 |
-| `sys.flags.debug`, `sys.flags.inspect`, `sys.flags.interactive`, `sys.flags.optimize`, `sys.flags.dont_write_bytecode`, `sys.flags.no_user_site`, `sys.flags.no_site`, `sys.flags.ignore_environment`, `sys.flags.verbose`, `sys.flags.bytes_warning`, `sys.flags.quiet`, `sys.flags.hash_randomization`, `sys.flags.isolated`, `sys.flags.dev_mode`, `sys.flags.utf8_mode`, `sys.flags.warn_default_encoding`, `sys.flags.safe_path`, `sys.flags.int_max_str_digits`, `sys.flags.gil`, `sys.flags.thread_inherit_context`, `sys.flags.context_aware_warnings` | O(1) | O(1) | Index reads; `safe_path` is Python 3.11+, `gil` 3.13+, and `thread_inherit_context` and `context_aware_warnings` 3.14+ |
+| `sys.flags.debug`, `sys.flags.inspect`, `sys.flags.interactive`, `sys.flags.optimize`, `sys.flags.dont_write_bytecode`, `sys.flags.no_user_site`, `sys.flags.no_site`, `sys.flags.ignore_environment`, `sys.flags.verbose`, `sys.flags.bytes_warning`, `sys.flags.quiet`, `sys.flags.hash_randomization`, `sys.flags.isolated`, `sys.flags.dev_mode`, `sys.flags.utf8_mode`, `sys.flags.warn_default_encoding`, `sys.flags.safe_path`, `sys.flags.int_max_str_digits`, `sys.flags.gil`, `sys.flags.thread_inherit_context`, `sys.flags.context_aware_warnings`, `sys.flags.lazy_imports` | O(1) | O(1) | Index reads; `safe_path` is Python 3.11+, `gil` 3.13+, `thread_inherit_context` and `context_aware_warnings` 3.14+, and `lazy_imports` 3.15+ |
 | `sys.float_info`, `sys.float_info.max`, `sys.float_info.max_exp`, `sys.float_info.max_10_exp`, `sys.float_info.min`, `sys.float_info.min_exp`, `sys.float_info.min_10_exp`, `sys.float_info.dig`, `sys.float_info.mant_dig`, `sys.float_info.epsilon`, `sys.float_info.radix`, `sys.float_info.rounds` | O(1) | O(1) | The C `float.h` limits, as index reads |
 | `sys.int_info`, `sys.int_info.bits_per_digit`, `sys.int_info.sizeof_digit`, `sys.int_info.default_max_str_digits`, `sys.int_info.str_digits_check_threshold` | O(1) | O(1) | How `int` stores digits, and the limit described under `set_int_max_str_digits` |
 | `sys.hash_info`, `sys.hash_info.width`, `sys.hash_info.modulus`, `sys.hash_info.inf`, `sys.hash_info.nan`, `sys.hash_info.imag`, `sys.hash_info.algorithm`, `sys.hash_info.hash_bits`, `sys.hash_info.seed_bits`, `sys.hash_info.cutoff` | O(1) | O(1) | The parameters of the hash the dict and set bounds assume is O(1) |
@@ -155,6 +158,7 @@ Python 3.12+. Six tool slots, each with its own callbacks and event mask.
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `sys.platform`, `sys.version`, `sys.hexversion`, `sys.api_version`, `sys.byteorder`, `sys.copyright`, `sys.float_repr_style`, `sys.abiflags` | O(1) | O(1) | Plain attribute reads, computed once at startup; Windows has no `sys.abiflags` |
+| `sys.abi_info`, `sys.abi_info.pointer_bits`, `sys.abi_info.free_threaded`, `sys.abi_info.debug`, `sys.abi_info.byteorder` | O(1) | O(1) | Python 3.15+. A namespace built at startup, the same object on every read, describing the build the process runs on |
 | `sys.executable`, `sys.prefix`, `sys.exec_prefix`, `sys.base_prefix`, `sys.base_exec_prefix`, `sys.platlibdir` | O(1) | O(1) | Paths resolved during startup |
 | `sys.argv`, `sys.orig_argv` | O(1) | O(1) | Lists built once; `orig_argv` keeps the interpreter's own options, which `argv` drops. Python 3.10+ |
 | `sys.warnoptions`, `sys._xoptions` | O(1) | O(1) | The `-W` and `-X` options as given on the command line |
@@ -391,6 +395,58 @@ sys.path[:] = original
 assert '/one' not in sys.path    # O(e) - a linear scan
 ```
 
+### Lazy Imports
+
+From 3.15 an import can bind a proxy instead of loading the module, and the search and the
+module's body run the first time the name is used. A `lazy import` statement asks for that
+directly; a module that must still run on older versions can list the names in
+`__lazy_modules__` instead, which those versions ignore. `sys.set_lazy_imports('all')` extends it
+to ordinary module-level imports, and a filter can keep chosen imports eager.
+
+```python
+import pathlib
+import sys
+import tempfile
+
+if sys.version_info >= (3, 15):
+    import types
+
+    with tempfile.TemporaryDirectory() as tmp:
+        pathlib.Path(tmp, 'slow_dependency.py').write_text('LOADED = True\n')
+        sys.path.insert(0, tmp)
+        try:
+            app = {'__name__': 'app'}
+            exec("__lazy_modules__ = ['slow_dependency']\nimport slow_dependency\n", app)
+            assert type(app['slow_dependency']) is types.LazyImportType  # O(1) - a proxy
+            assert 'slow_dependency' not in sys.modules  # nothing was searched for or run
+            assert 'slow_dependency' in sys.lazy_modules  # O(1) average
+
+            exec('loaded = slow_dependency.LOADED', app)  # the import runs here, once
+            assert app['loaded'] is True
+            assert type(app['slow_dependency']) is types.ModuleType  # the proxy is replaced
+
+            seen = []
+
+            def keep_csv_eager(importer, name, fromlist):
+                seen.append(name)
+                return name != 'csv'
+
+            sys.set_lazy_imports_filter(keep_csv_eager)  # O(1)
+            sys.set_lazy_imports('all')  # O(1)
+            try:
+                other = {'__name__': 'other'}
+                exec('import csv\nimport difflib\n', other)  # the filter runs per import
+            finally:
+                sys.set_lazy_imports('normal')
+                sys.set_lazy_imports_filter(None)
+            assert seen[0] == 'csv' and 'difflib' in seen
+            assert type(other['csv']) is types.ModuleType  # the filter kept it eager
+            assert type(other['difflib']) is types.LazyImportType
+        finally:
+            sys.path.remove(tmp)
+            sys.modules.pop('slow_dependency', None)
+```
+
 ## Replacing the Standard Streams
 
 `sys.stdout` is a name like any other, so redirecting it is an assignment and restoring it is
@@ -577,6 +633,9 @@ assert text.rstrip().endswith('ValueError: boom')
   `sys.remote_exec()`, `sys.is_remote_debug_enabled()`, `sys._is_immortal()`, `sys._jit` and
   `sys.monitoring.clear_tool_id()` added, and `sys.monitoring.free_tool_id()` began clearing the
   tool's events and callbacks instead of only releasing the name
+- **Python 3.15+**: lazy imports (PEP 810), with `sys.set_lazy_imports()`,
+  `sys.get_lazy_imports()`, `sys.set_lazy_imports_filter()`, `sys.get_lazy_imports_filter()`,
+  `sys.lazy_modules` and `sys.flags.lazy_imports`; `sys.abi_info` added
 - **All Python 3**: an audit hook cannot be removed once added, so install one for the life of
   the process or not at all
 

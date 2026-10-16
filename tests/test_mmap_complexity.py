@@ -48,9 +48,15 @@ Measurement scope:
   single byte costs over 8x what it costs over 64 KiB.
 * `write()` past the end raises `ValueError` and leaves the tail untouched;
   `mm[i:j] = data` of the wrong length raises `IndexError`; `mm[i]` reads and
-  writes `int`. `size()` raises `OSError` on Unix for anonymous memory and for
-  `trackfd=False` (3.13+), and exceeds `len(mm)` for a map over part of a
-  file. `length=0` maps the whole file at offset 0 and from `offset` to the
+  writes `int`. `size()` of anonymous memory raises `OSError` on Unix through
+  3.14 and returns the mapped length from 3.15; with `trackfd=False` (3.13+)
+  it raises `OSError` through 3.14 and `ValueError` from 3.15; it exceeds
+  `len(mm)` for a map over part of a file. `set_name()` (3.15+, Linux) is run
+  in child interpreters: without `-X dev` a 66-byte name returns `None` and
+  leaves `/proc/self/maps` unlabelled, a 67-byte name and a file-backed map
+  raise `ValueError`; with `-X dev` it either labels the mapping or raises
+  `OSError`, the second on a kernel built without `CONFIG_ANON_VMA_NAME`, as
+  the development machine's is. `length=0` maps the whole file at offset 0 and from `offset` to the
   end otherwise. Slicing leaves the position where it was. A `length` past the end
   of the file raises `ValueError` on Unix, and an `offset` that is not a
   multiple of `ALLOCATIONGRANULARITY` raises `OSError`. `close()` and `resize()` raise `BufferError` under a live
@@ -667,9 +673,16 @@ class TestSizeResizeAndFlush:
             assert mm.size() == 10_000
 
     @pytest.mark.skipif(sys.platform == "win32", reason="Windows reports the map's length")
-    def test_size_of_anonymous_memory_raises_on_unix(self) -> None:
+    def test_size_of_anonymous_memory_raises_on_unix_through_3_14(self) -> None:
+        if sys.version_info >= (3, 15):
+            pytest.skip("version: from 3.15 it returns the mapped length")
         with mmap.mmap(-1, 10) as mm, pytest.raises(OSError):
             mm.size()
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="anonymous size() is 3.15+")
+    def test_size_of_anonymous_memory_is_its_length_from_3_15(self) -> None:
+        with mmap.mmap(-1, 3 * mmap.PAGESIZE) as mm:
+            assert mm.size() == 3 * mmap.PAGESIZE
 
     @pytest.mark.skipif(sys.platform == "win32", reason="Unix-only argument")
     @pytest.mark.skipif(sys.version_info < (3, 13), reason="trackfd arrived in 3.13")
@@ -678,7 +691,9 @@ class TestSizeResizeAndFlush:
     ) -> None:
         f = file_of(b"x" * 100)
 
-        with mmap.mmap(f.fileno(), 0, trackfd=False) as mm, pytest.raises(OSError):  # type: ignore[call-arg]
+        # ValueError from 3.15, OSError (a bad descriptor) before.
+        expected = ValueError if sys.version_info >= (3, 15) else OSError
+        with mmap.mmap(f.fileno(), 0, trackfd=False) as mm, pytest.raises(expected):  # type: ignore[call-arg]
             mm.size()
 
     @linux_only
@@ -780,6 +795,86 @@ class TestSizeResizeAndFlush:
             for name in ("MADV_NORMAL", "MADV_SEQUENTIAL", "MADV_WILLNEED"):
                 assert mm.madvise(getattr(mmap, name)) is None  # type: ignore[func-returns-value]
             assert mm.madvise(mmap.MADV_RANDOM, mmap.PAGESIZE, mmap.PAGESIZE) is None  # type: ignore[attr-defined, func-returns-value]
+
+
+@pytest.mark.skipif(sys.version_info < (3, 15), reason="set_name() is 3.15+")
+class TestSetName:
+    """`mmap.set_name(name)` | Labels anonymous memory, Linux only, in development mode."""
+
+    @pytest.mark.skipif(sys.platform != "linux", reason="PR_SET_VMA_ANON_NAME is Linux's")
+    def test_outside_development_mode_it_validates_and_does_nothing(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        source = textwrap.dedent(
+            """
+            import mmap, sys, tempfile
+            debug = hasattr(sys, "gettotalrefcount")  # a debug build always labels
+            with mmap.mmap(-1, mmap.PAGESIZE) as mm:
+                if not debug:
+                    assert mm.set_name("x" * 66) is None
+                try:
+                    mm.set_name("x" * 67)
+                except ValueError as error:
+                    assert "too long" in str(error)
+                else:
+                    raise AssertionError("a 67-byte name was accepted")
+                if not debug:
+                    with open("/proc/self/maps") as maps:
+                        assert "cpython:mmap:" not in maps.read()
+            with tempfile.TemporaryFile() as f:
+                f.write(b"x" * mmap.PAGESIZE)
+                f.flush()
+                with mmap.mmap(f.fileno(), 0) as mm:
+                    try:
+                        mm.set_name("file")
+                    except ValueError:
+                        pass
+                    else:
+                        raise AssertionError("a file-backed map was labelled")
+            """
+        )
+        result = subprocess.run(
+            [sys.executable, "-I", "-c", source],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            cwd=tmp_path,
+        )
+
+        assert result.returncode == 0, result.stderr
+
+    @pytest.mark.skipif(sys.platform != "linux", reason="PR_SET_VMA_ANON_NAME is Linux's")
+    def test_in_development_mode_it_labels_or_raises(self, tmp_path: pathlib.Path) -> None:
+        """A kernel with CONFIG_ANON_VMA_NAME shows the label; one without raises OSError."""
+        source = textwrap.dedent(
+            """
+            import mmap
+            with mmap.mmap(-1, mmap.PAGESIZE) as mm:
+                try:
+                    mm.set_name("complexity-label")
+                except OSError:
+                    print("raised")
+                else:
+                    with open("/proc/self/maps") as maps:
+                        assert "cpython:mmap:complexity-label" in maps.read()
+                    print("labelled")
+            """
+        )
+        result = subprocess.run(
+            [sys.executable, "-I", "-X", "dev", "-c", source],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            cwd=tmp_path,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() in {"raised", "labelled"}
+
+    @pytest.mark.skipif(sys.platform == "linux", reason="Linux implements it")
+    def test_elsewhere_it_raises_not_implemented(self) -> None:
+        with mmap.mmap(-1, mmap.PAGESIZE) as mm, pytest.raises(NotImplementedError):
+            mm.set_name("label")  # type: ignore[attr-defined]
 
 
 class TestConstants:

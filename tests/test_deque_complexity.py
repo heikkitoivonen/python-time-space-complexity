@@ -1087,12 +1087,16 @@ class TestDequeComplexity:
 
     @pytest.mark.timing
     def test_clear_is_on(self) -> None:
-        """clear() should be O(n)."""
+        """clear() should be O(n).
+
+        The elements start at 2,000, above the small-int cache (-5 to 1,024 from 3.15):
+        releasing a cached int is free, which would make the small deque too cheap.
+        """
 
         def measure_clear(size: int) -> float:
             times = []
             for _ in range(40):
-                dq = deque(range(size))
+                dq = deque(range(2_000, 2_000 + size))
                 start = time.perf_counter()
                 dq.clear()
                 end = time.perf_counter()

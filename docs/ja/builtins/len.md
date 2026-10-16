@@ -1,5 +1,5 @@
 ---
-source_sha: d121e0a8af5ee71633a5877aead4146b5a677a147d64343c227a3ee27348715b
+source_sha: d678eab417340ad37271b9efd45d109c51c9563b947ffd94873ec76ddb7be4e2
 translated: machine
 ---
 
@@ -12,12 +12,12 @@ translated: machine
 | 型 | 時間 | 空間 | 備考 |
 |------|------|-------|-------|
 | `list` | O(1) | O(1) | 長さの属性を直接参照する |
-| `tuple` | O(1) | O(1) | 不変なのでキャッシュされる |
+| `tuple` | O(1) | O(1) | 長さはオブジェクトに格納されている |
 | `dict` | O(1) | O(1) | サイズを保持している |
 | `set` | O(1) | O(1) | サイズを保持している |
-| `str` | O(1) | O(1) | 不変なのでキャッシュされる |
-| `bytes` | O(1) | O(1) | 不変なのでキャッシュされる |
-| `range` | O(1) | O(1) | 保持せずに計算する |
+| `str` | O(1) | O(1) | 長さはオブジェクトに格納されている |
+| `bytes` | O(1) | O(1) | 長さはオブジェクトに格納されている |
+| `range` | O(1) | O(1) | 保持される：range の生成時に一度だけ計算する |
 | `deque` | O(1) | O(1) | サイズを保持している |
 | `defaultdict` | O(1) | O(1) | dict から継承している |
 | `OrderedDict` | O(1) | O(1) | サイズを保持している |
@@ -32,13 +32,13 @@ lst = [1, 2, 3, 4, 5]
 length = len(lst)  # O(1) - stored length
 
 tpl = (1, 2, 3)
-length = len(tpl)  # O(1) - immutable
+length = len(tpl)  # O(1) - length stored in the tuple
 
 dct = {'a': 1, 'b': 2}
 length = len(dct)  # O(1) - maintains size
 
 s = "hello"
-length = len(s)    # O(1) - immutable string
+length = len(s)    # O(1) - length stored in the string
 ```
 
 ## 独自のオブジェクト
@@ -173,10 +173,10 @@ for i in range(len(items)):
 
 ```python
 # Range length is O(1), not O(n)
-r = range(10**1000)
-length = len(r)  # O(1) - computed from start, stop, step
+r = range(10**9)
+length = len(r)  # O(1) - stored when the range was built
 
-# This is computed, not stored
+# Computed once from start, stop, step, then stored
 # So even huge ranges have O(1) length
 ```
 

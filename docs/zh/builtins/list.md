@@ -1,5 +1,5 @@
 ---
-source_sha: 2c9b1483aa05e2e0dbb6693a2258ac1a811fbbbb06b82e37147b372fe2ca1fc9
+source_sha: 4be9c7effa33db1176d1ac0933f57739a43404edc602043c8eb1ae684c37985d
 translated: machine
 ---
 
@@ -7,29 +7,38 @@ translated: machine
 
 `list` 类型是可变的有序序列。在 CPython 中它以动态数组实现。
 
+`n` 是列表长度，`k` 是索引或重复次数，`i:j` 是切片边界，`len(t)` 是另一个操作数的长度。比较两个元素按 O(1) 计。
+
 ## 复杂度参考
 
 | 操作 | 时间 | 空间 | 备注 |
 |-----------|------|-------|-------|
-| `len()` | O(1) | O(1) | 直接查询 |
-| `access[i]` | O(1) | O(1) | 直接索引 |
+| `len(l)` | O(1) | O(1) | 长度保存在列表中，无需计数 |
+| `l[k]` | O(1) | O(1) | 直接索引 |
+| `l[k] = x` | O(1) | O(1) | 替换一个槽位 |
+| `del l[k]` | O(n-k) | O(1) | 将 k 之后的元素左移一位 |
 | `append(x)` | 均摊 O(1) | 均摊 O(1) | 可能扩容；需要重新分配时最坏为 O(n) |
-| `insert(0, x)` | O(n) | O(1) | 需要移动所有元素 |
-| `insert(i, x)` | O(n-i) | O(1) | 从索引 i 开始移动元素 |
+| `insert(0, x)` | O(n) | 均摊 O(1) | 需要移动所有元素 |
+| `insert(k, x)` | 均摊 O(n-k) | 均摊 O(1) | 将从 k 开始的元素右移一位 |
 | `remove(x)` | O(n) | O(1) | 需要先查找再移动 |
-| `pop()` | O(1) | O(1) | 移除最后一个元素 |
+| `pop()` | 均摊 O(1) | O(1) | 移除最后一个元素；不移动任何元素 |
 | `pop(0)` | O(n) | O(1) | 移动其余元素 |
-| `pop(i)` | O(n-i) | O(1) | 移动 i 之后的元素 |
+| `pop(k)` | 均摊 O(n-k) | O(1) | 将 k 之后的元素左移一位 |
 | `clear()` | O(n) | O(1) | 释放内存 |
 | `index(x)` | O(n) | O(1) | 线性查找 |
 | `count(x)` | O(n) | O(1) | 线性扫描 |
-| `sort()` | 平均/最坏 O(n log n)，最好 O(n) | O(n) | Timsort/Powersort；对部分有序的数据自适应 |
+| `sort()` | 最坏 O(n log n)，已排序或逆序输入为 O(n) | O(n) | Timsort/Powersort；自适应，已有序的片段所需比较更少 |
 | `reverse()` | O(n) | O(1) | 原地反转 |
 | `copy()` | O(n) | O(n) | 浅拷贝 |
-| `extend(iterable)` | O(k) | O(k) | k = 可迭代对象的长度；可能触发 O(n) 扩容 |
-| `in`（成员检测） | O(n) | O(1) | 线性查找 |
-| `x + y`（拼接） | O(m+n) | O(m+n) | m、n 为长度 |
-| `[::2]`（切片） | O(k) | O(k) | k = 切片长度 |
+| `extend(t)` | 均摊 O(len(t)) | O(len(t)) | 另加迭代 t 的开销；可能触发 O(n) 扩容 |
+| `l[i:j]`（切片） | O(j-i) | O(j-i) | 带步长时为 O(结果长度) |
+| `l[i:j] = t` | 若 len(t) == j-i 为 O(j-i)，否则均摊 O(n-i+len(t)) | O(j-i+len(t)) | 长度相等时原地覆盖；否则 j 之后的所有元素都要移动 |
+| `del l[i:j]` | O(n-i) | O(j-i) | j 之后的所有元素左移 |
+| `l1 + l2`（拼接） | O(len(l1)+len(l2)) | O(len(l1)+len(l2)) | 新列表 |
+| `l * k`（重复） | O(nk) | O(nk) | 含 n·k 个引用的新列表 |
+| `for x in l`（迭代） | O(n) | O(1) | 每步 O(1) |
+| `x in l`（成员检测） | O(n) | O(1) | 线性查找 |
+| `min(l)`, `max(l)` | O(n) | O(1) | n-1 次比较 |
 
 ## 实现细节
 
@@ -55,6 +64,7 @@ If size >= capacity:
 lst = []
 for i in range(1000000):
     lst.append(i)  # Resizes ~log(n) times
+assert len(lst) == 1000000
 ```
 
 ### 插入操作的性能
@@ -63,6 +73,7 @@ for i in range(1000000):
 # O(n) - must shift all elements after insertion point
 lst = [0] * 1000000
 lst.insert(0, -1)  # Shifts 1,000,000 elements!
+assert lst[0] == -1 and len(lst) == 1000001
 ```
 
 ## 版本说明

@@ -1,7 +1,8 @@
 """Tests for docs/stdlib/unicodedata.md.
 
 The page prices every property and name function as a table read for one
-code point, and normalization as the one operation that walks a string. The
+code point, and normalization and grapheme iteration as the operations that
+walk a string. The
 table reads are settled by observation - each function rejects a second
 character, and every assigned name fits under a fixed cap - with one timing
 check that the code point does not move the cost. Whether normalization
@@ -43,10 +44,35 @@ Measurement scope:
 * The identifier key's two normalizations: `casefold()` of NFKC U+01F0
   is asserted not to be NFKC, and NFKC after `casefold()` is asserted to
   turn MATHEMATICAL BOLD CAPITAL A into a capital `A`.
+* `bidirectional()` of three unassigned code points (U+0378, U+05FF,
+  U+E0080) is `''` before 3.15 and `'L'`, `'R'` and `'BN'` on 3.15;
+  `ucd_3_2_0` answers `''` for them, and for U+20B9, on every version.
+* 3.15 only: the six new property functions raise `TypeError` for a
+  two-character string, none of the seven new functions exists on
+  `ucd_3_2_0`, and each answer on the page is asserted. `block()` of U+0061
+  and U+10FFFF, the first and last ends of its table, 20,000 calls each,
+  stays within 3x.
+* 3.15 only, `iter_graphemes()`: creating it on a 10,000,000-character
+  string peaks under 1 KB and adds one reference to that string; creating
+  it and taking a first step cost under 10x more on 10,000,000 characters
+  than on two. One step over a single cluster of a letter and 1,000,000
+  combining marks peaks under 1 KB and spans the whole string; a first step
+  over 1,000,000 marks costs between 20x and 1,000x one over 10,000 (linear
+  is 100x). A full pass over a five-character, three-cluster unit repeated
+  20,000 and 2,000,000 times costs between 20x and 1,000x (linear 100x,
+  quadratic 10,000x). Cluster positions, slice-style clamping of `start`
+  and `end`, and `str()` of a segment are asserted by value; a segment
+  outliving its iterator adds one reference to the string. The tables are
+  asserted to be Unicode 17.0.0.
 * Every fenced Python block runs in its own subprocess, and a mutated
   assertion in one of them is asserted to fail.
 
 Not settled here:
+
+* `str(segment)` is priced O(g) from Modules/unicodedata.c, where it takes
+  a substring of the stored string; only its value is asserted.
+* The grapheme segmentation rules themselves (UAX #29) are checked on the
+  page's handful of clusters, not against the Unicode test data.
 
 * The patched O(n) bound for an adversarial combining run is measured by
   `tests/test_complexity_caveats.py::TestUnicodeDataCaveats`, which the CI
@@ -69,7 +95,8 @@ Not settled here:
   Modules/unicodedata.c (a hash table up to 3.12, a DAWG walk from 3.13);
   names are too short to time it.
 * NFKC, NFKD and the Unicode 3.2.0 database are not varied in the timing
-  tests, and neither are code points outside the BMP beyond `category()`.
+  tests. Code points outside the BMP are timed only in `category()`,
+  `block()` and the regional-indicator pair of the grapheme full pass.
 """
 
 from __future__ import annotations
@@ -88,7 +115,7 @@ from typing import Any
 import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "unicodedata.md"
-EXPECTED_BLOCKS = 6
+EXPECTED_BLOCKS = 7
 
 PROPERTY_FUNCTIONS = (
     "bidirectional",
@@ -171,9 +198,178 @@ class TestPropertiesAreTableReads:
 
     def test_empty_results_for_unassigned_properties(self) -> None:
         assert unicodedata.decomposition("a") == ""
-        assert unicodedata.bidirectional(chr(0x378)) == ""
         assert unicodedata.mirrored("a") == 0
         assert unicodedata.mirrored("(") == 1
+
+    def test_an_unassigned_bidi_class_is_empty_before_3_15_and_a_default_from_it(self) -> None:
+        unassigned = {chr(0x378): "L", chr(0x5FF): "R", chr(0xE0080): "BN"}
+        for char, default in unassigned.items():
+            assert unicodedata.category(char) == "Cn"
+            expected = default if sys.version_info >= (3, 15) else ""
+            assert unicodedata.bidirectional(char) == expected, hex(ord(char))
+            assert unicodedata.ucd_3_2_0.bidirectional(char) == ""
+        assert unicodedata.ucd_3_2_0.bidirectional("\u20b9") == ""
+
+
+NEW_IN_3_15 = (
+    "block",
+    "extended_pictographic",
+    "grapheme_cluster_break",
+    "indic_conjunct_break",
+    "isxidcontinue",
+    "isxidstart",
+    "iter_graphemes",
+)
+requires_3_15 = pytest.mark.skipif(sys.version_info < (3, 15), reason="added in 3.15")
+
+
+@requires_3_15
+class TestTheNewPropertiesAreTableReads:
+    """`block`, `isxidstart`, `isxidcontinue`, `grapheme_cluster_break`,
+    `indic_conjunct_break`, `extended_pictographic` | O(1) | O(1), on the
+    module only.
+
+    Each takes exactly one character, so there is no size to grow. `block()`
+    is a binary search of a fixed table, so the timing check compares the
+    first block with the last one.
+    """
+
+    PROPERTIES = tuple(name for name in NEW_IN_3_15 if name != "iter_graphemes")
+
+    @pytest.mark.parametrize("function", PROPERTIES)
+    def test_a_second_character_is_rejected(self, function: str) -> None:
+        with pytest.raises(TypeError, match="unicode character"):
+            getattr(unicodedata, function)("ab")
+
+    def test_the_3_2_0_database_does_not_have_them(self) -> None:
+        for name in NEW_IN_3_15:
+            assert not hasattr(unicodedata.ucd_3_2_0, name), name
+
+    def test_answers(self) -> None:
+        get: Any = unicodedata
+        assert unicodedata.unidata_version == "17.0.0"
+        assert get.block("S") == "Basic Latin"
+        assert get.block(chr(0x2FE0)) == "No_Block"
+        assert get.isxidstart("a") and not get.isxidstart("1") and not get.isxidstart("_")
+        assert get.isxidcontinue("1") and get.isxidcontinue("_")
+        assert not get.isxidcontinue(" ")
+        assert get.grapheme_cluster_break("\u0301") == "Extend"
+        assert get.grapheme_cluster_break("\r") == "CR"
+        assert get.indic_conjunct_break("\u0915") == "Consonant"
+        assert get.indic_conjunct_break("\u094d") == "Linker"
+        assert get.extended_pictographic("\U0001f600") is True
+        assert get.extended_pictographic("a") is False
+
+    @pytest.mark.timing
+    def test_the_block_searched_for_does_not_move_the_cost(self) -> None:
+        get: Any = unicodedata
+        low = best_ns(lambda: [get.block("a") for _ in range(20_000)])
+        high = best_ns(lambda: [get.block("\U0010ffff") for _ in range(20_000)])
+
+        ratio = max(low, high) / min(low, high)
+        assert ratio < 3.0, f"first block {low:.0f}ns, last block {high:.0f}ns"
+
+
+@requires_3_15
+class TestIterGraphemesIsLazy:
+    """`iter_graphemes(unistr, start, end)` | O(1) | O(1); `next()` | O(g) |
+    O(1); `str(segment)` | O(g) | O(g).
+
+    Creation and a first step are compared on short and very long strings,
+    which separates a lazy iterator from one that segments the whole string up
+    front; a step over one long cluster against a short one separates O(g)
+    from O(1) per step.
+    """
+
+    def test_clusters_and_their_positions(self) -> None:
+        get: Any = unicodedata
+        text = "e\u0301\U0001f1eb\U0001f1ee\U0001f469\u200d\U0001f4bb!"
+
+        segments = list(get.iter_graphemes(text))
+
+        assert [(s.start, s.end) for s in segments] == [(0, 2), (2, 4), (4, 7), (7, 8)]
+        assert "".join(str(s) for s in segments) == text
+
+    def test_start_and_end_are_clamped_like_a_slice(self) -> None:
+        get: Any = unicodedata
+
+        def texts(*bounds: int) -> list[str]:
+            return [str(s) for s in get.iter_graphemes("abcd", *bounds)]
+
+        assert texts(1, -1) == ["b", "c"]
+        assert texts(-2) == ["c", "d"]
+        assert texts(5) == [] and texts(3, 1) == []
+        clamped = list(get.iter_graphemes("abcd", -100, 100))
+        assert [(s.start, s.end) for s in clamped] == [(0, 1), (1, 2), (2, 3), (3, 4)]
+
+    @pytest.mark.serial
+    def test_creating_the_iterator_allocates_nothing_sized_by_the_string(self) -> None:
+        get: Any = unicodedata
+        text = "a" * 10_000_000
+        before = sys.getrefcount(text)
+
+        peak = peak_bytes(lambda: get.iter_graphemes(text))
+        iterator = get.iter_graphemes(text)
+
+        assert peak < 1_000, f"creating the iterator allocated {peak} bytes"
+        assert sys.getrefcount(text) == before + 1, "the iterator holds the string itself"
+        del iterator
+
+    @pytest.mark.serial
+    def test_a_step_allocates_nothing_sized_by_the_cluster(self) -> None:
+        get: Any = unicodedata
+        text = "a" + "\u0301" * 1_000_000
+
+        peak = peak_bytes(lambda: next(get.iter_graphemes(text)))
+        segment = next(get.iter_graphemes(text))
+
+        assert peak < 1_000, f"one step allocated {peak} bytes"
+        assert (segment.start, segment.end) == (0, len(text))
+
+    @pytest.mark.timing
+    def test_creation_and_a_first_step_do_not_read_the_rest(self) -> None:
+        get: Any = unicodedata
+        short = "ab"
+        long = "ab" * 5_000_000
+
+        create = [best_ns(lambda t=t: get.iter_graphemes(t)) for t in (short, long)]  # type: ignore[misc]
+        step = [best_ns(lambda t=t: next(get.iter_graphemes(t))) for t in (short, long)]  # type: ignore[misc]
+
+        assert create[1] < 10 * create[0], f"5,000,000x the string: create {create} ns"
+        assert step[1] < 10 * step[0], f"5,000,000x the string: first step {step} ns"
+
+    @pytest.mark.timing
+    def test_a_step_costs_the_length_of_its_cluster(self) -> None:
+        get: Any = unicodedata
+        durations = [
+            best_ns(lambda t=t: next(get.iter_graphemes(t)))  # type: ignore[misc]
+            for t in ("a" + "\u0301" * 10_000, "a" + "\u0301" * 1_000_000)
+        ]
+
+        ratio = durations[1] / durations[0]
+        assert 20 < ratio < 1_000, f"100x the cluster cost x{ratio:.0f}; linear gives x100"
+
+    @pytest.mark.timing
+    def test_a_full_pass_is_linear(self) -> None:
+        get: Any = unicodedata
+        unit = "ab\u0301\U0001f1eb\U0001f1ee"
+        durations = [
+            best_ns(lambda t=t: sum(1 for _ in get.iter_graphemes(t)), repeats=3)  # type: ignore[misc]
+            for t in (unit * 20_000, unit * 2_000_000)
+        ]
+
+        ratio = durations[1] / durations[0]
+        assert 20 < ratio < 1_000, f"100x the text cost x{ratio:.0f}; quadratic gives x10,000"
+
+    def test_a_segment_converts_to_its_text(self) -> None:
+        get: Any = unicodedata
+        text = "xy" + "a" + "\u0301" * 1_000
+
+        before = sys.getrefcount(text)
+        segment = list(get.iter_graphemes(text))[-1]
+
+        assert str(segment) == text[2:] and len(str(segment)) == 1_001
+        assert sys.getrefcount(text) == before + 1, "the segment holds the string itself"
 
 
 class TestLookupReadsTheName:

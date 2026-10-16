@@ -55,6 +55,7 @@ only where `F` or `L` does.
 | `readline.parse_and_bind(string)` | O(L) | O(L) | One init-file line; the syntax differs between the two libraries |
 | `readline.read_init_file(filename=None)` | O(F) | O(F) | Runs every line of an init file; `OSError` if it is missing |
 | `readline.set_startup_hook(function=None)`, `readline.set_pre_input_hook(function=None)` | O(1) | O(1) | GNU readline calls them once per line read; libedit does not call them. `set_pre_input_hook` is only present if the library provides it |
+| `readline.get_pre_input_hook()` | O(1) | O(1) | Python 3.15+. The function that was set, or `None`; present where `set_pre_input_hook` is |
 | `readline.get_line_buffer()` | O(b) | O(b) | b = characters in the line being edited |
 | `readline.insert_text(string)` | O(b + L) | O(L) | Inserts at the cursor |
 | `readline.redisplay()` | O(b) | O(1) | Redraws the line being edited |
@@ -122,9 +123,9 @@ list: it limits the file, and each of the two writers enforces it by passing ove
 after writing. With a limit set, `append_history_file()` costs O(F) like the full write.
 
 !!! warning "Truncated files on libedit"
-    Before CPython 3.14.8, some libedit versions drop the file's header line when truncating
-    to the length limit, and `read_history_file()` then raises `OSError` for that file.
-    CPython 3.14.8+ preserves the header; macOS's libedit also keeps it readable on older Python
+    Before CPython 3.14.8, and in CPython 3.15.0, some libedit versions drop the file's header
+    line when truncating to the length limit, and `read_history_file()` then raises `OSError` for
+    that file. CPython 3.14.8 and later 3.14 releases preserve the header; macOS's libedit also keeps it readable on older Python
     versions. When supporting affected builds, cap the history yourself before writing rather
     than relying on `set_history_length()`.
 
@@ -266,6 +267,7 @@ with tempfile.TemporaryDirectory() as directory:
 ## Version Notes
 
 - **Python 3.13+**: Added `readline.backend`
+- **Python 3.15+**: Added `get_pre_input_hook()`
 - **Python 3.12.9+, 3.13.2+**: `append_history_file()` raises `ValueError` for a negative
   `nelements`
 - **All Python 3**: History files written by one library may not be readable by the other

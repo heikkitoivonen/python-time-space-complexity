@@ -65,6 +65,11 @@ Measurement scope:
   quota below two cores is not detected and fails the first assertion.
 * `algorithms_guaranteed` is the 14 names on the page and a subset of
   `algorithms_available`; both are sets.
+* On 3.15, passing initial data as `string=` to `md5`, `sha256`,
+  `sha3_256`, `blake2b` and `new("sha256")` is asserted to warn with
+  `DeprecationWarning`. Which constructors accept `data=` or `string=` before
+  3.15 is observed by hand only (3.11 rejects `data=` on `sha256` and
+  `string=` on `blake2b`) and not asserted.
 * Every fenced Python block runs in its own subprocess and working
   directory, and a mutated assertion in one of them is asserted to fail.
 
@@ -189,8 +194,23 @@ class TestConstructorsAbsorbData:
             assert len(named.digest()) == named.digest_size
 
     def test_an_unknown_name_raises(self) -> None:
-        with pytest.raises(ValueError, match="unsupported hash type"):
+        with pytest.raises(ValueError, match="unsupported hash"):
             hashlib.new("nope")
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="deprecated in 3.15")
+    @pytest.mark.parametrize("name", ["md5", "sha256", "sha3_256", "blake2b", "new"])
+    def test_the_string_keyword_warns(self, name: str) -> None:
+        constructor: Any = (
+            (lambda **kwargs: hashlib.new("sha256", **kwargs))
+            if name == "new"
+            else (getattr(hashlib, name))
+        )
+        expected = hashlib.sha256(b"payload") if name == "new" else constructor(b"payload")
+
+        with pytest.warns(DeprecationWarning, match="'string' keyword"):
+            built = constructor(string=b"payload")
+
+        assert built.digest() == expected.digest()
 
     def test_a_str_is_rejected(self) -> None:
         with pytest.raises(TypeError, match="encoded"):

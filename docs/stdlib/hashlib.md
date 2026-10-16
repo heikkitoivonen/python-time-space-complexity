@@ -354,6 +354,9 @@ assert duplicates == [[0, 2]]
 
 - **Python 3.11+**: Added `file_digest()`
 - **Python 3.12+**: `pbkdf2_hmac()` comes only from OpenSSL; a build without it has no `pbkdf2_hmac` at all
+- **Python 3.15+**: passing the initial data as `string=` emits `DeprecationWarning`. Earlier
+  versions accept `data=` or `string=` on some constructors and not others, so pass the data
+  positionally
 
 ## Related Modules
 

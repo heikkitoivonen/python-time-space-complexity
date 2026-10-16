@@ -89,8 +89,8 @@ dicts, and an operation forwarded to `data` costs what the [dict](../builtins/di
 | `ud.copy()` | O(n) | O(n) | A plain `UserDict` copies `data`; a subclass is shallow-copied, then refilled through `update()` |
 | `UserDict.fromkeys(iterable, value=None)` | O(k) | O(k) | One `__setitem__` call per key |
 | `ud.pop(key)`, `ud.setdefault(key, default=None)` | O(1) | O(1) | `ud[key]` and then `del ud[key]` or `ud[key] = default` |
-| `ud.popitem()` | O(d) | O(1) | Removes the first key in iteration order; d is the entries deleted before it, which a fresh iterator has to skip |
-| `ud.clear()` | O(n·(n + d)) | O(1) | `popitem()` until empty, each call skipping every slot the earlier ones emptied; `ud.data.clear()` is O(n) |
+| `ud.popitem()` | O(d) | O(1) | Removes the first key in iteration order; d is the entries deleted before it, which a fresh iterator has to skip. From 3.15 it forwards to `data.popitem()`, which removes the last key, skipping only the deleted slots after it |
+| `ud.clear()` | O(n·(n + d)) | O(1) | `popitem()` until empty, each call skipping every slot the earlier ones emptied; O(n + d) from 3.15. `ud.data.clear()` is one `dict.clear()` call |
 | `ud == other` | O(n + k) | O(n + k) | Flattens both sides into dicts and compares those, even when `other` is already a dict |
 
 ### UserList
@@ -246,24 +246,30 @@ assert Indexed.reads == 4
 
 ### Clearing a UserDict
 
-`UserDict` does not define `clear()`, `popitem()` or `pop()`; it inherits them from
-`MutableMapping`. Its `popitem()` takes the first key a fresh iterator yields, and a dict's
-iterator has to skip every slot that earlier deletions emptied, so a `popitem()` costs O(d) and
-emptying the whole dict through `clear()` costs O(n·(n + d)). Clear the `data` dict directly.
+`UserDict` does not define `clear()` or `pop()`; it inherits them from `MutableMapping`, and
+before 3.15 it inherits `popitem()` too. That `popitem()` takes the first key a fresh iterator
+yields, and a dict's iterator has to skip every slot that earlier deletions emptied, so a
+`popitem()` costs O(d) and emptying the whole dict through `clear()` costs O(n·(n + d)). From 3.15
+`popitem()` forwards to the dict's own, which removes the last key and skips only the deleted slots
+after it, so `clear()` is O(n + d). Clear the `data` dict directly.
 
 ```python
+import sys
 from collections import UserDict
 
 wrapped = UserDict({"a": 1, "b": 2, "c": 3})
 
-assert wrapped.popitem() == ("a", 1)  # O(d) - the first key still present
+if sys.version_info >= (3, 15):
+    assert wrapped.popitem() == ("c", 3)  # O(1) - dict.popitem(), the last key
+else:
+    assert wrapped.popitem() == ("a", 1)  # O(d) - the first key still present
 assert wrapped.popitem() == ("b", 2)
 
 wrapped.data.clear()  # O(n) - the dict's own clear
 assert len(wrapped) == 0
 
 wrapped.update(zip("xyz", range(3)))
-wrapped.clear()  # O(n·(n + d)) - popitem() until empty
+wrapped.clear()  # popitem() until empty: O(n·(n + d)), or O(n + d) from 3.15
 assert len(wrapped) == 0
 ```
 
@@ -322,7 +328,7 @@ assert resolved == {"host": "localhost", "port": 8080, "debug": True}
 
 - Keep a `ChainMap` short: every miss, `get()` on a default and read of a key in the last map costs one lookup per map
 - Flatten with `dict(chain)` once when a chain is read in a loop, so the per-map search happens once per key rather than once per read
-- Clear a `UserDict` through `data.clear()`; the inherited `clear()` is quadratic in the entries and the slots deleted before them
+- Clear a `UserDict` through `data.clear()`; before 3.15 the inherited `clear()` is quadratic in the entries and the slots deleted before them
 - Reach for `ud.data`, `ul.data` or `us.data` when a hot loop does not need the subclass hooks
 
 ❌ **Avoid**:
@@ -335,6 +341,7 @@ assert resolved == {"host": "localhost", "port": 8080, "debug": True}
 ## Version Notes
 
 - **Python 3.12+**: `UserDict.get()` returns the default for a missing key without calling `__missing__`; before 3.12 the inherited `Mapping.get()` went through `__getitem__` and called it
+- **Python 3.15+**: `UserDict.popitem()` forwards to `dict.popitem()`, removing the last key rather than the first, without rescanning from the start of the table, so the inherited `clear()` is O(n + d)
 - **All Python 3**: `len()` and iteration over a `ChainMap` cost every entry in every map; nothing about the chain is cached
 
 ## Related Modules

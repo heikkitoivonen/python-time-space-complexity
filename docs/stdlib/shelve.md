@@ -25,6 +25,8 @@ and reading a cached key again costs O(1).
 | `shelve.DbfilenameShelf(filename, flag='c', protocol=None, writeback=False)` | O(1) | O(1) | What `shelve.open()` returns |
 | `shelve.Shelf(dict, protocol=None, writeback=False, keyencoding='utf-8')` | O(1) | O(1) | Wraps any mapping with bytes keys, such as a database from a chosen `dbm` backend |
 | `shelve.BsdDbShelf(dict, protocol=None, writeback=False, keyencoding='utf-8')` | O(1) | O(1) | A `Shelf` over an object with cursor methods; no standard-library `dbm` backend has them |
+| `serializer=`, `deserializer=` on any of the four above | O(1) | O(1) | Python 3.15+, keyword-only. A pair that replaces `pickle.dumps(value, protocol)` and `pickle.loads(data)`, so every pickle and unpickle priced below costs what they cost instead; giving one without the other raises `ShelveError` |
+| `shelve.ShelveError` | O(1) | O(1) | Python 3.15+. Raised for a serializer without a deserializer, or the reverse |
 
 ### Shelf
 
@@ -45,6 +47,7 @@ and reading a cached key again costs O(1).
 | `DbfilenameShelf.clear()` | One backend `clear()` from Python 3.13, O(n² + V) before | O(1) from Python 3.13, O(n + v) before | The backend's `clear()` still removes keys one at a time. Before 3.13 this is `Shelf.clear()` |
 | `Shelf.sync()` | O(w) | O(v) | Re-pickles and stores every cached entry, read or written, then empties the cache and calls the backend's `sync()` if it has one. O(1) without `writeback` |
 | `Shelf.close()` | O(w) | O(v) | `sync()`, then the backend's `close()`; later operations raise `ValueError`. Also what leaving a `with` block does |
+| `Shelf.reorganize()` | O(w), plus the backend's `reorganize()` | O(v) | Python 3.15+. `sync()`, then the backend's `reorganize()` where it has one - `dbm.gnu`, and from 3.15 `dbm.dumb` and `dbm.sqlite3` - which rebuilds the database to give back the space deleted entries held. A backend without one, such as `dbm.ndbm`, is only synced |
 | `Shelf.cache` | O(1) | O(w) | With `writeback=True`, every key read or stored stays in it until it is deleted or the shelf is synced, cleared or closed; empty otherwise |
 
 ### BsdDbShelf
@@ -257,6 +260,8 @@ with tempfile.TemporaryDirectory() as directory:
   the first available of `dbm.gnu`, `dbm.ndbm` and `dbm.dumb`
 - **Python 3.13+**: `DbfilenameShelf.clear()` calls the backend's `clear()`; before, it removed
   keys through `popitem()` at O(n² + V)
+- **Python 3.15+**: `Shelf.reorganize()`, `ShelveError`, and the `serializer` and
+  `deserializer` arguments
 - **All Python 3**: Reading a key returns a copy; an in-place change is lost unless it is stored
   again or the shelf uses `writeback=True`
 

@@ -85,6 +85,8 @@ PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "bisect.md"
 EXPECTED_BLOCKS = 8
 
 SEARCHES = (bisect.bisect_left, bisect.bisect_right)
+# The ValueError wording for a negative lo, which 3.15 rephrased.
+NEGATIVE_LO = "lo cannot be negative" if sys.version_info >= (3, 15) else "lo must be non-negative"
 
 
 def best_ns(func: Callable[[], Any], repeats: int = 7) -> float:
@@ -275,7 +277,7 @@ class TestLoAndHi:
 
     def test_a_negative_lo_raises(self) -> None:
         for function in (*SEARCHES, bisect.insort_left, bisect.insort_right):
-            with pytest.raises(ValueError, match="lo must be non-negative"):
+            with pytest.raises(ValueError, match=NEGATIVE_LO):
                 function([1, 2], 1, lo=-1)
 
 

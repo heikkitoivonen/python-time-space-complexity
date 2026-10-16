@@ -110,7 +110,7 @@ pointers reach, while an array's counts its whole buffer at `itemsize` bytes per
 import array
 import sys
 
-values = list(range(1_000, 11_000))  # above the small-int cache: distinct objects
+values = list(range(2_000, 12_000))  # above the small-int cache: distinct objects
 packed = array.array('i', values)    # O(k)
 
 assert sys.getsizeof(packed) < sys.getsizeof(values)  # 4-byte items against 8-byte pointers

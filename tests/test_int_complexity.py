@@ -689,12 +689,16 @@ class TestIdentities:
 
 
 class TestSmallIntCache:
-    def test_minus_five_to_256_are_shared(self) -> None:
-        for text in ("-5", "0", "100", "256"):
+    """-5 to 256 are shared, and from 3.15 the range runs to 1024."""
+
+    TOP = 1024 if sys.version_info >= (3, 15) else 256
+
+    def test_minus_five_to_the_top_are_shared(self) -> None:
+        for text in ("-5", "0", "100", "256", str(self.TOP)):
             assert int(text) is int(text), text
 
     def test_the_neighbours_outside_the_range_are_not(self) -> None:
-        for text in ("-6", "257", "300"):
+        for text in ("-6", str(self.TOP + 1), "2000"):
             assert int(text) is not int(text), text
 
 

@@ -36,7 +36,7 @@ rows say "plus the handler".
 | `BaseServer.handle_timeout()` | O(1) | O(1) | A no-op hook for `handle_request()` expiring |
 | `BaseServer.server_bind()`, `BaseServer.server_activate()` | O(1) | O(1) | Hooks the `TCPServer` constructor calls: `bind()`, then `listen(request_queue_size)` |
 | `BaseServer.server_close()` | O(1) | O(1) | A hook, also called on leaving a `with` block; `TCPServer` closes the listening socket, and the mix-ins add waiting, below |
-| `BaseServer.address_family`, `BaseServer.socket_type`, `BaseServer.allow_reuse_address`, `BaseServer.request_queue_size`, `BaseServer.timeout` | O(1) | O(1) | Class attributes to override on a subclass; all but `timeout` are read during construction. `request_queue_size` is 5, the `listen()` backlog |
+| `BaseServer.address_family`, `BaseServer.socket_type`, `BaseServer.allow_reuse_address`, `BaseServer.request_queue_size`, `BaseServer.timeout` | O(1) | O(1) | Class attributes to override on a subclass; all but `timeout` are read during construction. `request_queue_size` is the `listen()` backlog: 5 through Python 3.14, `socket.SOMAXCONN` from Python 3.15 |
 | `BaseServer.server_address`, `BaseServer.socket`, `BaseServer.RequestHandlerClass` | O(1) | O(1) | After binding, `server_address` is the address actually bound, so port 0 reads back as the port chosen |
 
 ### Server classes
@@ -403,6 +403,7 @@ with Server(("127.0.0.1", 0), Echo) as server:
 
 - **Python 3.11+**: Added `allow_reuse_port`
 - **Python 3.12+**: Added `ForkingUnixStreamServer` and `ForkingUnixDatagramServer`
+- **Python 3.15+**: `request_queue_size` defaults to `socket.SOMAXCONN` rather than 5
 - **All Python 3**: `ForkingMixIn` and the `Forking*` servers exist only where `os.fork` does, and
   the `Unix*` servers only where `AF_UNIX` does
 

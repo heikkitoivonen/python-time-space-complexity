@@ -41,6 +41,11 @@ Measurement scope:
   the space column.
 * Searching: `find()`, `rfind()` and `in` for an absent byte, `count()` for a
   present one and `in` with a `bytes` pattern scale with the receiver.
+  `find()` over a 1,000-byte `start:end` region costs the same in 100,000-
+  and 10,000,000-byte receivers, scales with the region, and traces under
+  1,000 bytes for half of a 10,000,000-byte one. A 100,000- or
+  10,000,000-byte pattern against a 100-byte receiver costs the same for
+  `find()`, `count()` and `in`.
   `startswith()` costs the same on both receiver sizes and scales with the
   prefix instead; a tuple of 10,000 empty candidates with `start` past the
   end costs more than ten times a tuple of 100, the q term. The O(n·m)
@@ -60,8 +65,9 @@ Measurement scope:
   absent separator and with whitespace splitting on input without
   whitespace, `splitlines()` with no line break, `partition()` and
   `rpartition()` on a miss, and `join()` of one `bytes` part. The case
-  methods and `expandtabs()` are asserted to return a new object on inputs
-  they leave unchanged, and a `bytes` subclass to get a new exact `bytes`
+  methods and `expandtabs()` are asserted to return a new object on
+  non-empty inputs they leave unchanged, and the shared empty `bytes` for
+  an empty receiver, and a `bytes` subclass to get a new exact `bytes`
   from `strip()`.
 * What identity saves: with nothing to strip, `strip()`, `strip(chars)`,
   `center(10)` and `removeprefix()` of an absent prefix cost the same at
@@ -96,7 +102,7 @@ Measurement scope:
 
 Not settled here:
 
-* The O(n + m) bound on `find()`, `count()`, `split()`, `partition()`,
+* The linear worst case of `find()`, `count()`, `split()`, `partition()`,
   `replace()` and `in` follows from the two-way algorithm in
   Objects/stringlib/fastsearch.h, present on every supported branch; only the
   n term and the flat response to the pattern are timed. The reverse search
@@ -466,7 +472,7 @@ class TestFormatting:
 
 
 class TestSearching:
-    """`find()`, `index()`, `count()`, `in` | O(n + m); `startswith()`,
+    """`find()`, `index()`, `count()`, `in` | O(n); `startswith()`,
     `endswith()` | O(m + q); `rfind()`, `rindex()` | O(n·m) worst case."""
 
     def test_the_documented_results(self) -> None:
@@ -498,6 +504,40 @@ class TestSearching:
 
         for name, ratio in ratios.items():
             assert_linear(name, ratio)
+
+    @pytest.mark.timing
+    def test_n_is_the_region_searched_and_a_longer_pattern_reads_nothing(self) -> None:
+        """With `start` and `end`, n is the region searched, read in place:
+        1,000 bytes cost the same in 100,000- and 10,000,000-byte receivers,
+        100x the region costs 100x, and searching half of a 10,000,000-byte
+        receiver traces no copy of it. A pattern longer than the region returns
+        before either is read, so it costs the same at 100,000 and 10,000,000
+        bytes: the bound is O(n), with no m term."""
+        small, large, tiny = letters(SMALL), letters(LARGE), letters(100)
+        short_pattern, long_pattern = letters(SMALL), letters(LARGE)
+
+        across_receivers = growth(
+            lambda: small.find(b"b", 0, 1_000), lambda: large.find(b"b", 0, 1_000), inner=100
+        )
+        across_regions = growth(
+            lambda: large.find(b"b", 0, SMALL), lambda: large.find(b"b", 0, LARGE)
+        )
+        region_peak = peak_bytes(lambda: large.find(b"b", 0, LARGE // 2))
+        across_patterns = {
+            "find": growth(
+                lambda: tiny.find(short_pattern), lambda: tiny.find(long_pattern), inner=100
+            ),
+            "count": growth(
+                lambda: tiny.count(short_pattern), lambda: tiny.count(long_pattern), inner=100
+            ),
+            "in": growth(lambda: short_pattern in tiny, lambda: long_pattern in tiny, inner=100),
+        }
+
+        assert across_receivers < CONSTANT, f"a 1,000-byte region cost x{across_receivers:.2f}"
+        assert_linear("find() over a region", across_regions)
+        assert region_peak < 1_000, f"searching a region traced {region_peak} bytes"
+        for name, ratio in across_patterns.items():
+            assert ratio < CONSTANT, f"{name}: a 100x longer pattern cost x{ratio:.2f}"
 
     @pytest.mark.timing
     def test_startswith_costs_the_prefix_not_the_receiver(self) -> None:
@@ -535,7 +575,7 @@ class TestSearching:
         pattern; the forward search stays flat on it. A pattern that
         mismatches only near its end is the case a naive forward scan turns
         quadratic; staying flat on it is what separates the documented
-        O(n + m) from a scan with no linear-time fallback.
+        linear bound from a scan with no linear-time fallback.
         """
         haystack = letters(SMALL)
         shapes = {
@@ -620,6 +660,12 @@ class TestUnchangedResultsAreTheReceiver:
 
         assert result == data, f"{name} changed an input chosen to stay the same"
         assert result is not data, f"{name} returned the receiver"
+
+    @pytest.mark.parametrize("name", sorted(ALWAYS_COPIES))
+    def test_an_empty_receiver_gets_the_shared_empty_bytes(self, name: str) -> None:
+        empty = b""
+
+        assert ALWAYS_COPIES[name][1](empty) is empty
 
     def test_a_subclass_gets_a_copy_from_strip(self) -> None:
         class Packet(bytes):

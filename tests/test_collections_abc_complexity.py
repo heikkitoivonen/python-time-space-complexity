@@ -25,7 +25,9 @@ Measurement scope:
   subscription is asserted to flatten `[int, str], float` into three
   arguments. `Buffer` recognises `bytes`, `bytearray` and `memoryview` on
   3.12+; `ByteString` warns on `isinstance()` and on subclassing from 3.12
-  and not before, and its `index` is `Sequence.index`.
+  and not before, and, in a fresh process from 3.15, once on the first import
+  of the name with no further warning on a later attribute read, with the name
+  gone from `__all__`; its `index` is `Sequence.index`.
 * `Iterator.__iter__` and `AsyncIterator.__aiter__` return the instance.
   `next()` on a `Generator` subclass is one `send(None)`, `close()` one
   `throw(GeneratorExit)`, and `RuntimeError` when `throw()` yields instead of
@@ -377,6 +379,33 @@ class TestRuntimeChecks:
 
             class Sub(abcs.ByteString):  # pyright: ignore[reportUnusedClass]
                 pass
+
+    def test_bytestring_first_access_warns_and_leaves_all_from_315(self) -> None:
+        source = textwrap.dedent(
+            """
+            import warnings
+            def warned(caught):
+                return sum("ByteString" in str(w.message) for w in caught)
+
+            with warnings.catch_warnings(record=True) as on_import:
+                warnings.simplefilter("always")
+                from collections.abc import ByteString
+            with warnings.catch_warnings(record=True) as on_read:
+                warnings.simplefilter("always")
+                import collections.abc
+                collections.abc.ByteString
+            print(warned(on_import), warned(on_read))
+            print("ByteString" in collections.abc.__all__)
+            """
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", source], capture_output=True, text=True, check=False
+        )
+        assert result.returncode == 0, result.stderr
+        if sys.version_info >= (3, 15):
+            assert result.stdout.split() == ["1", "0", "False"]
+        else:
+            assert result.stdout.split() == ["0", "0", "True"]
 
     @pytest.mark.skipif(sys.version_info >= (3, 12), reason="not deprecated before 3.12")
     def test_bytestring_is_silent_before_312(self) -> None:

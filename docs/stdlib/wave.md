@@ -1,6 +1,7 @@
 # wave Module Complexity
 
-The `wave` module reads and writes uncompressed PCM WAV files. It is pure Python and works a call
+The `wave` module reads and writes uncompressed PCM WAV files, and from Python 3.15 IEEE
+floating-point ones. It is pure Python and works a call
 at a time: opening a file reads its header, `readframes()` returns the frames you ask for, and
 `writeframes()` passes your bytes straight to the file. Nothing in the module holds the audio
 unless you read it all at once.
@@ -18,6 +19,7 @@ little-endian host; on a big-endian one, samples wider than a byte are swapped i
 |-----------|------|-------|-------|
 | `wave.open(file, mode=None)` | O(c) to read, O(1) to write | O(1) | `'rb'` returns a `Wave_read`, `'wb'` a `Wave_write`; without a mode, `file.mode` decides, else `'rb'` |
 | `wave.Error` | O(1) | O(1) | Raised for a format the module does not support, and for a parameter that is invalid, missing or set too late |
+| `wave.WAVE_FORMAT_PCM`, `wave.WAVE_FORMAT_IEEE_FLOAT`, `wave.WAVE_FORMAT_EXTENSIBLE` | O(1) | O(1) | The format codes `getformat()` returns; `WAVE_FORMAT_IEEE_FLOAT` is Python 3.15+ |
 
 ### Wave_read
 
@@ -30,7 +32,8 @@ little-endian host; on a big-endian one, samples wider than a byte are swapped i
 | `Wave_read.getnchannels()`, `Wave_read.getsampwidth()`, `Wave_read.getframerate()`, `Wave_read.getnframes()` | O(1) | O(1) | Read from the header when the file was opened |
 | `Wave_read.getcomptype()`, `Wave_read.getcompname()` | O(1) | O(1) | Always `'NONE'` and `'not compressed'` |
 | `Wave_read.getparams()` | O(1) | O(1) | A named tuple of the six values above |
-| `Wave_read.getmarkers()`, `Wave_read.getmark(id)` | O(1) | O(1) | `getmarkers()` returns `None` and `getmark()` raises `wave.Error`; both deprecated from Python 3.13 |
+| `Wave_read.getformat()` | O(1) | O(1) | Python 3.15+. The format code read from the header: PCM, IEEE float or extensible |
+| `Wave_read.getmarkers()`, `Wave_read.getmark(id)` | O(1) | O(1) | `getmarkers()` returns `None` and `getmark()` raises `wave.Error`; both deprecated from Python 3.13 and removed in Python 3.15 |
 | `Wave_read.close()` | O(1) | O(1) | Closes the file only if it was opened from a file name |
 
 ### Wave_write
@@ -39,7 +42,8 @@ little-endian host; on a big-endian one, samples wider than a byte are swapped i
 |-----------|------|-------|-------|
 | `wave.Wave_write(file)`, `wave.open(file, 'wb')` | O(1) | O(1) | Writes nothing; the header goes out with the first frames or at `close()` |
 | `Wave_write.setnchannels(n)`, `Wave_write.setsampwidth(n)`, `Wave_write.setframerate(n)`, `Wave_write.setnframes(n)`, `Wave_write.setcomptype(type, name)` | O(1) | O(1) | Raise `wave.Error` once frames have been written; all but `setnframes()` also reject a bad value |
-| `Wave_write.setparams(tuple)` | O(1) | O(1) | The five setters in one call |
+| `Wave_write.setparams(tuple)` | O(1) | O(1) | The five setters in one call; from Python 3.15 a seven-item tuple also sets the format |
+| `Wave_write.setformat(format)`, `Wave_write.getformat()` | O(1) | O(1) | Python 3.15+. `WAVE_FORMAT_PCM` by default; `WAVE_FORMAT_IEEE_FLOAT` needs a sample width of 4 or 8, and adds a `fact` chunk to the header that `close()` patches like the length fields. `setformat()` raises `wave.Error` once frames have been written |
 | `Wave_write.writeframes(data)` | O(k·w) | O(1) | The bytes are written as given, not copied; whenever the frames written so far differ from the header's count, its two length fields are patched in place |
 | `Wave_write.writeframesraw(data)` | O(k·w) | O(1) | The same without the patch, which is left to `close()` |
 | `Wave_write.tell()`, `Wave_write.getnframes()` | O(1) | O(1) | Frames written so far |
@@ -256,7 +260,10 @@ assert len(halved) == 10_000
 - **Python 3.12+**: Reads `WAVE_FORMAT_EXTENSIBLE` headers whose subformat is PCM; earlier versions
   raise `wave.Error` on them
 - **Python 3.13+**: `Wave_read.getmarkers()` and `Wave_read.getmark()` emit `DeprecationWarning`
-- **All Python 3**: Only uncompressed PCM is read or written; any other format raises `wave.Error`
+- **Python 3.15+**: IEEE floating-point files are read and written, with `getformat()` and
+  `setformat()`; the marker methods are removed
+- **All Python 3**: Only uncompressed audio is read or written; any other format raises
+  `wave.Error`
 
 ## Related Modules
 

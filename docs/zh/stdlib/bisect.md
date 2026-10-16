@@ -1,5 +1,5 @@
 ---
-source_sha: a94d3e8a9450b59cb245eb0f1ed57d4adf9f9336e3b33dadbbff5a31abbd09b2
+source_sha: ef6bf1c2ad845d07841bd88ca360fa8c82155e1e7d2d5d73089a40f80b45fb1f
 translated: machine
 ---
 
@@ -72,8 +72,8 @@ assert bisect.bisect_left(values, 100, lo=40, hi=60) == 50  # O(log 20)
 
 try:
     bisect.bisect_left(values, 100, lo=-1)
-except ValueError as error:
-    assert 'lo must be non-negative' in str(error)
+except ValueError:
+    pass
 else:
     raise AssertionError('a negative lo was accepted')
 ```

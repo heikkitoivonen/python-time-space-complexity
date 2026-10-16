@@ -1,5 +1,5 @@
 ---
-source_sha: c0bc8604cd865955e9bee5e9ce07ac587f5fc37659a6f2d952c5a11560725f18
+source_sha: 94b8516e62742f8991e48fca56d762ca55a09160a862913d1a31bbcba081e372
 translated: machine
 ---
 
@@ -7,29 +7,33 @@ translated: machine
 
 `tuple` 类型是不可变的有序序列。不可变性使 CPython 得以进行多种优化。
 
+`n` 是元组长度，`k` 是索引或重复次数，`i:j` 是切片边界，`len(t1)`、`len(t2)` 是操作数的长度。比较或哈希一个元素按 O(1) 计。
+
 ## 复杂度参考
 
 | 操作 | 时间 | 空间 | 备注 |
 |-----------|------|-------|-------|
-| `len()` | O(1) | O(1) | 直接查询 |
-| `access[i]` | O(1) | O(1) | 直接索引 |
+| `len(t)` | O(1) | O(1) | 长度保存在元组中，无需计数 |
+| `t[k]` | O(1) | O(1) | 直接索引 |
 | `index(x)` | O(n) | O(1) | 线性查找 |
 | `count(x)` | O(n) | O(1) | 线性扫描 |
-| `in`（成员检测） | O(n) | O(1) | 线性查找 |
-| `copy()` | O(1) | O(1) | 仅增加引用计数 |
-| `x + y`（拼接） | O(m+n) | O(m+n) | m、n 为长度 |
-| `t * n`（重复） | O(n*len(t)) | O(n*len(t)) | 创建新元组 |
-| `hash()` | 首次 O(n)，之后缓存为 O(1) | O(1) | 哈希值只计算一次，缓存在 `ob_hash` 中 |
+| `x in t`（成员检测） | O(n) | O(1) | 线性查找 |
+| `tuple(t)`, `copy.copy(t)` | O(1) | O(1) | `t` 类型恰为 `tuple` 时返回 `t` 本身；元组没有 `copy()` 方法 |
+| `t1 + t2`（拼接） | O(len(t1)+len(t2)) | O(len(t1)+len(t2)) | |
+| `t * k`（重复） | O(nk) | O(nk) | |
+| `for x in t`（迭代） | O(n) | O(1) | 每步 O(1) |
+| `min(t)`, `max(t)` | O(n) | O(1) | n-1 次比较 |
+| `hash()` | 首次 O(n)；3.14+ 之后为 O(1) | O(1) | 3.14+ 将哈希值缓存在 `ob_hash` 中；3.11-3.13 每次调用都重新计算 |
 | `reversed()` | O(1) | O(1) | 返回迭代器，不会物化 |
-| `tuple()` 构造函数 | O(n) | O(n) | n = 可迭代对象长度 |
-| `slice [::2]` | O(k) | O(k) | k = 切片长度 |
+| `tuple()` 构造函数 | O(n) | O(n) | n = 可迭代对象长度；类型恰为 `tuple` 的参数原样返回 |
+| `t[i:j]`（切片） | O(j-i) | O(j-i) | 带步长时为 O(结果长度) |
 
 ## 实现细节
 
 ### 不可变性的优势
 
 ```python
-# Tuples are hashable - can be dict keys or set members
+# Tuples of hashable elements are hashable - can be dict keys or set members
 d = {(1, 2): 'point', (3, 4): 'another'}
 s = {(0, 0), (1, 1)}
 
@@ -41,12 +45,13 @@ s = {(0, 0), (1, 1)}
 
 ```python
 # hash() computes hash value by iterating all elements
-t = (1, 2, 3)
+t = tuple([1, 2, 3])  # built at run time, so not hashed yet
 h1 = hash(t)  # O(n) first call - computes by iterating elements
 
-# CPython caches the hash in the tuple's ob_hash field
-# Subsequent calls return the cached value
-h2 = hash(t)  # O(1) - returns cached hash
+# Python 3.14+ caches the hash in the tuple's ob_hash field;
+# 3.11-3.13 recompute it on every call
+h2 = hash(t)  # O(1) on 3.14+, O(n) on 3.11-3.13
+assert h1 == h2
 ```
 
 ### 引用与拷贝
@@ -55,7 +60,7 @@ h2 = hash(t)  # O(1) - returns cached hash
 # Tuple "copy" doesn't copy - returns same object
 t1 = (1, 2, 3)
 t2 = tuple(t1)
-print(t1 is t2)  # True - same object in memory!
+assert t1 is t2  # True - same object in memory!
 
 # This is safe because tuples are immutable
 ```
@@ -77,9 +82,9 @@ tup = tuple(lst)  # O(n) - must copy all elements
 
 ## 版本说明
 
-- **所有版本**：核心复杂度稳定
 - **Python 3.8+**：部分场景下元组解包有所改进
 - **Python 3.11+**：自适应特化可优化重复的元组操作
+- **Python 3.14+**：`hash()` 会把结果缓存在元组中，因此重复调用为 O(1)
 
 ## 各实现对比
 
@@ -105,7 +110,6 @@ JIT 编译配合逃逸分析可进一步优化。
 
 - 在循环中反复拼接：`t += (item,)` —— 改用列表
 - 在循环里从大型可迭代对象创建元组
-- 想当然认为元组拷贝很快 —— 它仍然引用相同的元素
 
 ## 常见用法
 
@@ -142,7 +146,7 @@ lst = list(range(1000000))
 for i in range(1000):
     x = lst[i]  # O(1)
 
-# Both have same access time; tuple is hashable and immutable
+# Both have O(1) indexing; tuple is hashable and immutable
 ```
 
 ## 相关类型

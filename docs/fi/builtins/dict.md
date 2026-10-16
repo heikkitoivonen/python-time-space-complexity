@@ -1,11 +1,14 @@
 ---
-source_sha: 1ce9ec38802382a00f950d40de21191bc041a2d77c11e823222eb83a57ab0475
+source_sha: 8fd3d66178b61ce76428fd4d9d654b6858f39d3c2870bb746da072fd9957bab2
 translated: machine
 ---
 
 # Sanakirjaoperaatioiden vaativuus
 
 Tyyppi `dict` on muuttuva kuvaus, joka tallentaa avain-arvo-pareja. CPythonissa se on toteutettu hajautustauluna.
+
+`n` on sanakirjan alkioiden määrä ja `k` toisen operandin tai iteroitavan alkioiden määrä.
+Avainten hajautus ja vertailu oletetaan O(1)-operaatioiksi.
 
 ## Vaativuustaulukko
 
@@ -22,13 +25,20 @@ Tyyppi `dict` on muuttuva kuvaus, joka tallentaa avain-arvo-pareja. CPythonissa 
 | `keys()` | O(1) | O(1) | Näkymäolio (iterointi O(n)) |
 | `values()` | O(1) | O(1) | Näkymäolio (iterointi O(n)) |
 | `items()` | O(1) | O(1) | Näkymäolio (iterointi O(n)) |
+| `d`:n iterointi | O(n) | O(1) | Lisäysjärjestyksessä |
 | `copy()` | O(n) | O(n) | Pinnallinen kopio kaikista pareista |
-| `update(other)` | O(k) | O(1) | k = len(other), tasoitettu; muokkaa paikallaan |
+| `update(other)`, `d \|= other` | O(k) | O(1) | k = len(other), tasoitettu, lisäksi `other`-olion iteroinnin kustannus; muokkaa paikallaan |
+| `d \| other` | O(n + k) | O(n + k) | Uusi sanakirja: kopio `d`:stä, jota päivitetään `other`-olion alkioilla |
 | `setdefault(key, val)` | O(1) keskim. | O(1) | Hajautushaku + lisäys |
 | `fromkeys(keys)` | O(k) | O(k) | k = len(keys) |
 | `popitem()` | O(1) | O(1) | Poistaa viimeksi lisätyn parin (LIFO versiosta 3.7 alkaen) |
 
 *Huomio: keskimääräinen O(1) edellyttää hyvää tiivisteiden jakaumaa. Pahin tapaus O(n) syntyy patologisista tiivistetörmäyksistä, mikä on harvinaista Pythonin satunnaistetun hajautuksen ansiosta.*
+
+Alkioiden poistaminen ei pienennä taulua. Kun suurin osa alkioista on poistettu, taulun
+läpikäyvät operaatiot - iterointi, `copy()`, `other.update(d)`, `|`, `==` ja `dict(d)` - vievät
+yhä aikaa suhteessa sanakirjan aiempaan kokoon, kunnes myöhemmät lisäykset laukaisevat
+kokomuutoksen. `len()` ja haut eivät muutu.
 
 ## Toteutuksen yksityiskohdat
 
@@ -52,6 +62,29 @@ value = d[500]  # O(1)
 # CPython mitigates this with randomized hashing
 ```
 
+### Poistaminen ei pienennä taulua
+
+`del` ja `pop()` jättävät taulun suurimpaan kokoonsa, joten sen läpikäynti käy yhä läpi
+jokaisen paikan, joka sillä on ollut. Kun sanakirja on menettänyt suurimman osan
+alkioistaan, `copy()` rakentaa tiiviin sanakirjan, jolloin myöhemmät läpikäynnit ovat taas halpoja.
+
+```python
+import sys
+
+d = {i: i for i in range(100_000)}
+full = sys.getsizeof(d)
+for i in range(10, 100_000):
+    del d[i]                       # O(1) each
+
+assert len(d) == 10                # O(1)
+assert sys.getsizeof(d) == full    # still sized for 100,000 items
+keys = list(d)                     # O(100,000): walks the old table
+
+d = d.copy()                       # O(100,000) once
+assert sys.getsizeof(d) < full     # sized for 10 items
+assert list(d) == keys             # O(10)
+```
+
 ### Lisäysjärjestyksen takuu
 
 ```python
@@ -72,6 +105,7 @@ d['c'] = 3
 | Python 3.9+ | Sanakirjojen yhdistämis- ja päivitysoperaattorit (`\|`, `\|=`) |
 | Python 3.10+ | Hahmontunnistus sanakirjoilla |
 | Python 3.11+ | 23 % pienempi, kun kaikki avaimet ovat Unicode-merkkijonoja |
+| Python 3.15+ | [`frozendict`](frozendict.md), muuttumaton ja hajautettava sanakirja |
 
 ## Toteutusten vertailu
 
@@ -120,6 +154,7 @@ d = {
 ## Liittyvät tyypit
 
 - **[Joukko](set.md)** - Järjestämättömät uniikit alkiot
+- **[frozendict](frozendict.md)** - Muuttumaton, hajautettava sanakirja (Python 3.15+)
 - **[Defaultdict](../stdlib/collections.md#defaultdict)** - Automaattiset oletusarvot
 - **[OrderedDict](../stdlib/collections.md#ordereddict)** - Eksplisiittinen järjestys (ennen 3.6)
 - **[ChainMap](../stdlib/collections.md#chainmap)** - Useita sanakirjanäkymiä

@@ -266,7 +266,8 @@ class TestConstruction:
             assert not is_listening(server.socket)
 
     def test_class_attribute_defaults(self) -> None:
-        assert socketserver.TCPServer.request_queue_size == 5
+        backlog = getattr(socket, "SOMAXCONN", 5) if sys.version_info >= (3, 15) else 5
+        assert socketserver.TCPServer.request_queue_size == backlog
         assert socketserver.TCPServer.address_family == socket.AF_INET
         assert socketserver.TCPServer.socket_type == socket.SOCK_STREAM
         assert socketserver.TCPServer.allow_reuse_address is False

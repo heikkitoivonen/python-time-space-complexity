@@ -1,4 +1,4 @@
-<!-- source_sha: 0cdef5816a099ea96efa48c5cb4e1a668c3a5b208d7f9fdaa5e16f027c014457 -->
+<!-- source_sha: 086995ffd6369191cf4f532cfdde286f955d5ed4c10e0ad8670fd2f30fdb2d60 -->
 <!-- translated: machine -->
 
 [English](README.md) | **简体中文**
@@ -7,7 +7,7 @@
 
 [![Lint / Format](https://img.shields.io/github/actions/workflow/status/heikkitoivonen/python-time-space-complexity/deploy.yml?label=lint%20%2F%20format)](https://github.com/heikkitoivonen/python-time-space-complexity/actions/workflows/deploy.yml)
 [![Type Check](https://img.shields.io/github/actions/workflow/status/heikkitoivonen/python-time-space-complexity/deploy.yml?label=type%20check)](https://github.com/heikkitoivonen/python-time-space-complexity/actions/workflows/deploy.yml)
-[![Python](https://img.shields.io/badge/python-3.11%20to%203.14-blue)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.11%20to%203.15-blue)](https://www.python.org/)
 [![License](https://img.shields.io/github/license/heikkitoivonen/python-time-space-complexity)](LICENSE.txt)
 [![Docs](https://img.shields.io/badge/docs-pythoncomplexity.com-brightgreen)](https://pythoncomplexity.com)
 
@@ -18,7 +18,7 @@
 本项目提供以下内容的详细算法复杂度文档：
 - **Python 内置类型**：`list`、`dict`、`set`、`str` 等
 - **标准库模块**：`collections`、`heapq`、`bisect`、`annotationlib`、`compression.zstd` 等
-- **Python 版本**：3.11–3.14（包含新的 3.14 特性）
+- **Python 版本**：3.11–3.15（包含新的 3.15 特性）
 - **替代实现**：CPython、PyPy、Jython、IronPython
 
 ## 特性
@@ -39,7 +39,7 @@
 ## 快速开始
 
 ### 环境要求
-- Python 3.11+（推荐 3.14）
+- Python 3.11+（推荐 3.15）
 - [uv](https://github.com/astral-sh/uv) - 快速的 Python 包管理器
 - Git
 
@@ -185,7 +185,7 @@ Estimated Complexity: O(n) (Linear)
 │   ├── builtins/               # Built-in types (list, dict, set, tuple, str)
 │   ├── stdlib/                 # Standard library modules
 │   ├── implementations/        # CPython, PyPy, Jython, IronPython
-│   └── versions/               # Python version guides (3.10–3.14)
+│   └── versions/               # Python version guides (3.10–3.15)
 ├── skills/                     # Distributable agent skill sources and release guidance
 │   ├── python-complexity/
 │   │   ├── SKILL.md            # Agent instructions
@@ -338,7 +338,8 @@ dq.appendleft(item)
 Python 3.11     ← Baseline (inline caching)
 Python 3.12     ← +5-10% improvements
 Python 3.13     ← Similar (experimental free-threading)
-Python 3.14     ← Better GC pauses, new heapq max-heap
+Python 3.14     ← New heapq max-heap
+Python 3.15     ← Lazy imports, frozendict, UTF-8 by default
 ```
 
 ### 实现对比
@@ -390,6 +391,7 @@ rm -rf .venv/ && uv sync
 ## 来源与参考
 
 - [Python 官方文档](https://docs.python.org/3/)
+- [Python 官方时间复杂度页面](https://docs.python.org/3.15/builtins/time-complexity.html)（Python 3.15+）
 - [TimeComplexity Wiki](https://wiki.python.org/moin/TimeComplexity)
 - [Python 增强提案（PEPs）](https://www.python.org/dev/peps/)
 - [uv 文档](https://docs.astral.sh/uv/)

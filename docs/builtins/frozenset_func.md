@@ -7,7 +7,7 @@ The `frozenset()` function creates immutable sets from iterables.
 | Case | Time | Space | Notes |
 |------|------|-------|-------|
 | Empty frozenset | O(1) | O(1) | frozenset() |
-| From iterable | O(n) avg | O(n) | n = iterable length; O(n²) worst case with hash collisions |
+| From iterable | O(n) avg | O(n) | n = iterable length; O(n²) worst case with hash collisions. A set or dict that had most of its elements removed costs its former size (see [set](set.md)) |
 | From string | O(n) avg | O(n) | n = string length; each char hashed |
 | Duplicate removal | O(n) avg | O(n) | Automatic deduplication via hashing |
 | Shallow copy | O(1) | O(1) | Returns same object (immutable) |

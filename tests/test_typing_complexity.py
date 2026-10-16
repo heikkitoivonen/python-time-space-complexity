@@ -68,6 +68,12 @@ Measurement scope:
 * The rows that carry a version are checked against the running
   interpreter: each name exists from the version its row gives and not
   before.
+* 3.15: `TypeForm(x)` returns `x` itself and `TypeForm[int]` is the same
+  object on a repeat; `disjoint_base(cls)` returns the class with
+  `__disjoint_base__` set; a `TypedDict` without `extra_items` reports
+  `NoExtraItems`. `no_type_check_decorator` exists before 3.15 and not from
+  it, and reading `ByteString` warns `DeprecationWarning` and the name is
+  absent from `typing.__all__` from 3.15, neither before.
 * Every fenced Python block runs in its own subprocess, so the
   `from __future__ import annotations` block is the first statement of its
   file, and a mutated assertion in one block is asserted to fail.
@@ -106,6 +112,7 @@ import sys
 import textwrap
 import tracemalloc
 import typing
+import warnings
 from collections.abc import Callable
 from typing import (
     TYPE_CHECKING,
@@ -152,6 +159,9 @@ ADDED_AFTER_310 = {
     "get_protocol_members": "3.13",
     "is_protocol": "3.13",
     "evaluate_forward_ref": "3.14",
+    "NoExtraItems": "3.15",
+    "TypeForm": "3.15",
+    "disjoint_base": "3.15",
 }
 
 
@@ -233,6 +243,43 @@ class TestVersionedRows:
         if sys.version_info >= (3, 12):
             alias = typing.TypeAliasType("Alias", int)  # type: ignore[attr-defined]
             assert hasattr(alias, "evaluate_value") == (sys.version_info >= (3, 14))
+
+
+class TestThe315Changes:
+    """`TypeForm`, `disjoint_base` and `NoExtraItems` are O(1) (3.15+);
+    `no_type_check_decorator` is removed in 3.15 and `ByteString` warns on
+    access and leaves `__all__` there."""
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="version: added in 3.15")
+    def test_the_additions(self) -> None:
+        names: Any = typing
+        value = [1, 2]
+
+        assert names.TypeForm(value) is value
+        assert names.TypeForm[int] is names.TypeForm[int]  # through the subscription cache
+
+        class Plain:
+            pass
+
+        assert names.disjoint_base(Plain) is Plain
+        assert Plain.__disjoint_base__ is True  # type: ignore[attr-defined]
+
+        class Open(typing.TypedDict):
+            a: int
+
+        assert Open.__extra_items__ is names.NoExtraItems  # type: ignore[attr-defined]
+
+    def test_no_type_check_decorator_is_gone_from_3_15(self) -> None:
+        assert hasattr(typing, "no_type_check_decorator") is (sys.version_info < (3, 15))
+
+    def test_byte_string_warns_and_leaves_all_from_3_15(self) -> None:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            typing.ByteString  # type: ignore[attr-defined]  # noqa: B018
+
+        later = sys.version_info >= (3, 15)
+        assert any(issubclass(w.category, DeprecationWarning) for w in caught) is later
+        assert ("ByteString" in typing.__all__) is not later
 
 
 class TestSubscriptionIsCached:

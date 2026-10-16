@@ -57,7 +57,7 @@ run a subprocess and which results are cached.
 | `platform.win32_edition()`, `platform.win32_is_iot()` | O(1) | O(1) | One registry read on Windows; `None` and `False` elsewhere |
 | `platform.ios_ver(system='', release='', model='', is_simulator=False)`, `platform.IOSVersionInfo` | O(1) | O(1) | Python 3.13+. The device's values on iOS, the defaults elsewhere |
 | `platform.android_ver(release='', api_level=0, manufacturer='', model='', device='', is_emulator=False)`, `platform.AndroidVer` | O(1) | O(1) | Python 3.13+. System properties read on every call on Android, the defaults elsewhere |
-| `platform.java_ver(release='', vendor='', vminfo=('', '', ''), osinfo=('', '', ''))` | O(1) | O(1) | Returns the defaults on anything but Jython; deprecated since Python 3.13 |
+| `platform.java_ver(release='', vendor='', vminfo=('', '', ''), osinfo=('', '', ''))` | O(1) | O(1) | Returns the defaults on anything but Jython; deprecated since Python 3.13 and removed in Python 3.15 |
 
 ## Cached and Uncached Queries
 
@@ -221,6 +221,7 @@ assert report['bits'] in ('32bit', '64bit')
 
 - **Python 3.13+**: Added `ios_ver()` and `android_ver()`; `java_ver()` is deprecated
 - **Python 3.14+**: Added `invalidate_caches()`; `libc_ver()` also recognises musl
+- **Python 3.15+**: `java_ver()` removed
 
 ## Related Modules
 

@@ -61,7 +61,7 @@ call as O(1).
 | `calendar.TextCalendar(firstweekday=0)` | O(1) | O(1) | Every `Calendar` method, plus the formatting below |
 | `TextCalendar.formatday(day, weekday, width)` | O(w) | O(w) | One day, centered to at least `width` characters |
 | `TextCalendar.formatweek(theweek, width)` | O(w) | O(w) | Seven days joined by spaces |
-| `TextCalendar.formatweekday(day, width)` | O(w) | O(w) | The full name when `width` is at least 9, otherwise the abbreviation, cut to `width` |
+| `TextCalendar.formatweekday(day, width)` | O(w) | O(w) | The full name when `width` is at least 9 - from 3.15, at least the longest full day name in the locale - otherwise the abbreviation, cut to `width` |
 | `TextCalendar.formatweekheader(width)` | O(w) | O(w) | |
 | `TextCalendar.formatmonthname(theyear, themonth, width, withyear=True)` | O(w) | O(w) | The name, centered to at least `width` characters |
 | `TextCalendar.formatmonth(theyear, themonth, w=0, l=0)` | O(w + l) | O(w + l) | `w` is raised to at least 2 and `l` to at least 1 |
@@ -82,7 +82,7 @@ call as O(1).
 | `HTMLCalendar.formatmonthname(theyear, themonth, withyear=True)` | O(1) | O(1) | |
 | `HTMLCalendar.formatmonth(theyear, themonth, withyear=True)` | O(1) | O(1) | One `<table>` |
 | `HTMLCalendar.formatyear(theyear, width=3)` | O(1) | O(1) | Twelve month tables, `width` to a row |
-| `HTMLCalendar.formatyearpage(theyear, width=3, css='calendar.css', encoding=None)` | O(1) | O(1) | A complete page, returned as `bytes` in `encoding` |
+| `HTMLCalendar.formatyearpage(theyear, width=3, css='calendar.css', encoding=None)` | O(1) | O(1) | A complete page, returned as `bytes` in `encoding`, UTF-8 by default: HTML5 with a `<meta charset>` from 3.15, XHTML with an XML declaration before |
 | `HTMLCalendar.cssclasses`, `HTMLCalendar.cssclasses_weekday_head`, `HTMLCalendar.cssclass_noday`, `HTMLCalendar.cssclass_month_head`, `HTMLCalendar.cssclass_month`, `HTMLCalendar.cssclass_year_head`, `HTMLCalendar.cssclass_year` | O(1) | O(1) | Class attributes read as each element is written; override them on a subclass or an instance |
 
 ### LocaleTextCalendar and LocaleHTMLCalendar
@@ -100,6 +100,7 @@ call as O(1).
 |-----------|------|-------|-------|
 | `calendar.day_name`, `calendar.day_abbr` | O(1) | O(1) | Indexed 0-6 from Monday; each access formats the name afresh with `strftime()` in the current `LC_TIME` locale |
 | `calendar.month_name`, `calendar.month_abbr` | O(1) | O(1) | Indexed 1-12, with `''` at 0; each name is formatted on access in the same way |
+| `calendar.standalone_month_name`, `calendar.standalone_month_abbr` | O(1) | O(1) | Python 3.15+. The form of a month name used on its own, which some languages inflect differently; formatted on access with `%OB` and `%Ob`, or the same objects as `month_name` and `month_abbr` where the C library lacks those. The formatters' month headings use them from 3.15 |
 | `calendar.MONDAY`, `calendar.TUESDAY`, `calendar.WEDNESDAY`, `calendar.THURSDAY`, `calendar.FRIDAY`, `calendar.SATURDAY`, `calendar.SUNDAY` | O(1) | O(1) | 0 to 6; `Day` members from Python 3.12, plain integers before |
 | `calendar.JANUARY`, `calendar.FEBRUARY`, `calendar.MARCH`, `calendar.APRIL`, `calendar.MAY`, `calendar.JUNE`, `calendar.JULY`, `calendar.AUGUST`, `calendar.SEPTEMBER`, `calendar.OCTOBER`, `calendar.NOVEMBER`, `calendar.DECEMBER` | O(1) | O(1) | 1 to 12; Python 3.12+ |
 | `calendar.Day`, `calendar.Month` | O(1) | O(1) | `IntEnum`s behind those constants; `weekday()` returns a `Day`. Python 3.12+ |
@@ -250,7 +251,7 @@ class Styled(calendar.HTMLCalendar):
     cssclass_noday = 'empty'
 
 html = Styled().formatmonth(2024, 2)  # O(1)
-assert html.startswith('<table border="0" cellpadding="0" cellspacing="0" class="month compact">')
+assert html.startswith('<table') and 'class="month compact">' in html.splitlines()[0]
 assert '<td class="empty">&nbsp;</td>' in html
 assert '<td class="thu">1</td>' in html
 
@@ -261,7 +262,8 @@ assert b'<title>Calendar for 2024</title>' in page
 
 ## Localized Names
 
-`day_name`, `day_abbr`, `month_name` and `month_abbr` store no names. Each name is
+`day_name`, `day_abbr`, `month_name` and `month_abbr`, and from 3.15 `standalone_month_name` and
+`standalone_month_abbr`, store no names. Each name is
 formatted by `strftime()` when it is looked up, in the current `LC_TIME` locale, which is what lets them follow a locale change;
 a loop that looks names up per item can copy them into a list once.
 
@@ -378,6 +380,10 @@ assert by_loop == by_formula == 49
 
 ## Version Notes
 
+- **Python 3.15+**: Added `standalone_month_name` and `standalone_month_abbr`, which
+  `formatmonthname()` uses; `HTMLCalendar` writes HTML5, without the `border`, `cellpadding` and
+  `cellspacing` table attributes, and `formatyearpage()` writes a `<meta charset>` instead of an XML
+  declaration
 - **Python 3.12+**: Added the `Day` and `Month` enums and the `JANUARY` to `DECEMBER` constants;
   `MONDAY` to `SUNDAY` became `Day` members, `weekday()` returns one, and `calendar.January` and
   `calendar.February` are deprecated

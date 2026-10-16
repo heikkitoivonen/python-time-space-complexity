@@ -82,6 +82,7 @@ Widget options reach Tk through one routine that rebuilds the argument tuple onc
 | `Misc.winfo_pointerx()` / `Misc.winfo_pointery()` / `Misc.winfo_pointerxy()` / `Misc.winfo_containing(x, y)` / `Misc.winfo_pixels(number)` / `Misc.winfo_fpixels(number)` / `Misc.winfo_rgb(color)` / `Misc.winfo_atom(name)` / `Misc.winfo_atomname(id)` | O(1) | O(1) | The pointer queries and `winfo_containing()` are a round trip to the display server |
 | `Misc.winfo_visualsavailable()` / `Misc.winfo_interps()` | O(m) | O(m) | Every visual of the screen, or every Tk interpreter on the display |
 | `Misc.pack_slaves()` / `Misc.place_slaves()` / `Misc.grid_slaves(row, column)` | O(n) | O(n) | Every widget the manager holds; `grid_slaves()` filters by row or column after the scan |
+| `Misc.pack_content()` / `Misc.place_content()` / `Misc.grid_content(row, column)` / `Misc.content()` | O(n) | O(n) | Python 3.15+. The row above through Tk's `content` subcommands, falling back to `slaves` on a Tk before 8.6; `content()` is `pack_content()` |
 | `Misc.pack_propagate(flag)` / `Misc.grid_propagate(flag)` / `Misc.grid_anchor(anchor)` / `Misc.grid_columnconfigure(index, **k)` / `Misc.grid_rowconfigure(index, **k)` | O(k² + m) | O(k) | A list of m indices configures each one |
 | `Misc.grid_size()` / `Misc.grid_bbox()` | O(n) | O(1) | Tk recomputes the grid's extent from every managed widget |
 | `Misc.grid_location(x, y)` | O(rows + columns) | O(1) | Scans the slot offsets |
@@ -95,6 +96,7 @@ Widget options reach Tk through one routine that rebuilds the argument tuple onc
 | `Pack.pack_info()` / `Grid.grid_info()` / `Place.place_info()` | O(o) | O(o) | A dict of the manager's options for this widget |
 | `Pack.propagate()` / `Pack.slaves()` / `Grid.bbox()` / `Grid.columnconfigure()` / `Grid.rowconfigure()` / `Grid.propagate()` / `Grid.size()` / `Grid.slaves()` / `Place.slaves()` | O(n + k²) | O(n) | The `Misc` container methods under their manager-local names, with the bounds above |
 | `Grid.location(x, y)` | O(rows + columns) | O(1) | `Misc.grid_location()` under its manager-local name |
+| `Pack.content()` / `Pack.pack_content()` / `Grid.content()` / `Grid.grid_content()` / `Place.content()` / `Place.place_content()` | O(n) | O(n) | Python 3.15+; the `Misc` `*_content()` methods under their manager-local names |
 
 ### Wm
 
@@ -197,6 +199,7 @@ Widget options reach Tk through one routine that rebuilds the argument tuple onc
 | `Text.insert(index, chars, *tags)` / `Text.delete(index1, index2)` / `Text.replace(index1, index2, chars)` | O(log L + m + ℓ) | O(m + ℓ) | Tk keeps each line's text in runs it splits and merges around the edit, copying the ℓ characters of the line; `insert()` with tags also adds each tag over the new text |
 | `Text.count(index1, index2, *options)` | O(log L + m) | O(1) | `lines` and `indices` come from the tree's counts, `chars` and `displaychars` walk the range; `return_ints=True` is Python 3.13+, where a single option also returns a plain int |
 | `Text.search(pattern, index, stopindex, **k)` | O(m) | O(ℓ) | An exact search scans the m characters between the indices, a line at a time through a buffer of that line; `regexp=True` matches the pattern against each line at the pattern's own cost instead |
+| `Text.search_all(pattern, index, stopindex, **k)` | O(m) | O(m) | Python 3.15+. One search with Tk's `-all` over the same m characters as `search()`, with the same cost for `regexp=True`, returning a tuple of every match's start index; `overlap=True` also reports matches that overlap |
 | `Text.bbox(index)` / `Text.dlineinfo(index)` | O(log L + m) | O(1) | One index resolution; None when the index is off screen |
 | `Text.mark_unset(*names)` / `Text.mark_gravity(name, direction)` / `Text.mark_next(index)` / `Text.mark_previous(index)` / `Text.mark_names()` | O(marks) | O(marks) | Marks are segments in the line they sit on; `mark_names()` lists all of them |
 | `Text.tag_add(tag, index1, index2)` / `Text.tag_remove(tag, index1, index2)` | O(log L + m) | O(1) | Inserts toggle segments at the ends of the range and updates the tag counts up the tree |
@@ -250,6 +253,7 @@ Widget options reach Tk through one routine that rebuilds the argument tuple onc
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `Event.serial` / `Event.num` / `Event.focus` / `Event.height` / `Event.width` / `Event.keycode` / `Event.state` / `Event.time` / `Event.x` / `Event.y` / `Event.x_root` / `Event.y_root` / `Event.char` / `Event.send_event` / `Event.keysym` / `Event.keysym_num` / `Event.type` / `Event.widget` / `Event.delta` | O(1) | O(1) | Filled in once per delivered event from Tk's substitutions whether or not the handler reads them, except `focus` and `send_event`, which are left unset when Tk supplies no boolean; `widget` is looked up by path name, O(p), and `type` is an `EventType` |
+| `Event.detail` / `Event.user_data` | O(1) | O(1) | Python 3.15+. Filled from the same substitution: `user_data` is a virtual event's data and `detail` the detail string of any other event, with the one that does not apply set to `'??'` |
 | `EventType` | O(1) | O(1) | A `str` enum of the numeric event type codes |
 | `CallWrapper(func, subst, widget)` | O(f) | O(1) | What every registered command runs: `subst` then `func`, with any exception but SystemExit sent to `report_callback_exception()` rather than raised |
 

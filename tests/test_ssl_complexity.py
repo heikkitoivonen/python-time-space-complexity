@@ -116,6 +116,15 @@ Measurement scope:
   `ssl.SSLErrorNumber` and `ssl.AlertDescription` are asserted by identity, so
   nothing is built. Identity does not time the lookup; the O(1) is `enum`'s
   value map in Lib/enum.py.
+* The 3.15 group and signature-algorithm rows run a real handshake: a server
+  restricted to `secp384r1`, `TLS_CHACHA20_POLY1305_SHA256` and `ECDSA+SHA256`
+  against a client offering `secp384r1:x25519` reports those three on both
+  sides, and `client_sigalg()` is `None` with no client certificate. Unknown
+  names raise `SSLError` from each setter. `get_groups()` and `get_sigalgs()`
+  return equal lists that are not the same object on two calls. Before a
+  handshake the sigalg accessors return `None`, and `group()` kills a child
+  interpreter on 3.15.0 with OpenSSL 3.5 - the reason the row says to call it
+  only afterwards.
 * Every fenced Python block except the one that opens a connection runs in its
   own subprocess and working directory, and a mutated assertion in one of them
   is asserted to fail.
@@ -124,6 +133,10 @@ Not settled here:
 
 * Round trips. The page puts them outside every bound, and the in-process
   handshake here has none.
+* `SSLSocket.sendfile()` on a socket whose sending kernel TLS took over, from
+  3.15. That needs `OP_ENABLE_KTLS`, a kernel with the `tls` module loaded and
+  a cipher the kernel implements; the sendfile test here exercises the block
+  path every other socket takes.
 * `ssl.get_server_certificate()`, which needs a server to answer.
 * `ssl.enum_certificates()` and `ssl.enum_crls()` are Windows-only and absent
   on this platform, so their O(t·k) row is unverified by any run this project
@@ -1329,6 +1342,112 @@ class TestContextSettings:
             connection.client.get_channel_binding("tls-server-end-point")
 
 
+SSL_315 = pytest.mark.skipif(sys.version_info < (3, 15), reason="the API is Python 3.15+")
+
+
+@SSL_315
+class TestGroupsAndSignatureAlgorithms:
+    """The 3.15 rows: `set_ciphersuites`, `set_groups`, `get_groups`, the sigalg
+    setters, `get_sigalgs`, and the three per-connection accessors."""
+
+    def test_the_listings_are_built_per_call(self) -> None:
+        """O(g) and O(s) space: a fresh list each time, not a stored one."""
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        if ssl.OPENSSL_VERSION_INFO < (3, 5):
+            with pytest.raises(NotImplementedError):
+                context.get_groups()  # type: ignore[attr-defined]
+            return
+
+        first, second = context.get_groups(), context.get_groups()  # type: ignore[attr-defined]
+        assert first == second and first is not second
+        assert "secp384r1" in first
+        aliased = context.get_groups(include_aliases=True)  # type: ignore[attr-defined]
+        assert len(aliased) >= len(first)
+
+    def test_get_sigalgs_is_built_per_call(self) -> None:
+        if ssl.OPENSSL_VERSION_INFO < (3, 4):
+            with pytest.raises(NotImplementedError):
+                ssl.get_sigalgs()  # type: ignore[attr-defined]
+            return
+
+        sigalgs = ssl.get_sigalgs()  # type: ignore[attr-defined]
+        assert sigalgs == ssl.get_sigalgs() and sigalgs is not ssl.get_sigalgs()  # type: ignore[attr-defined]
+        assert "ecdsa_secp256r1_sha256" in sigalgs
+
+    def test_the_setters_choose_what_the_handshake_negotiates(
+        self, chain_file: pathlib.Path
+    ) -> None:
+        server = server_context(chain_file)
+        client = client_context(ROOT_CERT)
+        server.set_groups("secp384r1")  # type: ignore[attr-defined]
+        client.set_groups("secp384r1:x25519")  # type: ignore[attr-defined]
+        server.set_ciphersuites("TLS_CHACHA20_POLY1305_SHA256")  # type: ignore[attr-defined]
+        server.set_server_sigalgs("ECDSA+SHA256")  # type: ignore[attr-defined]
+
+        connection = handshake(server, client)
+
+        for side in (connection.client, connection.server):
+            cipher = side.cipher()
+            assert cipher is not None and cipher[0] == "TLS_CHACHA20_POLY1305_SHA256"
+            if ssl.OPENSSL_VERSION_INFO < (3, 5):
+                with pytest.raises(NotImplementedError):
+                    side.server_sigalg()  # type: ignore[attr-defined]
+                continue
+            assert side.group() == "secp384r1"  # type: ignore[attr-defined]
+            assert side.server_sigalg() == "ecdsa_secp256r1_sha256"  # type: ignore[attr-defined]
+            assert side.client_sigalg() is None, "no client certificate was asked for"  # type: ignore[attr-defined]
+
+    def test_unknown_names_raise(self) -> None:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+
+        with pytest.raises(ssl.SSLError):
+            context.set_groups("no-such-group")  # type: ignore[attr-defined]
+        with pytest.raises(ssl.SSLError):
+            context.set_ciphersuites("NO_SUCH_SUITE")  # type: ignore[attr-defined]
+        with pytest.raises(ssl.SSLError):
+            context.set_client_sigalgs("no-such-sigalg")  # type: ignore[attr-defined]
+        with pytest.raises(ssl.SSLError):
+            context.set_server_sigalgs("no-such-sigalg")  # type: ignore[attr-defined]
+
+    def test_the_sigalg_accessors_are_none_before_the_handshake(self) -> None:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        unfinished = context.wrap_bio(ssl.MemoryBIO(), ssl.MemoryBIO(), server_side=True)
+        if ssl.OPENSSL_VERSION_INFO < (3, 5):
+            with pytest.raises(NotImplementedError):
+                unfinished.client_sigalg()  # type: ignore[attr-defined]
+            return
+
+        assert unfinished.client_sigalg() is None  # type: ignore[attr-defined]
+        assert unfinished.server_sigalg() is None  # type: ignore[attr-defined]
+
+    def test_group_before_the_handshake_crashes_3_15_0(self) -> None:
+        """Why the row says to call `group()` only after the handshake.
+
+        Run in a child, which dies rather than printing None.
+        """
+        if sys.version_info[:3] != (3, 15, 0):
+            pytest.skip("version: the crash is the one observed on 3.15.0")
+        if ssl.OPENSSL_VERSION_INFO < (3, 2):
+            pytest.skip("version: an OpenSSL before 3.2 raises NotImplementedError instead")
+        source = textwrap.dedent(
+            """
+            import ssl
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            unfinished = context.wrap_bio(ssl.MemoryBIO(), ssl.MemoryBIO(), server_side=True)
+            print(unfinished.group())
+            """
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", source], capture_output=True, text=True, timeout=60
+        )
+
+        # A signal on POSIX (negative), an access-violation status on Windows:
+        # either way the child died before it could print the None.
+        assert result.returncode != 0, (result.returncode, result.stdout, result.stderr)
+        assert result.stdout == "", result.stdout
+        assert "Traceback" not in result.stderr, "an exception is not the crash the row warns of"
+
+
 class TestVersionNotes:
     """Each Version Notes bullet, asserted against the running interpreter so
     the matrix holds the page to the boundary it names."""
@@ -1376,6 +1495,22 @@ class TestVersionNotes:
 
     def test_post_handshake_auth_reporting_arrives_in_3_14(self) -> None:
         assert hasattr(ssl, "HAS_PHA") is (sys.version_info >= (3, 14))
+
+    def test_groups_sigalgs_and_tls13_suites_arrive_in_3_15(self) -> None:
+        arrived = sys.version_info >= (3, 15)
+        for name in (
+            "set_ciphersuites",
+            "set_groups",
+            "get_groups",
+            "set_client_sigalgs",
+            "set_server_sigalgs",
+        ):
+            assert hasattr(ssl.SSLContext, name) is arrived, name
+        for name in ("group", "client_sigalg", "server_sigalg"):
+            assert hasattr(ssl.SSLSocket, name) is arrived, name
+            assert hasattr(ssl.SSLObject, name) is arrived, name
+        assert hasattr(ssl, "get_sigalgs") is arrived
+        assert hasattr(ssl, "HAS_PSK_TLS13") is arrived
 
 
 def _blocks() -> list[tuple[int, str]]:

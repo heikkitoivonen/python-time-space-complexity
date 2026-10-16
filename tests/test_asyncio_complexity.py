@@ -33,6 +33,13 @@ Measurement scope:
   `first is not second` settles the space column with no tolerance - a stored
   view would return the same object. `.copy()` on the result is the control
   that the comparison is not vacuous.
+* `TaskGroup.cancel()` (3.15+) on a group of 20 sleeping tasks and one
+  finished one cancels each of the 20 once, leaves the finished one alone,
+  cancels the body, and the group exits without an exception; after two
+  calls each of the 20 tasks and the body reports `cancelling() == 1`, one
+  request each, and a call before entry cancels the body on entry. The
+  n of the row is read from `_abort()` in Lib/asyncio/taskgroups.py, which
+  walks the group's tasks; only one size is run.
 * `Event.set()` resolves every queued waiter. The waiter deque is read
   directly, so eight waiters is eight futures, and the count after `set()` is
   exact rather than timed. `Condition.notify(2)` is checked the same way.
@@ -615,6 +622,71 @@ class TestTaskGroup:
         raised, cancelled = asyncio.run(main())
         assert raised.__name__ == "ExceptionGroup"
         assert cancelled is True
+
+
+@pytest.mark.skipif(sys.version_info < (3, 15), reason="TaskGroup.cancel() is 3.15+")
+class TestTaskGroupCancel:
+    """`TaskGroup.cancel()` | O(n): every unfinished task is cancelled once,
+    the body too, and the group exits without raising."""
+
+    def test_every_pending_task_is_cancelled_and_nothing_is_raised(self) -> None:
+        async def main() -> tuple[int, int, bool, list[int]]:
+            cancelled = 0
+            finished = 0
+
+            async def waits() -> None:
+                nonlocal cancelled
+                try:
+                    await asyncio.sleep(10)
+                except asyncio.CancelledError:
+                    cancelled += 1
+                    raise
+
+            async def quick() -> None:
+                nonlocal finished
+                finished += 1
+
+            reached_end = False
+            requests: list[int] = []
+            async with asyncio.TaskGroup() as group:
+                for _ in range(20):
+                    group.create_task(waits())
+                done = group.create_task(quick())
+                await asyncio.sleep(0)
+                await asyncio.sleep(0)
+                assert done.done()
+                body = asyncio.current_task()
+                assert body is not None
+                cast_any(group).cancel()
+                cast_any(group).cancel()  # idempotent: no second request
+                tasks = cast_any(group)._tasks
+                requests.extend(task.cancelling() for task in tasks)
+                requests.append(body.cancelling())
+                await asyncio.sleep(10)  # the body is cancelled here
+                reached_end = True
+            return cancelled, finished, reached_end, requests
+
+        cancelled, finished, reached_end, requests = asyncio.run(main())
+        # one request per pending task and one for the body; the finished
+        # task has left the group's set
+        assert requests == [1] * 21
+        assert (cancelled, finished, reached_end) == (20, 1, False)
+
+    def test_cancel_before_entry_cancels_on_entry(self) -> None:
+        async def main() -> bool:
+            group = asyncio.TaskGroup()
+            cast_any(group).cancel()
+            ran = False
+            async with group:
+                await asyncio.sleep(10)
+                ran = True
+            return ran
+
+        assert asyncio.run(main()) is False
+
+
+def cast_any(value: object) -> Any:
+    return value
 
 
 class TestTaskSnapshots:

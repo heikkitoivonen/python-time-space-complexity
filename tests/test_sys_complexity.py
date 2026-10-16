@@ -53,6 +53,21 @@ Measurement scope:
   dropped in a fresh interpreter retains 10.0 MB on 3.12.5 and 3.12.6 and
   0.0 MB on 3.11, 3.12.7, 3.12.14, 3.13 and 3.14. The immortal window is a patch range, not a
   minor release: gh-113993 landed in 3.12.7.
+* Lazy imports (3.15+). A module listed in `__lazy_modules__` and imported
+  by an `exec` at module scope binds a `types.LazyImportType` proxy, makes
+  no `find_spec` call on a recording meta path finder, stays out of
+  `sys.modules` and is in `sys.lazy_modules`; the first attribute use makes
+  the search, runs the body once, replaces the proxy with the module and
+  takes the name out of `sys.lazy_modules`.
+  A filter sees each of two listed imports once, with the importer's name,
+  the module's name and `None`, and is not called for an unlisted import;
+  returning `False` binds the module eagerly. In a fresh interpreter,
+  `set_lazy_imports('all')` makes a plain module-level import lazy and a
+  function-level one and a `from ... import *` eager. The setters round-trip through the getters, and
+  an unknown mode raises `ValueError`. `sys.abi_info` is one object on every
+  read, its `byteorder` is `sys.byteorder`, its `pointer_bits` is
+  `struct.calcsize('P') * 8`, and its `debug` matches the presence of
+  `sys.gettotalrefcount`. The names are asserted absent before 3.15.
 * The rest is counted rather than timed: hooks fired, `find_spec` calls,
   `__sizeof__` calls, traceback frames printed, `firstiter` calls, entries in
   a returned dict, and object identity before and after.
@@ -146,7 +161,7 @@ from typing import Any
 import pytest
 
 PAGE = pathlib.Path(__file__).resolve().parent.parent / "docs" / "stdlib" / "sys.md"
-EXPECTED_BLOCKS = 13
+EXPECTED_BLOCKS = 14
 
 # gh-113993 made interned strings mortal again, and it was backported: the
 # immortal table covers 3.12.0 to 3.12.6 and nothing else in the supported
@@ -1838,6 +1853,152 @@ class TestModulesAndPath:
         assert scanned > hashed * 5, (
             f"{len(names)} entries scanned {scanned:.2e}s against a frozenset {hashed:.2e}s"
         )
+
+
+NEEDS_315 = pytest.mark.skipif(sys.version_info < (3, 15), reason="Python 3.15+ API")
+
+
+@NEEDS_315
+class TestLazyImports:
+    """`sys.set_lazy_imports()`, `sys.set_lazy_imports_filter()` and
+    `sys.lazy_modules`: a lazy import binds a proxy and searches nothing; the
+    first use pays the import once; the filter runs once per lazy-eligible
+    import."""
+
+    @pytest.fixture
+    def module_dir(self, tmp_path: pathlib.Path) -> Iterator[pathlib.Path]:
+        for name in ("lazy_probe_a", "lazy_probe_b", "lazy_probe_c"):
+            (tmp_path / f"{name}.py").write_text(
+                "import sys\nsys.lazy_probe_runs = getattr(sys, 'lazy_probe_runs', 0) + 1\n"
+                "VALUE = 1\n",
+                encoding="utf-8",
+            )
+        sys.path.insert(0, str(tmp_path))
+        try:
+            yield tmp_path
+        finally:
+            sys.path.remove(str(tmp_path))
+            for name in ("lazy_probe_a", "lazy_probe_b", "lazy_probe_c"):
+                sys.modules.pop(name, None)
+            if hasattr(sys, "lazy_probe_runs"):
+                delattr(sys, "lazy_probe_runs")
+            lazy: Any = sys
+            lazy.set_lazy_imports_filter(None)
+            lazy.set_lazy_imports("normal")
+
+    def test_the_statement_searches_nothing_and_the_first_use_imports_once(
+        self, module_dir: pathlib.Path
+    ) -> None:
+        import types
+
+        searched: list[str] = []
+
+        class Recorder:
+            def find_spec(self, name: str, path: object = None, target: object = None) -> None:
+                searched.append(name)
+
+        sys.meta_path.insert(0, Recorder())  # type: ignore[arg-type]
+        try:
+            app: dict[str, Any] = {"__name__": "lazy_app"}
+            exec("__lazy_modules__ = ['lazy_probe_a']\nimport lazy_probe_a\n", app)  # noqa: S102
+
+            assert type(app["lazy_probe_a"]) is cast_any(types).LazyImportType
+            assert searched == []
+            assert "lazy_probe_a" not in sys.modules
+            assert "lazy_probe_a" in cast_any(sys).lazy_modules
+
+            exec("first = lazy_probe_a.VALUE\nsecond = lazy_probe_a.VALUE\n", app)  # noqa: S102
+
+            assert searched == ["lazy_probe_a"]
+            assert cast_any(sys).lazy_probe_runs == 1
+            assert type(app["lazy_probe_a"]) is types.ModuleType
+            assert "lazy_probe_a" not in cast_any(sys).lazy_modules
+        finally:
+            sys.meta_path[:] = [f for f in sys.meta_path if not isinstance(f, Recorder)]
+
+    def test_the_filter_runs_once_per_lazy_import_and_can_force_eager(
+        self, module_dir: pathlib.Path
+    ) -> None:
+        import types
+
+        calls: list[tuple[str, str, object]] = []
+
+        def keep_b_eager(importer: str, name: str, fromlist: object) -> bool:
+            calls.append((importer, name, fromlist))
+            return name != "lazy_probe_b"
+
+        lazy = cast_any(sys)
+        lazy.set_lazy_imports_filter(keep_b_eager)
+        assert lazy.get_lazy_imports_filter() is keep_b_eager
+        app: dict[str, Any] = {"__name__": "lazy_app"}
+        source = (
+            "__lazy_modules__ = ['lazy_probe_a', 'lazy_probe_b']\n"
+            "import lazy_probe_a\nimport lazy_probe_b\nimport lazy_probe_c\n"
+        )
+
+        exec(source, app)  # noqa: S102
+
+        assert calls == [
+            ("lazy_app", "lazy_probe_a", None),
+            ("lazy_app", "lazy_probe_b", None),
+        ]
+        assert type(app["lazy_probe_a"]) is cast_any(types).LazyImportType
+        assert type(app["lazy_probe_b"]) is types.ModuleType
+        assert type(app["lazy_probe_c"]) is types.ModuleType
+
+    def test_the_modes(self) -> None:
+        lazy = cast_any(sys)
+        assert lazy.get_lazy_imports() == "normal"
+        with pytest.raises(ValueError):
+            lazy.set_lazy_imports("sometimes")
+        assert lazy.flags.lazy_imports == -1  # neither -X lazy_imports nor the variable
+
+        result = run_isolated(
+            """
+            import sys, types
+            sys.set_lazy_imports("all")
+            assert sys.get_lazy_imports() == "all"
+            import difflib
+            assert type(globals()["difflib"]) is types.LazyImportType
+            assert "difflib" not in sys.modules
+            def inner():
+                import tabnanny
+                return tabnanny
+            assert type(inner()) is types.ModuleType
+            from colorsys import *
+            assert "colorsys" in sys.modules  # a star import stays eager
+            """
+        )
+
+        assert result.returncode == 0, result.stderr
+
+    def test_abi_info_describes_the_build(self) -> None:
+        import struct
+
+        info = cast_any(sys).abi_info
+
+        assert cast_any(sys).abi_info is info
+        assert info.byteorder == sys.byteorder
+        assert info.pointer_bits == struct.calcsize("P") * 8
+        assert info.debug is hasattr(sys, "gettotalrefcount")
+        assert isinstance(info.free_threaded, bool)
+
+
+@pytest.mark.skipif(sys.version_info >= (3, 15), reason="lazy imports are 3.15+")
+def test_the_lazy_import_names_are_absent_before_3_15() -> None:
+    for name in (
+        "set_lazy_imports",
+        "get_lazy_imports",
+        "set_lazy_imports_filter",
+        "get_lazy_imports_filter",
+        "lazy_modules",
+        "abi_info",
+    ):
+        assert not hasattr(sys, name), name
+
+
+def cast_any(value: object) -> Any:
+    return value
 
 
 class TestStreamsAndHooks:

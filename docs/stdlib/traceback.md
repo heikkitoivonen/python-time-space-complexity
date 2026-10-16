@@ -9,7 +9,8 @@ nothing here streams frames: the cost is the frames walked, paid up front.
 formatted exception includes: itself and its traceback, each `__cause__` and `__context__` it chains
 to, and every member of an exception group, with theirs. `e` is the exceptions alone, `n` is a
 `limit`, `s` is the characters in a source file, and `a` is the names searched for a "Did you mean"
-suggestion, which has a row of its own and is left out of the others. A frame's source line, an
+suggestion, which has a row of its own and is left out of the others, as is `E`, the entries
+in the directories a missing module's name is looked for in. A frame's source line, an
 exception's message and its notes are priced O(1). Source lines come from `linecache`, which reads a
 whole file the first time a line from it is needed, O(s), and serves later lookups from its cache.
 Finding a stack frame's line number, and on Python 3.11+ a traceback frame's position, scans its
@@ -75,6 +76,7 @@ proportion to that offset in a very long one, such as generated code.
 | `TracebackException.exc_type_str` | O(1) | O(1) | Python 3.13+; `exc_type` holds the class and is deprecated from 3.13 |
 | `TracebackException.filename`, `TracebackException.lineno`, `TracebackException.end_lineno`, `TracebackException.text`, `TracebackException.offset`, `TracebackException.end_offset`, `TracebackException.msg` | O(1) | O(1) | Set for a `SyntaxError` only |
 | "Did you mean" suggestion | O(d + a log a) | O(a) | Python 3.12+, at construction, for a `NameError`, an `AttributeError` or an `ImportError` from `from ... import`: a = the names in the raising frame's scopes, the object's attributes, or the module's names; d = the traceback followed to that frame, whatever the `limit` |
+| Module-name suggestion for a `ModuleNotFoundError` | O(E) | O(E) | Python 3.15+, at construction. Lists every entry of every directory on `sys.path`, or of the parent package's path for a dotted name, and builds a spec for each through its finder's `discover()`, then searches those names. Skipped for a standard-library name and under `-S`; before 3.15 a `ModuleNotFoundError` gets no suggestion and costs nothing here |
 
 ## Extracting vs Formatting
 
@@ -237,9 +239,12 @@ On Python 3.12+, building a `TracebackException` for a `NameError` or `Attribute
 the names in scope, or the object's attributes, for a close match and adds a "Did you mean"
 hint. That search is linear in those names, and sorting an object's attributes makes it
 O(a log a), so formatting such an error costs more on an object with many attributes or in a
-module with many globals.
+module with many globals. From 3.15 a missing module gets a suggestion too, and finding it lists
+every directory on `sys.path`: printing a `ModuleNotFoundError` costs O(E) in the entries of
+those directories, which on a large environment outweighs the rest of the traceback.
 
 ```python
+import sys
 import traceback
 
 class Config:
@@ -252,7 +257,10 @@ except AttributeError as exc:
 
 message = traceback.format_exception_only(error)[-1]  # O(a log a) for the suggestion
 assert message.startswith("AttributeError: 'Config' object has no attribute 'timeuot'")
-assert "Did you mean: 'timeout'?" in message
+if sys.version_info >= (3, 15):
+    assert "Did you mean '.timeout' instead of '.timeuot'?" in message
+else:
+    assert "Did you mean: 'timeout'?" in message
 ```
 
 ## Keeping a Failure Without Its Frames
@@ -360,6 +368,8 @@ assert log.getvalue().count("invalid literal for int() with base 10: 'not a numb
   `AttributeError` and `ImportError`, and `print_last()` reads `sys.last_exc`
 - **Python 3.13+**: `format_exception_only()` takes `show_group`, and
   `TracebackException.exc_type_str` replaces the deprecated `exc_type`
+- **Python 3.15+**: an `AttributeError` suggestion reads "Did you mean '.timeout' instead of
+  '.timeuot'?", and a `ModuleNotFoundError` gets a module-name suggestion, at O(E)
 
 ## Related Modules
 

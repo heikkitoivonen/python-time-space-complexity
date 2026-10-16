@@ -70,7 +70,9 @@ Measurement scope:
   wider grammar and `datetime.UTC`, both 3.11, are asserted present, and the
   `utcnow()` and `utcfromtimestamp()` deprecation at 3.12 and
   `date.strptime()` and `time.strptime()` at 3.14 on each side of their
-  boundary. Building the regular
+  boundary. A `%d %m` format is parsed silently before 3.13, with a
+  `DeprecationWarning` from compiling the format on 3.13 and 3.14, and refused with `ValueError` from
+  3.15, by `datetime.strptime()` and, where it exists, `date.strptime()`. Building the regular
   expression for 5,000 and 100,000 `%%` directives costs under 60x more from
   3.12.8 and 3.13.1 and over 60x before; 3.12.7 measured about 170x and
   3.12.14 about 20x.
@@ -794,6 +796,26 @@ class TestVersionNotes:
 
         assert hasattr(date, "strptime") is present
         assert ("strptime" in vars(time)) is present
+
+    def test_a_day_without_a_year_is_refused_from_3_15(self) -> None:
+        parsers = [datetime.strptime]
+        if sys.version_info >= (3, 14):
+            parsers.append(date.strptime)  # pyright: ignore[reportAttributeAccessIssue]
+        for index, parse in enumerate(parsers):
+            # A format the process has not compiled yet: the warning comes
+            # from compiling it, and compiled formats are cached.
+            fmt = f"%d %m day-without-year-{index}"
+            text = f"30 01 day-without-year-{index}"
+            if sys.version_info >= (3, 15):
+                with pytest.raises(ValueError, match="without a year"):
+                    parse(text, fmt)
+            elif sys.version_info >= (3, 13):
+                with pytest.deprecated_call():
+                    assert parse(text, fmt).day == 30
+            else:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("error")
+                    assert parse(text, fmt).day == 30
 
 
 def _blocks() -> list[tuple[int, str]]:

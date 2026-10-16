@@ -20,7 +20,7 @@ structured codec can cost more.
 | `bytearray(count)` | O(n) | O(n) | n = count zero bytes; a negative count raises `ValueError` |
 | `bytearray(bytes_like)` | O(k) | O(k) | Copies the buffer of a `bytes`, `bytearray`, `memoryview` or `array.array`; the copy is independent of its source |
 | `bytearray(iterable)` | O(k) | O(k) | One byte per item; an item outside `range(256)` raises `ValueError` |
-| `bytearray(string, encoding, errors='strict')` | O(k) | O(k) | Encodes to a `bytes` and copies it in; k = characters in the string, which the encoder walks whatever it emits. A `str` without an encoding raises `TypeError` |
+| `bytearray(string, encoding, errors='strict')` | O(k) | O(k) | Encodes to a `bytes`. On Python 3.15+ a result nothing else references, as the built-in codecs return, becomes the buffer itself; otherwise, and before 3.15, it is copied in; k = characters in the string, which the encoder walks whatever it emits. A `str` without an encoding raises `TypeError` |
 | `bytearray.fromhex(string)` | O(k) | O(k) | k = characters, one byte per pair; whitespace between pairs is skipped. Class method |
 
 ## Every Source Is Copied
@@ -75,7 +75,9 @@ else:
 
 ## Text and Hexadecimal Sources
 
-A `str` needs an encoding, and is encoded to a `bytes` that is then copied in. `fromhex()`
+A `str` needs an encoding, and is encoded to a `bytes`. From Python 3.15 that `bytes` becomes
+the bytearray's buffer when nothing else references it, as with the built-in codecs; otherwise,
+and on earlier versions, it is copied in. `fromhex()`
 reads two hexadecimal digits per byte and skips the whitespace between pairs.
 
 ```python
@@ -130,6 +132,7 @@ view.release()
 
 ## Version Notes
 
+- **Python 3.15+**: `bytearray(string, encoding)` keeps an encoded `bytes` that nothing else references as its buffer instead of copying it
 - **Python 3.14+**: `fromhex()` accepts bytes-like input as well as `str`
 
 ## Related Functions
@@ -137,4 +140,4 @@ view.release()
 - **[Bytearray Type](bytearray.md)** - The operations and methods of the bytearray this builds
 - **[bytes()](bytes_func.md)** - The immutable counterpart, built the same ways
 - **[memoryview()](memoryview_func.md)** - O(1) views over an existing buffer
-- **[str](str.md)** - `encode()` produces the bytes that `bytearray(text, encoding)` copies in
+- **[str](str.md)** - `encode()` produces the bytes that `bytearray(text, encoding)` is built from

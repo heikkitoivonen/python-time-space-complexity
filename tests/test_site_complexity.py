@@ -21,15 +21,35 @@ Measurement scope:
   a set passed. A `.pth` file of distinct existing, missing and repeated
   lines costs one call per line whose directory is not already known, and the
   count does not move when `sys.path` grows from 10 to 1,000 entries. A
-  `list` subclass standing in for `sys.path` records no `__contains__` call
-  and at most one iteration, so duplicates are found in the set.
+  `list` subclass standing in for `sys.path` records at most one iteration,
+  so duplicates are found in the set, and no `__contains__` call before
+  3.15. From 3.15 it records one `__contains__` call per new path before the
+  append: 2 for a site directory and one path named 50 times, and 11 and
+  101 for 10 and 100 distinct paths, half of them missing, each named twice,
+  against none before 3.15. That is the N·(P + A) term; each scan is
+  `list.__contains__`, linear in the list's length at that moment, which
+  each append grows; the length per call is not recorded.
+* `import` lines and `.start` files. An `import` line placed before the path
+  line that makes its module findable finds it from 3.15 and not before, so
+  it runs after the batch's paths are added rather than when reached. From
+  3.15, of two `.pth` files with `import` lines the one with a same-named
+  `.start` file is skipped, and the entry point runs after the other's
+  line. A `StartupState` given a set leaves `sys.path` untouched through
+  three `addsitedir()` calls, one a repeat, adds the site directory's
+  `makepath()` form to that set, and on `process()` appends the two
+  directories and their path lines once each, in order. Built without a set
+  it calls `os.path.exists` once per `sys.path` entry, 10 and 1,000 times,
+  and with one it calls it never. From 3.15 a missing path line is named on
+  stderr, and before 3.15 nothing is written. `makepath()` returns the
+  absolute path and its `normcase` form.
 * The listing: a directory of 10,000 non-`.pth` files peaks more than 100
   times higher than one of 10, with a set passed so the P term is held fixed.
 * Name order: `b.pth` and `a.pth` add their directories as `a`, then `b`.
 * A `.pth` line is joined to the site directory, a missing path is not
   added, an existing regular file is, a repeated path is added once, comment
   and blank lines are skipped, and an `import` line after a path line imports
-  a module from the directory that line added, so it runs when it is reached.
+  a module from the directory that line added; that it runs when reached is
+  true up to 3.14 only, and the later-path test below marks the boundary.
 * On 3.12.4+ a `.pth` file of 100,000 comment lines peaks more than 20 times
   higher than one of 1,000, so the file is held whole, and a file starting
   with a UTF-8 byte order mark still adds the directory on its first line.
@@ -44,8 +64,10 @@ Measurement scope:
   imported, and `usercustomize` only once `ENABLE_USER_SITE` is true.
 * In a virtual environment made with `python -m venv --without-pip`, a `.pth`
   file in the environment's site-packages whose `import` line writes a marker
-  to stderr runs twice at a normal start, four times under `python -m site`,
-  and not at all under `-S`. Only an environment without system site
+  to stderr runs twice at a normal start and four times under
+  `python -m site` up to 3.14, once and twice from 3.15, and not at all
+  under `-S`. The `main()` tests replace `site.venv`, and from 3.15
+  `site._venv`, which `main()` calls instead. Only an environment without system site
   packages is built.
 * `getsitepackages()` returns 1,000 times the paths for 1,000 prefixes as for
   one, a new list on each call, a path under a prefix that does not exist,
@@ -71,6 +93,9 @@ Measurement scope:
 
 Not settled here:
 
+* `StartupState.addusersitepackages()` and `addsitepackages()` are read
+  from Lib/site.py as `addsitedir()` on the directories the lookups name;
+  they are exercised only through `main()`.
 * The f log f sort and the O(P) set of known paths are read from
   `addsitedir()` and `_init_pathinfo()` in Lib/site.py; only the order the
   sort produces and the existence checks that build the set are observed.
@@ -93,7 +118,7 @@ Not settled here:
   password database when `HOME` is unset, which depends on the NSS backend.
 * `abs_paths`, `addpackage`, `addsitepackages`, `addusersitepackages`,
   `check_enableusersite`, `enablerlcompleter`, `execsitecustomize`,
-  `execusercustomize`, `gethistoryfile`, `makepath`, `register_readline`,
+  `execusercustomize`, `gethistoryfile`, `register_readline`,
   `removeduppaths`, `setcopyright`, `sethelper`, `setquit`, `venv` and the
   module's `io` import are undocumented helpers the audit reports for
   classification; the page prices them only as steps of `main()` and
@@ -271,16 +296,152 @@ class TestAddsitedirChecksThePathOnce:
 
         site.addsitedir(str(sitedir))
 
-        assert CountingList.contains == 0
+        # From 3.15 each new path - the site directory and `one` - is checked
+        # against sys.path once before it is appended; the 49 repeats are not.
+        assert CountingList.contains == (2 if sys.version_info >= (3, 15) else 0)
         assert CountingList.iterations <= 1, "sys.path was walked more than once"
         assert counting[-1] == str(sitedir / "one")
         assert counting.count(str(sitedir / "one")) == 1
+
+    @pytest.mark.parametrize("paths", [10, 100])
+    def test_from_3_15_each_new_path_scans_sys_path_once(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, paths: int
+    ) -> None:
+        """10 and 100 distinct path lines, half of them missing, each named
+        twice: from 3.15 the site directory and every distinct path cost one
+        `sys.path` membership scan, 1 + paths in all; before 3.15, none."""
+        sitedir = tmp_path / "site"
+        sitedir.mkdir()
+        names = [f"dir{index}" for index in range(paths)]
+        for name in names[: paths // 2]:
+            (sitedir / name).mkdir()
+        write_pth(sitedir, "x.pth", names * 2)
+        counting = CountingList(padded_path(tmp_path, 100))
+        monkeypatch.setattr(sys, "path", counting)
+        monkeypatch.setattr(CountingList, "contains", 0)
+        monkeypatch.setattr(CountingList, "iterations", 0)
+
+        site.addsitedir(str(sitedir), set())
+
+        expected = 1 + paths if sys.version_info >= (3, 15) else 0
+        assert CountingList.contains == expected
+        assert len(counting) == 100 + 1 + paths // 2
+
+
+@pytest.mark.usefixtures("isolated_path")
+class TestImportLinesAndStartFiles:
+    """Up to 3.14 an `import` line runs when reached; from 3.15 it runs after
+    every path of the batch is added, is skipped when a `.start` file of the
+    same name exists, and `.start` entry points run after it."""
+
+    def test_an_import_line_sees_a_later_path_only_from_3_15(self, tmp_path: pathlib.Path) -> None:
+        (tmp_path / "later").mkdir()
+        (tmp_path / "later" / "site_late_marker.py").write_text("", encoding="utf-8")
+        write_pth(
+            tmp_path,
+            "x.pth",
+            [
+                "import sys; sys.site_page_found = __import__('importlib.util').util"
+                ".find_spec('site_late_marker') is not None",
+                "later",
+            ],
+        )
+        try:
+            site.addsitedir(str(tmp_path))
+
+            found = vars(sys).get("site_page_found")
+        finally:
+            if hasattr(sys, "site_page_found"):
+                delattr(sys, "site_page_found")
+
+        assert found is (sys.version_info >= (3, 15))
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason=".start files are 3.15+")
+    def test_a_start_file_suppresses_the_import_lines_and_runs_after(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        order: list[str] = []
+        sys.site_page_order = order  # type: ignore[attr-defined]
+        (tmp_path / "site_page_hooks.py").write_text(
+            "import sys\ndef start():\n    sys.site_page_order.append('start')\n",
+            encoding="utf-8",
+        )
+        record = "import sys; sys.site_page_order.append('{}')"
+        write_pth(tmp_path, "a.pth", [record.format("a.pth")])
+        write_pth(tmp_path, "b.pth", [record.format("b.pth")])
+        write_pth(tmp_path, "b.start", ["site_page_hooks:start"])
+        try:
+            site.addsitedir(str(tmp_path))
+        finally:
+            del sys.site_page_order  # type: ignore[attr-defined]
+
+        assert order == ["a.pth", "start"]
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="StartupState is 3.15+")
+    def test_a_startup_state_applies_nothing_until_process(self, tmp_path: pathlib.Path) -> None:
+        dirs = []
+        for name in ("one", "two"):
+            sitedir = tmp_path / name
+            (sitedir / f"plugin_{name}").mkdir(parents=True)
+            write_pth(sitedir, f"{name}.pth", [f"plugin_{name}"])
+            dirs.append(sitedir)
+        known: set[str] = set()
+        state = cast_any(site).StartupState(known)
+        before = list(sys.path)
+
+        state.addsitedir(str(dirs[0]))
+        state.addsitedir(str(dirs[1]))
+        state.addsitedir(str(dirs[0]))  # already in this batch
+
+        assert sys.path == before
+        assert cast_any(site).makepath(str(dirs[0]))[1] in known  # the set given is updated
+        state.process()
+        added = [pathlib.Path(entry).name for entry in sys.path[len(before) :]]
+        assert added == ["one", "plugin_one", "two", "plugin_two"]
+
+    @pytest.mark.skipif(sys.version_info < (3, 15), reason="StartupState is 3.15+")
+    def test_without_a_set_the_state_checks_each_sys_path_entry(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        counts = []
+        for entries in (10, 1_000):
+            sys.path[:] = padded_path(tmp_path / str(entries), entries)
+            exists = CountingExists()
+            # Its own context: undoing the fixture's monkeypatch would restore the
+            # real sys.path, and the next iteration would then overwrite it.
+            with pytest.MonkeyPatch.context() as patch:
+                patch.setattr(os.path, "exists", exists)
+                cast_any(site).StartupState()
+                cast_any(site).StartupState(set())
+            counts.append(exists.calls)
+
+        assert counts == [10, 1_000]
+
+    def test_a_missing_path_is_reported_from_3_15(
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        write_pth(tmp_path, "x.pth", ["site_page_missing"])
+
+        site.addsitedir(str(tmp_path))
+
+        reported = "site_page_missing does not exist" in capsys.readouterr().err
+        assert reported is (sys.version_info >= (3, 15))
+
+    def test_makepath_returns_the_absolute_and_normalised_pair(self) -> None:
+        joined, normalised = site.makepath("a", "..", "b")  # type: ignore[attr-defined]
+
+        assert joined == os.path.abspath("b")
+        assert normalised == os.path.normcase(joined)
+
+
+def cast_any(value: object) -> Any:
+    return value
 
 
 @pytest.mark.usefixtures("isolated_path")
 class TestPthLines:
     """A path line is joined to the site directory and added only if it
-    exists and is new; an `import` line runs as it is read."""
+    exists and is new; an `import` line after a path line sees that path."""
 
     def test_lines_are_joined_filtered_and_deduplicated(self, tmp_path: pathlib.Path) -> None:
         (tmp_path / "plugins").mkdir()
@@ -368,6 +529,7 @@ def abs_paths():
     calls["abs_paths"] += 1
     real_abs_paths()
 site.venv = lambda known_paths: known_paths
+site._venv = lambda state: None  # what main() calls from 3.15
 site.abs_paths = abs_paths
 site.PREFIXES = json.loads(sys.argv[1])
 site.ENABLE_USER_SITE = json.loads(sys.argv[2])
@@ -605,17 +767,22 @@ def venv_python(tmp_path_factory: pytest.TempPathFactory) -> pathlib.Path:
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX virtual-environment layout")
 class TestVirtualEnvironmentSitePackagesRunsTwice:
     """In a virtual environment `main()` processes the environment's own
-    site-packages twice, and `python -m site` runs `main()` again."""
+    site-packages twice up to 3.14 and once from 3.15, and `python -m site`
+    runs `main()` again."""
+
+    PER_MAIN = 1 if sys.version_info >= (3, 15) else 2
 
     @staticmethod
     def runs(python: pathlib.Path, *args: str) -> int:
         return run_in(python, *args).stderr.splitlines().count(PTH_MARKER)
 
-    def test_a_normal_start_runs_the_import_line_twice(self, venv_python: pathlib.Path) -> None:
-        assert self.runs(venv_python, "-c", "pass") == 2
+    def test_a_normal_start_runs_the_import_line_per_version(
+        self, venv_python: pathlib.Path
+    ) -> None:
+        assert self.runs(venv_python, "-c", "pass") == self.PER_MAIN
 
-    def test_python_m_site_runs_it_twice_more(self, venv_python: pathlib.Path) -> None:
-        assert self.runs(venv_python, "-m", "site") == 4
+    def test_python_m_site_runs_main_again(self, venv_python: pathlib.Path) -> None:
+        assert self.runs(venv_python, "-m", "site") == 2 * self.PER_MAIN
 
     def test_minus_capital_s_never_runs_it(self, venv_python: pathlib.Path) -> None:
         assert self.runs(venv_python, "-S", "-c", "pass") == 0

@@ -393,7 +393,8 @@ class TestDunderBytes:
             def __bytes__(self) -> Any:
                 return bytearray(b"x")
 
-        with pytest.raises(TypeError, match="non-bytes"):
+        # Before 3.15 "__bytes__ returned non-bytes"; from 3.15 "... must return a bytes".
+        with pytest.raises(TypeError, match="non-bytes|must return a bytes"):
             bytes(Wrong())
 
 

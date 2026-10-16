@@ -25,8 +25,11 @@ Measurement scope:
   with nonempty operands. Empty-operand concatenations are excluded. The
   decoded result is checked against the original text at every size.
 * `lookup()` is observed through a registered counting search function:
-  `My-Codec`, `my codec` and `MY_CODEC` reach it once, as `my_codec`, and
-  return one object; an unknown name reaches it on every lookup; after
+  spellings differing in ASCII case reach it once and return one object;
+  a spaced name reaches it once, as the hyphenated name on 3.15 and the
+  underscored one before; a hyphenated and an underscored spelling reach
+  it as one name before 3.15 and as two on 3.15; an unknown name reaches
+  it on every lookup; after
   `unregister()` of a registered unrelated function a cached name reaches it
   again, and after `unregister()` of a function never registered it does
   not;
@@ -298,16 +301,41 @@ class TestLookupIsCached:
         codecs.unregister(recorder)
 
     def test_spellings_that_normalize_alike_share_one_entry(self, recorder: SearchRecorder) -> None:
-        first = codecs.lookup("Complexity-Test-Codec")
+        first = codecs.lookup("Complexity_Test_Codec")
 
-        assert codecs.lookup("complexity test codec") is first
         assert codecs.lookup("COMPLEXITY_TEST_CODEC") is first
+        assert codecs.lookup("complexity_test_codec") is first
         assert recorder.asked == ["complexity_test_codec"]
+
+    def test_spaces_fold_into_the_separator_the_version_uses(self) -> None:
+        separator = "-" if sys.version_info >= (3, 15) else "_"
+        normalized = f"complexity{separator}spaced{separator}codec"
+        recorder = SearchRecorder(normalized)
+        codecs.register(recorder)
+        try:
+            first = codecs.lookup("Complexity Spaced Codec")
+            assert codecs.lookup(f"COMPLEXITY{separator}SPACED{separator}CODEC") is first
+        finally:
+            codecs.unregister(recorder)
+
+        assert recorder.asked == [normalized]
+
+    def test_hyphens_and_underscores_share_an_entry_before_3_15_only(
+        self, recorder: SearchRecorder
+    ) -> None:
+        codecs.lookup("complexity_test_codec")
+        if sys.version_info >= (3, 15):
+            with pytest.raises(LookupError, match="unknown encoding"):
+                codecs.lookup("Complexity-Test-Codec")
+            assert recorder.asked == ["complexity_test_codec", "complexity-test-codec"]
+        else:
+            codecs.lookup("Complexity-Test-Codec")
+            assert recorder.asked == ["complexity_test_codec"]
 
     def test_a_miss_is_asked_again_every_time(self, recorder: SearchRecorder) -> None:
         for _ in range(3):
             with pytest.raises(LookupError, match="unknown encoding"):
-                codecs.lookup("complexity-test-missing")
+                codecs.lookup("complexity_test_missing")
 
         assert recorder.asked == ["complexity_test_missing"] * 3
 

@@ -1,5 +1,5 @@
 ---
-source_sha: 699f54d0f15380f0acf2cc37e53cc5f55cb222c850ade1649086deaeb841be2c
+source_sha: d24b620768bc53a40c6d0d39a6858400af74f38f08b069d06c242fea93ad2429
 translated: machine
 ---
 
@@ -85,6 +85,7 @@ bisect.insort(arr, 4)  # O(n) - must shift
 - **Python 3.7+**：`dict` 保留插入顺序
 - **Python 3.8+**：赋值表达式（海象运算符）
 - **Python 3.10+**：支持对数据类进行模式匹配
+- **Python 3.15+**：[profiling](profiling.md) 包：按调用计费的追踪型分析器，以及按样本计费的采样型分析器
 
 ## 另请参阅
 

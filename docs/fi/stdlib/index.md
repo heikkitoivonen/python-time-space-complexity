@@ -1,5 +1,5 @@
 ---
-source_sha: 699f54d0f15380f0acf2cc37e53cc5f55cb222c850ade1649086deaeb841be2c
+source_sha: d24b620768bc53a40c6d0d39a6858400af74f38f08b069d06c242fea93ad2429
 translated: machine
 ---
 
@@ -85,6 +85,7 @@ bisect.insort(arr, 4)  # O(n) - must shift
 - **Python 3.7+**: `dict`-lisäysjärjestys säilyy
 - **Python 3.8+**: Sijoituslausekkeet (mursuoperaattori)
 - **Python 3.10+**: Hahmontunnistus dataluokkien kanssa
+- **Python 3.15+**: [profiling](profiling.md)-paketti: jäljittävä profiloija, jonka kustannus on kutsukohtainen, ja otantaan perustuva profiloija, jonka kustannus on näytekohtainen
 
 ## Katso myös
 

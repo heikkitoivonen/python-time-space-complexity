@@ -1,5 +1,5 @@
 ---
-source_sha: f5c4b3c5bd9a612e361874983042cd25d27aa989a7e7b47532e46516d57e6430
+source_sha: ed4deba4ee0e77fff224572f8c5dbd19bdce146a2f308aed272dddf5c100ef51
 translated: machine
 ---
 
@@ -93,8 +93,8 @@ translated: machine
 | `ud.copy()` | O(n) | O(n) | 素の `UserDict` は `data` をコピーします。サブクラスは浅くコピーされ、その後 `update()` で埋め直されます |
 | `UserDict.fromkeys(iterable, value=None)` | O(k) | O(k) | キーごとに 1 回の `__setitem__` 呼び出し |
 | `ud.pop(key)`, `ud.setdefault(key, default=None)` | O(1) | O(1) | `ud[key]` の後に `del ud[key]` または `ud[key] = default` |
-| `ud.popitem()` | O(d) | O(1) | 反復順で最初のキーを取り除きます。d はその前に削除されたエントリ数で、新しいイテレータはそれらを読み飛ばさなければなりません |
-| `ud.clear()` | O(n·(n + d)) | O(1) | 空になるまで `popitem()` を繰り返し、各呼び出しは前の呼び出しが空にしたスロットをすべて読み飛ばします。`ud.data.clear()` は O(n) です |
+| `ud.popitem()` | O(d) | O(1) | 反復順で最初のキーを取り除きます。d はその前に削除されたエントリ数で、新しいイテレータはそれらを読み飛ばさなければなりません。3.15 以降は `data.popitem()` に転送され、最後のキーを取り除きます。その後ろの削除済みスロットだけを読み飛ばします |
+| `ud.clear()` | O(n·(n + d)) | O(1) | 空になるまで `popitem()` を繰り返し、各呼び出しは前の呼び出しが空にしたスロットをすべて読み飛ばします。3.15 以降は O(n + d) です。`ud.data.clear()` は `dict.clear()` の 1 回の呼び出しです |
 | `ud == other` | O(n + k) | O(n + k) | `other` がすでに辞書であっても、両辺を辞書に平坦化してから比較します |
 
 ### UserList
@@ -249,24 +249,31 @@ assert Indexed.reads == 4
 
 ### UserDict を空にする
 
-`UserDict` は `clear()`、`popitem()`、`pop()` を定義しておらず、`MutableMapping` から継承します。
-その `popitem()` は新しいイテレータが返す最初のキーを取り、辞書のイテレータは以前の削除で空に
-なったスロットをすべて読み飛ばさなければならないため、`popitem()` は O(d) かかり、
-`clear()` で辞書全体を空にするには O(n·(n + d)) かかります。`data` 辞書を直接クリアしてください。
+`UserDict` は `clear()` と `pop()` を定義しておらず、`MutableMapping` から継承します。3.15 より前は
+`popitem()` も継承します。その `popitem()` は新しいイテレータが返す最初のキーを取り、辞書の
+イテレータは以前の削除で空になったスロットをすべて読み飛ばさなければならないため、`popitem()` は
+O(d) かかり、`clear()` で辞書全体を空にするには O(n·(n + d)) かかります。3.15 以降の `popitem()` は
+辞書自身のメソッドに転送され、最後のキーを取り除いてその後ろの削除済みスロットだけを読み飛ばすので、
+`clear()` は O(n + d) です。
+`data` 辞書を直接クリアしてください。
 
 ```python
+import sys
 from collections import UserDict
 
 wrapped = UserDict({"a": 1, "b": 2, "c": 3})
 
-assert wrapped.popitem() == ("a", 1)  # O(d) - the first key still present
+if sys.version_info >= (3, 15):
+    assert wrapped.popitem() == ("c", 3)  # O(1) - dict.popitem(), the last key
+else:
+    assert wrapped.popitem() == ("a", 1)  # O(d) - the first key still present
 assert wrapped.popitem() == ("b", 2)
 
 wrapped.data.clear()  # O(n) - the dict's own clear
 assert len(wrapped) == 0
 
 wrapped.update(zip("xyz", range(3)))
-wrapped.clear()  # O(n·(n + d)) - popitem() until empty
+wrapped.clear()  # popitem() until empty: O(n·(n + d)), or O(n + d) from 3.15
 assert len(wrapped) == 0
 ```
 
@@ -325,7 +332,7 @@ assert resolved == {"host": "localhost", "port": 8080, "debug": True}
 
 - `ChainMap` は短く保つ。すべてのミス、デフォルトに落ちる `get()`、最後のマップにあるキーの読み取りは、マップごとに 1 回の検索を要する
 - ループ内でチェーンを読むときは `dict(chain)` で一度だけ平坦化し、マップごとの検索を読み取りごとではなくキーごとに 1 回にする
-- `UserDict` は `data.clear()` でクリアする。継承された `clear()` はエントリ数とその前に削除されたスロット数について 2 乗のコストがかかる
+- `UserDict` は `data.clear()` でクリアする。3.15 より前は、継承された `clear()` はエントリ数とその前に削除されたスロット数について 2 乗のコストがかかる
 - ホットループがサブクラスのフックを必要としないなら、`ud.data`、`ul.data`、`us.data` を使う
 
 ❌ **避ける**:
@@ -338,6 +345,7 @@ assert resolved == {"host": "localhost", "port": 8080, "debug": True}
 ## バージョンに関する注意
 
 - **Python 3.12+**: `UserDict.get()` は、`__missing__` を呼び出さずに存在しないキーに対してデフォルトを返す。3.12 より前は継承された `Mapping.get()` が `__getitem__` を経由し、それを呼び出していた
+- **Python 3.15+**: `UserDict.popitem()` は `dict.popitem()` に転送され、テーブルを先頭から走査し直さずに、最初のキーではなく最後のキーを取り除く。そのため継承された `clear()` は O(n + d)
 - **すべての Python 3**: `ChainMap` に対する `len()` と反復は、すべてのマップのすべてのエントリのコストがかかる。チェーンについて何もキャッシュされない
 
 ## 関連モジュール

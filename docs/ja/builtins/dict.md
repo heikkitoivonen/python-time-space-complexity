@@ -1,11 +1,13 @@
 ---
-source_sha: 1ce9ec38802382a00f950d40de21191bc041a2d77c11e823222eb83a57ab0475
+source_sha: 8fd3d66178b61ce76428fd4d9d654b6858f39d3c2870bb746da072fd9957bab2
 translated: machine
 ---
 
 # 辞書操作の計算量
 
 `dict` 型はキーと値の組を格納する可変のマッピングです。CPython ではハッシュテーブルとして実装されています。
+
+`n` は辞書の要素数、`k` はもう一方のオペランドまたはイテラブルの要素数です。キーのハッシュ計算と比較は O(1) とみなします。
 
 ## 計算量リファレンス
 
@@ -22,13 +24,17 @@ translated: machine
 | `keys()` | O(1) | O(1) | ビューオブジェクト（反復には O(n)） |
 | `values()` | O(1) | O(1) | ビューオブジェクト（反復には O(n)） |
 | `items()` | O(1) | O(1) | ビューオブジェクト（反復には O(n)） |
+| `d` の反復 | O(n) | O(1) | 挿入順 |
 | `copy()` | O(n) | O(n) | すべての組の浅いコピー |
-| `update(other)` | O(k) | O(1) | k = len(other)、償却。その場で変更する |
+| `update(other)`, `d \|= other` | O(k) | O(1) | k = len(other)、償却。これに `other` の反復コストが加わる。その場で変更する |
+| `d \| other` | O(n + k) | O(n + k) | 新しい辞書。`d` をコピーしてから `other` で更新する |
 | `setdefault(key, val)` | 平均 O(1) | O(1) | ハッシュ探索と挿入 |
 | `fromkeys(keys)` | O(k) | O(k) | k = len(keys) |
 | `popitem()` | O(1) | O(1) | 最後に挿入した組を取り除く（3.7 以降は LIFO） |
 
 *注: 平均計算量 O(1) はハッシュがよく分散していることを前提としています。最悪計算量 O(n) は病的なハッシュ衝突が起きた場合に生じますが、Python のランダム化ハッシュのもとではめったに起こりません。*
+
+要素を削除してもテーブルは縮小しません。大半の要素を削除した後も、テーブルを走査する操作（反復、`copy()`、`other.update(d)`、`|`、`==`、`dict(d)`）は、後の挿入でリサイズが起きるまで、辞書の以前のサイズに比例した時間がかかります。`len()` と検索は影響を受けません。
 
 ## 実装の詳細
 
@@ -52,6 +58,27 @@ value = d[500]  # O(1)
 # CPython mitigates this with randomized hashing
 ```
 
+### 削除してもテーブルは縮小しない
+
+`del` と `pop()` はテーブルを最大サイズのまま残すため、走査はかつて存在したすべてのスロットを訪れます。大半の要素を失った辞書に対しては `copy()` がコンパクトな辞書を作るので、その後の走査は再び安価になります。
+
+```python
+import sys
+
+d = {i: i for i in range(100_000)}
+full = sys.getsizeof(d)
+for i in range(10, 100_000):
+    del d[i]                       # O(1) each
+
+assert len(d) == 10                # O(1)
+assert sys.getsizeof(d) == full    # still sized for 100,000 items
+keys = list(d)                     # O(100,000): walks the old table
+
+d = d.copy()                       # O(100,000) once
+assert sys.getsizeof(d) < full     # sized for 10 items
+assert list(d) == keys             # O(10)
+```
+
 ### 挿入順序の保証
 
 ```python
@@ -72,6 +99,7 @@ d['c'] = 3
 | Python 3.9+ | 辞書の結合・更新演算子（`\|`、`\|=`） |
 | Python 3.10+ | 辞書に対するパターンマッチング |
 | Python 3.11+ | キーがすべて Unicode 文字列の場合、サイズが 23% 小さくなる |
+| Python 3.15+ | [`frozendict`](frozendict.md)：不変でハッシュ可能な辞書 |
 
 ## 実装ごとの比較
 
@@ -120,6 +148,7 @@ d = {
 ## 関連する型
 
 - **[集合](set.md)** - 順序を持たない重複のない要素
+- **[frozendict](frozendict.md)** - 不変でハッシュ可能な辞書（Python 3.15+）
 - **[Defaultdict](../stdlib/collections.md#defaultdict)** - 既定値を自動で用意する
 - **[OrderedDict](../stdlib/collections.md#ordereddict)** - 明示的な順序付け（3.6 より前）
 - **[ChainMap](../stdlib/collections.md#chainmap)** - 複数の辞書をまとめて見る

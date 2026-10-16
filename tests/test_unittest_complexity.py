@@ -103,6 +103,10 @@ Measurement scope:
 * Cleanup ordering is asserted on interleaved sync and async registrations, so
   two separate stacks drained one after the other would fail whichever went
   first. A test registering one of each cannot tell those apart.
+  `doModuleCleanups()` with two failing cleanups runs both, last registered
+  first, and raises an `ExceptionGroup` of both failures in that order from
+  3.15, and the first failure alone before; one failing cleanup is raised
+  inside a one-member `ExceptionGroup` from 3.15 and bare before.
 * `patch.dict` copies the whole dictionary. The ratio is taken over a 1,000x
   size step between two dictionaries patched with the same single key, so the
   term being measured is the dictionary's size and nothing else.
@@ -719,7 +723,7 @@ class TestCleanupsRunLastInFirstOut:
         assert under_debug == ["first"]
         assert under_run == ["first", "second"]
 
-    def test_module_cleanups_all_run_and_the_first_failure_is_the_one_raised(self) -> None:
+    def test_module_cleanups_all_run_and_raise_their_failures(self) -> None:
         reached: list[str] = []
 
         def failing(name: str) -> None:
@@ -729,11 +733,22 @@ class TestCleanupsRunLastInFirstOut:
         unittest.addModuleCleanup(failing, "registered first")
         unittest.addModuleCleanup(failing, "registered second")
 
-        with pytest.raises(RuntimeError) as raised:
+        with pytest.raises(Exception) as raised:
             unittest.doModuleCleanups()
 
         assert reached == ["registered second", "registered first"]
-        assert str(raised.value) == "registered second"
+        if sys.version_info >= (3, 15):
+            assert type(raised.value) is ExceptionGroup
+            assert [str(e) for e in raised.value.exceptions] == reached
+        else:
+            assert type(raised.value) is RuntimeError
+            assert str(raised.value) == "registered second"
+
+        unittest.addModuleCleanup(failing, "alone")
+        with pytest.raises(Exception) as single:
+            unittest.doModuleCleanups()
+        expected = ExceptionGroup if sys.version_info >= (3, 15) else RuntimeError
+        assert type(single.value) is expected  # a group even for one failure
 
 
 class TestSkippingStopsBeforeSetUp:

@@ -115,7 +115,7 @@ Cleanups run last-in first-out, and they run even when `setUp` raised, which
 | `TestCase.enterContext(cm)` | cost of `__enter__` | O(1) | Python 3.11+; enters the manager and registers its `__exit__` as a cleanup |
 | `TestCase.enterClassContext(cm)` | cost of `__enter__` | O(1) | Python 3.11+; the class-scoped form |
 | `addModuleCleanup(func, *args)` | O(1) | O(1) | Module-scoped list, run after `tearDownModule` |
-| `doModuleCleanups()` | O(c) + the functions | O(1), or O(c) failures | Python 3.11+ under this name. Same LIFO order. All run, and every failure is collected before the first of them is re-raised and the rest discarded |
+| `doModuleCleanups()` | O(c) + the functions | O(1), or O(c) failures | Python 3.11+ under this name. Same LIFO order. All run, and every failure is collected; from 3.15 they are raised together as one `ExceptionGroup`, in the order they ran, even when there is only one, while earlier versions re-raise the first and discard the rest |
 | `enterModuleContext(cm)` | cost of `__enter__` | O(1) | Python 3.11+ |
 | `setUpModule()`, `tearDownModule()` | O(1) | O(1) | Names a test module may define. The suite calls them on module transitions, on the same positional rule as the class fixtures |
 
