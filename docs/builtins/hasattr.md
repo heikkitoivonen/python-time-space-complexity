@@ -13,7 +13,8 @@ descriptor such as a property getter.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `hasattr(obj, name)` | O(1) avg | O(1) | The class-level lookup of a plain `str` name is cached per class and name, for misses as well as hits, so `d` does not matter once the cache is warm |
+| `hasattr(obj, name)` | O(1) avg | O(1) | The class-level lookup is cached per class and name object, for misses as well as hits, so `d` does not matter once the cache is warm - provided `name` is the same `str` object each time, as a literal in the source or a `sys.intern()` result is |
+| `hasattr(obj, name)` with a name built at run time | O(d) | O(1) | An f-string, a concatenation or a string read from input is usually a new object on every call, and the cache matches name objects rather than their text, so every call walks the MRO. `sys.intern(name)` returns one shared object per text and restores the cached cost. A `str` subclass, or a name longer than 100 characters, is never cached |
 | `hasattr(obj, name)`, first lookup after the class or a base changed | O(d) | O(1) | Walks the MRO once and caches the result. From Python 3.13, once a class has been changed and looked up again more than 1,000 times it is never cached again, and every lookup on it pays O(d) |
 | `hasattr(obj, name)` through a hook | O(g) | O(g) | On top of the lookup above. A property getter runs, and `__getattr__` runs on every miss. Only `AttributeError` becomes `False`; any other exception propagates |
 | `hasattr(obj, name)` with a non-`str` name | O(1) | O(1) | Raises `TypeError` before any lookup |
@@ -94,6 +95,29 @@ has_x = hasattr(obj, 'x_attr')  # O(d) once, then the miss is cached too
 # Assigning to a class, or to any of its bases, invalidates its cache
 C.c_attr = 30
 has_a = hasattr(obj, 'a_attr')  # O(d) again, once
+```
+
+### Names Built at Run Time
+
+```python
+# The cache matches the name object, not its text
+import sys
+
+class Shape:
+    def draw_circle(self):
+        pass
+
+def supports(obj, kind):
+    # The f-string is a new object per call - every call walks the MRO, O(d)
+    return hasattr(obj, f"draw_{kind}")
+
+def supports_interned(obj, kind):
+    # One shared object per text - the lookup is O(1) avg once the cache is warm
+    return hasattr(obj, sys.intern(f"draw_{kind}"))
+
+shape = Shape()
+assert supports(shape, "circle") and not supports(shape, "square")
+assert supports_interned(shape, "circle") and not supports_interned(shape, "square")
 ```
 
 ### What hasattr() Catches
@@ -439,6 +463,7 @@ print(hasattr(Permissive(), 'anything'))  # True
 - Use `getattr()` with a default when the value is needed - it is one lookup, not two
 - Use it for duck typing and protocol checking
 - Expect property getters and `__getattr__` to run inside it
+- Pass a name built at run time through `sys.intern()` when it is checked repeatedly on a deep hierarchy - a fresh string object misses the lookup cache
 
 ❌ **Avoid**:
 
@@ -458,7 +483,7 @@ print(hasattr(Permissive(), 'anything'))  # True
 
 ## Version Notes
 
-- **Python 2.x**: Any exception raised by the lookup, not only `AttributeError`, is swallowed and reported as `False`
+- **Python 2.x**: Every `Exception` raised by the lookup, not only `AttributeError`, is swallowed and reported as `False`
 - **Python 3.2+**: Only `AttributeError` becomes `False`; every other exception propagates
 - **Python 3.13+**: A class that has been changed and looked up again more than 1,000 times stops being cached, so lookups on it are O(d) from then on
-- **All versions**: A non-`str` name raises `TypeError`
+- **Python 3**: A non-`str` name, `bytes` included, raises `TypeError`

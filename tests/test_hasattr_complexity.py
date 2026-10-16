@@ -8,12 +8,15 @@ AttributeError for the generic, type and module getattro paths, and lets
 every other exception through. The generic path is
 _PyObject_GenericGetAttrWithDict: a _PyType_Lookup of the name on the type
 followed by an instance-dict probe. _PyType_Lookup (Objects/typeobject.c)
-consults a per-interpreter cache of 1 << MCACHE_SIZE_EXP (4,096) entries keyed
-by the type's version tag and the name's hash, storing NULL results as readily
-as found ones, and only on a miss walks the MRO with one dict lookup per class
-(find_name_in_mro). A name is cacheable only when it is an exact str of at most
-MCACHE_MAX_ATTR_SIZE (100) characters, so a str subclass forces the walk on
-every call - the lever the timing tests use. Assigning to a class or a base
+consults a per-interpreter cache of 1 << MCACHE_SIZE_EXP (4,096) entries
+indexed by the type's version tag and the name object's address, whose entries
+match on name identity (entry->name == name), not on string equality. It stores
+NULL results as readily as found ones, and only on a miss walks the MRO with
+one dict lookup per class (find_name_in_mro). A name is cacheable only when it
+is an exact str of at most MCACHE_MAX_ATTR_SIZE (100) characters, so a str
+subclass forces the walk on every call - the lever most timing tests use - and
+so does an equal but distinct str object, such as an f-string result built per
+call, until sys.intern() maps it to one object. Assigning to a class or a base
 clears the version tag (type_modified); the next lookup assigns a fresh one.
 From the v3.13.0 tag assign_version_tag refuses once tp_versions_used reaches
 MAX_VERSIONS_PER_CLASS (1,000), after which nothing on that class is cached
@@ -38,14 +41,20 @@ Observation settles the hook and TypeError rows:
   ``__getattr__`` miss allocates a few hundred bytes for its AttributeError
   (624 on 3.14).
 
-Elapsed time settles the two lookup rows on the pinned interpreter (aarch64,
-CPython 3.14). With an exact str name, a hit or a miss on a class 1,024 deep
-costs the same as on one 2 deep, where the same name as a str subclass costs
-x99 more at 1,024 than at 2 and a 101-character exact str x119. Assigning to the class and then looking the name
-up costs x79 more per iteration at 1,024 than at 2, where assigning to the
-instance instead costs x1.2. After 1,100 assignments to the class, hasattr()
-on the 1,024-deep class costs x160 what it did before them on 3.14 and x215
-on 3.13, and x1.0 on 3.12; 1,100 assignments to the root of its MRO give x168
+Elapsed time settles the three lookup rows; the figures below were measured
+on aarch64 CPython 3.14 unless a version is named, and the tests assert only
+the wide thresholds noted. With an exact str name, a hit or a miss on a class
+1,024 deep costs the same as on one 2 deep (asserted under x3), where the same
+name as a str subclass costs x99 more at 1,024 than at 2 and a 101-character
+exact str x119 (asserted over x20). Names rebuilt by "".join() before each call
+cost x149 to x187 more on 3.11 and 3.15, and sys.intern() on the rebuilt names
+brings them back to x1.0, as does one non-interned join result reused for every
+call (asserted under x3); building and interning happen outside the timed loop,
+so the cost of sys.intern() itself is not measured. Assigning to the class and
+then looking the name up costs x79 more per iteration at 1,024 than at 2,
+where assigning to the instance instead costs x1.2. After 1,100 assignments to
+the class, hasattr() on the 1,024-deep class costs x160 what it did before
+them on 3.14 and x215 on 3.13, and x1.0 on 3.12; 1,100 assignments to the root of its MRO give x168
 on 3.14 and x1.0 on 3.12. One set(dir(obj)) against an object with 1,000 class
 attributes costs x846 what three hasattr() calls do, and x100 class attributes
 (100 to 10,000) cost dir() x80 where hasattr() costs x1.0.
@@ -56,8 +65,9 @@ beyond a plain check that a miss on each is False, the cache's 4,096-entry
 capacity (a program touching more (class, name) pairs than that between
 repeats evicts its own entries), and the instance dict's hash-collision worst
 case, which is dict's own bound. The Python 2 row of the page cannot be run
-here: it describes hasattr() swallowing every exception, which the 3.2 change
-to AttributeError-only removed.
+here: it describes hasattr() swallowing every Exception subclass (builtin_hasattr
+at the v2.7.18 tag clears anything matching PyExc_Exception and re-raises the
+rest), which 3.2 narrowed to AttributeError.
 """
 
 import pathlib
@@ -143,6 +153,39 @@ class TestCachedLookupRow:
             f"x512 classes should cost near x512 uncached: hit x{walked_hit:.1f}, "
             f"miss x{walked_miss:.1f}, 101-character miss x{long_miss:.1f}"
         )
+
+    @pytest.mark.timing
+    def test_a_name_built_per_call_misses_the_cache_until_interned(self) -> None:
+        """The cache matches name objects, so equal text in a fresh object walks."""
+
+        def rebuilt(parts: list[str], how: str) -> Callable[[object], float]:
+            def cost(obj: object) -> float:
+                if how == "reused":
+                    names = ["".join(parts)] * 20_000
+                else:
+                    names = ["".join(parts) for _ in range(20_000)]
+                if how == "interned":
+                    names = [sys.intern(name) for name in names]
+                assert (names[0] is names[1]) == (how != "fresh")
+
+                def loop() -> None:
+                    for name in names:
+                        hasattr(obj, name)
+
+                return best_time(loop)
+
+            return cost
+
+        shallow, deep = chain(2)(), chain(1_024)()
+        for parts in (["a_", "attr"], ["mis", "sing"]):
+            fresh, interned = rebuilt(parts, "fresh"), rebuilt(parts, "interned")
+            reused = rebuilt(parts, "reused")
+            walked = fresh(deep) / fresh(shallow)
+            cached = interned(deep) / interned(shallow)
+            kept = reused(deep) / reused(shallow)
+            assert walked > 20, f"x512 classes should cost a fresh name near x512: x{walked:.1f}"
+            assert cached < 3, f"x512 classes should cost an interned name nothing: x{cached:.1f}"
+            assert kept < 3, f"x512 classes should cost one reused object nothing: x{kept:.1f}"
 
 
 class TestColdLookupRow:
@@ -441,7 +484,7 @@ class TestDirIsNotAShortcut:
         )
 
 
-EXPECTED_BLOCKS = 16
+EXPECTED_BLOCKS = 17
 
 
 def _blocks() -> list[tuple[int, str]]:
