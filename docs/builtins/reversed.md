@@ -1,282 +1,207 @@
 # reversed() Function Complexity
 
-The `reversed()` function returns a reverse iterator over a sequence.
+The `reversed()` function returns an iterator that yields a sequence's items from last to first. It
+copies nothing: a type with a `__reversed__` method, such as `list`, `range`, `dict` or `deque`,
+returns its own reverse iterator, and any other sequence is read backwards through `len()` and
+indexing, one item per `next()`.
 
-## Complexity Analysis
+`n` is the items the reverse iterator yields. A user-defined `__reversed__`, `__len__` or
+`__getitem__` costs what it does; the bounds below are the work `reversed()` and the built-in
+reverse iterators add to them.
 
-| Case | Time | Space | Notes |
-|------|------|-------|-------|
-| Creating iterator | O(1) | O(1) | Just creates iterator |
-| Consuming iterator | O(n) | O(1)† | † iterator only, no copy made |
-| Works with | O(n) total | O(1) per item | Sequences with __reversed__ or __getitem__ |
-| Unsupported types | N/A | N/A | Raises TypeError |
+## Complexity Reference
 
-## Basic Usage
+### reversed()
 
-### Reversing Lists
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `reversed(seq)` on a `list`, `range`, `dict`, dict view, `OrderedDict` or `deque` | O(1) | O(1) | Returns the type's own reverse iterator, without copying |
+| `reversed(seq)` on a `tuple`, `str`, `bytes`, `bytearray`, `memoryview`, `array.array` or user sequence | O(1) | O(1) | Calls `len(seq)` once; each `next()` then calls `seq[i]` for i = len - 1 down to 0 |
+| `reversed(obj)` with a user-defined `__reversed__` | Cost of `__reversed__` | Cost of `__reversed__` | Returns whatever the method returns |
+| `reversed(obj)` on a `set`, an iterator, a generator, or a class with `__reversed__ = None` | O(1) | O(1) | Raises `TypeError` |
+| `reversed(obj)` with `__getitem__` but no `__len__` | O(1) | O(1) | Raises `TypeError` |
+
+### Iterating the Result
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `next()` on a reverse iterator | O(1) | O(1) | For a sequence read by indexing, plus one `seq[i]` call |
+| `next()` on a reverse `dict` or dict view iterator | O(1) amortized | O(1) | Starts at the newest entry. A full pass is O(n), but deleting the newest keys one at a time leaves slots it scans past: after deleting most of them a pass costs the table's former size |
+| A full pass over a sequence | O(n) | O(1) | |
+| `list(reversed(seq))` | O(n) | O(n) | Builds a new list |
+| `lst[::-1]` on a list | O(n) | O(n) | For comparison: copies the whole list before the first item is used |
+
+## Reversing Without a Copy
+
+### Iterating Backwards
+
+`reversed()` reads the original sequence, so iterating backwards needs no second copy of it, where
+slicing a list with `[::-1]` builds one first.
 
 ```python
-# O(1) - creates reverse iterator
 numbers = [1, 2, 3, 4, 5]
-reversed_iter = reversed(numbers)
 
-# O(n) - consumed when needed
-result = list(reversed_iter)
-# [5, 4, 3, 2, 1]
+backwards = reversed(numbers)  # O(1) - no copy
+assert list(backwards) == [5, 4, 3, 2, 1]  # O(n)
 
-# Or iterate directly
-for num in reversed(numbers):
-    print(num)  # 5, 4, 3, 2, 1
+assert numbers[::-1] == [5, 4, 3, 2, 1]  # O(n) time and space - a reversed copy
+assert numbers == [1, 2, 3, 4, 5]  # Neither changes the original
 ```
 
-### Reversing Strings
+### Stopping Early
+
+The iterator produces items only when asked, so stopping after k items costs O(k), however long the
+sequence is.
 
 ```python
-# O(1) - creates iterator
-text = "hello"
-reversed_iter = reversed(text)
+readings = list(range(100_000))
 
-# O(n) - consumed
-result = ''.join(reversed_iter)
-# "olleh"
+latest = []
+for value in reversed(readings):  # O(1) to create
+    latest.append(value)
+    if len(latest) == 3:
+        break  # Only 3 items were read
 
-# Direct iteration
-for char in reversed(text):
-    print(char)  # o, l, l, e, h
+assert latest == [99_999, 99_998, 99_997]
 ```
 
-### Reversing Tuples
+### The Length Is Fixed When reversed() Is Called
+
+A reverse iterator over a list, or over a sequence read by indexing, starts at the length the
+sequence had when `reversed()` was called, so items appended later are not yielded.
 
 ```python
-# O(1) - creates iterator
-numbers = (1, 2, 3)
-reversed_iter = reversed(numbers)
+items = [1, 2, 3]
+backwards = reversed(items)
+items.append(4)
 
-# O(n) - consumed
-result = tuple(reversed_iter)
-# (3, 2, 1)
+assert list(backwards) == [3, 2, 1]
 ```
 
-## Performance Patterns
+## Sequences Without `__reversed__`
 
-### Lazy Evaluation
+`tuple`, `str`, `bytes` and other sequences have no `__reversed__`. For them, and for a class that
+defines `__len__` and `__getitem__`, `reversed()` calls `len()` once and then fetches one index per
+`next()`.
 
 ```python
-# O(1) - creates iterator, doesn't process yet
-big_list = list(range(10**9))
-reversed_iter = reversed(big_list)
+class Squares:
+    def __init__(self, count):
+        self.count = count
+        self.fetched = []
 
-# O(k) - only processes k items
-for i, item in enumerate(reversed_iter):
-    print(item)
-    if i >= 10:
-        break  # Stops after 10 items
+    def __len__(self):
+        return self.count
+
+    def __getitem__(self, index):
+        if not 0 <= index < self.count:
+            raise IndexError(index)
+        self.fetched.append(index)
+        return index * index
+
+squares = Squares(1_000)
+backwards = reversed(squares)  # O(1) - fetches nothing
+assert squares.fetched == []
+
+assert next(backwards) == 998_001  # One __getitem__ call, for index 999
+assert squares.fetched == [999]
+
+assert "".join(reversed("hello")) == "olleh"  # O(n)
+assert tuple(reversed((1, 2, 3))) == (3, 2, 1)  # O(n)
 ```
 
-### Memory Efficiency
+## Dicts and Their Views
+
+A `dict` and its `keys()`, `values()` and `items()` views iterate backwards in reverse insertion
+order. The reverse iterator starts from the newest entry, so after the most recently inserted keys
+are deleted one at a time, its first `next()` scans past their slots, the mirror of a forward
+iterator after the oldest keys are deleted. Rebuilding the dict makes it compact again.
 
 ```python
-# ✅ O(1) space - lazy evaluation
-big_list = range(10**9)
-for item in reversed(big_list):
-    process(item)
+prices = {"apple": 3, "pear": 5, "plum": 2}
 
-# ❌ O(n) space - creates list
-reversed_list = list(reversed(big_list))
-for item in reversed_list:
-    process(item)
+assert list(reversed(prices)) == ["plum", "pear", "apple"]  # O(n)
+assert list(reversed(prices.values())) == [2, 5, 3]
+assert next(reversed(prices.items())) == ("plum", 2)  # O(1)
+
+d = {i: i for i in range(10_000)}
+for i in range(1, 10_000):
+    del d[i]  # Deletes the 9,999 newest keys
+
+assert next(reversed(d)) == 0  # Scans the deleted slots first
+d = dict(d)  # One scan of the old table; the new one is sized for what is left
+assert next(reversed(d)) == 0  # O(1)
+```
+
+## What reversed() Rejects
+
+`reversed()` needs either `__reversed__` or both `__len__` and `__getitem__`. A `set` has no order
+to reverse, and an iterator or generator has no length, so both raise `TypeError`. Turning an
+iterator into a list first works, at O(n) space.
+
+```python
+for value in [{1, 2, 3}, iter([1, 2, 3]), (x for x in [1, 2, 3])]:
+    try:
+        reversed(value)
+    except TypeError as error:
+        assert "is not reversible" in str(error)
+    else:
+        raise AssertionError("expected TypeError")
+
+assert list(reversed(list(x for x in [1, 2, 3]))) == [3, 2, 1]  # O(n) space for the list
+```
+
+## Custom `__reversed__`
+
+A class can supply its own reverse iterator. `reversed()` calls the method and returns its result,
+so the cost is whatever the method does.
+
+```python
+class CountDown:
+    def __init__(self, start):
+        self.start = start
+
+    def __reversed__(self):
+        for i in range(1, self.start + 1):
+            yield i
+
+assert list(reversed(CountDown(5))) == [1, 2, 3, 4, 5]
 ```
 
 ## Common Patterns
 
-### Reverse Iteration
+### Walking Backwards with the Original Indexes
+
+`enumerate(reversed(items))` numbers the items 0, 1, 2 in the order they are yielded. To keep each
+item's original index, reverse a `range` instead; neither builds a copy.
 
 ```python
-# O(n) - iterate in reverse
-items = ['a', 'b', 'c', 'd']
+items = ["a", "b", "c", "d"]
 
-# Using reversed()
-for item in reversed(items):
-    print(item)  # d, c, b, a
+assert list(enumerate(reversed(items))) == [(0, "d"), (1, "c"), (2, "b"), (3, "a")]
 
-# Alternative: slicing (creates copy)
-for item in items[::-1]:
-    print(item)  # Same output, but O(n) space
+original = [(i, items[i]) for i in reversed(range(len(items)))]  # O(n), O(1) per step
+assert original == [(3, "d"), (2, "c"), (1, "b"), (0, "a")]
 ```
 
-### Reverse with Index
-
-```python
-# O(n) - combining enumerate and reversed
-items = ['a', 'b', 'c', 'd']
-
-# Get indices in reverse
-for i, item in enumerate(reversed(items)):
-    print(i, item)
-# 0 d
-# 1 c
-# 2 b
-# 3 a
-
-# Note: indices are sequential, not reversed
-# Use: len(items) - 1 - i to get original indices
-```
-
-### Reversing and Collecting
-
-```python
-# O(n) - reverse and collect in new structure
-items = [1, 2, 3, 4, 5]
-
-# Reverse to list
-result = list(reversed(items))  # [5, 4, 3, 2, 1]
-
-# Reverse to string
-chars = "hello"
-result = ''.join(reversed(chars))  # "olleh"
-
-# Reverse to tuple
-result = tuple(reversed(items))  # (5, 4, 3, 2, 1)
-```
-
-## Comparison with Alternatives
-
-### reversed() vs Slicing
-
-```python
-# Both reverse the sequence
-items = [1, 2, 3, 4, 5]
-
-# reversed() - O(1) space, lazy
-for item in reversed(items):
-    process(item)
-
-# Slicing - O(n) space, eager
-for item in items[::-1]:
-    process(item)
-
-# reversed() is more memory efficient
-```
-
-## Supported Types
-
-### Works With
-
-```python
-# Sequences with __reversed__ method
-list_rev = reversed([1, 2, 3])  # O(1)
-tuple_rev = reversed((1, 2, 3))  # O(1)
-str_rev = reversed("hello")  # O(1)
-range_rev = reversed(range(1, 4))  # O(1)
-
-# All work efficiently
-```
-
-## Edge Cases
-
-### Empty Sequence
-
-```python
-# O(1) - creates empty iterator
-result = list(reversed([]))
-# []
-
-for item in reversed(()):
-    print(item)  # Never executes
-```
-
-### Single Element
-
-```python
-# O(1)
-result = list(reversed([42]))
-# [42]
-```
-
-### Custom Objects
-
-```python
-# O(1) - if class implements __reversed__
-class CountDown:
-    def __init__(self, n):
-        self.n = n
-    
-    def __reversed__(self):
-        for i in range(self.n, 0, -1):
-            yield i
-
-cd = CountDown(5)
-result = list(reversed(cd))
-# [5, 4, 3, 2, 1]
-```
-
-## Performance Considerations
-
-### When to Use reversed()
-
-```python
-# Use when:
-# 1. You need to preserve original
-# 2. Iterating only once
-# 3. Reverse iteration is an afterthought
-
-# 1. Preserve original
-original = [1, 2, 3]
-for item in reversed(original):
-    process(item)
-# original is unchanged
-
-# 2. One-pass iteration
-if condition:
-    for item in reversed(items):
-        process(item)
-
-# 3. Quick reverse
-list(reversed(items))  # Lazily created
-```
-
-### Performance Comparison
-
-```python
-import timeit
-
-items = list(range(1000))
-
-# reversed() - creates iterator (fast)
-t1 = timeit.timeit(lambda: list(reversed(items)), number=10000)
-
-# Slicing - creates copy (slower)
-t2 = timeit.timeit(lambda: items[::-1], number=10000)
-
-# reversed() typically faster for iteration
-# But slicing has optimizations in CPython
-```
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use `reversed()` to reverse sequences without modifying
-- Use for lazy iteration over reversed sequences
-- Combine with `enumerate()` for reverse iteration with indices
-- Use for one-pass reverse iterations
+- Use `reversed(seq)` to iterate backwards without copying the sequence
+- Use `reversed(range(len(seq)))` when you need the original indexes
+- Break out of the loop once you have what you need; the rest is never read
 
 ❌ **Avoid**:
 
-- Converting to list immediately (defeats laziness)
-- Using with non-sequences (check type first)
-- Using `reversed()` when `reverse()` modifies in-place
-- Assuming reversed indices match original
+- `lst[::-1]` or `list(reversed(lst))` on a list just to loop once; both build an O(n) copy
+- `reversed()` on an iterator or generator; it raises `TypeError` until you build a list
+- Iterating a `dict` backwards repeatedly after deleting its newest keys without rebuilding it
 
 ## Related Functions
 
-- **[list.reverse()](list.md)** - In-place list reversal
-- **[sorted(reverse=True)](sorted.md)** - Reverse sorting
-- **[slicing [::-1]](list.md)** - Reverse slicing
-- **[enumerate()](enumerate.md)** - Iteration with indices
-
-## Version Notes
-
-- **Python 2.x**: Basic functionality available
-- **Python 3.x**: Same behavior, consistent
-- **Python 3.8+**: No changes to complexity
+- **[iter() and next()](iter.md)** - Forward iteration, and the sparse-table cost from the other end
+- **[list](list.md)** - `list.reverse()` reverses the list in place
+- **[range()](range.md)** - `reversed(range(...))` is O(1) and yields indexes backwards
+- **[sorted()](sorted.md)** - `sorted(seq, reverse=True)` sorts in descending order
+- **[enumerate()](enumerate.md)** - Numbers the items as they are yielded
