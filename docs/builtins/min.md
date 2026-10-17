@@ -1,242 +1,165 @@
 # min() Function Complexity
 
-The `min()` function returns the smallest item in an iterable or among multiple arguments.
+The `min()` function returns the smallest item of an iterable, or the smallest of two or more
+arguments. It makes one pass, comparing each item with the smallest seen so far, and holds only that
+item and its key: it never copies or sorts the input.
 
-## Complexity Analysis
+`n` is the items in the iterable, or the positional arguments. Each comparison is one `<` between
+two items, or between two keys when `key` is given, priced at O(1); comparing long strings or tuples
+costs up to their length. A `key` function, and the iterable itself when it is a generator or other
+lazy iterator, cost what they do on top of the bounds below.
 
-| Case | Time | Space | Notes |
-|------|------|-------|-------|
-| Single iterable | O(n) | O(1) | Must compare all items |
-| Multiple arguments | O(n) | O(1) | n = number of arguments |
-| With key function | O(n*k) | O(1) | k = key function time; keeps only current best item/key |
-| Empty iterable | O(1) | O(1) | Raises ValueError unless default provided |
+## Complexity Reference
 
-## Basic Usage
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `min(iterable)` | O(n) | O(1) | n - 1 comparisons; on a tie the first smallest item is returned |
+| `min(arg1, arg2, *args)` | O(n) | O(1) | The same pass over the arguments |
+| `min(iterable, key=func)` | O(n) | O(1) | Plus one `func` call per item; the keys are compared, and the item is returned |
+| `min(iterable, default=value)` | O(n) | O(1) | An empty iterable returns `value`; without `default` it raises `ValueError` |
+| `min(arg1, arg2, default=value)` | O(1) | O(1) | Raises `TypeError`: `default` needs a single iterable |
 
-### Finding Minimum in Iterable
+## Finding the Minimum
+
+### One Pass Over Any Iterable
+
+`min()` consumes the iterable once, so it works on a generator without building a list, and leaves
+an iterator exhausted.
 
 ```python
-# O(n) - must scan all items
 numbers = [3, 1, 4, 1, 5, 9, 2, 6]
-min_val = min(numbers)  # 1
+assert min(numbers) == 1  # O(n)
 
-# O(n) for any iterable
-min_val = min([1, 2, 3])      # 1
-min_val = min((1, 2, 3))      # 1
-min_val = min({1, 2, 3})      # 1
-min_val = min("abc")          # 'a'
+assert min(5, 2, 8, 1) == 1  # O(n) - n positional arguments
+assert min("python") == "h"  # O(n) - characters compared by code point
+assert min(x * x for x in range(-5, 6)) == 0  # O(n) time, O(1) space
+
+it = iter([7, 3, 5])
+assert min(it) == 3
+assert list(it) == []  # The pass consumed the iterator
 ```
 
-### Multiple Arguments
+### Ties Return the First Item
+
+Only a strictly smaller item replaces the current one, so among equal items the first wins.
 
 ```python
-# O(n) where n is number of arguments
-min_val = min(5, 2, 8, 1)     # 1
-min_val = min(3.14, 2.71, 1.41)  # 1.41
+words = ["pear", "fig", "kiwi", "yam"]
+assert min(words, key=len) == "fig"  # "fig" and "yam" tie; the first is returned
+
+pairs = [(1, "b"), (1, "a")]
+assert min(pairs, key=lambda p: p[0]) == (1, "b")
+assert min(pairs) == (1, "a")  # Without a key, whole tuples are compared
 ```
 
-## With Key Function
+## Key Functions
+
+### One Key Call per Item
+
+The key is computed once per item, and the smallest key's item is returned, not the key.
 
 ```python
-# O(n*k) - evaluates key for each item
-words = ["apple", "pie", "cat"]
-shortest = min(words, key=len)  # "pie" (3 letters)
+calls = []
 
-# More expensive key function
-numbers = [1, 2, 3, 4, 5]
-min_val = min(numbers, key=lambda x: expensive_function(x))
-# O(n*k) where k = time for expensive_function
-```
-
-## Performance Patterns
-
-### Scanning Collections
-
-```python
-# O(n) - makes one pass through data
-lst = list(range(1000000))
-result = min(lst)  # ~1M comparisons
-
-# Same complexity with generators
-result = min(x**2 for x in range(10000))  # O(n) time, O(1) space
-```
-
-### Working with Different Types
-
-```python
-# All O(n) - must compare all items
-min([1, 2, 3])              # O(n) for list
-min({1, 2, 3})              # O(n) for set
-min("abcdef")               # O(n) for string
-min(range(1000000))         # O(n) - iterates range
-min(iter([1, 2, 3]))        # O(n) - iterates iterator
-```
-
-### Using Generators
-
-```python
-# O(n) but space-efficient
-# Generator doesn't store all values
-min(x for x in range(1000000) if x % 7 == 0)
-
-# Less efficient:
-# O(n) time but O(n) space
-min([x for x in range(1000000) if x % 7 == 0])
-```
-
-## Complex Keys
-
-### Finding Item with Minimum Property
-
-```python
-# O(n) - evaluate key for each item
-class Person:
-    def __init__(self, name, age):
-        self.name = name
-        self.age = age
-
-people = [Person("Alice", 30), Person("Bob", 25), Person("Charlie", 35)]
-youngest = min(people, key=lambda p: p.age)  # Bob
-
-# Find string with minimum length
-words = ["python", "code", "programming"]
-shortest = min(words, key=len)  # "code"
-```
-
-### Tuple Comparison
-
-```python
-# O(n) - compare tuples lexicographically
-coords = [(1, 5), (3, 2), (2, 8)]
-min_coord = min(coords)  # (1, 5) - compared by first element
-# If first equal, compares second element, etc.
-
-# Compare by second element instead
-min_by_y = min(coords, key=lambda c: c[1])  # (3, 2)
-```
-
-### Distance Calculation
-
-```python
-# O(n*k) - evaluate distance for each item
 def distance(point):
-    return (point[0]**2 + point[1]**2)**0.5
+    calls.append(point)
+    return point[0] ** 2 + point[1] ** 2
 
-points = [(1, 1), (0, 5), (3, 4)]
-closest = min(points, key=distance)  # (1, 1) - closest to origin
+points = [(3, 4), (1, 1), (0, 5)]
+closest = min(points, key=distance)  # O(n) - plus 3 key calls
 
-# More expensive calculation
-def expensive_distance(p1, p2):
-    # Simulated expensive computation
-    return sum((a - b)**2 for a, b in zip(p1, p2))**0.5
-
-closest = min(points, key=lambda p: expensive_distance(p, (0, 0)))
+assert closest == (1, 1)
+assert calls == points  # Each point's key computed exactly once
 ```
 
-## Comparison with Sorting
+### Minimum and Its Index
+
+Passing indexes with a key that looks each one up finds the position of the smallest item in the
+same single pass.
 
 ```python
-# min() is much more efficient than sorting
-numbers = list(range(10000))
+values = [8, 3, 9, 3, 7]
+index = min(range(len(values)), key=values.__getitem__)  # O(n)
 
-# O(n) - just find minimum
-result = min(numbers)
-
-# O(n log n) - overkill if you just need min
-result = sorted(numbers)[0]
-
-# Finding n smallest items
-# O(n*k) with key - worse than:
-import heapq
-result = heapq.nsmallest(10, numbers)  # More efficient
+assert index == 1  # The first of the two 3s
+assert values[index] == 3
 ```
 
-## Edge Cases
+## Empty and Invalid Input
 
-### Empty Sequences
+### Empty Iterables
+
+An empty iterable raises `ValueError` unless `default` is given. `default` cannot be combined with
+multiple positional arguments.
 
 ```python
-# Raises ValueError
 try:
     min([])
-except ValueError as e:
-    print(e)  # min() arg is an empty sequence
+except ValueError:
+    pass
+else:
+    raise AssertionError("expected ValueError")
 
-# Provide default
-min([], default=float('inf'))  # Returns infinity if empty
+assert min([], default=None) is None  # O(1)
+assert min([4, 2], default=0) == 2  # default is ignored when there are items
+
+try:
+    min(1, 2, default=0)
+except TypeError as error:
+    assert "default" in str(error)
+else:
+    raise AssertionError("expected TypeError")
 ```
 
-### Single Item
+### Items That Cannot Be Compared
+
+The comparison raises `TypeError` as soon as the pass meets an item that cannot be ordered against
+the current smallest one.
 
 ```python
-# O(1) - already the minimum
-result = min([42])  # 42
-
-# O(1) - single argument
-# result = min(42)  # TypeError: 'int' object is not iterable
-```
-
-### Non-Comparable Types
-
-```python
-# Raises TypeError if types can't be compared
 try:
     min([1, "string"])
-except TypeError:
-    print("Can't compare int and str")
+except TypeError as error:
+    assert "'<' not supported" in str(error)
+else:
+    raise AssertionError("expected TypeError")
 ```
 
-## Practical Examples
+## min() vs Sorting
 
-### Finding Minimum Distance
+`min()` is O(n). Sorting to take the first item is O(n log n) for unordered input.
+`heapq.nsmallest(k, iterable)` is the choice when you need the k smallest.
 
 ```python
-# O(n) - single pass
-def find_closest(target, points):
-    return min(points, key=lambda p: abs(p - target))
+import heapq
+import random
 
-closest = find_closest(5, [1, 3, 7, 9])  # 3
+numbers = list(range(10_000))
+random.shuffle(numbers)
+
+assert min(numbers) == 0  # O(n)
+assert sorted(numbers)[0] == 0  # O(n log n) - sorts everything to read one item
+assert heapq.nsmallest(3, numbers) == [0, 1, 2]  # O(n log k) - k = 3
 ```
 
-### Selecting Best Option
-
-```python
-# O(n) with complex key
-def evaluate_option(option):
-    return option['cost'] + option['time'] * 0.5
-
-options = [
-    {'cost': 10, 'time': 5},
-    {'cost': 15, 'time': 2},
-    {'cost': 8, 'time': 10},
-]
-best = min(options, key=evaluate_option)
-```
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use `min()` to find minimum element
-- Use key parameter for custom comparisons
-- Use generators with `min()` for memory efficiency
-- Provide `default` parameter for possibly empty sequences
+- Pass a generator expression rather than a list comprehension; `min()` needs one item at a time
+- Use `key=` instead of building `(key, item)` pairs: the same n key calls, in O(1) space
+- Use `min(..., default=value)` for an iterable that may be empty
+- Use `heapq.nsmallest(k, ...)` when you need the k smallest items
 
 ❌ **Avoid**:
 
-- Sorting just to find minimum (use `min()` instead)
-- Unnecessary key function evaluations
-- Finding min without checking if sequence is empty
+- `sorted(x)[0]` to find the minimum: O(n log n) against O(n)
+- Calling `min()` twice on an iterator; the second call sees it empty
+- Calling `min()` once per item to repeatedly take the smallest remaining item: O(n²) in total;
+  sort once or use `heapq`
 
 ## Related Functions
 
-- **[max()](max.md)** - Find maximum value
-- **[sorted()](sorted.md)** - Sort all items
-- **[sum()](sum.md)** - Sum all items
-- **[heapq.nsmallest()](../stdlib/heapq.md)** - Find k smallest items efficiently
-
-## Version Notes
-
-- **Python 2.x**: Basic functionality available
-- **Python 3.x**: Same behavior
-- **Python 3.8+**: Same behavior, consistent
+- **[max()](max.md)** - The largest item, with the same single pass
+- **[sorted()](sorted.md)** - All items in order, when you need more than the smallest
+- **[heapq.nsmallest()](../stdlib/heapq.md)** - The k smallest items, when one is not enough
