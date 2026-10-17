@@ -343,17 +343,6 @@ element_type = typing.get_args(List[int])
 assert element_type == (int,)
 ```
 
-## Version Notes
-
-- **Python 3.10+**: `isinstance()` accepts a `|` union such as `int | str` as its second argument, checked like a tuple of the same classes
-
-## Related Functions
-
-- **[issubclass()](issubclass.md)** - Check class inheritance (O(d))
-- **[type()](type_func.md)** - Get exact type (O(1))
-- **[callable()](callable.md)** - Check if callable (O(1))
-- **[abc](../stdlib/abc.md)** - How ABC checks walk and cache their answers
-
 ## Best Practices
 
 ✅ **Do**:
@@ -369,3 +358,14 @@ assert element_type == (int,)
 - Calling `register()` between negative ABC checks in a loop
 - Checking against too many types at once (long tuples cost O(k*d))
 - Assuming `isinstance()` works with parameterized generics like `List[int]`
+
+## Version Notes
+
+- **Python 3.10+**: `isinstance()` accepts a `|` union such as `int | str` as its second argument, checked like a tuple of the same classes
+
+## Related Functions
+
+- **[issubclass()](issubclass.md)** - Check class inheritance (O(d))
+- **[type()](type_func.md)** - Get exact type (O(1))
+- **[callable()](callable.md)** - Check if callable (O(1))
+- **[abc](../stdlib/abc.md)** - How ABC checks walk and cache their answers

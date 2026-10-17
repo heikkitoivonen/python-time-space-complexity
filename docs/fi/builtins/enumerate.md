@@ -1,5 +1,5 @@
 ---
-source_sha: b889a562e9f00aad128b2d24a4fa016dfcc7707bf8eb8dc89a3f513d6c9e708f
+source_sha: 844b2fd07560e1b853ab4474ba200e419c5b664d645e8dde2a53edba0146c530
 translated: machine
 ---
 
@@ -209,13 +209,13 @@ else:
 - `list(enumerate(...))`, kun yksi silmukka parien yli riittää - O(n) tilaa turhaan
 - Jo loppuun kulutetun enumerate-olion iterointia uudelleen - toinen läpikäynti on tyhjä
 
+## Versiohuomautukset
+
+- **Kaikki Python 3 -versiot**: `enumerate()` on laiska ja kertakäyttöinen, ja sen rajat ovat samat kaikissa tuetuissa versioissa
+
 ## Liittyvät funktiot
 
 - **[zip()](zip.md)** - Yhdistää useita iteroituvia
 - **[range()](range.md)** - Tuottaa lukujonoja
 - **[iter()](iter.md)** - Luo iteraattoreita
 - **[next()](next.md)** - Hakee iteraattorin seuraavan alkion
-
-## Versiohuomautukset
-
-- **Kaikki Python 3 -versiot**: `enumerate()` on laiska ja kertakäyttöinen, ja sen rajat ovat samat kaikissa tuetuissa versioissa

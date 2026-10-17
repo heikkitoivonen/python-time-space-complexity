@@ -225,6 +225,10 @@ else:
 - Expecting `next()` on a filter object to be O(1) - it takes every rejected item before the next match
 - Iterating an exhausted filter object again - the second pass is empty
 
+## Version Notes
+
+- **All Python 3**: `filter()` is lazy and single-pass, and its bounds are the same on every supported version
+
 ## Related Functions
 
 - **[map()](map.md)** - Apply function to all items
@@ -232,7 +236,3 @@ else:
 - **[any()](any.md)** - Check if any item passes condition
 - **[all()](all.md)** - Check if all items pass condition
 - **[itertools.filterfalse()](../stdlib/itertools.md)** - Opposite of filter
-
-## Version Notes
-
-- **All Python 3**: `filter()` is lazy and single-pass, and its bounds are the same on every supported version

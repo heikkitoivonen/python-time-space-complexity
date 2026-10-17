@@ -312,15 +312,15 @@ result = list(zip_longest([1, 2, 3, 4, 5], ['a', 'b', 'c'], fillvalue=None))
 - Forgetting that `zip()` returns an iterator, not a list
 - Using `zip()` with very different iteration speeds
 
+## Version Notes
+
+- **Python 2.x**: `zip()` returns a list
+- **Python 3.x**: `zip()` returns an iterator (lazy evaluation)
+- **Python 3.8+**: Same lazy behavior, consistent
+
 ## Related Functions
 
 - **[enumerate()](enumerate.md)** - Iterate with indices
 - **[map()](map.md)** - Apply function to iterables
 - **[itertools.zip_longest()](../stdlib/itertools.md)** - Zip with padding
 - **[itertools.chain()](../stdlib/itertools.md)** - Chain iterables
-
-## Version Notes
-
-- **Python 2.x**: `zip()` returns a list
-- **Python 3.x**: `zip()` returns an iterator (lazy evaluation)
-- **Python 3.8+**: Same lazy behavior, consistent

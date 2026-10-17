@@ -1,5 +1,5 @@
 ---
-source_sha: 05b11fd8990c3ab03bcbd6e22ff231408e64e183e7aae4c19e514643e201fd9a
+source_sha: ffd081c2b18547b6c6e66d5e5075e7c58988c5a8bc4cdd42c5af8b6e7ab5d42e
 translated: machine
 ---
 
@@ -328,14 +328,14 @@ result = sorted(numbers)
 - key 函数够用时仍使用 `functools.cmp_to_key()`（每次比较都要调用一次 Python 函数，而不是每个元素一次）
 - 忘记 `sorted()` 会创建新列表（占用内存）
 
+## 版本说明
+
+- **Python 2.3-3.10**：使用 Timsort 算法
+- **Python 3.11+**：使用 Powersort（归并策略改进，复杂度不变）
+
 ## 相关函数
 
 - **[list.sort()](list.md)** - 原地排序
 - **[heapq.nsmallest()](../stdlib/heapq.md)** - 最小的 k 个元素
 - **[heapq.nlargest()](../stdlib/heapq.md)** - 最大的 k 个元素
 - **[max()](max.md)** - 不排序即可求最大值
-
-## 版本说明
-
-- **Python 2.3-3.10**：使用 Timsort 算法
-- **Python 3.11+**：使用 Powersort（归并策略改进，复杂度不变）

@@ -1,5 +1,5 @@
 ---
-source_sha: 17dca96f77aa4827b96bfec2eeb12c24b2f1699ee2dcf6f6e3065eac5735ef2c
+source_sha: 405eebdf89ef17d014d564de89a6c76d122db46249754d00557d9a234255368c
 translated: machine
 ---
 
@@ -482,14 +482,14 @@ hasattr(mv, "append")  # False
 - 尝试修改不可变缓冲区（bytes）
 - 对可写视图或 `bytearray` 上的视图求哈希——两者都会抛出异常
 
-## 相关函数
-
-- **[bytes()](bytes_func.md)** - 不可变字节
-- **[bytearray()](bytearray_func.md)** - 可变字节
-- **[array](../stdlib/array.md)** - 类型化数组模块
-
 ## 版本说明
 
 - **Python 3.12+**：可以用 Python 编写导出者，实现 `__buffer__()` 和
   `__release_buffer__()`；对 0 维视图调用 `len()` 抛出 `TypeError`
 - **Python 3.14+**：新增 `count()` 和 `index()`；`memoryview[int]` 成为泛型别名
+
+## 相关函数
+
+- **[bytes()](bytes_func.md)** - 不可变字节
+- **[bytearray()](bytearray_func.md)** - 可变字节
+- **[array](../stdlib/array.md)** - 类型化数组模块

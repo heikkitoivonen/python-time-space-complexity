@@ -1,5 +1,5 @@
 ---
-source_sha: 05b11fd8990c3ab03bcbd6e22ff231408e64e183e7aae4c19e514643e201fd9a
+source_sha: ffd081c2b18547b6c6e66d5e5075e7c58988c5a8bc4cdd42c5af8b6e7ab5d42e
 translated: machine
 ---
 
@@ -328,14 +328,14 @@ result = sorted(numbers)
 - `functools.cmp_to_key()`-funktiota, kun avainfunktio riittää (Python-kutsu jokaista vertailua kohti alkiokohtaisen sijaan)
 - Unohtamasta, että `sorted()` luo uuden listan (vie muistia)
 
+## Versiohuomiot
+
+- **Python 2.3-3.10**: Käyttää Timsort-algoritmia
+- **Python 3.11+**: Käyttää Powersortia (parannettu yhdistämisstrategia, sama vaativuus)
+
 ## Liittyvät funktiot
 
 - **[list.sort()](list.md)** - Järjestäminen paikallaan
 - **[heapq.nsmallest()](../stdlib/heapq.md)** - k pienintä alkiota
 - **[heapq.nlargest()](../stdlib/heapq.md)** - k suurinta alkiota
 - **[max()](max.md)** - Etsii suurimman ilman järjestämistä
-
-## Versiohuomiot
-
-- **Python 2.3-3.10**: Käyttää Timsort-algoritmia
-- **Python 3.11+**: Käyttää Powersortia (parannettu yhdistämisstrategia, sama vaativuus)

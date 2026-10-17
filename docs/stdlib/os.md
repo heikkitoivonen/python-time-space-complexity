@@ -647,25 +647,6 @@ thousand-deep existing tree is a single frame, where a thousand missing ones
 raise `RecursionError`. `removedirs()` unwinds the other way, keeping one
 prefix live at a time.
 
-## Version Notes
-
-- **Python 3.5+**: `os.scandir()` and `os.DirEntry`, which is what lets a
-  listing loop answer `is_file()` without a stat
-- **Python 3.11+**: `os.path.isabs()` inspects a three-character prefix on Windows
-  instead of rewriting separators across the whole path. Adds `os.login_tty()`
-- **Python 3.12+**: `os.walk()` drives an explicit stack instead of recursing,
-  so depth stops costing a suspended frame per level — in the peak, and in the
-  time, since results no longer pass up through one frame per level. Adds
-  `os.setns()`, `os.unshare()`, `os.path.splitroot()`,
-  `os.path.isjunction()`, `os.path.isdevdrive()` (Windows only until 3.13),
-  `DirEntry.is_junction()` and `stat_result.st_birthtime_ns`
-- **Python 3.13+**: on POSIX `os.path.ismount()` lstats the parent directly and keeps
-  `realpath()` only as a fallback, so it stops scaling with the parent's
-  depth. Adds `os.process_cpu_count()`, the timerfd family, `os.posix_openpt()`,
-  `os.grantpt()`, `os.unlockpt()`, `os.ptsname()` and `os.path.isreserved()`
-- **Python 3.14+**: `os.readinto()` fills a caller-supplied buffer where
-  `os.read()` allocates. Adds `os.reload_environ()`
-
 ## Platform Differences
 
 - **POSIX**: the fork, exec, pty, scheduling, extended-attribute and
@@ -679,15 +660,6 @@ prefix live at a time.
   where on POSIX it returns its argument unchanged
 - **BSD and macOS**: `os.chflags()`, `os.lchflags()`, `os.lchmod()`, and the
   extra `stat_result` fields listed above
-
-## Related Modules
-
-- **[pathlib](pathlib.md)** - object-oriented paths over the same syscalls
-- **[shutil](shutil.md)** - recursive copies and removals
-- **[glob](glob.md)** - pattern expansion over directory listings
-- **[tempfile](tempfile.md)** - temporary files and directories
-- **[subprocess](subprocess.md)** - the supported way to start a process
-- **[stat](stat.md)** - interpreting `st_mode`
 
 ## Best Practices
 
@@ -708,3 +680,31 @@ prefix live at a time.
 - `os.makedirs()` on a path with enough missing components to exhaust the recursion limit
 - `os.putenv()` when `os.environ[key] = value` is what you meant
 - Materialising `os.listdir()` for a directory you only iterate once
+
+## Version Notes
+
+- **Python 3.5+**: `os.scandir()` and `os.DirEntry`, which is what lets a
+  listing loop answer `is_file()` without a stat
+- **Python 3.11+**: `os.path.isabs()` inspects a three-character prefix on Windows
+  instead of rewriting separators across the whole path. Adds `os.login_tty()`
+- **Python 3.12+**: `os.walk()` drives an explicit stack instead of recursing,
+  so depth stops costing a suspended frame per level — in the peak, and in the
+  time, since results no longer pass up through one frame per level. Adds
+  `os.setns()`, `os.unshare()`, `os.path.splitroot()`,
+  `os.path.isjunction()`, `os.path.isdevdrive()` (Windows only until 3.13),
+  `DirEntry.is_junction()` and `stat_result.st_birthtime_ns`
+- **Python 3.13+**: on POSIX `os.path.ismount()` lstats the parent directly and keeps
+  `realpath()` only as a fallback, so it stops scaling with the parent's
+  depth. Adds `os.process_cpu_count()`, the timerfd family, `os.posix_openpt()`,
+  `os.grantpt()`, `os.unlockpt()`, `os.ptsname()` and `os.path.isreserved()`
+- **Python 3.14+**: `os.readinto()` fills a caller-supplied buffer where
+  `os.read()` allocates. Adds `os.reload_environ()`
+
+## Related Modules
+
+- **[pathlib](pathlib.md)** - object-oriented paths over the same syscalls
+- **[shutil](shutil.md)** - recursive copies and removals
+- **[glob](glob.md)** - pattern expansion over directory listings
+- **[tempfile](tempfile.md)** - temporary files and directories
+- **[subprocess](subprocess.md)** - the supported way to start a process
+- **[stat](stat.md)** - interpreting `st_mode`

@@ -159,14 +159,14 @@ else:
 
 - Repeated subtraction in a loop to find a quotient - O(q) steps where `divmod()` divides once
 
+## Version Notes
+
+- **Python 3.12+**: Large ints with a large divisor and a large quotient are divided in O((n + m)^log₂3) rather than O(m·(n − m + 1))
+- **All Python 3**: For ints, `divmod(a, b)` equals `(a // b, a % b)`
+
 ## Related Functions
 
 - **[int](int.md)** - The `//` and `%` operators on ints
 - **[float](float.md)** - Floor division and remainder on floats
 - **[pow()](pow.md)** - Modular exponentiation
 - **[math](../stdlib/math.md)** - `math.fmod()`, a remainder with the sign of the dividend
-
-## Version Notes
-
-- **Python 3.12+**: Large ints with a large divisor and a large quotient are divided in O((n + m)^log₂3) rather than O(m·(n − m + 1))
-- **All Python 3**: For ints, `divmod(a, b)` equals `(a // b, a % b)`

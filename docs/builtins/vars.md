@@ -650,6 +650,11 @@ print(hasattr(obj, 'y'))  # False - not changed
 - Assuming vars() returns all attributes (only instance attrs)
 - Treating `vars()` inside a function as a live view: it is a snapshot, rebuilt on every call
 
+## Version Notes
+
+- **Python 3.13**: PEP 667: `vars()` in a function, like `locals()`, builds a fresh snapshot dict on every call, and builds it in O(n²) by looking each name up in the frame. Earlier versions fill the frame's one dict in O(n) and return it, so two snapshots taken in the same call are the same object and the earlier one shows the later values
+- **All versions**: `vars(obj)` returns `obj.__dict__` itself, not a copy; a class's is a read-only `mappingproxy`
+
 ## Related Functions
 
 - **[dir()](dir.md)** - List all attributes (including inherited)
@@ -657,8 +662,3 @@ print(hasattr(obj, 'y'))  # False - not changed
 - **[setattr()](setattr.md)** - Set attribute value
 - **[delattr()](delattr.md)** - Delete attribute
 - **[hasattr()](hasattr.md)** - Check attribute existence
-
-## Version Notes
-
-- **Python 3.13**: PEP 667: `vars()` in a function, like `locals()`, builds a fresh snapshot dict on every call, and builds it in O(n²) by looking each name up in the frame. Earlier versions fill the frame's one dict in O(n) and return it, so two snapshots taken in the same call are the same object and the earlier one shows the later values
-- **All versions**: `vars(obj)` returns `obj.__dict__` itself, not a copy; a class's is a read-only `mappingproxy`

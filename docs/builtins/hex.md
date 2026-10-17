@@ -219,13 +219,13 @@ assert b"\x00\x0f".hex() == '000f'
 - Using `hex()` for very frequent operations (cache result)
 - Parsing `hex()` output with plain `int(s)`, which rejects the '0x' prefix; use `int(s, 16)` or `int(s, 0)`
 
+## Version Notes
+
+- **All Python 3**: `hex(x)` returns a lowercase string with a '0x' prefix, '-0x' for a negative number, and accepts any object with `__index__`
+
 ## Related Functions
 
 - **[bin()](bin.md)** - Binary representation
 - **[oct()](oct.md)** - Octal representation
 - **[int()](int.md)** - Convert to integer (can parse hex)
 - **[format()](format.md)** - Format with specifications
-
-## Version Notes
-
-- **All Python 3**: `hex(x)` returns a lowercase string with a '0x' prefix, '-0x' for a negative number, and accepts any object with `__index__`

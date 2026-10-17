@@ -202,13 +202,13 @@ else:
 - `list(enumerate(...))` when one loop over the pairs is enough - O(n) space for nothing
 - Iterating an exhausted enumerate object again - the second pass is empty
 
+## Version Notes
+
+- **All Python 3**: `enumerate()` is lazy and single-pass, and its bounds are the same on every supported version
+
 ## Related Functions
 
 - **[zip()](zip.md)** - Combine multiple iterables
 - **[range()](range.md)** - Generate number sequences
 - **[iter()](iter.md)** - Create iterators
 - **[next()](next.md)** - Get next item from iterator
-
-## Version Notes
-
-- **All Python 3**: `enumerate()` is lazy and single-pass, and its bounds are the same on every supported version

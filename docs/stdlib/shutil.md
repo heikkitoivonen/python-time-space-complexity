@@ -270,17 +270,6 @@ error = shutil.Error([('src', 'dst', 'permission denied')])
 assert error.args[0][0] == ('src', 'dst', 'permission denied')
 ```
 
-## Version Notes
-
-- **Python 3.14**: on non-Windows systems, `COPY_BUFSIZE` rose from 64 KiB to 256 KiB; `zstdtar` joined the archive
-  formats; `ExecError` was deprecated and dropped from `__all__`
-
-## Related Documentation
-
-- **[os](os.md)** - the layer underneath, including `os.rename` and `os.scandir`
-- **[glob](glob.md)** - the other module whose cost is entries examined
-- **[pathlib](pathlib.md)** - the object-oriented path API
-
 ## Best Practices
 
 ✅ **Do**:
@@ -296,3 +285,14 @@ assert error.args[0][0] == ('src', 'dst', 'permission denied')
 - Assuming `move()` is O(1) across mount points
 - `rmtree()` on a path you have not checked — it does not ask
 - `which()` in a loop; it walks `PATH` every call and caches nothing
+
+## Version Notes
+
+- **Python 3.14**: on non-Windows systems, `COPY_BUFSIZE` rose from 64 KiB to 256 KiB; `zstdtar` joined the archive
+  formats; `ExecError` was deprecated and dropped from `__all__`
+
+## Related Documentation
+
+- **[os](os.md)** - the layer underneath, including `os.rename` and `os.scandir`
+- **[glob](glob.md)** - the other module whose cost is entries examined
+- **[pathlib](pathlib.md)** - the object-oriented path API

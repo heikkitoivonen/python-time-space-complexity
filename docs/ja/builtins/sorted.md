@@ -1,5 +1,5 @@
 ---
-source_sha: 05b11fd8990c3ab03bcbd6e22ff231408e64e183e7aae4c19e514643e201fd9a
+source_sha: ffd081c2b18547b6c6e66d5e5075e7c58988c5a8bc4cdd42c5af8b6e7ab5d42e
 translated: machine
 ---
 
@@ -328,14 +328,14 @@ result = sorted(numbers)
 - キー関数で済むところで `functools.cmp_to_key()` を使う（要素ごとではなく比較ごとに Python の呼び出しが起きる）
 - `sorted()` が新しいリストを作ること（メモリを使うこと）を忘れる
 
+## バージョン別の注記
+
+- **Python 2.3-3.10**: Timsort アルゴリズムを使う
+- **Python 3.11+**: Powersort を使う（マージ方針が改善されたが、計算量は同じ）
+
 ## 関連する関数
 
 - **[list.sort()](list.md)** - その場でのソート
 - **[heapq.nsmallest()](../stdlib/heapq.md)** - 小さいほうから k 個
 - **[heapq.nlargest()](../stdlib/heapq.md)** - 大きいほうから k 個
 - **[max()](max.md)** - ソートせずに最大値を求める
-
-## バージョン別の注記
-
-- **Python 2.3-3.10**: Timsort アルゴリズムを使う
-- **Python 3.11+**: Powersort を使う（マージ方針が改善されたが、計算量は同じ）

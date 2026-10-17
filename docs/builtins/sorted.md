@@ -323,14 +323,14 @@ result = sorted(numbers)
 - `functools.cmp_to_key()` when a key function will do (a Python call per comparison instead of per element)
 - Forgetting that `sorted()` creates a new list (uses memory)
 
+## Version Notes
+
+- **Python 2.3-3.10**: Uses Timsort algorithm
+- **Python 3.11+**: Uses Powersort (improved merge policy, same complexity)
+
 ## Related Functions
 
 - **[list.sort()](list.md)** - In-place sorting
 - **[heapq.nsmallest()](../stdlib/heapq.md)** - k smallest items
 - **[heapq.nlargest()](../stdlib/heapq.md)** - k largest items
 - **[max()](max.md)** - Find maximum without sorting
-
-## Version Notes
-
-- **Python 2.3-3.10**: Uses Timsort algorithm
-- **Python 3.11+**: Uses Powersort (improved merge policy, same complexity)

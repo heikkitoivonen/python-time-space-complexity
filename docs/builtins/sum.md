@@ -224,6 +224,12 @@ sum(values)   # 1.0 from 3.12; 0.9999999999999999 before
 - `sum(nested_lists, [])` - copies the whole running total at every step
 - `sum(strings, "")` - raises `TypeError`; use `"".join()`
 
+## Version Notes
+
+- **Python 3.8+**: `start` can be passed as a keyword argument
+- **Python 3.12+**: `float` items are summed with Neumaier compensation, so
+  `sum([0.1] * 10) == 1.0`
+
 ## Related Functions
 
 - **[any()](any.md)** - Check if any item is true
@@ -231,9 +237,3 @@ sum(values)   # 1.0 from 3.12; 0.9999999999999999 before
 - **[max()](max.md)** - Find maximum value
 - **[min()](min.md)** - Find minimum value
 - **[math.fsum()](../stdlib/math.md)** - Precise float summation
-
-## Version Notes
-
-- **Python 3.8+**: `start` can be passed as a keyword argument
-- **Python 3.12+**: `float` items are summed with Neumaier compensation, so
-  `sum([0.1] * 10) == 1.0`

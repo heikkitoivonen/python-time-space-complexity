@@ -301,13 +301,6 @@ with tempfile.TemporaryDirectory() as folder:
         assert not hasattr(glob, 'glob0') and not hasattr(glob, 'glob1')
 ```
 
-## Version Notes
-
-- **Python 3.11+**: `include_hidden` on `glob()` and `iglob()`
-- **Python 3.13+**: `glob.translate()`; `glob0()` and `glob1()` are deprecated in favour of
-  `glob(pattern, root_dir=...)`
-- **Python 3.15+**: `glob0()` and `glob1()` are removed
-
 ## Limitations
 
 - No filtering by size, type or time; that is a `stat()` per result afterwards
@@ -354,6 +347,13 @@ with tempfile.TemporaryDirectory() as folder:
 - One walk per extension when one walk and a filter will do
 - `**` over a tree with directory symlinks you have not checked
 - `glob()` as an existence check — `os.path.lexists()` is the O(1) answer
+
+## Version Notes
+
+- **Python 3.11+**: `include_hidden` on `glob()` and `iglob()`
+- **Python 3.13+**: `glob.translate()`; `glob0()` and `glob1()` are deprecated in favour of
+  `glob(pattern, root_dir=...)`
+- **Python 3.15+**: `glob0()` and `glob1()` are removed
 
 ## Related Documentation
 

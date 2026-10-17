@@ -271,20 +271,6 @@ def bfs(graph, start):
 - Searching (use set or dict)
 - Sorting (there is no `sort()`; `sorted(dq)` returns a list)
 
-## Version Notes
-
-- **Python 3.1+**: `maxlen` attribute added
-- **Python 3.2+**: `count()`, `reverse()` and `+=` added
-- **Python 3.5+**: `copy()`, `index()`, `insert()` and the `+`, `*`, `*=` operators added
-- **Python 3.9+**: `deque[int]` generic alias
-- **All versions**: pickling and `copy.copy()` supported
-
-## Related Modules
-
-- **[list](../builtins/list.md)** - Dynamic array
-- **[queue.Queue](queue.md)** - Blocking queue for threads, built on a deque
-- **[heapq](heapq.md)** - Priority queue
-
 ## Best Practices
 
 ✅ **Do**:
@@ -299,3 +285,17 @@ def bfs(graph, start):
 - Random access (use list)
 - When order of operation doesn't matter (use set)
 - Sorting (`sorted(dq)` builds a list anyway; keep a list if you sort often)
+
+## Version Notes
+
+- **Python 3.1+**: `maxlen` attribute added
+- **Python 3.2+**: `count()`, `reverse()` and `+=` added
+- **Python 3.5+**: `copy()`, `index()`, `insert()` and the `+`, `*`, `*=` operators added
+- **Python 3.9+**: `deque[int]` generic alias
+- **All versions**: pickling and `copy.copy()` supported
+
+## Related Modules
+
+- **[list](../builtins/list.md)** - Dynamic array
+- **[queue.Queue](queue.md)** - Blocking queue for threads, built on a deque
+- **[heapq](heapq.md)** - Priority queue

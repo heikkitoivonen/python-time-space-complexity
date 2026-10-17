@@ -360,6 +360,11 @@ assert lookups == 2
 - `dir()` as a way to read a few known names - it builds and sorts the whole attribute list
 - Reassigning a class's attributes in a hot loop on Python 3.13 or later - after more than 1,000 rounds of change and lookup the class is never cached again
 
+## Version Notes
+
+- **Python 3.13+**: A class that has been changed and looked up again more than 1,000 times stops being cached, so lookups on it are O(d) from then on
+- **All Python 3**: A non-`str` name raises `TypeError`, with or without a default
+
 ## Related Functions
 
 - **[hasattr()](hasattr.md)** - Check attribute existence
@@ -368,8 +373,3 @@ assert lookups == 2
 - **[dir()](dir.md)** - List attributes
 - **[vars()](vars.md)** - Get __dict__
 - **[type()](type_func.md)** - Get object type
-
-## Version Notes
-
-- **Python 3.13+**: A class that has been changed and looked up again more than 1,000 times stops being cached, so lookups on it are O(d) from then on
-- **All Python 3**: A non-`str` name raises `TypeError`, with or without a default

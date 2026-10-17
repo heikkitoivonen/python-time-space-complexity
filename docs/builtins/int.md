@@ -190,15 +190,6 @@ large = (10**10000) + (10**10000)
 product = (10**5000) * (10**5000)  # 16,610 bits each: Karatsuba, O(n^1.58)
 ```
 
-## Version Notes
-
-- **Python 3.x**: All integers are arbitrary precision
-- **Python 2.x**: Had `int` and `long` types (unified in 3.x)
-- **Python 3.10**: `bit_count()` added
-- **Python 3.11** (backported to 3.10.7): decimal string conversion is capped; `sys.set_int_max_str_digits()` adjusts the limit
-- **Python 3.12**: `is_integer()` added; decimal conversion in both directions and huge divisions switch to O(n^1.58) divide-and-conquer algorithms above the thresholds in the tables
-- **Python 3.15**: the preallocated small integers run from -5 to 1024, up from 256
-
 ## Implementation Details
 
 ### CPython
@@ -217,6 +208,15 @@ Similar performance characteristics with JIT compilation helping with:
 
 - Repeated operations
 - Type stability
+
+## Version Notes
+
+- **Python 3.x**: All integers are arbitrary precision
+- **Python 2.x**: Had `int` and `long` types (unified in 3.x)
+- **Python 3.10**: `bit_count()` added
+- **Python 3.11** (backported to 3.10.7): decimal string conversion is capped; `sys.set_int_max_str_digits()` adjusts the limit
+- **Python 3.12**: `is_integer()` added; decimal conversion in both directions and huge divisions switch to O(n^1.58) divide-and-conquer algorithms above the thresholds in the tables
+- **Python 3.15**: the preallocated small integers run from -5 to 1024, up from 256
 
 ## Related Types
 

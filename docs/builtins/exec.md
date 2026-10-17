@@ -313,14 +313,14 @@ exec("x = 1", big_scope)  # Must keep scope in memory
 - Assuming `exec()` is safe with restricted scope (it's not)
 - Building code strings dynamically (hard to debug, test)
 
-## Related Functions
-
-- **[eval()](eval.md)** - Evaluate Python expressions
-- **[compile()](compile.md)** - Compile code objects
-- **[__import__()](__import__.md)** - Import modules dynamically
-
 ## Version Notes
 
 - **Python 2.x**: `exec` is a statement, not a function
 - **Python 3.x**: `exec()` is a function
 - **All versions**: Security risk with untrusted input
+
+## Related Functions
+
+- **[eval()](eval.md)** - Evaluate Python expressions
+- **[compile()](compile.md)** - Compile code objects
+- **[__import__()](__import__.md)** - Import modules dynamically

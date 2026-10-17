@@ -392,16 +392,16 @@ manager.emit("click")  # Output: Event: click
 - Overcomplicating with `__call__` when simple functions work
 - Adding unnecessary `callable()` checks in performance-critical code
 
-## Related Functions
-
-- **[hasattr()](hasattr.md)** - Check for attribute existence
-- **[isinstance()](isinstance.md)** - Check object type
-- **[type()](type_func.md)** - Get object type
-- **[inspect.isfunction()](https://docs.python.org/3/library/inspect.html)** - Detailed type checking
-
 ## Version Notes
 
 - **Python 2.x**: `callable()` available as built-in
 - **Python 3.0-3.1**: Removed (controversial decision)
 - **Python 3.2+**: Re-added as built-in
 - **All versions**: O(1) constant time operation
+
+## Related Functions
+
+- **[hasattr()](hasattr.md)** - Check for attribute existence
+- **[isinstance()](isinstance.md)** - Check object type
+- **[type()](type_func.md)** - Get object type
+- **[inspect.isfunction()](https://docs.python.org/3/library/inspect.html)** - Detailed type checking

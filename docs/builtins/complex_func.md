@@ -243,17 +243,17 @@ if sys.version_info >= (3, 14):
 - Passing complex numbers as the `real` or `imag` argument; it is deprecated from Python 3.14
 - Calling `math` functions on complex numbers: they raise `TypeError`
 
-## Related Functions
-
-- **[abs()](abs.md)** - Magnitude of complex number
-- **[float()](float_func.md)** - Real-number conversion
-- **[cmath](../stdlib/cmath.md)** - Complex math functions
-
 ## Version Notes
 
 - **Python 3.14+**: `complex.from_number()` added
 - **Python 3.14+**: A complex number as the `real` or `imag` argument emits `DeprecationWarning`, and a string passed as `real=` raises `TypeError`
 - **All Python 3**: Both parts are C doubles
+
+## Related Functions
+
+- **[abs()](abs.md)** - Magnitude of complex number
+- **[float()](float_func.md)** - Real-number conversion
+- **[cmath](../stdlib/cmath.md)** - Complex math functions
 
 ## Further Reading
 

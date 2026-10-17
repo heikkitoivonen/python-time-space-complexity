@@ -445,19 +445,6 @@ assert next(it) == (1, 'b')  # O(1)
 assert next(it) == (2, 'c')  # O(1)
 ```
 
-## Version Notes
-
-- **All Python 3**: `range()` returns a lazy sequence, not an iterator: `next(range(3))` raises
-  `TypeError`, and every `iter()` over it starts again from the beginning.
-
-## Related Functions
-
-- **[zip()](zip.md)** - Iterate multiple sequences
-- **[map()](map.md)** - Transform iterator items
-- **[filter()](filter.md)** - Filter iterator items
-- **[enumerate()](enumerate.md)** - Get index and value
-- **[range()](range.md)** - Lazy sequence, iterable many times
-
 ## Best Practices
 
 ✅ **Do**:
@@ -472,3 +459,16 @@ assert next(it) == (2, 'c')  # O(1)
 - Iterating an iterator twice: the second pass yields nothing
 - `list()` on an iterator you will stop reading early; it produces every item first
 - Iterating a `dict` or `set` repeatedly after deleting most of its entries without rebuilding it
+
+## Version Notes
+
+- **All Python 3**: `range()` returns a lazy sequence, not an iterator: `next(range(3))` raises
+  `TypeError`, and every `iter()` over it starts again from the beginning.
+
+## Related Functions
+
+- **[zip()](zip.md)** - Iterate multiple sequences
+- **[map()](map.md)** - Transform iterator items
+- **[filter()](filter.md)** - Filter iterator items
+- **[enumerate()](enumerate.md)** - Get index and value
+- **[range()](range.md)** - Lazy sequence, iterable many times

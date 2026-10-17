@@ -483,15 +483,15 @@ hasattr(mv, "append")  # False
 - Trying to modify immutable buffers (bytes)
 - Hashing a writable view, or one over `bytearray` - both raise
 
-## Related Functions
-
-- **[bytes()](bytes_func.md)** - Immutable bytes
-- **[bytearray()](bytearray_func.md)** - Mutable bytes
-- **[array](../stdlib/array.md)** - Typed array module
-
 ## Version Notes
 
 - **Python 3.12+**: exporters can be written in Python with `__buffer__()` and
   `__release_buffer__()`; `len()` of a 0-dimensional view raises `TypeError`
 - **Python 3.14+**: `count()` and `index()`; `memoryview[int]` is a generic
   alias
+
+## Related Functions
+
+- **[bytes()](bytes_func.md)** - Immutable bytes
+- **[bytearray()](bytearray_func.md)** - Mutable bytes
+- **[array](../stdlib/array.md)** - Typed array module

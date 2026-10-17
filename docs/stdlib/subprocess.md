@@ -160,13 +160,6 @@ producer.wait()  # O(w)
 print(repr(output))  # 'beta\n'
 ```
 
-## Version Notes
-
-- **Python 3.10+**: `Popen()` takes `pipesize`
-- **Python 3.11+**: `Popen()` takes `process_group`; `getoutput()` and `getstatusoutput()` take `encoding` and `errors`
-- **Python 3.12+**, and 3.10.11 and 3.11.3: on Windows, `shell=True` finds `cmd.exe` through `COMSPEC` and `SystemRoot`, no longer through the current directory or `PATH`
-- **Python 3.13+**: `STARTF_FORCEONFEEDBACK` and `STARTF_FORCEOFFFEEDBACK` added on Windows
-
 ## Best Practices
 
 ✅ **Do**:
@@ -183,6 +176,13 @@ print(repr(output))  # 'beta\n'
 - `stdout=PIPE` with `call()` or `check_call()`, or with a child that writes more than a pipe holds and nobody reading
 - Dropping a `Popen` without waiting for it
 - Ignoring return codes
+
+## Version Notes
+
+- **Python 3.10+**: `Popen()` takes `pipesize`
+- **Python 3.11+**: `Popen()` takes `process_group`; `getoutput()` and `getstatusoutput()` take `encoding` and `errors`
+- **Python 3.12+**, and 3.10.11 and 3.11.3: on Windows, `shell=True` finds `cmd.exe` through `COMSPEC` and `SystemRoot`, no longer through the current directory or `PATH`
+- **Python 3.13+**: `STARTF_FORCEONFEEDBACK` and `STARTF_FORCEOFFFEEDBACK` added on Windows
 
 ## Related Documentation
 

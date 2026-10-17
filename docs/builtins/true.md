@@ -485,15 +485,15 @@ if user_exists and is_admin:  # Checks user_exists first
 - Confusing boolean True with truthy values
 - Unnecessary boolean intermediate variables
 
+## Version Notes
+
+- **Python 2.x**: `True` and `False` are singletons (could be reassigned)
+- **Python 3.x**: `True` and `False` are keywords, cannot be reassigned
+- **All versions**: `bool` subclasses `int` (True == 1, False == 0)
+
 ## Related Constants
 
 - **[False](false.md)** - Boolean false value
 - **[None](none.md)** - Null value
 - **[NotImplemented](notimplemented.md)** - Not implemented marker
 - **[bool type](bool.md)** - Boolean type
-
-## Version Notes
-
-- **Python 2.x**: `True` and `False` are singletons (could be reassigned)
-- **Python 3.x**: `True` and `False` are keywords, cannot be reassigned
-- **All versions**: `bool` subclasses `int` (True == 1, False == 0)

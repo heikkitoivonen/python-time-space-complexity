@@ -472,6 +472,13 @@ print(hasattr(Permissive(), 'anything'))  # True
 - Relying on `hasattr()` to swallow anything but `AttributeError`
 - Reassigning a class's attributes in a hot loop on Python 3.13 or later - after more than 1,000 rounds of change and lookup the class is never cached again
 
+## Version Notes
+
+- **Python 2.x**: Every `Exception` raised by the lookup, not only `AttributeError`, is swallowed and reported as `False`
+- **Python 3.2+**: Only `AttributeError` becomes `False`; every other exception propagates
+- **Python 3.13+**: A class that has been changed and looked up again more than 1,000 times stops being cached, so lookups on it are O(d) from then on
+- **Python 3**: A non-`str` name, `bytes` included, raises `TypeError`
+
 ## Related Functions
 
 - **[getattr()](getattr.md)** - Get attribute with default
@@ -480,10 +487,3 @@ print(hasattr(Permissive(), 'anything'))  # True
 - **[dir()](dir.md)** - List all attributes
 - **[vars()](vars.md)** - Get __dict__
 - **[callable()](callable.md)** - Check if callable
-
-## Version Notes
-
-- **Python 2.x**: Every `Exception` raised by the lookup, not only `AttributeError`, is swallowed and reported as `False`
-- **Python 3.2+**: Only `AttributeError` becomes `False`; every other exception propagates
-- **Python 3.13+**: A class that has been changed and looked up again more than 1,000 times stops being cached, so lookups on it are O(d) from then on
-- **Python 3**: A non-`str` name, `bytes` included, raises `TypeError`

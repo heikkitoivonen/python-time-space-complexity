@@ -335,13 +335,6 @@ float(3.99) # 3.99
 - Expecting int() to round (it truncates)
 - Parsing thousands of decimal digits in a hot path (quadratic, and capped)
 
-## Related Functions
-
-- **[float()](float_func.md)** - Convert to floating-point
-- **[str()](str_func.md)** - Convert to string
-- **[bin()](bin.md)** - Binary representation
-- **[hex()](hex.md)** - Hexadecimal representation
-
 ## Version Notes
 
 - **Python 2.x**: Long integers separate (long type)
@@ -350,3 +343,10 @@ float(3.99) # 3.99
 - **Python 3.11** (backported to 3.10.7): decimal digit cap, adjustable with `sys.set_int_max_str_digits()`
 - **Python 3.12**: O(n^1.58) base-10 parsing above 6,000 digits
 - **Python 3.14**: the `__trunc__` fallback is removed; objects need `__int__` or `__index__`
+
+## Related Functions
+
+- **[float()](float_func.md)** - Convert to floating-point
+- **[str()](str_func.md)** - Convert to string
+- **[bin()](bin.md)** - Binary representation
+- **[hex()](hex.md)** - Hexadecimal representation

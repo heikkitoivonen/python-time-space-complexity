@@ -251,14 +251,14 @@ result = ''.join(map(chr, codes))
 
 - Calling `chr()` on a constant code point; write the literal instead
 
+## Version Notes
+
+- **Python 3.13+**: Every out-of-range int raises `ValueError`; before 3.13 one outside the C `int` range, such as `2**31`, raised `OverflowError`
+- **All Python 3**: `chr()` returns a `str` and accepts any object with `__index__`
+
 ## Related Functions
 
 - **[ord()](ord.md)** - Convert character to code point
 - **[str.encode()](str.md)** - Convert string to bytes
 - **[bytes.decode()](bytes.md)** - Convert bytes to string
 - **[chr() with map()](map.md)** - Bulk character creation
-
-## Version Notes
-
-- **Python 3.13+**: Every out-of-range int raises `ValueError`; before 3.13 one outside the C `int` range, such as `2**31`, raised `OverflowError`
-- **All Python 3**: `chr()` returns a `str` and accepts any object with `__index__`
