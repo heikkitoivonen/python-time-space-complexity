@@ -1,5 +1,5 @@
 ---
-source_sha: 22106090538c8076aed9a98298900db2e126aa0620cb2f3716b812884cd44eda
+source_sha: 3755c77a0986670532a0b0ef871ac355ccae5598cc01682c68b3933a264532bb
 translated: machine
 ---
 
@@ -59,7 +59,7 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 | [`zip()`](zip.md) | O(1) | O(1) | 消費に O(n)、もっとも短いイテラブルで止まる |
 | [`map()`](map.md) | O(m) | O(m) | m は入力イテラブルの数、n 個の結果の消費に O(n·m) と n 回の関数呼び出し |
 | [`filter()`](filter.md) | O(1) | O(1) | 消費に O(n*k)、k は述語の実行時間 |
-| [`reversed()`](reversed.md) | O(1) | O(1) | 消費に O(n)、`__reversed__` か `__getitem__` が必要 |
+| [`reversed()`](reversed.md) | O(1) | O(1) | 消費に O(n)、`__reversed__`、または `__len__` と `__getitem__` の両方が必要 |
 
 ### 集約と順序付け
 
@@ -80,7 +80,7 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 | [`abs()`](abs.md) | O(1) | O(1) | n 桁の負の `int` では O(n)；独自の `__abs__()` はその実装のコスト |
 | [`divmod()`](divmod.md) | O(1) | O(1) | 任意精度整数では O(n²) |
 | [`pow()`](pow.md) | O(r²) | Θ(r) | r は結果のビット数、3 引数形式は Θ(m) 空間で O(log y * m²) |
-| [`round()`](round.md) | O(1) | O(1) | ちょうど半分のときは銀行家の丸め |
+| [`round()`](round.md) | O(1) | O(1) | ちょうど半分は偶数側に丸める。浮動小数点数の `round(x, ndigits)` は生成する d 桁に対して最悪で時間 O(d²)・空間 O(d)、整数の `round(n, -k)` は n のビット数 b に対して時間 O(b·k + k²)・空間 O(b + k) |
 | [`bin()`](bin.md) | O(log n) | O(log n) | コストは出力の長さに等しい |
 | [`hex()`](hex.md) | O(log n) | O(log n) | コストは出力の長さに等しい |
 | [`oct()`](oct.md) | O(log n) | O(log n) | コストは出力の長さに等しい |
@@ -106,7 +106,7 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 | [`callable()`](callable.md) | O(1) | O(1) | `__call__` の有無を調べる |
 | [`id()`](id.md) | O(1) | O(1) | `int` としての同一性。CPython ではメモリアドレス |
 | [`getattr()`](getattr.md) | 平均 O(1) | O(1) | クラスと名前ごとにキャッシュされる。実行時に組み立てた名前では O(d)、d は MRO の深さ |
-| [`setattr()`](setattr.md) | O(1) | O(1) | ハッシュテーブルへの挿入 |
+| [`setattr()`](setattr.md) | O(1) | O(1) | キャッシュされたクラス側の探索と 1 回の格納。クラスの通常の属性には O(s)、s はサブクラスの数。特殊メソッドではそれ以上 |
 | [`hasattr()`](hasattr.md) | 平均 O(1) | O(1) | `getattr()` と同じ探索で、`AttributeError` を捕捉する。実行時に組み立てた名前では O(d) |
 | [`delattr()`](delattr.md) | O(1) | O(1) | ハッシュテーブルからの削除 |
 | [`dir()`](dir.md) | O(k + p + n log n) | O(n) | クラスの辞書をマージしてから名前をソート |

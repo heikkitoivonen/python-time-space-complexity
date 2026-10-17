@@ -1,5 +1,5 @@
 ---
-source_sha: 22106090538c8076aed9a98298900db2e126aa0620cb2f3716b812884cd44eda
+source_sha: 3755c77a0986670532a0b0ef871ac355ccae5598cc01682c68b3933a264532bb
 translated: machine
 ---
 
@@ -63,7 +63,7 @@ mainittu kustannus on se, minkä maksat iteraattorin läpikäynnistä.
 | [`zip()`](zip.md) | O(1) | O(1) | O(n) läpikäyntiin; pysähtyy lyhimpään iteroitavaan |
 | [`map()`](map.md) | O(m) | O(m) | m = syötteenä annettujen iteroitavien määrä; n tuloksen läpikäynti maksaa O(n·m) sekä n funktiokutsua |
 | [`filter()`](filter.md) | O(1) | O(1) | O(n*k) läpikäyntiin, k = predikaatin aika |
-| [`reversed()`](reversed.md) | O(1) | O(1) | O(n) läpikäyntiin; vaatii `__reversed__` tai `__getitem__` |
+| [`reversed()`](reversed.md) | O(1) | O(1) | O(n) läpikäyntiin; vaatii `__reversed__`:n tai sekä `__len__`:n että `__getitem__`:n |
 
 ### Koonti ja järjestäminen
 
@@ -84,7 +84,7 @@ mainittu kustannus on se, minkä maksat iteraattorin läpikäynnistä.
 | [`abs()`](abs.md) | O(1) | O(1) | O(n) negatiiviselle n numeron `int`-arvolle; oma `__abs__()` määrää kustannuksensa itse |
 | [`divmod()`](divmod.md) | O(1) | O(1) | O(n²) mielivaltaisen tarkkuuden kokonaisluvuille |
 | [`pow()`](pow.md) | O(r²) | Θ(r) | r = tuloksen bittimäärä; kolmen argumentin muoto O(log y * m²) tilassa Θ(m) |
-| [`round()`](round.md) | O(1) | O(1) | Pankkiirin pyöristys tasan puolikkailla |
+| [`round()`](round.md) | O(1) | O(1) | Tasan puolikkaat pyöristetään parilliseen; liukuluvun `round(x, ndigits)` vie pahimmillaan O(d²) aikaa ja O(d) tilaa tuotettujen d numeron suhteen, ja kokonaisluvun `round(n, -k)` vie O(b·k + k²) aikaa ja O(b + k) tilaa, b = n:n bitit |
 | [`bin()`](bin.md) | O(log n) | O(log n) | Kustannus on tulosteen pituus |
 | [`hex()`](hex.md) | O(log n) | O(log n) | Kustannus on tulosteen pituus |
 | [`oct()`](oct.md) | O(log n) | O(log n) | Kustannus on tulosteen pituus |
@@ -110,7 +110,7 @@ mainittu kustannus on se, minkä maksat iteraattorin läpikäynnistä.
 | [`callable()`](callable.md) | O(1) | O(1) | Tarkistaa `__call__`-metodin |
 | [`id()`](id.md) | O(1) | O(1) | Identiteetti `int`-arvona; CPythonissa muistiosoite |
 | [`getattr()`](getattr.md) | O(1) keskim. | O(1) | Välimuistissa luokan ja nimen mukaan; ajon aikana muodostetulle nimelle O(d), d = MRO:n syvyys |
-| [`setattr()`](setattr.md) | O(1) | O(1) | Lisäys hajautustauluun |
+| [`setattr()`](setattr.md) | O(1) | O(1) | Välimuistissa oleva luokkahaku ja yksi tallennus; tavalliselle luokan attribuutille O(s), s = aliluokat; erikoismetodille enemmän |
 | [`hasattr()`](hasattr.md) | O(1) keskim. | O(1) | Sama haku kuin `getattr()`, `AttributeError` napataan kiinni; ajon aikana muodostetulle nimelle O(d) |
 | [`delattr()`](delattr.md) | O(1) | O(1) | Poisto hajautustaulusta |
 | [`dir()`](dir.md) | O(k + p + n log n) | O(n) | Yhdistää luokkien sanakirjat ja järjestää sitten nimet |

@@ -1,5 +1,5 @@
 ---
-source_sha: 22106090538c8076aed9a98298900db2e126aa0620cb2f3716b812884cd44eda
+source_sha: 3755c77a0986670532a0b0ef871ac355ccae5598cc01682c68b3933a264532bb
 translated: machine
 ---
 
@@ -60,7 +60,7 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 | [`zip()`](zip.md) | O(1) | O(1) | 消耗为 O(n)；在最短的可迭代对象处停止 |
 | [`map()`](map.md) | O(m) | O(m) | m 为输入可迭代对象的数量；消耗 n 个结果需要 O(n·m) 加 n 次函数调用 |
 | [`filter()`](filter.md) | O(1) | O(1) | 消耗为 O(n*k)，k 为谓词耗时 |
-| [`reversed()`](reversed.md) | O(1) | O(1) | 消耗为 O(n)；需要 `__reversed__` 或 `__getitem__` |
+| [`reversed()`](reversed.md) | O(1) | O(1) | 消耗为 O(n)；需要 `__reversed__`，或同时具备 `__len__` 和 `__getitem__` |
 
 ### 聚合与排序
 
@@ -81,7 +81,7 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 | [`abs()`](abs.md) | O(1) | O(1) | n 位负 `int` 为 O(n)；自定义 `__abs__()` 的成本由其实现决定 |
 | [`divmod()`](divmod.md) | O(1) | O(1) | 任意精度整数为 O(n²) |
 | [`pow()`](pow.md) | O(r²) | Θ(r) | r 为结果的位数；三参数形式为 O(log y * m²)，空间 Θ(m) |
-| [`round()`](round.md) | O(1) | O(1) | 恰为一半时采用银行家舍入 |
+| [`round()`](round.md) | O(1) | O(1) | 恰为一半时舍入到偶数；浮点数的 `round(x, ndigits)` 最坏时间为 O(d²)、空间为 O(d)，d 为生成的位数；整数的 `round(n, -k)` 时间为 O(b·k + k²)、空间为 O(b + k)，b 为 n 的位数（比特） |
 | [`bin()`](bin.md) | O(log n) | O(log n) | 开销即输出的长度 |
 | [`hex()`](hex.md) | O(log n) | O(log n) | 开销即输出的长度 |
 | [`oct()`](oct.md) | O(log n) | O(log n) | 开销即输出的长度 |
@@ -107,7 +107,7 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 | [`callable()`](callable.md) | O(1) | O(1) | 检查是否有 `__call__` |
 | [`id()`](id.md) | O(1) | O(1) | 以 `int` 表示的标识；在 CPython 中为内存地址 |
 | [`getattr()`](getattr.md) | 平均 O(1) | O(1) | 按类和名称缓存；运行时构造的名称为 O(d)，d 为 MRO 深度 |
-| [`setattr()`](setattr.md) | O(1) | O(1) | 哈希表插入 |
+| [`setattr()`](setattr.md) | O(1) | O(1) | 一次带缓存的类侧查找加一次存储；对类的普通属性赋值为 O(s)，s 为子类数量；特殊方法开销更大 |
 | [`hasattr()`](hasattr.md) | 平均 O(1) | O(1) | 与 `getattr()` 查找相同，只是捕获 `AttributeError`；运行时构造的名称为 O(d) |
 | [`delattr()`](delattr.md) | O(1) | O(1) | 哈希表删除 |
 | [`dir()`](dir.md) | O(k + p + n log n) | O(n) | 合并各类的字典，然后对名称排序 |

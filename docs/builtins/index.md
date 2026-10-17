@@ -58,7 +58,7 @@ under Notes is what you pay to consume it.
 | [`zip()`](zip.md) | O(1) | O(1) | O(n) to consume; stops at the shortest iterable |
 | [`map()`](map.md) | O(m) | O(m) | m = input iterables; consuming n results costs O(n·m) plus n function calls |
 | [`filter()`](filter.md) | O(1) | O(1) | O(n*k) to consume, k = predicate time |
-| [`reversed()`](reversed.md) | O(1) | O(1) | O(n) to consume; needs `__reversed__` or `__getitem__` |
+| [`reversed()`](reversed.md) | O(1) | O(1) | O(n) to consume; needs `__reversed__`, or `__len__` and `__getitem__` |
 
 ### Aggregation & Ordering
 
@@ -79,7 +79,7 @@ under Notes is what you pay to consume it.
 | [`abs()`](abs.md) | O(1) | O(1) | O(n) for a negative `int` of n digits; a custom `__abs__()` sets its own cost |
 | [`divmod()`](divmod.md) | O(1) | O(1) | O(n²) for arbitrary-precision integers |
 | [`pow()`](pow.md) | O(r²) | Θ(r) | r = bits of the result; the 3-argument form is O(log y * m²) in Θ(m) |
-| [`round()`](round.md) | O(1) | O(1) | Banker's rounding on exact halves |
+| [`round()`](round.md) | O(1) | O(1) | Exact halves round to even; `round(x, ndigits)` on a float is O(d²) time at worst and O(d) space in the d digits produced, and `round(n, -k)` on an int is O(b·k + k²) time and O(b + k) space in n's b bits |
 | [`bin()`](bin.md) | O(log n) | O(log n) | Cost is the length of the output |
 | [`hex()`](hex.md) | O(log n) | O(log n) | Cost is the length of the output |
 | [`oct()`](oct.md) | O(log n) | O(log n) | Cost is the length of the output |
@@ -105,7 +105,7 @@ under Notes is what you pay to consume it.
 | [`callable()`](callable.md) | O(1) | O(1) | Checks for `__call__` |
 | [`id()`](id.md) | O(1) | O(1) | Identity as an `int`; the memory address in CPython |
 | [`getattr()`](getattr.md) | O(1) avg | O(1) | Cached per class and name; O(d) for a name built at run time, d = MRO depth |
-| [`setattr()`](setattr.md) | O(1) | O(1) | Hash table insertion |
+| [`setattr()`](setattr.md) | O(1) | O(1) | Cached class lookup plus one store; O(s) for an ordinary attribute on a class, s = subclasses; more for a special method |
 | [`hasattr()`](hasattr.md) | O(1) avg | O(1) | The `getattr()` lookup with `AttributeError` caught; O(d) for a name built at run time |
 | [`delattr()`](delattr.md) | O(1) | O(1) | Hash table deletion |
 | [`dir()`](dir.md) | O(k + p + n log n) | O(n) | Merges the class dictionaries, then sorts the names |
