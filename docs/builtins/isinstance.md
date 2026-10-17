@@ -2,43 +2,48 @@
 
 The `isinstance()` function checks whether an object is an instance of a class or a tuple of classes, following inheritance relationships.
 
+`d` is the length of the object's MRO, `len(type(obj).__mro__)`, and `k` is the classes in a tuple or `|` union. For an abstract base class, `g` is the registration and subclass links the ABC can reach, followed recursively, as defined on the [abc page](../stdlib/abc.md); a `__subclasshook__` is priced at O(d), as the default and `collections.abc` hooks are.
+
 ## Complexity Reference
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `isinstance(obj, type)` | O(d) | O(1) | d = MRO depth; effectively O(1) for typical hierarchies |
-| `isinstance(obj, (type1, type2, ...))` | O(k*d) | O(1) | k = number of types; short-circuits on first match |
-| `isinstance(obj, abstract_base)` | O(d) to O(n) | O(1) | Depends on ABC __subclasshook__ implementation |
+| `isinstance(obj, type)` | O(d) | O(1) | O(1) when `type(obj)` is exactly the class; otherwise scans the MRO, so a `False` answer walks all of it |
+| `isinstance(obj, (type1, type2, ...))` | O(k*d) | O(1) | Checks the classes in order and stops at the first match; an ABC or hooked entry costs as in its own row |
+| `isinstance(obj, type1 \| type2)` | O(k*d) | O(1) | Checked as the tuple of the union's members |
+| `isinstance(obj, abstract_base)`: first check of a class | O(g*d) | O(g) | Walks the ABC's registered classes and subclasses recursively, testing `type(obj)`'s MRO at each, and caches the answer |
+| `isinstance(obj, abstract_base)`: cached | O(1) | O(1) | A positive answer stays cached; a negative one only until any ABC registers a new virtual subclass |
+| `isinstance(obj, cls)` with a custom `__instancecheck__` | Cost of the hook | Cost of the hook | The metaclass method decides the answer, except that an object whose type is exactly the class matches in O(1) without calling it |
 
 ## Basic Type Checking
 
 ### Simple Type Checks
 
 ```python
-# Single type - O(1)
+# Single type - O(1) on an exact type match
 x = 42
-isinstance(x, int)           # True - O(1)
-isinstance(x, str)           # False - O(1)
-isinstance(x, (int, float))  # True - O(2)
+assert isinstance(x, int)            # O(1) - exact type
+assert not isinstance(x, str)        # O(d) - scans int's MRO
+assert isinstance(x, (int, float))   # O(1) - first entry matches exactly
 
 # Works with built-in types
-isinstance([1, 2], list)     # True - O(1)
-isinstance({'a': 1}, dict)   # True - O(1)
-isinstance((1, 2), tuple)    # True - O(1)
+assert isinstance([1, 2], list)      # O(1)
+assert isinstance({'a': 1}, dict)    # O(1)
+assert isinstance((1, 2), tuple)     # O(1)
 ```
 
 ### Tuple of Types
 
 ```python
-# Multiple types - O(k) where k = number of types
+# Multiple types - O(k*d), stops at the first match
 numeric_types = (int, float, complex)
-isinstance(42, numeric_types)           # True - O(3)
-isinstance(3.14, numeric_types)         # True - O(3)
-isinstance("3.14", numeric_types)       # False - O(3)
+assert isinstance(42, numeric_types)          # matches the 1st entry
+assert isinstance(3.14, numeric_types)        # matches the 2nd entry
+assert not isinstance("3.14", numeric_types)  # checks all k = 3
 
-# Checking against all sequence types - O(k)
+# Checking against all sequence types - O(k*d)
 sequence_types = (list, tuple, range, str, bytes)
-isinstance([1, 2, 3], sequence_types)   # True - O(5)
+assert isinstance([1, 2, 3], sequence_types)  # matches the 1st entry
 ```
 
 ## Inheritance Checking
@@ -46,7 +51,7 @@ isinstance([1, 2, 3], sequence_types)   # True - O(5)
 ### Class Hierarchies
 
 ```python
-# Define class hierarchy - O(1)
+# Define class hierarchy
 class Animal:
     pass
 
@@ -56,37 +61,39 @@ class Dog(Animal):
 class Cat(Animal):
     pass
 
-# Check inheritance - O(1)
+# Check inheritance - O(d), d = 3 for Dog: Dog, Animal, object
 dog = Dog()
-isinstance(dog, Dog)      # True - O(1)
-isinstance(dog, Animal)   # True - O(1) - follows inheritance
-isinstance(dog, Cat)      # False - O(1)
+assert isinstance(dog, Dog)          # O(1) - exact type
+assert isinstance(dog, Animal)       # O(d) - follows inheritance
+assert not isinstance(dog, Cat)      # O(d) - walks the whole MRO
 
-# Check against base class
-isinstance(dog, (Dog, Cat))  # True - O(2)
+# Check against a tuple of classes
+assert isinstance(dog, (Dog, Cat))   # O(1) - first entry matches exactly
 ```
 
 ### Deep Inheritance Chains
 
 ```python
-# Multi-level inheritance - O(1)
+# Multi-level inheritance - O(d), d = 5 for D
 class A: pass
 class B(A): pass
 class C(B): pass
 class D(C): pass
 
 obj = D()
-isinstance(obj, D)  # True - O(1)
-isinstance(obj, A)  # True - O(1) - checks up the chain
+assert len(D.__mro__) == 5    # D, C, B, A, object
+assert isinstance(obj, D)     # O(1) - exact type
+assert isinstance(obj, A)     # O(d) - scans up the MRO
 
-# Multiple base classes (MRO) - O(1)
+# Multiple base classes - the MRO holds every base
 class X: pass
 class Y: pass
 class Z(X, Y): pass
 
 z = Z()
-isinstance(z, X)  # True - O(1)
-isinstance(z, Y)  # True - O(1)
+assert len(Z.__mro__) == 4    # Z, X, Y, object
+assert isinstance(z, X)       # O(d)
+assert isinstance(z, Y)       # O(d)
 ```
 
 ## Common Patterns
@@ -94,42 +101,45 @@ isinstance(z, Y)  # True - O(1)
 ### Type-based Dispatching
 
 ```python
-# Dispatch based on type - O(k) for checking, O(1) for dispatch
+# Dispatch based on type - each branch adds one isinstance() check
 def process(obj):
     if isinstance(obj, int):
-        return obj * 2  # O(1)
+        return obj * 2
     elif isinstance(obj, str):
-        return obj.upper()  # O(n) for string
+        return obj.upper()  # O(len(obj))
     elif isinstance(obj, list):
         return len(obj)  # O(1)
     else:
-        return None  # O(1)
+        return None
 
-# Total complexity: O(k) checks + O(operation complexity)
+assert process(21) == 42
+assert process("hi") == "HI"
+assert process([1, 2]) == 2
+assert process(None) is None
+# Total: one check per branch tried, plus the branch's own work
 ```
 
 ### Batch Type Checking
 
 ```python
-# Check multiple items against types - O(n*k)
+# Check multiple items against types - O(n*k*d) for n items
 items = [1, "hello", 3.14, None, [1, 2]]
 numeric_types = (int, float)
 
-# Count numeric items - O(n*k)
 count = sum(1 for item in items if isinstance(item, numeric_types))
-# 2 items are numeric - O(5 * 2) = O(10)
+assert count == 2  # 1 and 3.14
 ```
 
 ### Filtering by Type
 
 ```python
-# Filter items by type - O(n*k)
+# Filter items by type - O(n*k*d) for n items
 items = [1, "a", 2, "b", 3, "c"]
 strings = [item for item in items if isinstance(item, str)]
-# O(6 * 1) = O(6)
+assert strings == ["a", "b", "c"]
 
 numbers = [item for item in items if isinstance(item, (int, float))]
-# O(6 * 2) = O(12)
+assert numbers == [1, 2, 3]
 ```
 
 ## Built-in Type Checking
@@ -137,60 +147,65 @@ numbers = [item for item in items if isinstance(item, (int, float))]
 ### All Built-in Types
 
 ```python
-# isinstance() works with all built-in types - O(1) each
-isinstance(42, int)              # True
-isinstance(3.14, float)          # True
-isinstance("hello", str)         # True
-isinstance([1, 2, 3], list)      # True
-isinstance((1, 2), tuple)        # True
-isinstance({1, 2, 3}, set)       # True
-isinstance({'a': 1}, dict)       # True
-isinstance(b'bytes', bytes)      # True
-isinstance(True, bool)           # True
-isinstance(True, int)            # True - bool is subclass of int!
+# isinstance() works with all built-in types - O(1) on an exact match
+assert isinstance(42, int)
+assert isinstance(3.14, float)
+assert isinstance("hello", str)
+assert isinstance([1, 2, 3], list)
+assert isinstance((1, 2), tuple)
+assert isinstance({1, 2, 3}, set)
+assert isinstance({'a': 1}, dict)
+assert isinstance(b'bytes', bytes)
+assert isinstance(True, bool)
+assert isinstance(True, int)              # bool is a subclass of int!
 
 # Check multiple built-in types
-isinstance(42, (int, float))     # True - O(2)
-isinstance("hello", (str, bytes))  # True - O(2)
+assert isinstance(42, (int, float))
+assert isinstance("hello", (str, bytes))
 ```
 
 ### Important Relationship: bool is int
 
 ```python
 # bool is a subclass of int - important!
-isinstance(True, bool)           # True - O(1)
-isinstance(True, int)            # True - O(1) - bool inherits from int
-isinstance(1, bool)              # False - O(1) - int is not necessarily bool
+assert isinstance(True, bool)           # O(1) - exact type
+assert isinstance(True, int)            # O(d) - bool inherits from int
+assert not isinstance(1, bool)          # an int is not a bool
 
 # This matters in type checking
 def check_bool_only(value):
-    return isinstance(value, bool)  # O(1) - stricter check
+    return isinstance(value, bool)  # stricter check
 
 def check_int_like(value):
-    return isinstance(value, int)   # O(1) - includes bool!
+    return isinstance(value, int)   # includes bool!
+
+assert not check_bool_only(1)
+assert check_int_like(True)
 ```
 
 ## Abstract Base Classes (ABCs)
 
 ### Standard ABCs
 
+An ABC answers through its `__instancecheck__`, which caches the answer per class. The first check of a class walks the ABC's registered classes and subclasses, O(g*d); a repeat check of the same class is a set lookup, O(1).
+
 ```python
 from collections.abc import Sequence, Mapping, Iterable
 
-# ABC checking - O(1) typically
+# First check of each class - O(g*d); repeats - O(1)
 numbers = [1, 2, 3]
-isinstance(numbers, Sequence)  # True - O(1)
+assert isinstance(numbers, Sequence)
 
 d = {'a': 1}
-isinstance(d, Mapping)         # True - O(1)
+assert isinstance(d, Mapping)
 
 # Works with iterables
 gen = (x for x in range(10))
-isinstance(gen, Iterable)      # True - O(1)
+assert isinstance(gen, Iterable)
 
 # Check strings
-isinstance("hello", Sequence)  # True - O(1)
-isinstance("hello", str)       # True - O(1)
+assert isinstance("hello", Sequence)
+assert isinstance("hello", str)       # O(1) - exact type
 ```
 
 ### Custom ABC Implementation
@@ -198,7 +213,6 @@ isinstance("hello", str)       # True - O(1)
 ```python
 from abc import ABC, abstractmethod
 
-# Define custom ABC - O(1)
 class DataProcessor(ABC):
     @abstractmethod
     def process(self, data):
@@ -208,10 +222,13 @@ class ListProcessor(DataProcessor):
     def process(self, data):
         return [x * 2 for x in data]
 
-# Check against ABC - O(1)
+# Check against ABC - O(g*d) the first time, then O(1) from its cache
 proc = ListProcessor()
-isinstance(proc, DataProcessor)     # True
-isinstance(proc, DataProcessor.__subclasses__())  # O(subclasses)
+assert isinstance(proc, DataProcessor)
+assert isinstance(proc, DataProcessor)  # cached
+
+# A tuple, never a list, of classes
+assert isinstance(proc, tuple(DataProcessor.__subclasses__()))  # O(k*d)
 ```
 
 ## Performance Considerations
@@ -219,55 +236,56 @@ isinstance(proc, DataProcessor.__subclasses__())  # O(subclasses)
 ### Tuple vs Multiple isinstance Calls
 
 ```python
-# Option 1: Single isinstance with tuple - O(k)
-result = isinstance(obj, (int, float, complex, bool))  # O(4)
+obj = 2.5
 
-# Option 2: Multiple isinstance calls - O(k)
-result = (isinstance(obj, int) or 
-          isinstance(obj, float) or 
-          isinstance(obj, complex) or
-          isinstance(obj, bool))  # O(4) - short-circuits
+# Option 1: Single isinstance with tuple - O(k*d)
+result = isinstance(obj, (int, float, complex))
 
-# Same complexity but tuple is cleaner
+# Option 2: Multiple isinstance calls - O(k*d), short-circuits
+result2 = (isinstance(obj, int) or
+           isinstance(obj, float) or
+           isinstance(obj, complex))
+
+# Same complexity and answer, but the tuple is cleaner
+assert result is result2 is True
 ```
 
-### Avoid Expensive Checks in Loops
+### Negative ABC Checks and Registration
+
+A negative ABC answer stays cached only until any ABC anywhere registers a virtual subclass. Code that calls `register()` while it runs negative checks pays the O(g*d) walk again after each registration; registering everything up front keeps repeat checks at O(1).
 
 ```python
-# Bad: Check complex ABC in loop - O(n*k)
-def is_valid_items(items):
-    from collections.abc import Sequence
-    for item in items:
-        if not isinstance(item, Sequence):  # O(k) per item
-            return False
-    return True
-# Total: O(n*k)
+from abc import ABC
+from collections.abc import Sequence
 
-# Better: Check once, then iterate
-def is_valid_items(items):
-    if not isinstance(items, list):  # O(1)
-        return False
-    for item in items:
-        # Process without checking
-        process(item)  # O(1)
-    return True
-# Total: O(n)
+class Point:
+    pass
+
+p = Point()
+assert not isinstance(p, Sequence)  # O(g*d) - first check of Point
+assert not isinstance(p, Sequence)  # O(1) - cached negative answer
+
+class Plugin(ABC):
+    pass
+
+Plugin.register(Point)              # invalidates every ABC's negative answers
+assert not isinstance(p, Sequence)  # O(g*d) again
 ```
 
 ### isinstance vs type()
 
 ```python
-# isinstance checks inheritance - O(1)
+# isinstance checks inheritance - O(d)
 class Animal: pass
 class Dog(Animal): pass
 dog = Dog()
 
-isinstance(dog, Animal)  # True - checks inheritance
-type(dog) is Animal      # False - exact type only
-type(dog) is Dog         # True
+assert isinstance(dog, Animal)  # checks inheritance
+assert type(dog) is not Animal  # exact type only
+assert type(dog) is Dog
 
 # isinstance is preferred for flexibility
-# type() is O(1) and exact, but less flexible
+# type(obj) is C is O(1) and exact, but ignores subclasses
 ```
 
 ## Special Cases
@@ -277,68 +295,77 @@ type(dog) is Dog         # True
 ```python
 # Check for None - O(1)
 value = None
-isinstance(value, type(None))  # True
-isinstance(value, object)      # True - everything inherits from object
+assert isinstance(value, type(None))  # O(1) - exact type
+assert isinstance(value, object)      # everything inherits from object
 
 # Or use direct comparison
-value is None  # True - preferred way for None
+assert value is None  # preferred way for None
 ```
 
-### Union Type Hints
+### Union Types
 
 ```python
-# Type hints don't affect isinstance behavior
+# An annotation does not affect isinstance(); a union can be its argument
 def process(value: int | str):
-    if isinstance(value, int):  # O(1)
+    if isinstance(value, int):
         return value * 2
-    elif isinstance(value, str):  # O(1)
+    elif isinstance(value, str):
         return value.upper()
 
-# isinstance still O(1) per check
+assert process(2) == 4
+assert process("a") == "A"
+
+# int | str is checked as the tuple (int, str) - O(k*d)
+assert isinstance("a", int | str)
+assert not isinstance(1.0, int | str)
 ```
 
 ### isinstance with Generic Types
 
 ```python
-from typing import List, Dict
+from typing import List
 
-# Generic types don't work directly with isinstance
+# Parameterized generics raise TypeError
 lst = [1, 2, 3]
-# isinstance(lst, List[int])  # TypeError
+try:
+    isinstance(lst, List[int])
+except TypeError as exc:
+    assert "generic" in str(exc)
+else:
+    raise AssertionError("isinstance() accepted List[int]")
 
 # Must use non-parameterized type
-isinstance(lst, list)  # True - O(1)
+assert isinstance(lst, list)  # O(1) - exact type
 
-# For runtime checking, use typing.get_args() - O(1)
+# typing.get_args() reads the parameters back, without checking elements - O(1)
 import typing
-if isinstance(lst, list):  # O(1)
-    element_type = typing.get_args(List[int])  # O(1)
+element_type = typing.get_args(List[int])
+assert element_type == (int,)
 ```
 
 ## Version Notes
 
-- **Python 2.x**: Works with old-style and new-style classes
-- **Python 3.x**: All classes are new-style, consistent behavior
-- **Python 3.10+**: `isinstance()` can accept `|` union syntax in type hints (no change to isinstance performance)
+- **Python 3.10+**: `isinstance()` accepts a `|` union such as `int | str` as its second argument, checked like a tuple of the same classes
 
 ## Related Functions
 
-- **[issubclass()](issubclass.md)** - Check class inheritance (O(1))
+- **[issubclass()](issubclass.md)** - Check class inheritance (O(d))
 - **[type()](type_func.md)** - Get exact type (O(1))
 - **[callable()](callable.md)** - Check if callable (O(1))
+- **[abc](../stdlib/abc.md)** - How ABC checks walk and cache their answers
 
 ## Best Practices
 
 ✅ **Do**:
 
 - Use `isinstance(obj, (type1, type2))` for multiple types
-- Use ABCs for flexible type checking
+- Use ABCs for flexible type checking; repeat checks of a class are cached
 - Use `isinstance()` for inheritance-aware type checking
-- Cache expensive type checks
+- Register virtual subclasses up front, before negative ABC checks run
 
 ❌ **Avoid**:
 
-- `type(obj) is SomeType` for inheritance (doesn't follow inheritance)
-- Expensive ABC checks in tight loops
-- Checking against too many types at once (long tuples)
+- `type(obj) is SomeType` when subclasses should match (it ignores inheritance)
+- Calling `register()` between negative ABC checks in a loop
+- Checking against too many types at once (long tuples cost O(k*d))
 - Assuming `isinstance()` works with parameterized generics like `List[int]`
