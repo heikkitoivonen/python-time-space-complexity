@@ -1,596 +1,246 @@
 # setattr() Function Complexity
 
-The `setattr()` function sets the value of a named attribute on an object. It's the programmatic way to assign object attributes dynamically.
+The `setattr()` function assigns a value to a named attribute of an object. `setattr(obj, "name",
+value)` is exactly `obj.name = value` with the name supplied at run time: both call
+`type(obj).__setattr__`, so a property setter, a descriptor's `__set__` or a class's own
+`__setattr__` runs in the same way.
 
-## Complexity Analysis
+`d` is the classes in `type(obj).__mro__`, `s` is the subclasses of a class, direct and indirect,
+and `k` is the cost, in time and space, of a user-defined `__setattr__`, property setter or
+`__set__`. Attribute names are treated as hashing and comparing in O(1), and the C stack used by
+recursion over a class's bases or subclasses is not counted in the Space column.
+
+## Complexity Reference
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| Direct assignment | O(1) | O(1) | Set in instance dict |
-| Property setter call | O(1) | O(1) | Call property __set__ |
-| __setattr__ call | O(1) | O(1) | Custom implementation |
-| Descriptor protocol | O(1) | O(1) | Data descriptors |
-| Total operation | O(1) | O(1) | Hash table insertion |
+| `setattr(obj, name, value)` | O(1) avg | O(1) | One class-side lookup for a data descriptor, cached per class and name, then one store in the instance's `__dict__`; adding a new attribute is amortized |
+| `setattr(obj, name, value)` with a name built at run time | O(1) avg | O(1) | An exact `str` name is interned first, so a name rebuilt on every call still hits the class-side cache, unlike [`getattr()`](getattr.md) |
+| `setattr(obj, name, value)` with a `str` subclass or a name over 100 characters | O(d) | O(1) | Such a name is never cached: every call walks the MRO |
+| First `setattr(obj, ...)` after the class or a base changed | O(d) | O(1) | Walks the MRO once and caches the result. From Python 3.13, once a class has been changed and looked up again more than 1,000 times it is never cached again, and every assignment on its instances pays O(d) |
+| `setattr(obj, name, value)`, property or data descriptor | O(k) | O(k) | Runs the setter or `__set__` instead of the store, even when the instance's `__dict__` holds the name; a property without a setter raises `AttributeError` |
+| `setattr(obj, name, value)`, custom `__setattr__` | O(k) | O(k) | Runs on every assignment, including those in `__init__` |
+| `setattr(obj, name, value)`, slot declared on `type(obj)` | O(1) | O(1) | Stores in the slot; without a `__dict__`, a name with no slot or other descriptor raises `AttributeError` |
+| `setattr(obj, name, value)`, slot declared on a base class | O(d) | O(1) | Checks that `type(obj)` derives from the declaring class by scanning its MRO; an `obj.name = value` statement the interpreter has specialized skips the check |
+| `setattr(cls, name, value)` | O(s) | O(1) | Invalidates the attribute cache of the class and of each subclass whose cache is still valid |
+| `setattr(cls, name, value)` for a special method such as `__eq__` | O(s·m) | O(1) | m = the longest MRO among the subclasses: on every assignment, each subclass that inherits the method looks it up again along its MRO |
+| `setattr(module, name, value)` | O(1) avg | O(1) | Stores in the module's `__dict__` |
+| Built-in type, such as `setattr(int, "x", 1)` | O(1) | O(1) | Raises `TypeError` |
+| Object without a `__dict__`, such as `object()` | O(1) | O(1) | Raises `AttributeError` |
+| Non-`str` name | O(1) | O(1) | Raises `TypeError` |
 
-## Basic Usage
+## Setting Attributes by Name
 
-### Set Attribute by Name
+### The Same as Assignment
 
-```python
-# O(1) - direct attribute setting
-class MyClass:
-    pass
-
-obj = MyClass()
-
-# Direct assignment - O(1)
-obj.value = 42
-
-# Using setattr - O(1)
-setattr(obj, 'value', 42)
-
-# Both equivalent, setattr is programmatic
-```
-
-### Dynamic Attribute Names
+`setattr()` and the assignment statement go through the same `__setattr__`, so they trigger the
+same hooks and, apart from slots declared on a base class, cost the same.
 
 ```python
-# O(1) - programmatic attribute setting
 class Config:
     pass
 
 config = Config()
+config.host = "localhost"  # O(1) avg
+setattr(config, "port", 8000)  # O(1) avg - the same operation
 
-# Set attributes dynamically - O(1) per attribute
-for key, value in {'host': 'localhost', 'port': 8000}.items():
-    setattr(config, key, value)  # O(1)
+assert vars(config) == {"host": "localhost", "port": 8000}
 
-print(config.host)  # localhost
-print(config.port)  # 8000
+for key, value in {"debug": True, "retries": 3}.items():
+    setattr(config, key, value)  # O(1) avg each
+assert config.debug is True and config.retries == 3
 ```
 
-### Bulk Initialization
+### Names Built at Run Time
+
+`setattr()` interns an exact `str` name before looking it up, so the instance stores the shared
+interned object and the class-side cache hits even when the name was just built. A `str`
+subclass is not interned, and a lookup with it walks the MRO every time.
 
 ```python
-# O(n) - set multiple attributes
+import sys
+
 class Record:
     pass
 
 record = Record()
+name = "".join(["col", "or"])  # A new string object
+assert name is not sys.intern("color")
 
-# Initialize from dictionary - O(n)
-data = {'name': 'Alice', 'age': 30, 'email': 'alice@example.com'}
-
-for key, value in data.items():  # O(n)
-    setattr(record, key, value)  # O(1) per attribute
-
-print(record.name)   # Alice
-print(record.age)    # 30
+setattr(record, name, "red")  # O(1) avg - the name is interned first
+stored = next(iter(vars(record)))
+assert stored is sys.intern("color")
+assert record.color == "red"
 ```
 
-## Complexity Details
+## Descriptors and Hooks
 
-### Direct Assignment to Instance
+### Property Setters
 
-```python
-# O(1) - hash table insertion into __dict__
-class Simple:
-    pass
-
-obj = Simple()
-
-# O(1) - insert into obj.__dict__
-setattr(obj, 'x', 1)
-setattr(obj, 'y', 2)
-setattr(obj, 'z', 3)
-
-# Python's attribute storage:
-# 1. Get instance.__dict__ (O(1))
-# 2. Insert key-value pair (O(1) average)
-# Total: O(1)
-```
-
-### Property Descriptor Protocol
+A property on the class takes priority over the instance's `__dict__`, so `setattr()` runs the
+setter on every call, and a property without one refuses the assignment.
 
 ```python
-# O(1) - calls property setter if exists
-class WithProperty:
+class Temperature:
     def __init__(self):
-        self._value = 0
-    
+        self._celsius = 0.0
+
     @property
-    def value(self):
-        return self._value
-    
-    @value.setter
-    def value(self, val):
-        self._value = val
+    def celsius(self):
+        return self._celsius
 
-obj = WithProperty()
+    @celsius.setter
+    def celsius(self, value):
+        if value < -273.15:
+            raise ValueError("below absolute zero")
+        self._celsius = value
 
-# O(1) - calls setter, not direct assignment
-setattr(obj, 'value', 42)  # Calls value.setter
+    @property
+    def kelvin(self):
+        return self._celsius + 273.15
+
+t = Temperature()
+setattr(t, "celsius", 21.5)  # O(k) - runs the setter
+assert t.celsius == 21.5 and "celsius" not in vars(t)
+
+try:
+    setattr(t, "kelvin", 300)  # No setter
+except AttributeError:
+    pass
+else:
+    raise AssertionError("expected AttributeError")
 ```
 
 ### Custom __setattr__
 
+A class that defines `__setattr__` pays for it on every assignment, including the ones its own
+`__init__` makes.
+
 ```python
-# O(1) - calls custom implementation
-class TrackedChanges:
+class Tracked:
     def __init__(self):
-        self._changes = {}
-    
+        object.__setattr__(self, "changes", [])
+        self.name = "initial"  # Goes through __setattr__ too
+
     def __setattr__(self, name, value):
-        # Custom behavior on every assignment
-        if name == '_changes':
-            # Avoid recursion for tracking dict
-            super().__setattr__(name, value)
-        else:
-            changes = super().__getattribute__('_changes')
-            changes[name] = value
-            super().__setattr__(name, value)
-
-obj = TrackedChanges()
-
-# O(1) - calls __setattr__
-setattr(obj, 'x', 1)  # Tracked in _changes
-
-print(obj._changes)  # {'x': 1}
-```
-
-## Performance Patterns
-
-### Direct vs setattr Performance
-
-```python
-# Direct assignment - slightly faster O(1)
-obj.attr = value  # Marginally faster
-
-# setattr - O(1) with slight overhead
-setattr(obj, 'attr', value)  # Lookup overhead
-
-# Both are O(1), setattr has ~5% overhead for name lookup
-# Use direct assignment in performance-critical code
-```
-
-### Batch Assignment
-
-```python
-# O(n) - multiple assignments
-class Batch:
-    pass
-
-obj = Batch()
-
-# Inefficient - multiple function calls
-for i in range(1000):  # O(n)
-    setattr(obj, f'attr{i}', i)  # O(1) per call
-
-# Better - use __dict__.update
-values = {f'attr{i}': i for i in range(1000)}  # O(n) - create dict
-obj.__dict__.update(values)  # O(n) - bulk insert
-
-# Second approach is ~10% faster for large batches
-```
-
-### vs Direct __dict__ Manipulation
-
-```python
-# Direct __dict__ - O(1), bypasses descriptor protocol
-class Data:
-    pass
-
-obj = Data()
-
-# Direct dict assignment - O(1), no descriptor calls
-obj.__dict__['x'] = 1
-
-# vs setattr - O(1), respects descriptors
-setattr(obj, 'x', 1)
-
-# Direct __dict__ is faster but skips property setters
-# Use setattr for proper initialization, __dict__ for performance
-```
-
-## Common Use Cases
-
-### Object Initialization from Dictionary
-
-```python
-# O(n) - initialize from dict
-class User:
-    def __init__(self, **kwargs):
-        """Initialize from keyword arguments - O(n)"""
-        for key, value in kwargs.items():  # O(n)
-            setattr(self, key, value)  # O(1) per attribute
-
-# O(n) - data = {name, email, age}
-user = User(name='Alice', email='alice@ex.com', age=30)
-
-print(user.name)    # Alice
-print(user.email)   # alice@ex.com
-```
-
-### Configuration Management
-
-```python
-# O(n) - apply configuration
-class Settings:
-    """Base configuration with defaults"""
-    timeout = 30
-    retries = 3
-    debug = False
-
-def apply_config(obj, config_dict):
-    """Apply config overrides - O(n)"""
-    for key, value in config_dict.items():  # O(n)
-        if hasattr(obj, key):  # O(1)
-            setattr(obj, key, value)  # O(1)
-
-settings = Settings()
-overrides = {'timeout': 60, 'debug': True}
-
-# O(n) - apply overrides
-apply_config(settings, overrides)
-
-print(settings.timeout)  # 60
-print(settings.debug)    # True
-```
-
-### Object Cloning
-
-```python
-# O(n) - copy attributes from source to destination
-def clone_object(source, dest):
-    """Clone attributes - O(n)"""
-    for attr in dir(source):  # O(n log n)
-        if not attr.startswith('_'):  # O(1)
-            try:
-                value = getattr(source, attr)  # O(1)
-                setattr(dest, attr, value)  # O(1)
-            except:
-                pass  # Skip read-only or property attributes
-
-class Original:
-    x = 1
-    y = 2
-    z = 3
-
-class Empty:
-    pass
-
-orig = Original()
-copy = Empty()
-
-clone_object(orig, copy)  # O(n) - copy all public attributes
-print(copy.x, copy.y)  # 1, 2
-```
-
-### Data Validation
-
-```python
-# O(1) - validate on assignment
-class ValidatedData:
-    def __setattr__(self, name, value):
-        """Validate data before setting - O(1)"""
-        if name == 'age':
-            if not isinstance(value, int) or value < 0:
-                raise ValueError("Age must be non-negative integer")
-        
-        super().__setattr__(name, value)
-
-obj = ValidatedData()
-
-setattr(obj, 'age', 30)      # O(1) - valid
-# setattr(obj, 'age', -5)    # Raises ValueError
-```
-
-### Builder Pattern
-
-```python
-# O(n) - builder with fluent interface
-class QueryBuilder:
-    def __init__(self):
-        self.filters = []
-        self.limit_value = None
-        self.offset_value = None
-    
-    def filter(self, condition):
-        """Add filter - O(1)"""
-        self.filters.append(condition)
-        return self
-    
-    def limit(self, value):
-        """Set limit - O(1)"""
-        setattr(self, 'limit_value', value)
-        return self
-    
-    def offset(self, value):
-        """Set offset - O(1)"""
-        setattr(self, 'offset_value', value)
-        return self
-    
-    def build(self):
-        return {
-            'filters': self.filters,
-            'limit': self.limit_value,
-            'offset': self.offset_value
-        }
-
-# O(n) - n = 4 operations
-query = (QueryBuilder()
-         .filter('x > 10')
-         .filter('y < 20')
-         .limit(100)
-         .offset(10)
-         .build())
-```
-
-## Advanced Usage
-
-### Meta-Programming
-
-```python
-# O(1) - set descriptor
-class Descriptor:
-    def __set__(self, obj, value):
-        obj.__dict__['_value'] = value
-
-class MyClass:
-    prop = Descriptor()
-
-obj = MyClass()
-
-# O(1) - calls descriptor protocol
-setattr(obj, 'prop', 42)  # Calls Descriptor.__set__
-
-print(obj.__dict__)  # {'_value': 42}
-```
-
-### Computed Properties
-
-```python
-# O(1) - set triggers computation
-class ComputedObject:
-    def __init__(self):
-        self._x = 0
-        self._y = 0
-    
-    @property
-    def x(self):
-        return self._x
-    
-    @x.setter
-    def x(self, value):
-        self._x = value
-        self._invalidate_cache()
-    
-    @property
-    def y(self):
-        return self._y
-    
-    @y.setter
-    def y(self, value):
-        self._y = value
-        self._invalidate_cache()
-    
-    def _invalidate_cache(self):
-        """Called on any coordinate change - O(1)"""
-        print("Cache invalidated")
-
-obj = ComputedObject()
-
-# O(1) - triggers _invalidate_cache
-setattr(obj, 'x', 10)  # Prints "Cache invalidated"
-```
-
-## Practical Examples
-
-### Attribute Mapper
-
-```python
-# O(n) - map source to destination attributes
-def map_attributes(source, dest, mapping):
-    """Map attributes with renaming - O(n)"""
-    for src_attr, dest_attr in mapping.items():  # O(n)
-        if hasattr(source, src_attr):  # O(1)
-            value = getattr(source, src_attr)  # O(1)
-            setattr(dest, dest_attr, value)  # O(1)
-
-class ApiResponse:
-    user_id = 123
-    user_name = "Alice"
-    user_email = "alice@ex.com"
-
-class User:
-    pass
-
-response = ApiResponse()
-user = User()
-
-mapping = {
-    'user_id': 'id',
-    'user_name': 'name',
-    'user_email': 'email'
-}
-
-# O(n) - map all attributes
-map_attributes(response, user, mapping)
-
-print(user.id)     # 123
-print(user.name)   # Alice
-```
-
-### Default Values
-
-```python
-# O(n) - set defaults for missing attributes
-def set_defaults(obj, defaults):
-    """Set default values - O(n)"""
-    for key, value in defaults.items():  # O(n)
-        if not hasattr(obj, key):  # O(1)
-            setattr(obj, key, value)  # O(1)
-
-class Settings:
-    debug = True
-
-settings = Settings()
-
-defaults = {
-    'timeout': 30,
-    'retries': 3,
-    'debug': False  # Already exists, won't override
-}
-
-# O(n) - set missing defaults
-set_defaults(settings, defaults)
-
-print(settings.timeout)  # 30
-print(settings.debug)    # True (not overridden)
-```
-
-### Dynamic Enum Creation
-
-```python
-# O(n) - create enum-like classes
-def create_flags(names):
-    """Create flag class dynamically - O(n)"""
-    flags = type('Flags', (), {})
-    
-    for i, name in enumerate(names):  # O(n)
-        setattr(flags, name, 1 << i)  # O(1) per flag
-    
-    return flags
-
-# O(n) - n = 5
-Flags = create_flags(['READ', 'WRITE', 'EXECUTE', 'DELETE', 'ADMIN'])
-
-print(Flags.READ)     # 1
-print(Flags.WRITE)    # 2
-print(Flags.ADMIN)    # 16
-```
-
-## Edge Cases
-
-### Property Without Setter
-
-```python
-# O(1) - raises error if property has no setter
-class ReadOnly:
-    @property
-    def value(self):
-        return 42
-
-obj = ReadOnly()
-
-# Raises AttributeError - property has no setter
-try:
-    setattr(obj, 'value', 100)  # O(1) but raises
-except AttributeError:
-    print("Cannot set read-only property")
+        self.changes.append(name)
+        object.__setattr__(self, name, value)
+
+obj = Tracked()
+setattr(obj, "name", "renamed")  # O(k) - runs __setattr__
+obj.size = 3
+
+assert obj.changes == ["name", "name", "size"]
+assert obj.name == "renamed"
 ```
 
 ### __slots__
 
+A slot is a data descriptor on the class, so assigning to it stores in a fixed field. When the
+class and its bases declare `__slots__` without listing `__dict__`, instances have no `__dict__`,
+and a name with no slot or other descriptor is refused. For a slot declared on a base class,
+`setattr()` also checks that the instance's type derives from that base, which scans the MRO.
+
 ```python
-# O(1) - works with __slots__
-class Slotted:
-    __slots__ = ['x', 'y']
+class Point:
+    __slots__ = ("x", "y")
 
-obj = Slotted()
+p = Point()
+setattr(p, "x", 1)  # O(1)
+setattr(p, "y", 2)
+assert (p.x, p.y) == (1, 2)
 
-# O(1) - set slot attribute
-setattr(obj, 'x', 1)
-setattr(obj, 'y', 2)
-
-# O(1) - faster than __dict__ objects
-# But cannot add new attributes
 try:
-    setattr(obj, 'z', 3)  # AttributeError - no slot for z
+    setattr(p, "z", 3)
 except AttributeError:
-    print("No slot for 'z'")
+    pass
+else:
+    raise AssertionError("expected AttributeError")
 ```
 
-### Immutable Objects
+## Setting Class Attributes
+
+### Subclasses Pay for Class Changes
+
+Assigning to a class invalidates the attribute cache of every subclass that has a valid one, so
+it is O(s); the next attribute lookup on each class walks its MRO once. Assigning a special method
+also updates every subclass that inherits it, so the new method takes effect on their instances;
+each one looks the method up along its own MRO, so a deep line of subclasses costs more than a wide
+set of direct ones.
 
 ```python
-# O(1) - cannot set attributes on immutable types
-class Immutable:
-    __slots__ = []  # No slots for instances
+class Base:
+    def __eq__(self, other):
+        return False
 
-obj = Immutable()
+class Child(Base):
+    pass
 
-# Raises AttributeError
-try:
-    setattr(obj, 'x', 1)  # O(1) but raises
-except AttributeError:
-    print("Cannot set attributes on this object")
+class Own(Base):
+    def __eq__(self, other):
+        return False
+
+setattr(Base, "__eq__", lambda self, other: True)  # O(s) - Child is updated
+assert Child() == Child()
+assert not Own() == Own()  # Own keeps its own __eq__
+
+setattr(Base, "limit", 10)  # O(s) - invalidates the caches below Base
+assert Child.limit == 10
 ```
 
-## Performance Considerations
+## Common Patterns
 
-### Avoiding __setattr__ Overhead
+### Initializing from a Dictionary
+
+Calling `setattr()` once per item makes n assignments for n items, O(n) when each is O(1), and
+runs any setter or `__setattr__` for each one. Updating `vars(obj)` directly is also O(n) but skips them, which is only correct when
+nothing should see the values.
 
 ```python
-# Direct __dict__ assignment - O(1) faster
-class FastInit:
-    def __init__(self, **kwargs):
-        # Bypass __setattr__ by direct dict assignment
-        self.__dict__.update(kwargs)  # O(n) - single call
+class User:
+    def __init__(self, **fields):
+        for key, value in fields.items():
+            setattr(self, key, value)  # O(1) avg each, O(n) in all
 
-# vs with setattr
-class SlowInit:
-    def __init__(self, **kwargs):
-        # Calls __setattr__ for each attribute
-        for k, v in kwargs.items():
-            setattr(self, k, v)  # O(1) each, but more calls
+user = User(name="Alice", email="alice@example.com", age=30)
+assert vars(user) == {"name": "Alice", "email": "alice@example.com", "age": 30}
 
-# __dict__.update is ~30% faster for bulk initialization
+class Checked:
+    def __setattr__(self, name, value):
+        if name == "age" and value < 0:
+            raise ValueError("age must be non-negative")
+        object.__setattr__(self, name, value)
+
+c = Checked()
+vars(c).update({"age": -1})  # O(n) - bypasses __setattr__
+assert c.age == -1
 ```
 
-### Batch vs Individual Updates
-
-```python
-# Individual updates - O(n) but multiple operations
-obj = object.__new__(type('Obj', (), {}))
-
-for i in range(100):
-    setattr(obj, f'attr{i}', i)  # 100 function calls
-
-# Batch update - O(n) but single operation
-obj.__dict__ = {f'attr{i}': i for i in range(100)}
-
-# Batch is ~20% faster
-```
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use `setattr()` for dynamic attribute assignment
-- Use `setattr()` to respect property setters
-- Use `__dict__.update()` for bulk initialization
-- Cache attribute names if setting repeatedly
-- Use descriptors for computed properties
+- Use `setattr()` when the name is known only at run time; it runs the same hooks as `obj.name = value`
+- Set class attributes when the class is created rather than reassigning them while instances are in use
+- Update `vars(obj)` directly only when no property, descriptor or `__setattr__` should see the values
 
 ❌ **Avoid**:
 
-- Using `setattr()` in tight O(n) loops repeatedly
-- Assuming all attributes can be set (check hasattr first)
-- Direct `__dict__` assignment when descriptors should be called
-- Expensive operations in `__setattr__` (consider caching)
-- Setting private/internal attributes (use setattr carefully)
-
-## Related Functions
-
-- **[getattr()](getattr.md)** - Get attribute value
-- **[hasattr()](hasattr.md)** - Check attribute existence
-- **[delattr()](delattr.md)** - Delete attribute
-- **[dir()](dir.md)** - List attributes
-- **[vars()](vars.md)** - Get __dict__
+- Reassigning a class attribute in a hot loop, such as a counter on the class: each assignment
+  invalidates the caches of the class and its subclasses, and from Python 3.13 a class changed
+  and looked up again more than 1,000 times stops being cached
+- Reassigning special methods on a class with many subclasses
+- `str` subclasses or names over 100 characters as attribute names on deep hierarchies
 
 ## Version Notes
 
-- **Python 2.x**: `setattr()` available, basic functionality
-- **Python 3.x**: Same behavior, optimized in CPython
-- **All versions**: Returns None, respects descriptor protocol
+- **Python 3.13+**: A class changed and looked up again more than 1,000 times is never cached
+  again, so every assignment on its instances walks the MRO
+
+## Related Functions
+
+- **[getattr()](getattr.md)** - Get an attribute by name
+- **[delattr()](delattr.md)** - Delete an attribute by name
+- **[hasattr()](hasattr.md)** - Check whether an attribute exists
+- **[vars()](vars.md)** - The instance's `__dict__`
+- **[object()](object_func.md)** - The default `__setattr__` every class inherits

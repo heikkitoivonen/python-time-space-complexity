@@ -126,6 +126,10 @@ ignore = [
 # map() is the subject of the map tests; C417 would rewrite the lambda-based
 # map() calls they measure into comprehensions.
 "tests/test_map_complexity.py" = ["C417"]
+# setattr() is the subject of the setattr tests; B010 rewrites each constant-name
+# call into the assignment statement it is compared with, and B009 the getattr()
+# that gives subclasses a cache.
+"tests/test_setattr_complexity.py" = ["B009", "B010"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["python_time_space_complexity"]
