@@ -1,226 +1,158 @@
 # ord() Function Complexity
 
-The `ord()` function returns the Unicode code point of a character.
+The `ord()` function returns the integer code point of a one-character string, or the byte value
+of a one-byte `bytes` or `bytearray`. Each call is O(1): it reads the argument's length, rejects
+anything but 1, and reads the single character or byte, whatever its value.
 
-## Complexity Analysis
+`n` is the characters in a string, or the bytes in a `bytes` object, when `ord()` is applied to
+each of them.
 
-| Case | Time | Space | Notes |
-|------|------|-------|-------|
-| Single ASCII character | O(1) | O(1) | Direct lookup |
-| Single Unicode character | O(1) | O(1) | Direct lookup |
-| Invalid input | O(1) | O(1) | Raises TypeError |
+## Complexity Reference
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `ord(c)`, `c` a one-character `str` | O(1) | O(1) | Any code point from 0 to 0x10FFFF; `str` subclasses are accepted |
+| `ord(b)`, `b` a one-byte `bytes` or `bytearray` | O(1) | O(1) | A value from 0 to 255 |
+| `ord(s)` with `len(s) != 1` | O(1) | O(1) | Raises `TypeError`; the length is read, not counted, so a long string fails as fast as a short one |
+| `ord(x)` on any other type | O(1) | O(1) | Raises `TypeError`, including for an `int` and a `memoryview`; `__index__` is not consulted |
+| `[ord(c) for c in s]`, `list(map(ord, s))` | O(n) | O(n) | One O(1) call per character |
+| `list(data)`, `data[i]` on `bytes` | O(n), O(1) | O(n), O(1) | Indexing or iterating `bytes` already yields ints, so `ord()` is not needed |
 
 ## Basic Usage
 
-### ASCII Characters
+### Characters
+
+Every code point costs the same, from ASCII to the supplementary planes.
 
 ```python
-# O(1) - direct Unicode code point lookup
-ord('a')       # 97
-ord('A')       # 65
-ord('0')       # 48
-ord(' ')       # 32
+assert ord('a') == 97        # O(1)
+assert ord('A') == 65
+assert ord(' ') == 32
+assert ord('\n') == 10
+assert ord('\\') == 92
+
+assert ord('é') == 233       # O(1) - Latin-1
+assert ord('€') == 8364      # O(1) - Basic Multilingual Plane
+assert ord('中') == 20013
+assert ord('😀') == 128512   # O(1) - beyond U+FFFF
 ```
 
-### Unicode Characters
+### Bytes
+
+A one-byte `bytes` or `bytearray` gives its byte value. Indexing a `bytes` object already returns
+an int, so `ord()` is for a length-1 slice or a one-byte literal.
 
 ```python
-# O(1) - works with any Unicode character
-ord('π')       # 960
-ord('€')       # 8364
-ord('中')      # 20013
-ord('😀')     # 128512
+assert ord(b'a') == 97             # O(1)
+assert ord(bytearray(b'\xff')) == 255
+
+data = b'hello'
+assert data[0] == 104              # O(1) - already an int
+assert ord(data[0:1]) == 104       # O(1) - a one-byte slice
+assert list(data) == [104, 101, 108, 108, 111]  # O(n) - no ord() needed
 ```
 
-### Special Characters
+### The Inverse of chr()
+
+`chr()` maps a code point back to its character, so the two round-trip.
 
 ```python
-# O(1)
-ord('\n')      # 10 (newline)
-ord('\t')      # 9 (tab)
-ord('\0')      # 0 (null)
-ord('\\'')     # 92 (backslash)
+assert chr(ord('Z')) == 'Z'   # O(1)
+assert ord(chr(90)) == 90     # O(1)
+assert ord(chr(0x10FFFF)) == 0x10FFFF
 ```
 
-## Comparison with chr()
+## Invalid Arguments
+
+### Wrong Length
+
+Anything but exactly one character or byte raises `TypeError`. The length is read from the object,
+so a long string is rejected in O(1).
 
 ```python
-# ord() - character to code point
-ord('A')       # 65
-
-# chr() - code point to character
-chr(65)        # 'A'
-
-# Inverse operations - both O(1)
-chr(ord('Z'))  # 'Z'
-ord(chr(90))   # 90
+for bad in ['ab', '', b'', 'x' * 1_000_000]:
+    try:
+        ord(bad)
+    except TypeError as error:
+        assert 'expected a character' in str(error)
+    else:
+        raise AssertionError(f'expected TypeError for length {len(bad)}')
 ```
 
-## Performance Patterns
+### Wrong Type
 
-### Character Mapping
-
-```python
-# O(n) - map all characters
-text = "hello"
-codes = [ord(c) for c in text]  # [104, 101, 108, 108, 111]
-
-# O(n) - each ord() is O(1)
-for char in text:
-    code = ord(char)  # O(1) operation
-```
-
-### Building Lookup Tables
+An `int` is not converted, and `memoryview` is not accepted even with one byte.
 
 ```python
-# O(k) where k = character set size
-lowercase_codes = {ord(c): c for c in "abcdefghijklmnopqrstuvwxyz"}
-# {97: 'a', 98: 'b', ..., 122: 'z'}
-
-# Useful for fast lookups
-for code, char in lowercase_codes.items():
-    verify = chr(code) == char  # True
+for bad in [120, memoryview(b'a')]:
+    try:
+        ord(bad)
+    except TypeError as error:
+        assert 'expected string of length 1' in str(error)
+    else:
+        raise AssertionError(f'expected TypeError for {type(bad).__name__}')
 ```
 
 ## Common Patterns
 
-### Sorting Characters Alphabetically
+### Converting Text to Code Points
+
+Applying `ord()` to each character is O(n), and `chr()` turns the codes back into a string.
 
 ```python
-# O(1) - ord() returns comparable values
-chars = ['z', 'a', 'm', 'b']
-sorted_chars = sorted(chars, key=ord)
-# ['a', 'b', 'm', 'z']
-
-# But Python already sorts characters correctly
-sorted_chars = sorted(chars)  # Same result, no need for ord()
-```
-
-### Converting Text to Numbers
-
-```python
-# O(n) - convert string to numeric codes
 text = "ABC"
-codes = [ord(c) for c in text]
-# [65, 66, 67]
+codes = [ord(c) for c in text]  # O(n)
+assert codes == [65, 66, 67]
+assert list(map(ord, text)) == codes  # O(n)
 
-# Useful for encoding/cipher operations
-def simple_cipher(text, shift=3):
-    return ''.join(chr(ord(c) + shift) for c in text)
+def shift(text, by=3):
+    return ''.join(chr(ord(c) + by) for c in text)  # O(n)
 
-cipher_text = simple_cipher("ABC")
-# "DEF"
+assert shift("ABC") == "DEF"
 ```
 
-### Checking Character Type
+### Checking Code Point Ranges
+
+A range check on one character is O(1).
 
 ```python
-# O(1) - check code point ranges
-def is_digit_char(char):
-    return ord('0') <= ord(char) <= ord('9')
-
-is_digit_char('5')  # True
-is_digit_char('a')  # False
-
-# But use str methods instead
-'5'.isdigit()  # True - clearer
-```
-
-## Unicode Handling
-
-### Working with Unicode
-
-```python
-# O(1) - Unicode characters
-ord('é')       # 233 (Latin small e with acute)
-ord('ñ')       # 241 (Latin small n with tilde)
-ord('ß')       # 223 (German eszett)
-
-# High Unicode points
-ord('𝔸')       # 119808 (Mathematical Alphanumeric Symbols)
-ord('🎵')      # 127925 (Music note emoji)
-```
-
-### Character Ranges
-
-```python
-# O(1) - check character ranges
-def is_ascii(char):
-    return ord(char) < 128
-
-def is_extended_ascii(char):
-    return 128 <= ord(char) < 256
+def is_ascii_char(char):
+    return ord(char) < 128  # O(1)
 
 def is_greek(char):
-    return 0x0370 <= ord(char) <= 0x03FF
+    return 0x0370 <= ord(char) <= 0x03FF  # O(1)
+
+assert is_ascii_char('a') and not is_ascii_char('é')
+assert is_greek('π') and not is_greek('p')
+assert "plain text".isascii()  # O(1) - a str records whether it is ASCII
 ```
 
-## Edge Cases
+### Sorting Characters
 
-### Single Character Requirement
+Strings compare by code point, so single characters sort the same without a key; `key=ord` only
+adds a call per item.
 
 ```python
-# O(1) - works only with single characters
-ord('a')       # 97
-
-# TypeError - requires single character
-try:
-    ord('ab')  # TypeError: ord() expected a character
-except TypeError:
-    pass
-
-try:
-    ord('')    # TypeError: ord() expected a character
-except TypeError:
-    pass
+chars = ['z', 'a', 'M', 'é', 'b']
+assert sorted(chars) == ['M', 'a', 'b', 'z', 'é']
+assert sorted(chars, key=ord) == sorted(chars)
 ```
 
-### Type Requirements
-
-```python
-# O(1) - works with strings only
-ord('x')       # 120
-
-# TypeError - not with integers
-try:
-    ord(120)   # TypeError
-except TypeError:
-    pass
-```
-
-## Performance Considerations
-
-### Bulk Operations
-
-```python
-# O(n) - efficient for bulk operations
-text = "hello world"
-codes = [ord(c) for c in text]
-# O(n) - linear time for n characters
-
-# Using map
-codes = list(map(ord, text))  # O(n) - slightly more efficient
-```
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use `map(ord, string)` for bulk operations
+- Index or iterate `bytes` directly to get byte values; each item is already an int
+- Use `str.isascii()` to check a whole string: it is O(1), where `ord()` on every character is O(n)
 
 ❌ **Avoid**:
 
-- Using `ord()` for character type checking (use str methods)
+- `ord(data[i])` on `bytes`: `data[i]` is an int, and `ord()` raises `TypeError`
+- `sorted(chars, key=ord)` on single characters: the default comparison gives the same order without the calls
 
 ## Related Functions
 
-- **[chr()](chr.md)** - Convert code point to character
-- **[str.encode()](str.md)** - Convert string to bytes
-- **[bytes.decode()](bytes.md)** - Convert bytes to string
-- **[ord() with map()](map.md)** - Bulk character conversion
-
-## Version Notes
-
-- **Python 2.x**: Works with Unicode strings (u"")
-- **Python 3.x**: All strings are Unicode, ord() works seamlessly
-- **Python 3.8+**: Same behavior, consistent Unicode support
+- **[chr()](chr.md)** - Convert a code point back to a character
+- **[str](str.md)** - `str.encode()` turns a string into bytes, and `str.isascii()` checks a whole string
+- **[bytes](bytes.md)** - Indexing and iteration yield ints directly
+- **[map()](map.md)** - Apply `ord()` lazily across a string
