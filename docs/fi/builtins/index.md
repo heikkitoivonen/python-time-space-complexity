@@ -1,5 +1,5 @@
 ---
-source_sha: 1ed7ab17216561e0d1c11de99c9c29e123937fe2aaea718acac80514978333ed
+source_sha: a90cba64552a8a0d019989c19c6a56d48f7d352ffea630d0dc0cb57628916433
 translated: machine
 ---
 
@@ -136,7 +136,7 @@ mainittu kustannus on se, minkä maksat iteraattorin läpikäynnistä.
 | [`tuple()`](tuple_func.md) | O(n) | O(n) | O(1) kun argumentti on jo monikko |
 | [`dict()`](dict_func.md) | O(n) | O(n) | O(n²) pahimmassa tapauksessa hajautustörmäyksillä |
 | [`set()`](set_func.md) | O(n) | O(n) | O(n²) pahimmassa tapauksessa hajautustörmäyksillä |
-| [`frozenset()`](frozenset_func.md) | O(n) | O(n) | O(1) kun argumentti on jo frozenset |
+| [`frozenset()`](frozenset_func.md) | O(n) | O(n) | O(1) kun argumentti on tarkalleen frozenset eikä sen aliluokka |
 | [`slice()`](slice.md) | O(1) | O(1) | Tallettaa vain indeksit; sen soveltaminen maksaa O(k) tyypille, joka kopioi k alkiota |
 | [`object()`](object_func.md) | O(1) | O(1) | Jokaisen luokan perusta |
 | [`sentinel()`](sentinel.md) | O(1) | O(1) | Python 3.15+; yksilöllinen nimetty merkkiarvo, jota verrataan `is`-operaattorilla |

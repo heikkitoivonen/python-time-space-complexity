@@ -131,7 +131,7 @@ under Notes is what you pay to consume it.
 | [`tuple()`](tuple_func.md) | O(n) | O(n) | O(1) when the argument is already a tuple |
 | [`dict()`](dict_func.md) | O(n) | O(n) | O(n²) worst case with hash collisions |
 | [`set()`](set_func.md) | O(n) | O(n) | O(n²) worst case with hash collisions |
-| [`frozenset()`](frozenset_func.md) | O(n) | O(n) | O(1) when the argument is already a frozenset |
+| [`frozenset()`](frozenset_func.md) | O(n) | O(n) | O(1) when the argument is an exact frozenset, not a subclass |
 | [`slice()`](slice.md) | O(1) | O(1) | Only stores indices; applying it costs O(k) for a type that copies the k items |
 | [`object()`](object_func.md) | O(1) | O(1) | The base of every class |
 | [`sentinel()`](sentinel.md) | O(1) | O(1) | Python 3.15+; a unique named marker, compared with `is` |

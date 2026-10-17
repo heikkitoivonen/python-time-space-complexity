@@ -1,5 +1,5 @@
 ---
-source_sha: 1ed7ab17216561e0d1c11de99c9c29e123937fe2aaea718acac80514978333ed
+source_sha: a90cba64552a8a0d019989c19c6a56d48f7d352ffea630d0dc0cb57628916433
 translated: machine
 ---
 
@@ -132,7 +132,7 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 | [`tuple()`](tuple_func.md) | O(n) | O(n) | 引数がすでにタプルなら O(1) |
 | [`dict()`](dict_func.md) | O(n) | O(n) | ハッシュ衝突がある最悪の場合は O(n²) |
 | [`set()`](set_func.md) | O(n) | O(n) | ハッシュ衝突がある最悪の場合は O(n²) |
-| [`frozenset()`](frozenset_func.md) | O(n) | O(n) | 引数がすでに frozenset なら O(1) |
+| [`frozenset()`](frozenset_func.md) | O(n) | O(n) | 引数がサブクラスではない frozenset そのものなら O(1) |
 | [`slice()`](slice.md) | O(1) | O(1) | 添字を保持するだけで、k 個の要素をコピーする型では適用に O(k) かかる |
 | [`object()`](object_func.md) | O(1) | O(1) | すべてのクラスの基底 |
 | [`sentinel()`](sentinel.md) | O(1) | O(1) | Python 3.15+。一意の名前付きマーカーで、`is` で比較する |

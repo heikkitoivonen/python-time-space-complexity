@@ -1,5 +1,5 @@
 ---
-source_sha: 1ed7ab17216561e0d1c11de99c9c29e123937fe2aaea718acac80514978333ed
+source_sha: a90cba64552a8a0d019989c19c6a56d48f7d352ffea630d0dc0cb57628916433
 translated: machine
 ---
 
@@ -133,7 +133,7 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 | [`tuple()`](tuple_func.md) | O(n) | O(n) | 参数已经是元组时为 O(1) |
 | [`dict()`](dict_func.md) | O(n) | O(n) | 哈希冲突下最坏为 O(n²) |
 | [`set()`](set_func.md) | O(n) | O(n) | 哈希冲突下最坏为 O(n²) |
-| [`frozenset()`](frozenset_func.md) | O(n) | O(n) | 参数已经是 frozenset 时为 O(1) |
+| [`frozenset()`](frozenset_func.md) | O(n) | O(n) | 参数恰好是 frozenset（而非其子类）时为 O(1) |
 | [`slice()`](slice.md) | O(1) | O(1) | 只保存索引；对会复制 k 个元素的类型，实际应用时为 O(k) |
 | [`object()`](object_func.md) | O(1) | O(1) | 所有类的基类 |
 | [`sentinel()`](sentinel.md) | O(1) | O(1) | Python 3.15+；唯一的具名标记值，用 `is` 比较 |
