@@ -1,5 +1,5 @@
 ---
-source_sha: ba03519eb1cf16ee0c4516e074eee5297b646048a43805cbb3976c1cad828ae8
+source_sha: 57d716c6f66d8bbbcb272169ca3192cf8617d8e1006de2d86ac3b38c9e772247
 translated: machine
 ---
 
@@ -93,7 +93,7 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 | [`chr()`](chr.md) | O(1) | O(1) | 码位转字符 |
 | [`ord()`](ord.md) | O(1) | O(1) | 字符转码位 |
 | [`format()`](format.md) | O(n) | O(n + p) | n 为结果长度，p 为精度；十进制 `int` 与 `str()` 一样为 O(n²)，既不填充也不截断的精确 `str` 为 O(1) |
-| [`repr()`](repr.md) | O(n) | O(n) | 递归处理容器 |
+| [`repr()`](repr.md) | O(L) | O(L) | L = 结果长度，另加每个元素的 repr 开销；嵌套 h 层时最多 O(L × h)，d 位的 int 为 O(d²) |
 | [`ascii()`](ascii.md) | O(n) | O(n) | 与 `repr()` 类似，但转义非 ASCII 字符 |
 | [`hash()`](hash.md) | O(k) | O(1) | k 为内置类型值的大小，或其 `__hash__` 的开销；`str`、`bytes` 和 `frozenset` 会保存结果，元组从 3.14 起也会 |
 
@@ -125,7 +125,7 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 | [`int()`](int_func.md) | O(1) | O(1) | 解析很长的数字字符串时为 O(n²) |
 | [`float()`](float_func.md) | O(1) | O(1) | 从字符串转换为 O(n)，含非 ASCII 字符或下划线时空间也为 O(n)；从 d 位整数转换最坏为 O(d) |
 | [`complex()`](complex_func.md) | O(1) | O(1) | 从字符串转换为 O(n) |
-| [`str()`](str_func.md) | O(1) | O(1) | 容器与自定义 `__str__()` 为 O(n) |
+| [`str()`](str_func.md) | O(1) | O(1) | 适用于恰好是 str、float、bool 或 None 的情况；d 位的 int 为 O(d²)，解码字节为 O(n)，容器为 O(L × h) 另加每个元素的 repr 开销，自定义 `__str__()` 取决于其开销 |
 | [`bytes()`](bytes_func.md) | O(n) | O(n) | n 为来源的长度；来源的类型恰为 `bytes` 时为 O(1) |
 | [`bytearray()`](bytearray_func.md) | O(n) | O(n) | n 为来源的长度 |
 | [`memoryview()`](memoryview_func.md) | O(1) | O(1) | 缓冲区上的视图，从不复制 |

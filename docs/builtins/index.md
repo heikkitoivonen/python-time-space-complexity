@@ -91,7 +91,7 @@ under Notes is what you pay to consume it.
 | [`chr()`](chr.md) | O(1) | O(1) | Code point to character |
 | [`ord()`](ord.md) | O(1) | O(1) | Character to code point |
 | [`format()`](format.md) | O(n) | O(n + p) | n = length of the result, p = precision; a decimal `int` costs O(n²), like `str()`, and an exact `str` neither padded nor truncated O(1) |
-| [`repr()`](repr.md) | O(n) | O(n) | Recurses into containers |
+| [`repr()`](repr.md) | O(L) | O(L) | L = result length, plus each element's repr; up to O(L × h) for nesting h deep, O(d²) for an int of d digits |
 | [`ascii()`](ascii.md) | O(n) | O(n) | Like `repr()`, escaping non-ASCII |
 | [`hash()`](hash.md) | O(k) | O(1) | k = size of a built-in value, or the cost of its `__hash__`; `str`, `bytes` and `frozenset` keep the result, a tuple from 3.14 |
 
@@ -123,7 +123,7 @@ under Notes is what you pay to consume it.
 | [`int()`](int_func.md) | O(1) | O(1) | O(n²) parsing a very long numeric string |
 | [`float()`](float_func.md) | O(1) | O(1) | O(n) from a string, with O(n) space for non-ASCII or underscored text; O(d) at worst from a d-digit int |
 | [`complex()`](complex_func.md) | O(1) | O(1) | O(n) from a string |
-| [`str()`](str_func.md) | O(1) | O(1) | O(n) for containers and custom `__str__()` |
+| [`str()`](str_func.md) | O(1) | O(1) | For an exact str, float, bool or None; O(d²) for an int of d digits, O(n) to decode bytes, O(L × h) plus each element's repr for a container, the cost of a custom `__str__()` |
 | [`bytes()`](bytes_func.md) | O(n) | O(n) | n = length of the source; O(1) when it is an exact `bytes` |
 | [`bytearray()`](bytearray_func.md) | O(n) | O(n) | n = length of the source |
 | [`memoryview()`](memoryview_func.md) | O(1) | O(1) | A view over the buffer, never a copy |

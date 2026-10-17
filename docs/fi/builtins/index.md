@@ -1,5 +1,5 @@
 ---
-source_sha: ba03519eb1cf16ee0c4516e074eee5297b646048a43805cbb3976c1cad828ae8
+source_sha: 57d716c6f66d8bbbcb272169ca3192cf8617d8e1006de2d86ac3b38c9e772247
 translated: machine
 ---
 
@@ -96,7 +96,7 @@ mainittu kustannus on se, minkä maksat iteraattorin läpikäynnistä.
 | [`chr()`](chr.md) | O(1) | O(1) | Koodipisteestä merkiksi |
 | [`ord()`](ord.md) | O(1) | O(1) | Merkistä koodipisteeksi |
 | [`format()`](format.md) | O(n) | O(n + p) | n = tuloksen pituus, p = tarkkuus; desimaalimuotoinen `int` maksaa O(n²) kuten `str()`, ja tarkalleen `str`-tyyppinen arvo ilman täyttöä tai katkaisua O(1) |
-| [`repr()`](repr.md) | O(n) | O(n) | Etenee rekursiivisesti säilöihin |
+| [`repr()`](repr.md) | O(L) | O(L) | L = tuloksen pituus, lisäksi kunkin alkion repr; enintään O(L × h), kun sisäkkäisyyttä on h tasoa, ja O(d²) d-numeroiselle int-luvulle |
 | [`ascii()`](ascii.md) | O(n) | O(n) | Kuten `repr()`, mutta suojaa ei-ASCII-merkit |
 | [`hash()`](hash.md) | O(k) | O(1) | k = sisäänrakennetun arvon koko tai sen `__hash__`-metodin hinta; `str`, `bytes` ja `frozenset` säilyttävät tuloksen, monikko 3.14:stä alkaen |
 
@@ -128,7 +128,7 @@ mainittu kustannus on se, minkä maksat iteraattorin läpikäynnistä.
 | [`int()`](int_func.md) | O(1) | O(1) | O(n²) hyvin pitkän lukumerkkijonon jäsennyksessä |
 | [`float()`](float_func.md) | O(1) | O(1) | O(n) merkkijonosta, ja O(n) tilaa ei-ASCII- tai alaviivoja sisältävälle tekstille; pahimmillaan O(d) d-numeroisesta kokonaisluvusta |
 | [`complex()`](complex_func.md) | O(1) | O(1) | O(n) merkkijonosta |
-| [`str()`](str_func.md) | O(1) | O(1) | O(n) säilöille ja omalle `__str__()`-toteutukselle |
+| [`str()`](str_func.md) | O(1) | O(1) | Kun kyseessä on tarkalleen str, float, bool tai None; O(d²) d-numeroiselle int-luvulle, O(n) tavujen dekoodaukseen, O(L × h) säilölle lisättynä kunkin alkion repr-kustannuksella, oman `__str__()`-toteutuksen kustannus |
 | [`bytes()`](bytes_func.md) | O(n) | O(n) | n = lähteen pituus; O(1), kun lähde on tarkalleen tyyppiä `bytes` |
 | [`bytearray()`](bytearray_func.md) | O(n) | O(n) | n = lähteen pituus |
 | [`memoryview()`](memoryview_func.md) | O(1) | O(1) | Näkymä puskuriin, ei koskaan kopio |

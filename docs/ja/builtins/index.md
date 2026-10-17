@@ -1,5 +1,5 @@
 ---
-source_sha: ba03519eb1cf16ee0c4516e074eee5297b646048a43805cbb3976c1cad828ae8
+source_sha: 57d716c6f66d8bbbcb272169ca3192cf8617d8e1006de2d86ac3b38c9e772247
 translated: machine
 ---
 
@@ -92,7 +92,7 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 | [`chr()`](chr.md) | O(1) | O(1) | コードポイントから文字へ |
 | [`ord()`](ord.md) | O(1) | O(1) | 文字からコードポイントへ |
 | [`format()`](format.md) | O(n) | O(n + p) | n は結果の長さ、p は精度。10 進の `int` は `str()` と同じく O(n²)、パディングも切り詰めもしない厳密な `str` は O(1) |
-| [`repr()`](repr.md) | O(n) | O(n) | コンテナの中へ再帰する |
+| [`repr()`](repr.md) | O(L) | O(L) | L = 結果の長さ。加えて各要素の repr のコスト。h 段の入れ子では最大 O(L × h)、d 桁の int では O(d²) |
 | [`ascii()`](ascii.md) | O(n) | O(n) | `repr()` と同様で、非 ASCII をエスケープする |
 | [`hash()`](hash.md) | O(k) | O(1) | k は組み込み型の値の大きさ、または `__hash__` のコスト。`str`、`bytes`、`frozenset` は結果を保持し、タプルも 3.14 から保持する |
 
@@ -124,7 +124,7 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 | [`int()`](int_func.md) | O(1) | O(1) | 非常に長い数値文字列の解析では O(n²) |
 | [`float()`](float_func.md) | O(1) | O(1) | 文字列からは O(n)、非 ASCII 文字やアンダースコアを含む文字列では空間も O(n)、d 桁の整数からは最悪 O(d) |
 | [`complex()`](complex_func.md) | O(1) | O(1) | 文字列からは O(n) |
-| [`str()`](str_func.md) | O(1) | O(1) | コンテナと独自の `__str__()` では O(n) |
+| [`str()`](str_func.md) | O(1) | O(1) | 厳密な str、float、bool、None の場合。d 桁の int では O(d²)、バイト列のデコードは O(n)、コンテナは O(L × h) に各要素の repr のコストを加えたもの、独自の `__str__()` はそのコスト |
 | [`bytes()`](bytes_func.md) | O(n) | O(n) | n は元データの長さ。元データの型がちょうど `bytes` なら O(1) |
 | [`bytearray()`](bytearray_func.md) | O(n) | O(n) | n は元データの長さ |
 | [`memoryview()`](memoryview_func.md) | O(1) | O(1) | バッファへのビューであり、コピーは作らない |
