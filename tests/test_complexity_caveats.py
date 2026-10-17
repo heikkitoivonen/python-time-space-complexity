@@ -377,10 +377,7 @@ class TestDecimalIsNotAConstantFactorOverFloat:
 
 
 class TestIndexingIsNotConstantForEverySequence:
-    """docs/builtins/range.md wrote items[i] as O(1) without qualification.
-
-    deque is the stdlib counterexample: indexing walks blocks.
-    """
+    """Indexing is not O(1) for every sequence: deque indexing walks blocks."""
 
     @pytest.mark.timing
     def test_deque_middle_indexing_is_far_slower_than_list(self) -> None:

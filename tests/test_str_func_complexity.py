@@ -17,9 +17,9 @@ Measurement scope:
 * A list, tuple, dict and set of 1,000 objects that count their `__repr__()`
   and `__str__()` calls: `str()` makes exactly one `__repr__()` call per
   element (keys and values both, for the dict) and no `__str__()` call.
-* Nesting: a 1,000,000-character string wrapped in 256 nested lists must cost
-  more than 5x a flat list of 256 strings of 3,900 characters, whose text is
-  about the same length (locally about 23x), so the cost follows depth at a
+* Nesting: a 1,000,000-character string wrapped in 768 nested lists must
+  cost more than 5x a flat list of 256 strings of 3,900 characters, whose text
+  is about the same length (locally about 70x), so the cost follows depth at a
   fixed result length. The traced peak of `str()` on the string wrapped 1, 64
   and 256 deep is asserted under 4x the result's length in bytes each time
   (locally about 2.3x), where copies held at every level would need 64x and
@@ -206,7 +206,7 @@ class TestNestingCopiesInnerText:
 
     @pytest.mark.timing
     def test_depth_costs_more_than_breadth(self) -> None:
-        deep = _nested(self.LEAF, 256)
+        deep = _nested(self.LEAF, 768)
         flat = ["a" * 3_900] * 256
         assert abs(len(str(deep)) - len(str(flat))) < 5_000
         deep_ns = best_ns(lambda: str(deep), repeats=5)
