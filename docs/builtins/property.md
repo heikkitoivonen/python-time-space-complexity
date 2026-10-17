@@ -1,727 +1,261 @@
 # property() Decorator Complexity
 
-The `property()` decorator allows you to define custom getter, setter, and deleter methods for class attributes. It enables attribute-like access with custom logic.
+`property` builds a data descriptor that routes reading, assigning and deleting one class attribute
+through functions. The property object holds those functions and a docstring, and keeps no
+per-instance state and no cached value, so every access calls the matching function again.
 
-## Complexity Analysis
+A getter, setter or deleter costs what its own body does; the bounds below are the work the
+property adds to it. `d` is the length of a class's MRO, `len(cls.__mro__)`. Class-side attribute
+lookups are cached per type, as described on the [object() page](object_func.md), so the access
+rows assume the cache is warm; an uncached lookup costs O(d).
+
+## Complexity Reference
+
+### property
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| Create property | O(1) | O(1) | Decorator application |
-| Get value | O(1) | O(1) | Call getter function |
-| Set value | O(1) | O(1) | Call setter function |
-| Delete value | O(1) | O(1) | Call deleter function |
-| Descriptor lookup | O(d) | O(1) | d = MRO depth |
-| Total operation | O(d) | O(1) | MRO traversal may occur |
+| `property(fget=None, fset=None, fdel=None, doc=None)` | O(1) | O(1) | Stores the three functions; calls none of them; without `doc`, takes the getter's docstring |
+| `@property` on a function | O(1) | O(1) | The same as `property(func)` |
+| `prop.getter(f)`, `prop.setter(f)`, `prop.deleter(f)` | O(1) | O(1) | Return a new property of the same type with one function replaced; the original is unchanged |
+| `prop.fget`, `prop.fset`, `prop.fdel` | O(1) | O(1) | The stored function, or `None` |
+| `prop.__doc__` | O(1) | O(1) | `doc`, or the getter's docstring |
+| `prop.__name__` | O(1) | O(1) | Python 3.13+: the name it was bound to in a class body, else the getter's `__name__` |
 
-## Basic Usage
+### Attribute Access
 
-### Simple Getter
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `obj.attr` | O(1) | O(1) | Plus one call of the getter, on every access; without one, raises `AttributeError`; an instance `__dict__` entry of the same name is ignored |
+| `obj.attr = value` | O(1) | O(1) | Plus one call of the setter; without one, raises `AttributeError` and stores nothing |
+| `del obj.attr` | O(1) | O(1) | Plus one call of the deleter; without one, raises `AttributeError` |
+| `Class.attr` | O(1) | O(1) | Returns the property object itself and calls nothing |
+| `obj.attr` where a base class defines the property | O(1) | O(1) | The cached lookup does not grow with d |
 
-```python
-# O(1) - define read-only property
-class Circle:
-    def __init__(self, radius):
-        self._radius = radius
-    
-    @property
-    def radius(self):
-        """Get radius - O(1)"""
-        return self._radius
+## Defining Properties
 
-# O(1) - access like attribute
-circle = Circle(5)
-r = circle.radius  # 5 (not a method call)
+### Getter, Setter and Deleter
 
-# Cannot set - read-only
-# circle.radius = 10  # AttributeError
-```
-
-### Getter and Setter
+Each operation on the attribute calls exactly one of the three functions.
 
 ```python
-# O(1) - define read-write property
-class Temperature:
-    def __init__(self, celsius):
-        self._celsius = celsius
-    
+calls = []
+
+class Account:
+    def __init__(self, balance):
+        self._balance = balance
+
     @property
-    def celsius(self):
-        """Get temperature - O(1)"""
-        return self._celsius
-    
-    @celsius.setter
-    def celsius(self, value):
-        """Set temperature - O(1)"""
-        if value < -273.15:
-            raise ValueError("Temperature below absolute zero")
-        self._celsius = value
+    def balance(self):
+        calls.append("get")
+        return self._balance
 
-# O(1) - get and set
-temp = Temperature(20)
-print(temp.celsius)  # 20
+    @balance.setter
+    def balance(self, amount):
+        calls.append("set")
+        if amount < 0:
+            raise ValueError("balance cannot be negative")
+        self._balance = amount
 
-temp.celsius = 25    # O(1) - calls setter
-print(temp.celsius)  # 25
-```
+    @balance.deleter
+    def balance(self):
+        calls.append("del")
+        self._balance = 0
 
-### Computed Property
-
-```python
-# O(1) - property computes value
-class Rectangle:
-    def __init__(self, width, height):
-        self.width = width
-        self.height = height
-    
-    @property
-    def area(self):
-        """Calculate area - O(1)"""
-        return self.width * self.height
-
-# O(1) - computed on access
-rect = Rectangle(5, 10)
-a = rect.area  # 50 (computed, not stored)
-
-# Change dimensions
-rect.width = 6
-a = rect.area  # 60 (recomputed)
-```
-
-### Getter, Setter, and Deleter
-
-```python
-# O(1) - complete property control
-class Data:
-    def __init__(self):
-        self._value = None
-    
-    @property
-    def value(self):
-        """Get value - O(1)"""
-        print("Getting value")
-        return self._value
-    
-    @value.setter
-    def value(self, val):
-        """Set value - O(1)"""
-        print(f"Setting value to {val}")
-        self._value = val
-    
-    @value.deleter
-    def value(self):
-        """Delete value - O(1)"""
-        print("Deleting value")
-        del self._value
-
-# O(1) - use property
-d = Data()
-d.value = 42      # Prints: Setting value to 42
-v = d.value       # Prints: Getting value, returns 42
-del d.value       # Prints: Deleting value
-```
-
-## Complexity Details
-
-### Descriptor Protocol
-
-```python
-# O(1) - property uses descriptor protocol
-class WithProperty:
-    @property
-    def value(self):
-        return 42
-
-# When accessing:
-# 1. Lookup 'value' in class dict - O(1)
-# 2. Found descriptor (property object)
-# 3. Call property.__get__() - O(1)
-# 4. Calls getter function - O(1)
-
-obj = WithProperty()
-val = obj.value  # O(1)
-```
-
-### MRO Traversal
-
-```python
-# O(d) - inherited properties
-class Parent:
-    @property
-    def value(self):
-        return "parent"
-
-class Child(Parent):
-    pass
-
-# O(d) - lookup via MRO
-obj = Child()
-val = obj.value  # O(d) - traverse MRO to find property
-```
-
-### Property Override
-
-```python
-# O(d) - child can override property
-class Parent:
-    @property
-    def value(self):
-        return "parent"
-
-class Child(Parent):
-    @property
-    def value(self):
-        return "child"
-
-# O(d) - finds Child property first
-parent_val = Parent().value  # "parent"
-child_val = Child().value    # "child"
-```
-
-## Performance Patterns
-
-### Property vs Direct Attribute
-
-```python
-# Direct attribute - O(1)
-class Direct:
-    def __init__(self):
-        self.value = 42
-
-# Property - O(1) + function call overhead
-class WithProperty:
-    def __init__(self):
-        self._value = 42
-    
-    @property
-    def value(self):
-        return self._value
-
-# Both O(1), but property has ~5% overhead
-direct = Direct()
-val1 = direct.value  # O(1)
-
-with_prop = WithProperty()
-val2 = with_prop.value  # O(1) + overhead
-```
-
-### Property vs Method Call
-
-```python
-# Method - O(1) with explicit call
-class WithMethod:
-    def __init__(self):
-        self._value = 42
-    
-    def get_value(self):
-        return self._value
-
-# Property - O(1) with implicit call
-class WithProperty:
-    def __init__(self):
-        self._value = 42
-    
-    @property
-    def value(self):
-        return self._value
-
-# Both O(1), property looks cleaner
-obj1 = WithMethod()
-val1 = obj1.get_value()  # Explicit call
-
-obj2 = WithProperty()
-val2 = obj2.value  # Attribute access
-```
-
-### Caching in Properties
-
-```python
-# O(1) with caching - compute once
-class Cached:
-    def __init__(self):
-        self._computed = None
-    
-    @property
-    def value(self):
-        """Compute once and cache - O(1)"""
-        if self._computed is None:
-            self._computed = expensive_computation()
-        return self._computed
-    
-    def expensive_computation(self):
-        # ... slow operation ...
-        return 42
-
-# vs recompute every time - O(f) where f = computation time
-class NoCache:
-    @property
-    def value(self):
-        """Recompute every time"""
-        return expensive_computation()
-
-# Caching significantly improves performance
-```
-
-## Common Use Cases
-
-### Validation on Set
-
-```python
-# O(1) - validate input
-class Person:
-    def __init__(self, age):
-        self._age = None
-        self.age = age  # Calls setter
-    
-    @property
-    def age(self):
-        """Get age - O(1)"""
-        return self._age
-    
-    @age.setter
-    def age(self, value):
-        """Set age with validation - O(1)"""
-        if not isinstance(value, int) or value < 0:
-            raise ValueError("Age must be non-negative integer")
-        self._age = value
-
-# O(1) - automatic validation
-p = Person(30)
-p.age = 35  # Valid
+account = Account(100)
+assert account.balance == 100  # O(1) plus the getter
+account.balance = 250          # O(1) plus the setter
+assert account.balance == 250
+del account.balance            # O(1) plus the deleter
+assert account.balance == 0
+assert calls == ["get", "set", "get", "del", "get"]
 
 try:
-    p.age = -5  # Invalid - raises ValueError
-except ValueError as e:
-    print(e)
-```
-
-### Computed Properties
-
-```python
-# O(1) - compute related value
-class Distance:
-    def __init__(self, kilometers):
-        self.km = kilometers
-    
-    @property
-    def miles(self):
-        """Convert to miles - O(1)"""
-        return self.km * 0.621371
-
-# O(1) - accessed like attribute
-d = Distance(10)
-miles = d.miles  # 6.21371
-```
-
-### Lazy Loading
-
-```python
-# O(1) first access, O(n) computation
-class Document:
-    def __init__(self, filename):
-        self.filename = filename
-        self._content = None
-    
-    @property
-    def content(self):
-        """Load on first access - O(1) or O(n)"""
-        if self._content is None:
-            with open(self.filename) as f:
-                self._content = f.read()  # O(n) - load file
-        return self._content  # O(1) - return cached
-
-# O(1) - first call loads file
-# O(1) - subsequent calls return cached
-doc = Document('large_file.txt')
-text1 = doc.content  # O(n) - loads
-text2 = doc.content  # O(1) - cached
+    account.balance = -5
+except ValueError as error:
+    assert "negative" in str(error)
+else:
+    raise AssertionError("expected ValueError")
+assert account.balance == 0
 ```
 
 ### Read-Only Properties
 
+A property without a setter refuses assignment instead of falling back to the instance's
+`__dict__`, so a read-only attribute stays read-only.
+
 ```python
-# O(1) - immutable attributes
-class ImmutablePoint:
-    def __init__(self, x, y):
+class Point:
+    def __init__(self, x):
         self._x = x
-        self._y = y
-    
+
     @property
     def x(self):
-        """Get x - O(1), read-only"""
         return self._x
-    
-    @property
-    def y(self):
-        """Get y - O(1), read-only"""
-        return self._y
 
-# O(1) - get values
-p = ImmutablePoint(1, 2)
-x = p.x  # 1
+p = Point(3)
+try:
+    p.x = 10
+except AttributeError as error:
+    assert "has no setter" in str(error)
+else:
+    raise AssertionError("expected AttributeError")
 
-# Cannot set - no setter defined
-# p.x = 5  # AttributeError
+assert p.x == 3
+assert "x" not in vars(p)  # Nothing was stored
 ```
 
-### Type Conversion
+### Each Decorator Returns a New Property
+
+`setter()`, `getter()` and `deleter()` copy the property with one function replaced. Reusing the
+same name, as the decorator form does, rebinds it to the copy.
 
 ```python
-# O(1) - convert on access
 class Temperature:
-    def __init__(self, celsius):
-        self._celsius = celsius
-    
     @property
     def celsius(self):
-        """Get Celsius - O(1)"""
+        """Degrees Celsius."""
         return self._celsius
-    
-    @property
-    def fahrenheit(self):
-        """Get Fahrenheit - O(1)"""
-        return self._celsius * 9/5 + 32
-    
-    @property
-    def kelvin(self):
-        """Get Kelvin - O(1)"""
-        return self._celsius + 273.15
 
-# O(1) - convert automatically
-temp = Temperature(20)
-c = temp.celsius      # 20
-f = temp.fahrenheit   # 68.0
-k = temp.kelvin       # 293.15
+read_only = Temperature.__dict__["celsius"]
+read_write = read_only.setter(lambda self, value: setattr(self, "_celsius", value))  # O(1)
+
+assert read_write is not read_only
+assert read_only.fset is None  # The original is unchanged
+assert read_write.fget is read_only.fget
+assert read_write.__doc__ == "Degrees Celsius."
 ```
 
-## Advanced Usage
+## Accessing Properties
 
-### Property with Side Effects
+### The Getter Runs on Every Access
+
+A property computes its value each time it is read. When the value cannot change, a
+[`functools.cached_property`](../stdlib/functools.md) computes it once per instance and stores it in
+the instance's `__dict__`, so later reads call nothing.
 
 ```python
-# O(1) - setter with side effects
-class Volume:
-    def __init__(self, value):
-        self._value = value
-        self.changed = False
-    
-    @property
-    def value(self):
-        """Get value - O(1)"""
-        return self._value
-    
-    @value.setter
-    def value(self, new_value):
-        """Set value and track change - O(1)"""
-        if new_value != self._value:
-            self.changed = True
-            self._value = new_value
+from functools import cached_property
 
-# O(1) - track changes
-vol = Volume(100)
-vol.value = 150  # Sets changed = True
-print(vol.changed)  # True
+computed = []
+
+class Report:
+    def __init__(self, values):
+        self.values = values
+
+    @property
+    def total(self):
+        computed.append("property")
+        return sum(self.values)  # Runs on every access
+
+    @cached_property
+    def cached_total(self):
+        computed.append("cached")
+        return sum(self.values)  # Runs once per instance
+
+report = Report(range(1_000))
+for _ in range(3):
+    assert report.total == 499_500
+    assert report.cached_total == 499_500
+
+assert computed.count("property") == 3
+assert computed.count("cached") == 1
 ```
 
-### Property Inheritance
+### Properties Take Precedence Over the Instance Dictionary
+
+A property is a data descriptor, so it wins over an entry of the same name in the instance's
+`__dict__`. The getter is called even when such an entry exists.
 
 ```python
-# O(d) - override property in subclass
-class Parent:
+class Box:
     @property
-    def name(self):
-        return "Parent"
+    def size(self):
+        return 42
 
-class Child(Parent):
-    @property
-    def name(self):
-        return "Child"
-
-# O(d) - finds correct property
-parent = Parent()
-child = Child()
-
-print(parent.name)  # "Parent"
-print(child.name)   # "Child"
+box = Box()
+vars(box)["size"] = 7  # Bypasses the property
+assert box.size == 42  # The property still answers
+assert vars(box)["size"] == 7
 ```
 
-### Dynamic Properties
+### Inherited Properties
+
+A property defined on a base class is found through the class's cached attribute lookup, so a deep
+hierarchy costs no more per access than a shallow one. Reading the attribute from the class returns
+the property object itself.
 
 ```python
-# O(1) - add properties dynamically
-class Dynamic:
-    def __init__(self):
-        self._data = {}
-    
-    def add_property(self, name, getter, setter=None):
-        """Add property dynamically - O(1)"""
-        prop = property(getter, setter)
-        setattr(self.__class__, name, prop)
+class Base:
+    @property
+    def kind(self):
+        return type(self).__name__
 
-# Create instance
-obj = Dynamic()
+class Middle(Base):
+    pass
 
-# Add property dynamically
-obj.add_property(
-    'value',
-    getter=lambda self: self._data.get('value', 0)
-)
+class Leaf(Middle):
+    pass
 
-# Use property
-obj.value = 42
+assert Leaf().kind == "Leaf"  # O(1) - cached lookup
+assert isinstance(Leaf.kind, property)  # The descriptor, not a value
+assert Leaf.kind is Base.__dict__["kind"]
 ```
 
-## Practical Examples
+## Common Patterns
 
-### Account Balance with Limits
+### Validation in a Setter
+
+Validation runs once per assignment, including the one in `__init__` when it assigns through the
+property.
 
 ```python
-# O(1) - property with validation and limits
-class BankAccount:
-    def __init__(self, initial_balance):
-        self._balance = initial_balance
-    
+class Person:
+    def __init__(self, age):
+        self.age = age  # Goes through the setter
+
     @property
-    def balance(self):
-        """Get balance - O(1)"""
-        return self._balance
-    
-    @balance.setter
-    def balance(self, amount):
-        """Set balance with validation - O(1)"""
-        if amount < 0:
-            raise ValueError("Balance cannot be negative")
-        if amount > 1_000_000:
-            raise ValueError("Balance exceeds limit")
-        self._balance = amount
-    
-    @balance.deleter
-    def balance(self):
-        """Reset balance - O(1)"""
-        self._balance = 0
+    def age(self):
+        return self._age
 
-# O(1) - use account
-account = BankAccount(100)
-print(account.balance)  # 100
+    @age.setter
+    def age(self, value):
+        if not isinstance(value, int) or value < 0:
+            raise ValueError("age must be a non-negative int")
+        self._age = value
 
-account.balance = 500   # Valid
-print(account.balance)  # 500
+assert Person(30).age == 30
 
-del account.balance     # Reset to 0
-print(account.balance)  # 0
+try:
+    Person(-1)
+except ValueError as error:
+    assert "non-negative" in str(error)
+else:
+    raise AssertionError("expected ValueError")
 ```
 
-### Configuration Management
-
-```python
-# O(1) - validate configuration
-class Config:
-    def __init__(self):
-        self._debug = False
-        self._timeout = 30
-    
-    @property
-    def debug(self):
-        """Get debug flag - O(1)"""
-        return self._debug
-    
-    @debug.setter
-    def debug(self, value):
-        """Set debug - O(1)"""
-        if not isinstance(value, bool):
-            raise TypeError("debug must be boolean")
-        self._debug = value
-    
-    @property
-    def timeout(self):
-        """Get timeout - O(1)"""
-        return self._timeout
-    
-    @timeout.setter
-    def timeout(self, seconds):
-        """Set timeout with bounds - O(1)"""
-        if not (1 <= seconds <= 300):
-            raise ValueError("timeout must be 1-300 seconds")
-        self._timeout = seconds
-
-# O(1) - validated configuration
-config = Config()
-config.debug = True
-config.timeout = 60
-```
-
-### User Authentication
-
-```python
-# O(1) - property for authenticated user
-class User:
-    def __init__(self, username, password_hash):
-        self.username = username
-        self._password_hash = password_hash
-        self._authenticated = False
-    
-    @property
-    def authenticated(self):
-        """Check authentication - O(1)"""
-        return self._authenticated
-    
-    def authenticate(self, password):
-        """Authenticate - O(1)"""
-        import hashlib
-        password_hash = hashlib.sha256(password.encode()).hexdigest()
-        if password_hash == self._password_hash:
-            self._authenticated = True
-        return self._authenticated
-    
-    @authenticated.setter
-    def authenticated(self, value):
-        """Prevent direct setting - O(1)"""
-        raise AttributeError("Cannot set authenticated directly")
-
-# O(1) - use authentication
-user = User("alice", "hash123")
-is_auth = user.authenticated  # False
-
-user.authenticate("mypassword")  # Authenticates if password matches
-```
-
-## Edge Cases
-
-### Property Can't Have Same Name as __init__ Param
-
-```python
-# O(1) - attribute name matters
-class Good:
-    def __init__(self, value):
-        self._value = value  # Different name
-    
-    @property
-    def value(self):
-        return self._value
-
-# O(1) - works fine
-obj = Good(42)
-val = obj.value  # 42
-```
-
-### Deleter Without Setter
-
-```python
-# O(1) - can define deleter without setter
-class OnlyDelete:
-    def __init__(self):
-        self.value = 42
-    
-    @property
-    def value(self):
-        return self._value if hasattr(self, '_value') else None
-    
-    @value.deleter
-    def value(self):
-        if hasattr(self, '_value'):
-            del self._value
-
-# O(1) - delete works
-obj = OnlyDelete()
-del obj.value
-```
-
-### Property on Module
-
-```python
-# O(1) - properties in classes, not modules
-# (modules don't support property directly in Python 3.6+)
-
-# But can be emulated with __getattr__
-import sys
-
-class ModuleProxy:
-    def __init__(self, module):
-        self.module = module
-    
-    @property
-    def version(self):
-        return "1.0.0"
-
-# Access: ModuleProxy(sys).version
-```
-
-## Performance Considerations
-
-### Avoiding Property Overhead
-
-```python
-# If performance critical, use direct attribute:
-class Fast:
-    def __init__(self):
-        self.value = 42
-
-# Slightly faster than property (no function call)
-obj = Fast()
-val = obj.value  # Very fast
-
-# vs property (function call overhead)
-class WithProperty:
-    def __init__(self):
-        self._value = 42
-    
-    @property
-    def value(self):
-        return self._value
-
-# Overhead is minimal (~5%), only matters in extreme cases
-```
-
-### Caching Computed Properties
-
-```python
-# O(1) - cache expensive computation
-class Cached:
-    def __init__(self):
-        self._cached_value = None
-    
-    @property
-    def value(self):
-        """Compute once - O(1) after first access"""
-        if self._cached_value is None:
-            self._cached_value = expensive_computation()
-        return self._cached_value
-    
-    def expensive_computation(self):
-        return sum(range(1_000_000))
-
-# First access does computation, subsequent accesses are fast
-```
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use for read-only computed attributes
-- Use to validate input in setters
-- Use to implement lazy loading
-- Use to provide clean attribute-like interface
-- Document properties in docstrings
-- Make getters fast (no I/O)
+- Keep getters cheap: every read of the attribute calls the getter again
+- Use `functools.cached_property` for a value computed once per instance and never changed
+- Define a property without a setter to make an attribute read-only
 
 ❌ **Avoid**:
 
-- Complex logic in property methods (keep simple)
-- I/O operations in getters (causes performance issues)
-- Properties with unexpected side effects
-- Using property when method is clearer
-- Expensive computations without caching
-- Hiding errors in property methods
-
-## Related Functions
-
-- **[classmethod()](classmethod.md)** - Decorator for class methods
-- **[staticmethod()](staticmethod.md)** - Decorator for static methods
-- **[type()](type_func.md)** - Get object type
-- **[hasattr()](hasattr.md)** - Check attribute existence
-- **[getattr()](getattr.md)** - Get attribute value
+- Reading an expensive property repeatedly in a loop; read it once into a local
+- Expecting an instance `__dict__` entry to override a property; the property always answers
 
 ## Version Notes
 
-- **Python 2.x**: `@property` available, same behavior
-- **Python 3.x**: Same behavior, optimized in CPython
-- **All versions**: Uses descriptor protocol for efficiency
+- **Python 3.13+**: `property.__name__` gives the name the property was bound to in a class body, or
+  its getter's name
+
+## Related Functions
+
+- **[classmethod()](classmethod.md)** - Another descriptor, for methods bound to the class
+- **[staticmethod()](staticmethod.md)** - A descriptor for methods bound to nothing
+- **[getattr()](getattr.md)** - Reading an attribute by name, which calls a property's getter
+- **[setattr()](setattr.md)** - Assigning by name, which calls a property's setter
+- **[object()](object_func.md)** - The cached class-side attribute lookup every access goes through
