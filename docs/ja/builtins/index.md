@@ -1,5 +1,5 @@
 ---
-source_sha: 89d3af592bd5abc5e4c13bbffcd6e5cbae1cf80f4783806b0af50d3ea4667b99
+source_sha: 27d7b49873dd1e3f2dce6e588bbfb248a178e5e45840254699ee9fc177f994e8
 translated: machine
 ---
 
@@ -101,8 +101,8 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 | 関数 | 時間 | 空間 | 備考 |
 |----------|------|-------|-------|
 | [`type()`](type_func.md) | O(1) | O(1) | クラスを生成する 3 引数形式では O(n) |
-| [`isinstance()`](isinstance.md) | O(d) | O(1) | d は MRO の深さ、実際上は O(1) |
-| [`issubclass()`](issubclass.md) | O(d) | O(1) | d は MRO の深さ、実際上は O(1) |
+| [`isinstance()`](isinstance.md) | O(d) | O(1) | d は MRO の長さ、型が完全一致なら O(1) |
+| [`issubclass()`](issubclass.md) | O(d) | O(1) | d は第 1 引数の MRO の長さ、先頭近くで一致すればすぐに返る |
 | [`callable()`](callable.md) | O(1) | O(1) | `__call__` の有無を調べる |
 | [`id()`](id.md) | O(1) | O(1) | `int` としての同一性。CPython ではメモリアドレス |
 | [`getattr()`](getattr.md) | 平均 O(1) | O(1) | クラスと名前ごとにキャッシュされる。実行時に組み立てた名前では O(d)、d は MRO の深さ |

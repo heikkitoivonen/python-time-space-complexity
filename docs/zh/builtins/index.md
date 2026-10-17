@@ -1,5 +1,5 @@
 ---
-source_sha: 89d3af592bd5abc5e4c13bbffcd6e5cbae1cf80f4783806b0af50d3ea4667b99
+source_sha: 27d7b49873dd1e3f2dce6e588bbfb248a178e5e45840254699ee9fc177f994e8
 translated: machine
 ---
 
@@ -102,8 +102,8 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 | 函数 | 时间 | 空间 | 备注 |
 |----------|------|-------|-------|
 | [`type()`](type_func.md) | O(1) | O(1) | 三参数的建类形式为 O(n) |
-| [`isinstance()`](isinstance.md) | O(d) | O(1) | d 为 MRO 深度；实际使用中相当于 O(1) |
-| [`issubclass()`](issubclass.md) | O(d) | O(1) | d 为 MRO 深度；实际使用中相当于 O(1) |
+| [`isinstance()`](isinstance.md) | O(d) | O(1) | d 为 MRO 长度；类型完全匹配时为 O(1) |
+| [`issubclass()`](issubclass.md) | O(d) | O(1) | d 为第一个参数的 MRO 长度；在开头附近匹配时立即返回 |
 | [`callable()`](callable.md) | O(1) | O(1) | 检查是否有 `__call__` |
 | [`id()`](id.md) | O(1) | O(1) | 以 `int` 表示的标识；在 CPython 中为内存地址 |
 | [`getattr()`](getattr.md) | 平均 O(1) | O(1) | 按类和名称缓存；运行时构造的名称为 O(d)，d 为 MRO 深度 |

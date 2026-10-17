@@ -100,8 +100,8 @@ under Notes is what you pay to consume it.
 | Function | Time | Space | Notes |
 |----------|------|-------|-------|
 | [`type()`](type_func.md) | O(1) | O(1) | O(n) in the three-argument class-creating form |
-| [`isinstance()`](isinstance.md) | O(d) | O(1) | d = MRO depth; effectively O(1) in practice |
-| [`issubclass()`](issubclass.md) | O(d) | O(1) | d = MRO depth; effectively O(1) in practice |
+| [`isinstance()`](isinstance.md) | O(d) | O(1) | d = MRO length; O(1) on an exact type match |
+| [`issubclass()`](issubclass.md) | O(d) | O(1) | d = MRO length of the first argument; a match near the front returns early |
 | [`callable()`](callable.md) | O(1) | O(1) | Checks for `__call__` |
 | [`id()`](id.md) | O(1) | O(1) | Identity as an `int`; the memory address in CPython |
 | [`getattr()`](getattr.md) | O(1) avg | O(1) | Cached per class and name; O(d) for a name built at run time, d = MRO depth |

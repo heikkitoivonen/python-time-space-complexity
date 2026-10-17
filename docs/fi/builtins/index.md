@@ -1,5 +1,5 @@
 ---
-source_sha: 89d3af592bd5abc5e4c13bbffcd6e5cbae1cf80f4783806b0af50d3ea4667b99
+source_sha: 27d7b49873dd1e3f2dce6e588bbfb248a178e5e45840254699ee9fc177f994e8
 translated: machine
 ---
 
@@ -105,8 +105,8 @@ mainittu kustannus on se, minkä maksat iteraattorin läpikäynnistä.
 | Funktio | Aika | Tila | Huomiot |
 |----------|------|-------|-------|
 | [`type()`](type_func.md) | O(1) | O(1) | O(n) kolmen argumentin luokan luovassa muodossa |
-| [`isinstance()`](isinstance.md) | O(d) | O(1) | d = MRO:n syvyys; käytännössä O(1) |
-| [`issubclass()`](issubclass.md) | O(d) | O(1) | d = MRO:n syvyys; käytännössä O(1) |
+| [`isinstance()`](isinstance.md) | O(d) | O(1) | d = MRO:n pituus; O(1), kun tyyppi täsmää tarkalleen |
+| [`issubclass()`](issubclass.md) | O(d) | O(1) | d = ensimmäisen argumentin MRO:n pituus; osuma MRO:n alussa palauttaa tuloksen heti |
 | [`callable()`](callable.md) | O(1) | O(1) | Tarkistaa `__call__`-metodin |
 | [`id()`](id.md) | O(1) | O(1) | Identiteetti `int`-arvona; CPythonissa muistiosoite |
 | [`getattr()`](getattr.md) | O(1) keskim. | O(1) | Välimuistissa luokan ja nimen mukaan; ajon aikana muodostetulle nimelle O(d), d = MRO:n syvyys |
