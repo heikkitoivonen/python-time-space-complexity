@@ -1,177 +1,186 @@
 # oct() Function Complexity
 
-The `oct()` function returns the octal (base 8) representation of an integer.
+The `oct()` function returns the octal (base 8) representation of an integer as a string with a
+`'0o'` prefix. Because 8 is a power of two, each octal digit is read straight from three bits of
+the integer, so the time and the size of the string are both linear in the number of digits.
 
-## Complexity Analysis
+`n` is the integer's absolute value and `d` is the number of octal digits in the result:
+`n.bit_length()` divided by 3 and rounded up, about log₈ n, or 1 for zero. A user-defined
+`__index__` costs what it does.
 
-| Case | Time | Space | Notes |
-|------|------|-------|-------|
-| Convert integer | O(log n) | O(log n) | n = integer value |
-| Negative integer | O(log n) | O(log n) | Adds '-0o' prefix |
-| Large integer | O(log n) | O(log n) | Works with arbitrary precision |
+## Complexity Reference
 
-## Basic Usage
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `oct(x)` | O(d) | O(d) | One character per octal digit, after `'0o'`, or `'-0o'` for a negative number |
+| `oct(x)` on a very large int | O(d) | O(d) | Not limited by `sys.set_int_max_str_digits()`, which exempts power-of-two bases |
+| `oct(obj)` with `__index__` | `__index__` + O(d) | `__index__` + O(d) | Any other non-int, such as a float, raises `TypeError` |
+| `format(x, 'o')`, `f"{x:o}"` | O(d) | O(d) | The same digits without the prefix; `'#o'` adds it |
+| `int(s, 8)`, `int(s, 0)` | O(d) | O(d) | Parse `oct()`'s output; also linear and exempt from the digit limit. Plain `int(s)` rejects the `'0o'` prefix |
 
-### Decimal to Octal
+## Converting Integers
+
+### Basic Conversion
 
 ```python
-# O(log n) - where n = integer value
-oct(0)      # '0o0'
-oct(8)      # '0o10'
-oct(64)     # '0o100'
-oct(512)    # '0o1000'
-oct(4095)   # '0o7777'
+assert oct(0) == '0o0'          # O(d), d = 1
+assert oct(8) == '0o10'
+assert oct(64) == '0o100'
+assert oct(4095) == '0o7777'    # O(d), d = 4
+
+# A negative number keeps its magnitude's digits behind a minus sign
+assert oct(-8) == '-0o10'
+assert oct(-64) == '-0o100'
 ```
 
-### Negative Numbers
+### Digits Grow With the Bit Length
+
+Each octal digit holds three bits, so the output length follows `bit_length()`.
 
 ```python
-# O(log n) - shows magnitude with minus
-oct(-1)     # '-0o1'
-oct(-8)     # '-0o10'
-oct(-64)    # '-0o100'
+value = 2**24 - 1
+assert oct(value) == '0o77777777'  # O(d), d = 8
+
+digits = len(oct(value)) - 2       # Subtract '0o'
+assert digits == (value.bit_length() + 2) // 3
+
+big = 2**100
+assert oct(big) == '0o2' + '0' * 33  # 101 bits, d = 34
 ```
 
-### Large Integers
+### Objects With `__index__`
+
+`oct()` accepts any object that converts itself to an int through `__index__`, and nothing else.
 
 ```python
-# O(log n) - octal digits
-oct(2**9)    # '0o1000'
-oct(2**12)   # '0o10000'
-oct(2**100)  # Very large octal number
+class Mode:
+    def __init__(self, bits):
+        self.bits = bits
+
+    def __index__(self):
+        return self.bits
+
+assert oct(Mode(0o644)) == '0o644'
+assert oct(True) == '0o1'  # bool is an int
+
+try:
+    oct(8.0)
+except TypeError as error:
+    assert "integer" in str(error)
+else:
+    raise AssertionError("expected TypeError")
 ```
 
-## Complexity Details
+## Octal vs Decimal for Large Integers
 
-### Logarithmic Time
-
-Conversion time grows with the number of octal digits:
+`str()` of a large int is slower than linear in its digits, and refuses ints past
+`sys.get_int_max_str_digits()` digits unless that limit is set to 0. `oct()` and `int(s, 8)` are
+linear and have no such limit, which makes octal, hex or binary the safe text form for very large
+integers.
 
 ```python
-# Small number - few digits
-oct(8)      # '0o10' - 2 digits, O(log 8) = O(3)
+import sys
 
-# Large number - more digits
-oct(2**24 - 1)  # 8 octal digits
-                # O(log(2**24)) = O(24)
+previous = sys.get_int_max_str_digits()
+sys.set_int_max_str_digits(640)
+try:
+    big = 10**1000  # 1,001 decimal digits
 
-# Relationship: octal digits = log₈(n) ≈ log₂(n) / 3
+    text = oct(big)               # O(d) - not limited
+    assert int(text, 8) == big    # O(d) - not limited either
+
+    try:
+        str(big)
+    except ValueError as error:
+        assert "limit" in str(error)
+    else:
+        raise AssertionError("expected ValueError")
+finally:
+    sys.set_int_max_str_digits(previous)
+```
+
+## Parsing Octal Strings
+
+`int()` reverses `oct()` when told the base. Base 8 accepts the string with or without the
+prefix, base 0 reads the base from the prefix, and plain `int()` rejects it.
+
+```python
+text = oct(493)
+assert text == '0o755'
+
+assert int(text, 8) == 493   # O(d)
+assert int('755', 8) == 493
+assert int(text, 0) == 493   # Base from the '0o' prefix
+
+try:
+    int(text)
+except ValueError as error:
+    assert "0o755" in str(error)
+else:
+    raise AssertionError("expected ValueError")
 ```
 
 ## Common Patterns
 
-### File Permissions (Unix/Linux)
+### File Permissions
+
+Unix permission bits group into threes, which is why modes are written in octal.
 
 ```python
-# O(log n) - display file permissions in octal
-import os
+import stat
 
-# File mode as integer
-file_mode = 0o755  # Standard permissions
-
-# Check permission components
-user = (file_mode >> 6) & 0o7      # User permissions
-group = (file_mode >> 3) & 0o7     # Group permissions
-other = file_mode & 0o7             # Other permissions
-
-print(f"User: {user}, Group: {group}, Other: {other}")
-# User: 7, Group: 5, Other: 5
-
-# Display in octal
-print(oct(file_mode))  # '0o755'
-
-# Convert back from octal
-permissions = int('0o755', 8)  # 493 (decimal)
-assert oct(permissions) == '0o755'
-```
-
-## Bidirectional Conversion
-
-```python
-# oct() and int() are inverses
-# O(log n) each way
-
-x = 64
-octal_str = oct(x)       # O(log 64)
-restored = int(octal_str, 8)  # O(log 64)
-assert restored == x
-
-# Useful for configuration
 mode = 0o755
-octal_form = oct(mode)   # '0o755'
-restored = int(octal_form, 8)  # 493 (decimal)
+assert (mode >> 6) & 0o7 == 7  # Owner
+assert (mode >> 3) & 0o7 == 5  # Group
+assert mode & 0o7 == 5         # Others
+
+assert oct(mode) == '0o755'
+assert format(mode, '03o') == '755'  # No prefix, padded to three digits
+
+# A file's st_mode also carries its type; S_IMODE keeps the permission bits
+st_mode = stat.S_IFREG | 0o644
+assert oct(st_mode) == '0o100644'
+assert oct(stat.S_IMODE(st_mode)) == '0o644'
 ```
 
-## Performance Patterns
+### Converting Many Values
 
-### Batch Conversion
+Each conversion is O(d), so a batch costs the total number of digits written.
 
 ```python
-# O(n * log m) - n numbers, each ~m value
 numbers = [0o100, 0o200, 0o400]
-octal_strings = [oct(n) for n in numbers]
-# O(n * log m)
 
-# vs direct format
-octal_strings = [f"{n:o}" for n in numbers]
-# Similar complexity
+with_prefix = [oct(n) for n in numbers]
+without_prefix = [f"{n:o}" for n in numbers]  # Same digits, no '0o'
+
+assert with_prefix == ['0o100', '0o200', '0o400']
+assert without_prefix == ['100', '200', '400']
 ```
 
-### Building Octal Values
-
-```python
-# O(log n) - combine octal digits
-def build_permissions(user, group, other):
-    # Each component is 0-7
-    return (user << 6) | (group << 3) | other
-
-perms = build_permissions(7, 5, 5)  # 0o755
-print(oct(perms))  # '0o755'
-```
-
-## Octal vs Decimal Performance
-
-```python
-import timeit
-
-# Performance is similar, O(log n) for both
-value = 262144  # 2**18
-
-# Decimal
-t1 = timeit.timeit(lambda: str(value), number=100000)
-
-# Octal
-t2 = timeit.timeit(lambda: oct(value), number=100000)
-
-# Similar time, decimal slightly faster due to base 10
-```
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use octal for file permissions and modes
-- Use `format(value, 'o')` if you don't need '0o' prefix
-- Use octal literals in permission codes: `0o755`
-- Use `int(octal_str, 8)` to parse octal
+- Use `format(x, 'o')` or `f"{x:o}"` when you don't want the `'0o'` prefix, rather than slicing it off
+- Use `int(s, 8)` or `int(s, 0)` to read `oct()`'s output back
+- Use `oct()`, `hex()` or `bin()` to write very large integers as text: they are linear and not
+  limited by `sys.set_int_max_str_digits()`
 
 ❌ **Avoid**:
 
-- Using octal without clear purpose (confusing)
-- Forgetting the '0o' prefix (Python 3 requires it)
-- Assuming octal arithmetic (it's still base 10)
-- Using octal for new code (hex or binary clearer)
-
-## Related Functions
-
-- **[hex()](hex.md)** - Hexadecimal representation
-- **[bin()](bin.md)** - Binary representation
-- **[int()](int.md)** - Convert to integer (can parse octal)
-- **[format()](format.md)** - Format with specifications
+- Parsing `oct()` output with plain `int(s)`, which rejects the `'0o'` prefix
+- Slicing `oct(x)[2:]` to drop the prefix: for a negative number it gives `'o10'` from `'-0o10'`,
+  where `format(x, 'o')` gives `'-10'`
 
 ## Version Notes
 
-- **Python 2.x**: Octal literals: `0755` (could omit 'o')
-- **Python 3.x**: Octal literals: `0o755` (requires 'o')
-- **All versions**: Works with arbitrary precision integers
-- **Note**: Octal rarely used in modern code, prefer hex or binary
+- **All Python 3**: `oct(x)` returns a lowercase `'0o'` prefix, `'-0o'` for a negative number,
+  and accepts any object with `__index__`; an octal literal needs the prefix, and `0755` is a
+  `SyntaxError`
+
+## Related Functions
+
+- **[hex()](hex.md)** - Hexadecimal representation, also linear in its digits
+- **[bin()](bin.md)** - Binary representation
+- **[int()](int.md)** - Parse an octal string with base 8 or 0
+- **[format()](format.md)** - Octal digits without the prefix, with padding
