@@ -48,6 +48,10 @@ Not settled here:
   tests hold each at O(1).
 * next()'s own O(1) is read from builtin_next; it is not separated from the
   iterator's work by measurement.
+* Only `del` and `discard` are timed; `d.pop(key)` and `s.remove(x)` reach the
+  same single-key deletion in Objects/dictobject.c and Objects/setobject.c.
+  `dict.popitem()` keeps the table but shortens the entries iteration scans,
+  and `set.difference_update()` can resize the table; the row covers neither.
 * Not varied: element types inside containers (ints and one-character
   strings only), the position at which deletions happen (all but the last
   key, deleted with `del` and `discard`), and the number of map inputs beyond
@@ -135,8 +139,8 @@ class TestContainerIteratorsAreConstantPerCall:
 
 
 class TestSparseHashTables:
-    """`next()` on a dict or set iterator is O(1) amortized: deleting entries by
-    key does not shrink the table, so the first next() after deleting most
+    """`next()` on a dict or set iterator is O(1) amortized: deleting single
+    keys does not shrink the table, so the first next() after deleting most
     of them walks the empty slots, and a rebuild restores O(1)."""
 
     @staticmethod

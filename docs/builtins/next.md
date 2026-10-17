@@ -16,7 +16,7 @@ the work `next()` and the built-in iterators add to them.
 |-----------|------|-------|-------|
 | `next(iterator)` | O(1) | O(1) | Iterators over `list`, `tuple`, `str`, `bytes` and `range`; any other iterator costs what its `__next__` does |
 | `next(iterator, default)` | Same as `next(iterator)` | Same as `next(iterator)` | Returns `default` instead of raising `StopIteration` |
-| `next()` on a `dict` or `set` iterator | O(1) amortized | O(1) | A full pass is O(n) in the n entries, but deleting entries by key does not shrink the table: after deleting most of them a pass costs the table's former size |
+| `next()` on a `dict` or `set` iterator | O(1) amortized | O(1) | A full pass is O(n) in the n entries, but deleting single keys (`del d[key]`, `d.pop(key)`, `s.remove(x)`, `s.discard(x)`) does not shrink the table: after deleting most of them a pass costs the table's former size |
 | `next()` on a generator | Cost of the body | Cost of the body | Runs the body from where it last stopped to the next `yield` |
 | `next()` on a `filter` iterator | O(k) | O(1) | Plus one predicate test per examined item |
 | `next()` on a `map` iterator | O(m) | O(m) | One item is taken from each input, plus one call of the function |
@@ -154,7 +154,8 @@ assert next(sums) == 111  # O(m) - one item from each of the 3 inputs
 
 ### Dict and Set Iterators After Removal
 
-Deleting entries by key does not shrink a `dict` or `set` table, so `next()` on a fresh iterator
+Deleting single keys (`del d[key]`, `d.pop(key)`, `s.remove(x)`, `s.discard(x)`) does not shrink a
+`dict` or `set` table, so `next()` on a fresh iterator
 scans any deleted slots ahead of the first surviving entry. Rebuilding the container makes it
 compact again.
 

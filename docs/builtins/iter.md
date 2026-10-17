@@ -26,7 +26,7 @@ one: the items it skips, plus the one it returns.
 |-----------|------|-------|-------|
 | `next(iterator)` | O(1) | O(1) | Iterators over `list`, `tuple`, `str`, `bytes` and `range`; any other iterator costs what its `__next__` does |
 | `next(iterator, default)` | Same as `next(iterator)` | Same as `next(iterator)` | Returns `default` instead of raising `StopIteration` |
-| `next()` on a `dict` or `set` iterator | O(1) amortized | O(1) | A full pass is O(n), but the table is not shrunk by removal: after deleting most entries a pass costs the table's former size |
+| `next()` on a `dict` or `set` iterator | O(1) amortized | O(1) | A full pass is O(n), but deleting single keys (`del d[key]`, `d.pop(key)`, `s.remove(x)`, `s.discard(x)`) does not shrink the table: after deleting most entries a pass costs the table's former size |
 | `next()` on `iter(callable, sentinel)` | O(1) | O(1) | Plus one call of the callable, whose result is compared with `sentinel` by `==`; once it matches, later calls raise without calling it |
 | `next()` on a `filter` iterator | O(k) | O(1) | Plus one predicate call per examined item |
 | `next()` on a `map` iterator | O(m) | O(m) | m = input iterables: one item is taken from each, plus one call of the function |
@@ -378,10 +378,11 @@ assert len(data) == 10_000
 
 ### Dict and Set Iterators After Removal
 
-Iterating a `dict` or `set` scans its hash table, and removing entries does not shrink the table.
-After most entries are deleted, a pass still takes time proportional to the size the table had,
-until a later insertion triggers a resize. Rebuild the container, at the cost of one more pass over
-the old table, if a small survivor will be iterated often.
+Iterating a `dict` or `set` scans its hash table, and deleting single keys (`del d[key]`,
+`d.pop(key)`, `s.remove(x)`, `s.discard(x)`) does not shrink the table. After most keys are deleted,
+a pass still takes time proportional to the size the table had, until a later insertion triggers a
+resize. Rebuild the container, at the cost of one more pass over the old table, if a small survivor
+will be iterated often.
 
 ```python
 d = {i: i for i in range(10_000)}

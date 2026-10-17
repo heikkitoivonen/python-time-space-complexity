@@ -61,6 +61,10 @@ Not settled here:
 * "Until a later insertion triggers a resize" is read from the official
   time-complexity page's footnote and Objects/dictobject.c; only a rebuild
   with dict() and set() is measured.
+* Only `del` and `discard` are timed; `d.pop(key)` and `s.remove(x)` reach the
+  same single-key deletion in Objects/dictobject.c and Objects/setobject.c.
+  `dict.popitem()` keeps the table but shortens the entries iteration scans,
+  and `set.difference_update()` can resize the table; the row covers neither.
 * Not varied: element types inside containers (ints and one-character
   strings only), the position at which deletions happen (all but the last
   key), and dict views, which share the dict iterators.
@@ -273,9 +277,9 @@ class TestContainerIteratorsAreConstantPerCall:
 
 
 class TestSparseHashTables:
-    """`next()` on a dict or set iterator is O(1) amortized: the hash table is
-    not shrunk by removal, so the first next() after deleting most entries
-    walks the empty slots, and a rebuild restores O(1)."""
+    """`next()` on a dict or set iterator is O(1) amortized: deleting single keys
+    does not shrink the hash table, so the first next() after deleting most
+    of them walks the empty slots, and a rebuild restores O(1)."""
 
     @staticmethod
     def _sparse_dict(size: int) -> dict[int, int]:
