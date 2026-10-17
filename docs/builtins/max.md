@@ -1,195 +1,204 @@
 # max() Function Complexity
 
-The `max()` function returns the largest item in an iterable or among multiple arguments.
+The `max()` function returns the largest item of an iterable, or the largest of two or more
+arguments. It makes one pass, consumes an iterable lazily, and holds only the best item so far and
+its key, so it never builds a copy of its input.
 
-## Complexity Analysis
+`n` is the items in the iterable, or the positional arguments. Comparing two items with `>` and
+calling the key function are each priced at O(1) unless a row says otherwise; with a `key`, `k` is
+the cost of one key call. Comparisons whose operands are long strings or tuples cost what those
+comparisons cost.
 
-| Case | Time | Space | Notes |
-|------|------|-------|-------|
-| Single iterable | O(n) | O(1) | Must compare all items |
-| Multiple arguments | O(n) | O(1) | n = number of arguments |
-| With key function | O(n*k) | O(1) | k = key function time; keeps only current best item/key |
-| Empty iterable | O(1) | O(1) | Raises ValueError unless default provided |
+## Complexity Reference
 
-## Basic Usage
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `max(iterable)` | O(n) | O(1) | n - 1 comparisons; items are taken one at a time and only the largest so far is kept |
+| `max(arg1, arg2, *args)` | O(n) | O(1) | n = arguments |
+| `max(iterable, key=func)` | O(n·k) | O(1) | `func` is called once per item; only the best item and its key are kept |
+| `max(iterable, default=value)` | O(n) | O(1) | An empty iterable returns `value` |
+| `max(empty_iterable)` | O(1) | O(1) | Raises `ValueError` |
+| `max(range_object)` | O(n) | O(1) | Iterates the range; the endpoints are not used as a shortcut |
 
-### Finding Maximum in Iterable
+Among equal largest items, `max()` returns the first one it meets.
+
+## Finding the Largest Item
+
+### Any Iterable
+
+Every item is compared, so the cost is O(n) whatever the container: a sorted `list` or a `range` is
+scanned like any other iterable.
 
 ```python
-# O(n) - must scan all items
 numbers = [3, 1, 4, 1, 5, 9, 2, 6]
-max_val = max(numbers)  # 9
+assert max(numbers) == 9  # O(n)
 
-# O(n) for any iterable
-max_val = max([1, 2, 3])      # 3
-max_val = max((1, 2, 3))      # 3
-max_val = max({1, 2, 3})      # 3
-max_val = max("abc")          # 'c'
+assert max((1, 2, 3)) == 3
+assert max({1, 2, 3}) == 3
+assert max("abc") == "c"
+assert max(range(1_000)) == 999  # O(n) - iterates the range
+assert max(iter([1, 2, 3])) == 3
 ```
 
 ### Multiple Arguments
 
 ```python
-# O(n) where n is number of arguments
-max_val = max(5, 2, 8, 1)     # 8
-max_val = max(3.14, 2.71, 1.41)  # 3.14
+assert max(5, 2, 8, 1) == 8  # O(n) in the arguments
+assert max(3.14, 2.71, 1.41) == 3.14
 ```
 
-## With Key Function
+### Generators Hold One Item at a Time
+
+`max()` takes items one by one, so a generator expression keeps memory at O(1), where a list
+comprehension first builds all n items.
 
 ```python
-# O(n*k) - evaluates key for each item
-words = ["apple", "pie", "cat"]
-longest = max(words, key=len)  # O(n) - key is O(1)
+largest = max(x for x in range(100_000) if x % 7 == 0)  # O(n) time, O(1) space
+assert largest == 99_995
 
-# More expensive key function
-numbers = [1, 2, 3, 4, 5]
-max_val = max(numbers, key=lambda x: expensive_function(x))
-# O(n*k) where k = time for expensive_function
+largest = max([x for x in range(100_000) if x % 7 == 0])  # O(n) space for the list
+assert largest == 99_995
 ```
 
-## Performance Patterns
+## Key Functions
 
-### Scanning Collections
+### One Key Call per Item
+
+The key is called once for each item, and `max()` keeps the key of the best item rather than
+calling the key again, so a key costing `k` gives O(n·k).
 
 ```python
-# O(n) - makes one pass through data
-lst = list(range(1000000))
-result = max(lst)  # ~1M comparisons
+calls = []
 
-# Same complexity with generators
-result = max(x**2 for x in range(10000))  # O(n)
+def length(word):
+    calls.append(word)
+    return len(word)
+
+words = ["apple", "pie", "banana", "cat"]
+assert max(words, key=length) == "banana"  # O(n·k)
+assert calls == words  # Each word once
 ```
 
-### Working with Different Types
+### The Key With the Largest Value
+
+With `key=d.get`, each key call is one dictionary lookup, so finding the key of the largest value is
+O(n) in the entries.
 
 ```python
-# All O(n) - must compare all items
-max([1, 2, 3])              # O(n) for list
-max({1, 2, 3})              # O(n) for set
-max("abcdef")               # O(n) for string
-max(range(1000000))         # O(n) - iterates range
-max(iter([1, 2, 3]))        # O(n) - iterates iterator
+scores = {"alice": 82, "bob": 95, "carol": 77}
+assert max(scores, key=scores.get) == "bob"  # O(n)
 ```
 
-### Using Generators
+### Attributes and Tuple Fields
 
 ```python
-# O(n) but space-efficient
-# Generator doesn't store all values
-max(x for x in range(1000000) if x % 7 == 0)
-
-# Better than:
-# O(n) time but O(n) space
-max([x for x in range(1000000) if x % 7 == 0])
-```
-
-## Complex Keys
-
-### String Sorting with Key
-
-```python
-# O(n) - simple key function
-data = ["apple", "pie", "cat", "banana"]
-longest = max(data, key=len)  # "banana"
-
-# O(n) - extract attribute
 class Person:
     def __init__(self, name, age):
         self.name = name
         self.age = age
 
 people = [Person("Alice", 30), Person("Bob", 25), Person("Charlie", 35)]
-oldest = max(people, key=lambda p: p.age)  # Charlie
+assert max(people, key=lambda p: p.age).name == "Charlie"  # O(n)
+
+coords = [(1, 5), (3, 2), (2, 8)]
+assert max(coords) == (3, 2)  # Tuples compare by first element, then the next
+assert max(coords, key=lambda c: c[1]) == (2, 8)
 ```
 
-### Tuple Unpacking
+### Ties Return the First Item
+
+`max()` only replaces its best item with one that compares strictly larger, so among equals the
+first wins.
 
 ```python
-# O(n) - compare tuples lexicographically
-coords = [(1, 5), (3, 2), (2, 8)]
-max_coord = max(coords)  # (3, 2) - compared by first element
-# If first equal, compares second element, etc.
-
-# With key to compare by second element
-max_by_y = max(coords, key=lambda c: c[1])  # (2, 8)
+words = ["pear", "plum", "fig"]
+assert max(words, key=len) == "pear"  # "plum" is as long, but comes later
 ```
 
 ## Comparison with Sorting
 
+`max()` is O(n) time and O(1) space. Sorting to take the last element is O(n log n) time and O(n)
+space for the new list, and `heapq.nlargest(k, iterable)` is the choice when you need the k largest
+items.
+
 ```python
-# max() is much more efficient than sorting
-numbers = list(range(10000))
+import heapq
 
-# O(n) - just find maximum
-result = max(numbers)
+numbers = [(i * 7919) % 10_007 for i in range(10_000)]
 
-# O(n log n) - overkill if you just need max
-result = sorted(numbers)[-1]
-
-# Even worse - O(n^2) if comparing inefficiently
-result = max(numbers, key=lambda x: expensive_function(x))
+assert max(numbers) == 10_006  # O(n)
+assert sorted(numbers)[-1] == 10_006  # O(n log n), and a full copy
+assert heapq.nlargest(3, numbers) == [10_006, 10_005, 10_004]  # O(n log k)
 ```
 
 ## Edge Cases
 
-### Empty Sequences
+### Empty Iterables
+
+An empty iterable raises `ValueError` unless `default` is given. `default` is accepted only with a
+single iterable argument.
 
 ```python
-# Raises ValueError
 try:
     max([])
-except ValueError as e:
-    print(e)  # max() arg is an empty sequence
+except ValueError as error:
+    assert "empty" in str(error)
+else:
+    raise AssertionError("expected ValueError")
 
-# Provide default
-max([], default=0)  # O(n) but returns 0 if empty
+assert max([], default=0) == 0  # O(1)
+assert max([4, 7], default=0) == 7  # The default is unused when there are items
+
+try:
+    max(1, 2, default=0)
+except TypeError:
+    pass
+else:
+    raise AssertionError("expected TypeError")
 ```
 
-### Single Item
+### A Single Non-Iterable Argument
+
+One argument must be an iterable; `max()` does not treat a lone value as its own maximum.
 
 ```python
-# O(1) - already the maximum
-result = max([42])  # 42
+try:
+    max(42)
+except TypeError as error:
+    assert "not iterable" in str(error)
+else:
+    raise AssertionError("expected TypeError")
 
-# O(1) - single argument
-# result = max(42)  # TypeError: 'int' object is not iterable
+assert max([42]) == 42
 ```
 
-### Non-Comparable Types
+### Items That Cannot Be Compared
 
 ```python
-# Raises TypeError if types can't be compared
 try:
     max([1, "string"])
-except TypeError:
-    print("Can't compare int and str")
+except TypeError as error:
+    assert "'>' not supported" in str(error)
+else:
+    raise AssertionError("expected TypeError")
 ```
 
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use `max()` to find maximum element
-- Use key parameter for custom comparisons
-- Use generators with `max()` for memory efficiency
-- Provide `default` parameter for possibly empty sequences
+- Use `max()` rather than sorting when you need only the largest item
+- Pass a generator expression rather than a list comprehension, to keep memory O(1)
+- Pass `default=` when the iterable may be empty
 
 ❌ **Avoid**:
 
-- Sorting just to find maximum (use `max()` instead)
-- Unnecessary key function evaluations
-- Finding max without checking if sequence is empty
+- `sorted(items)[-1]`: O(n log n) time and an O(n) copy for one item
+- `max(*items)` on a list or other non-tuple collection: unpacking builds a tuple of all n items first
 
 ## Related Functions
 
-- **[min()](min.md)** - Find minimum value
-- **[sorted()](sorted.md)** - Sort all items
-- **[sum()](sum.md)** - Sum all items
-- **[heapq.nlargest()](../stdlib/heapq.md)** - Find k largest items efficiently
-
-## Version Notes
-
-- **Python 2.x**: Basic functionality available
-- **Python 3.x**: Same behavior
-- **Python 3.8+**: Same behavior, consistent
+- **[min()](min.md)** - Find the smallest item, with the same costs
+- **[sorted()](sorted.md)** - Sort all items, O(n log n)
+- **[sum()](sum.md)** - Another single O(n) pass over an iterable
+- **[heapq.nlargest()](../stdlib/heapq.md)** - Find the k largest items in O(n log k)
