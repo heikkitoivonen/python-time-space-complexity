@@ -1,399 +1,369 @@
 # open() Function Complexity
 
-The `open()` function opens a file and returns a file object, allowing reading, writing, and manipulation of file contents.
+The `open()` function opens a file and returns a file object: a raw `FileIO`, wrapped in a buffered
+reader or writer unless `buffering=0`, wrapped in turn in a `TextIOWrapper` in text mode. Opening
+reads nothing, so its cost does not depend on the file's size. Reads and writes cost what they move,
+and `read()` with no size and `readlines()` return the rest of the file at once.
+
+`n` is the bytes in the file, or its characters in text mode, `k` is the bytes or characters one
+call reads or writes (for `readline()` and line iteration, the length of the line), and `b` is the
+buffer size. A system call is priced at the bytes it moves, and text encoding and decoding at O(1)
+per character, for a codec whose state clears between characters as UTF-8's does. The filesystem's
+own costs, such as resolving the path or freeing blocks when `'w'` truncates a file, are not priced.
+Buffered reads and writes are amortized: a call that refills the buffer or writes it out pays up to
+O(b) more, once per `b` bytes. Space for reads and writes is in addition to the buffer `open()`
+allocates.
 
 ## Complexity Reference
 
+### open
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `open(filename)` | O(1)* | O(1) | System call; * may vary with filesystem |
-| `file.read()` | O(n) | O(n) | n = file size |
-| `file.readline()` | O(k) | O(k) | k = line length |
-| `file.readlines()` | O(n) | O(n) | n = file size |
-| `file.write(data)` | O(k) | O(1)* | k = data length; * buffered, actual I/O varies |
-| `file.close()` | O(1) | O(1) | Flush and close |
-| `for line in file:` | O(n) | O(1) | n = file size (lazy iteration) |
+| `open(file, mode='r', buffering=-1, encoding=None, errors=None, newline=None, closefd=True, opener=None)` | O(1) | O(b) | Reads nothing from the file; allocates one buffer of `b` bytes, which `buffering` sets |
+| `open(file, 'rb', buffering=0)` | O(1) | O(1) | Unbuffered binary only: returns the `FileIO`, so each sized read or write is at most one system call. Text mode raises `ValueError` |
+| `open(file, 'w', buffering=1)` | O(1) | O(b) | Line buffering, text mode only: each write containing a newline is flushed |
+
+### Reading
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `f.read()` | O(n) | O(n) | Everything from the current position to the end |
+| `f.read(size)` | O(k) amortized | O(size) | Allocates for `size` before it knows how much is left; for a positive `size`, an empty result means end of file |
+| `f.readline()` | O(k) amortized | O(k) | On a `buffering=0` file, one system call per byte |
+| `f.readlines()` | O(n) | O(n) | Every remaining line at once |
+| `for line in f` | O(n) | O(k) | One line at a time; k = the longest line |
+
+### Writing
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `f.write(data)` | O(k) amortized | O(k) | Buffered: reaches the file when a write no longer fits in the buffer, or on `flush()` or `close()` |
+| `f.writelines(lines)` | O(n) | O(k) | n = total length of `lines`, k = the longest item; one `write()` per item, adding no newlines |
+| `f.flush()` | O(b) | O(1) | Writes out what the buffer holds |
+| `f.close()`, leaving a `with` block | O(b) | O(1) | Flushes, then closes the file |
+
+### Positioning and attributes
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `f.seek(offset, whence=0)`, binary mode | O(1) | O(1) | Plus O(b) to flush pending writes; the next read costs what it moves |
+| `f.tell()`, binary mode | O(1) | O(1) | |
+| `f.tell()`, text mode | O(c) | O(c) | c = bytes decoded in the last chunk, plus O(b) to flush pending writes; raises `OSError` inside a `for` loop over the file |
+| `f.seek(cookie)`, text mode | O(1) | O(1) | Plus O(b) to flush pending writes; takes a value from `tell()`, `0`, or `seek(0, 2)` for the end |
+| `f.truncate(size=None)` | O(b) | O(1) | Flushes first |
+| `f.name`, `f.mode`, `f.closed`, `f.encoding`, `f.readable()`, `f.writable()`, `f.seekable()` | O(1) | O(1) | `encoding` exists in text mode only |
 
 ## Opening Files
 
-### Basic File Operations
+### What open() Returns
+
+The mode decides how many layers `open()` stacks. Building them is O(1) whatever the file holds.
 
 ```python
-# Open for reading - O(1) system call
-file = open('data.txt', 'r')  # O(1)
-content = file.read()         # O(n) - read entire file
-file.close()                  # O(1)
+import io
+import os
+import tempfile
 
-# Or use context manager (recommended)
-with open('data.txt', 'r') as file:  # O(1)
-    content = file.read()             # O(n)
-# File automatically closed - O(1)
+with tempfile.TemporaryDirectory() as tmp:
+    path = os.path.join(tmp, "data.txt")
+
+    with open(path, "w", encoding="utf-8") as f:  # O(1) - creates or truncates
+        assert isinstance(f, io.TextIOWrapper)
+        f.write("hello\n")
+
+    with open(path, "rb") as f:  # O(1)
+        assert isinstance(f, io.BufferedReader)
+
+    with open(path, "r+b") as f:
+        assert isinstance(f, io.BufferedRandom)
+
+    with open(path, "rb", buffering=0) as f:
+        assert isinstance(f, io.FileIO)  # No buffer: each sized read is one system call
 ```
 
-### File Modes
+### Modes
+
+`'w'` empties an existing file, `'a'` sends every write to the end, and `'x'` refuses to open a file
+that already exists.
 
 ```python
-# Read mode (default) - O(1)
-file = open('file.txt', 'r')      # O(1) - text mode
+import os
+import tempfile
 
-# Binary mode - O(1)
-file = open('file.bin', 'rb')     # O(1) - binary read
+with tempfile.TemporaryDirectory() as tmp:
+    path = os.path.join(tmp, "log.txt")
 
-# Write mode - O(1)
-file = open('output.txt', 'w')    # O(1) - text write
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("first\n")
 
-# Append mode - O(1)
-file = open('log.txt', 'a')       # O(1) - append to end
+    with open(path, "a", encoding="utf-8") as f:
+        f.seek(0)
+        f.write("second\n")  # Appended, even after seek(0)
 
-# Read/Write - O(1)
-file = open('data.txt', 'r+')     # O(1) - read and write
+    with open(path, encoding="utf-8") as f:
+        assert f.read() == "first\nsecond\n"
+
+    try:
+        open(path, "x")
+    except FileExistsError:
+        pass
+    else:
+        raise AssertionError("expected FileExistsError")
 ```
 
-## Reading File Contents
+### Text Encoding
 
-### Read Methods
+Text mode decodes on read and encodes on write. Without `encoding=`, Python 3.15+ uses UTF-8 unless UTF-8
+mode is turned off, and earlier versions use the locale's encoding unless UTF-8 mode is on. Pass `encoding=` for a file
+that has to read the same everywhere.
 
 ```python
-with open('data.txt', 'r') as file:
-    # Read entire file - O(n)
-    content = file.read()  # O(file_size)
-    
-    # Read line by line - O(k) per line
-    file.seek(0)  # O(1) - go to start
-    line = file.readline()  # O(k) - k = line length
-    
-    # Read all lines into list - O(n)
-    file.seek(0)
-    lines = file.readlines()  # O(n) - creates list
-    
-    # Iterate lines (memory efficient) - O(1) per line
-    file.seek(0)
-    for line in file:  # O(1) per iteration, lazy
-        process(line)
+import locale
+import os
+import sys
+import tempfile
+
+with tempfile.TemporaryDirectory() as tmp:
+    path = os.path.join(tmp, "notes.txt")
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("naïve café")
+        assert f.encoding == "utf-8"
+
+    with open(path, "rb") as f:
+        assert f.read() == "naïve café".encode("utf-8")  # 2 bytes for each of ï and é
+
+    with open(path) as f:  # The default depends on the version and UTF-8 mode
+        assert f.encoding == ("utf-8" if sys.flags.utf8_mode else locale.getencoding())
 ```
 
-### Reading Line by Line (Memory Efficient)
+## Reading Files
+
+### Lazy vs Eager Reading
+
+Iterating a file holds one line at a time. `readlines()` and `read()` build the whole file in
+memory, which is O(n) space.
 
 ```python
-# Best for large files: iterate without loading all
-with open('largefile.txt', 'r') as file:
-    for line in file:  # O(1) per line, O(1) memory
-        # Process one line at a time
-        print(line.strip())
+import os
+import tempfile
 
-# vs. loading all at once - O(n) memory
-with open('largefile.txt', 'r') as file:
-    all_lines = file.readlines()  # O(n) memory!
-    for line in all_lines:        # Still O(1) per iteration
-        print(line.strip())
+with tempfile.TemporaryDirectory() as tmp:
+    path = os.path.join(tmp, "lines.txt")
+    with open(path, "w", encoding="utf-8") as f:
+        f.writelines(f"line {i}\n" for i in range(1_000))  # O(n)
+
+    # LAZY: O(k) memory - one line at a time
+    count = 0
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            count += 1
+    assert count == 1_000
+
+    # EAGER: O(n) memory - every line in one list
+    with open(path, encoding="utf-8") as f:
+        lines = f.readlines()
+    assert len(lines) == 1_000 and lines[0] == "line 0\n"
 ```
 
-## Writing to Files
+### Reading in Fixed-Size Chunks
 
-### Write Operations
+A binary file with no line structure can be read a chunk at a time with `iter()` and a sentinel, so
+memory stays at one chunk.
 
 ```python
-# Write string - O(k) where k = string length
-with open('output.txt', 'w') as file:
-    file.write('Hello')  # O(5)
-    file.write(' ')      # O(1)
-    file.write('World')  # O(5)
+import hashlib
+import os
+import tempfile
+from functools import partial
 
-# Write multiple lines - O(n)
-lines = ['Line 1\n', 'Line 2\n', 'Line 3\n']
-with open('output.txt', 'w') as file:
-    file.writelines(lines)  # O(n)
+with tempfile.TemporaryDirectory() as tmp:
+    path = os.path.join(tmp, "blob.bin")
+    with open(path, "wb") as f:
+        f.write(bytes(range(256)) * 1_000)
 
-# Write with formatting - O(n)
-with open('output.txt', 'w') as file:
-    for i, item in enumerate(items):
-        file.write(f"{i}: {item}\n")  # O(k) per write
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(partial(f.read, 65_536), b""):  # O(k) memory per chunk
+            digest.update(chunk)
+
+    assert digest.hexdigest() == hashlib.sha256(bytes(range(256)) * 1_000).hexdigest()
 ```
 
-## File Iteration
+## Writing Files
 
-### Iterating Lines
+### Buffered Writes
+
+A write lands in the buffer, and the file sees it when a later write no longer fits, or on
+`flush()` or `close()`, so a run of small writes costs few system calls. An unbuffered binary file makes one
+system call per write.
 
 ```python
-# Most efficient: lazy line iteration - O(1) memory per line
-with open('data.txt', 'r') as file:
-    for line in file:  # O(1) per iteration
-        # Process line
-        process(line)
+import os
+import tempfile
 
-# This is more efficient than:
-with open('data.txt', 'r') as file:
-    for line in file.readlines():  # O(n) memory upfront!
-        process(line)
+with tempfile.TemporaryDirectory() as tmp:
+    path = os.path.join(tmp, "out.bin")
 
-# For files with millions of lines:
-# - Iteration: O(n) time, O(1) memory
-# - readlines(): O(n) time, O(n) memory
+    with open(path, "wb") as f:
+        for _ in range(100):
+            f.write(b"x")  # O(1) amortized - copied into the buffer
+        assert os.path.getsize(path) == 0  # Nothing written to the file yet
+        f.flush()  # O(b)
+        assert os.path.getsize(path) == 100
+
+    with open(path, "wb", buffering=0) as f:
+        f.write(b"x")  # One system call
+        assert os.path.getsize(path) == 1
 ```
 
-## File Positioning
+### Buffering Modes
 
-### Seek and Tell
+`buffering=0` is for binary files only. `buffering=1` makes a text file flush at each newline,
+which suits a log another process is reading.
 
 ```python
-with open('data.txt', 'rb') as file:
-    # Get current position - O(1)
-    pos = file.tell()  # Usually 0 at start
-    
-    # Read some bytes - O(k)
-    data = file.read(100)  # O(100)
-    
-    # Get new position - O(1)
-    pos = file.tell()  # Around 100
-    
-    # Seek to beginning - O(1)
-    file.seek(0)  # Go to start
-    
-    # Seek to end - O(1)
-    file.seek(0, 2)  # Go to end
-    
-    # Get file size - O(1)
-    size = file.tell()
+import os
+import tempfile
+
+with tempfile.TemporaryDirectory() as tmp:
+    path = os.path.join(tmp, "app.log")
+
+    with open(path, "w", buffering=1, encoding="utf-8", newline="\n") as f:
+        f.write("starting")
+        assert os.path.getsize(path) == 0
+        f.write(" ... done\n")  # Contains a newline: flushed
+        assert os.path.getsize(path) == len("starting ... done\n")
+
+    try:
+        open(path, "w", buffering=0)
+    except ValueError as error:
+        assert "unbuffered text" in str(error)
+    else:
+        raise AssertionError("expected ValueError")
 ```
 
-### Random Access
+## Positioning
+
+### Binary Seek and Tell
+
+In binary mode a position is a byte offset, and moving to it is O(1) however far it is.
 
 ```python
-# Efficient seeking (in binary mode) - O(1)
-with open('data.bin', 'rb') as file:
-    # Jump to position - O(1)
-    file.seek(1000)
-    data = file.read(100)  # O(100)
-    
-    # Jump again - O(1)
-    file.seek(2000)
-    data = file.read(100)  # O(100)
+import os
+import tempfile
 
-# Note: seeking is fast; reading at new position is O(k)
+with tempfile.TemporaryDirectory() as tmp:
+    path = os.path.join(tmp, "records.bin")
+    with open(path, "wb") as f:
+        f.write(b"".join(i.to_bytes(4, "big") for i in range(10_000)))
+
+    with open(path, "rb") as f:
+        f.seek(4 * 9_000)  # O(1) - no reading on the way
+        assert int.from_bytes(f.read(4), "big") == 9_000  # O(k)
+        assert f.tell() == 4 * 9_001  # O(1)
+
+        f.seek(0, os.SEEK_END)  # O(1)
+        assert f.tell() == 40_000  # The file's size
 ```
 
-## File Object Methods
+### Text Seek and Tell
 
-### Useful Methods
+A text file's position is an opaque cookie, not a character count. `tell()` re-decodes the last
+chunk to build it, and `seek()` accepts only such a cookie, `0`, or the end. The
+[io page](../stdlib/io.md#tell-and-seek) covers the details.
 
 ```python
-with open('data.txt', 'r') as file:
-    # Check if writable - O(1)
-    is_writable = file.writable()
-    
-    # Check if readable - O(1)
-    is_readable = file.readable()
-    
-    # Check if seekable - O(1)
-    is_seekable = file.seekable()
-    
-    # Get file name - O(1)
-    name = file.name
-    
-    # Get file mode - O(1)
-    mode = file.mode
-    
-    # Flush buffer - O(1) usually
-    file.flush()
-    
-    # Truncate file - O(1) usually
-    file.truncate()
+import os
+import tempfile
+
+with tempfile.TemporaryDirectory() as tmp:
+    path = os.path.join(tmp, "text.txt")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("naïve\ncafé\n")
+
+    with open(path, encoding="utf-8") as f:
+        assert f.readline() == "naïve\n"
+        cookie = f.tell()  # O(c)
+        assert f.readline() == "café\n"
+        f.seek(cookie)  # O(1)
+        assert f.readline() == "café\n"
+
+        try:
+            f.seek(3, os.SEEK_CUR)
+        except OSError as error:
+            assert "nonzero" in str(error)
+        else:
+            raise AssertionError("seeked a text file by a character count")
 ```
 
 ## Common Patterns
 
-### Read and Process
+### Handling a Missing File
+
+`open()` raises before anything is read.
 
 ```python
-# Read entire small file - O(n)
-with open('config.json', 'r') as file:
-    config = json.load(file)  # O(n)
+import os
+import tempfile
 
-# Read large file line by line - O(n) time, O(1) memory
-with open('data.csv', 'r') as file:
-    for line in file:  # O(1) per iteration
-        row = parse_csv(line)  # O(k) per line
-        process(row)
+with tempfile.TemporaryDirectory() as tmp:
+    try:
+        with open(os.path.join(tmp, "missing.txt"), encoding="utf-8") as f:
+            f.read()
+    except FileNotFoundError as error:
+        assert error.filename.endswith("missing.txt")
+    else:
+        raise AssertionError("expected FileNotFoundError")
 ```
 
-### Write Results
+### Read, Transform, Write
+
+Iterating one file while writing another holds one line from each, whatever the files' sizes.
 
 ```python
-# Write results - O(n)
-with open('results.txt', 'w') as file:
-    for result in results:  # O(n) iterations
-        file.write(f"{result}\n")  # O(k) per write
+import os
+import tempfile
 
-# Write in bulk - O(n)
-with open('results.txt', 'w') as file:
-    file.writelines([f"{r}\n" for r in results])  # O(n)
+with tempfile.TemporaryDirectory() as tmp:
+    source = os.path.join(tmp, "in.txt")
+    target = os.path.join(tmp, "out.txt")
+    with open(source, "w", encoding="utf-8") as f:
+        f.write("alpha\nbeta\ngamma\n")
+
+    with open(source, encoding="utf-8") as src, open(target, "w", encoding="utf-8") as dst:
+        for line in src:  # O(n) time, O(k) memory
+            dst.write(line.upper())
+
+    with open(target, encoding="utf-8") as f:
+        assert f.read() == "ALPHA\nBETA\nGAMMA\n"
 ```
 
-### Line Counting
-
-```python
-# Efficient line counting - O(n) time, O(1) memory
-def count_lines(filename):
-    count = 0
-    with open(filename, 'r') as file:
-        for _ in file:  # O(1) per line
-            count += 1
-    return count
-
-# vs. loading all lines - O(n) time, O(n) memory
-def count_lines_bad(filename):
-    with open(filename, 'r') as file:
-        return len(file.readlines())  # O(n) memory!
-```
-
-## Binary vs Text Mode
-
-### Text Mode
-
-```python
-# Text mode (default) - O(n)
-with open('data.txt', 'r') as file:
-    content = file.read()  # Decoded as UTF-8 by default
-
-# With specific encoding - O(n)
-with open('data.txt', 'r', encoding='utf-8') as file:
-    content = file.read()  # O(n)
-```
-
-### Binary Mode
-
-```python
-# Binary mode - O(n)
-with open('data.bin', 'rb') as file:
-    content = file.read()  # No decoding, raw bytes
-
-# Good for non-text files (images, executables)
-with open('image.png', 'rb') as file:
-    image_data = file.read()  # O(n) - raw bytes
-```
-
-## Performance Optimization
-
-### Buffering
-
-```python
-# Buffering affects write performance
-# Full buffering (default for files)
-with open('output.txt', 'w', buffering=-1) as file:
-    for _ in range(1000):
-        file.write("x")  # Buffered, few actual system calls
-
-# Line buffering (default for terminals)
-with open('log.txt', 'w', buffering=1) as file:
-    for _ in range(1000):
-        file.write("x\n")  # Flushed on newline
-
-# No buffering
-with open('output.txt', 'w', buffering=0) as file:
-    for _ in range(1000):
-        file.write("x")  # Each write is system call - slow!
-```
-
-### Batch Processing
-
-```python
-# Inefficient: many small reads - O(n) with overhead
-with open('data.txt', 'r') as file:
-    while True:
-        char = file.read(1)  # O(1) but with overhead
-        if not char:
-            break
-        process(char)
-
-# Efficient: read chunks - O(n) with less overhead
-with open('data.txt', 'r') as file:
-    chunk_size = 8192  # 8KB chunks
-    while True:
-        chunk = file.read(chunk_size)  # O(chunk_size)
-        if not chunk:
-            break
-        for line in chunk.split('\n'):
-            process(line)
-```
-
-## Context Manager Benefits
-
-### Proper Cleanup
-
-```python
-# Manual file handling (error-prone)
-file = open('data.txt', 'r')
-try:
-    data = file.read()  # If error here, file not closed!
-finally:
-    file.close()
-
-# Context manager (guaranteed cleanup)
-with open('data.txt', 'r') as file:  # O(1) - open
-    data = file.read()  # O(n) - read
-# O(1) - auto close, even if error!
-```
-
-## Special File Types
-
-### File-like Objects
-
-```python
-# StringIO - in-memory file
-from io import StringIO
-file = StringIO("Hello\nWorld")  # O(n) to create
-content = file.read()  # O(n)
-
-# BytesIO - in-memory bytes
-from io import BytesIO
-file = BytesIO(b"Hello")  # O(n)
-content = file.read()  # O(n)
-
-# These behave like files but in memory
-```
-
-## Exception Handling
-
-### Common Exceptions
-
-```python
-try:
-    with open('missing.txt', 'r') as file:  # O(1)
-        content = file.read()  # O(n)
-except FileNotFoundError:
-    print("File doesn't exist")
-except PermissionError:
-    print("No permission to read")
-except IOError as e:
-    print(f"IO error: {e}")
-```
-
-## Version Notes
-
-- **Python 2.x**: `open()` vs `file()` (both work)
-- **Python 3.x**: `open()` unified (recommended)
-- **All versions**: Context manager support in 2.5+
-
-## Related Functions
-
-- **[pathlib.Path.open()](../stdlib/pathlib.md)** - Modern path-based file opening
-- **with statement** - Context manager for safe resource handling
-- **[io module](../stdlib/io.md)** - Low-level I/O operations
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use context manager (`with` statement) for automatic cleanup
-- Iterate large files line-by-line (lazy evaluation)
-- Use binary mode for non-text files
-- Specify encoding for text files
-- Seek only in binary mode (text mode has issues)
+- Use `with` so the file is flushed and closed even when an exception is raised
+- Iterate a file, or read it in fixed-size chunks, when it can be larger than you want in memory
+- Pass `encoding=` in text mode; the default differs between versions and platforms
+- Keep the default buffering for runs of small reads and writes
 
 ❌ **Avoid**:
 
-- Forgetting to close files (use `with`)
-- Loading huge files entirely into memory (`readlines()`)
-- Manual try/finally instead of context managers
-- Seeking in text mode (complex due to encoding)
-- Multiple small reads instead of buffered chunks
+- `readlines()` or `read()` on a file that may be large, when you only need one line at a time
+- `readline()` on a `buffering=0` file; it makes one system call per byte
+- `buffering=0` for many small writes; each one is a system call
+- Seeking a text file to a computed character offset; use a cookie from `tell()`, or binary mode
+
+## Version Notes
+
+- **Python 3.15+**: Text mode defaults to UTF-8 when `encoding` is omitted, whatever the locale,
+  unless UTF-8 mode is turned off; earlier versions use the locale's encoding unless UTF-8 mode is on
+
+## Related Functions
+
+- **[io](../stdlib/io.md)** - the classes `open()` builds, and what each layer costs
+- **[pathlib](../stdlib/pathlib.md)** - `Path.open()`, `read_text()` and `write_text()`
+- **[shutil](../stdlib/shutil.md)** - `copyfileobj()` for copying between files in chunks
+- **[iter()](iter.md)** - `iter(callable, sentinel)` for chunked reads
