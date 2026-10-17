@@ -1,319 +1,188 @@
 # dict() Function Complexity
 
-The `dict()` function creates dictionaries from various sources.
+`dict()` builds a new dictionary from nothing, from a mapping, from an iterable of key-value
+pairs, from keyword arguments, or from a positional source and keyword arguments together. It
+always builds a new object, and the copy is shallow: keys and values are shared with the source,
+not copied. What the resulting dict costs to use is on the [dict](dict.md) page.
 
-## Complexity Analysis
+`n` is the items the positional argument supplies - the pairs an iterable yields, or the keys of a
+mapping - and `m` is the keyword arguments. Times are average case and treat hashing and
+comparing a key as O(1), as CPython's own time-complexity table does. When every key hashes to the
+same value, each insertion costs O(n) instead, so building from n pairs costs O(n²). Iterating the
+argument, and a mapping's own `keys()` and `__getitem__`, cost whatever they cost on top.
 
-| Case | Time | Space | Notes |
-|------|------|-------|-------|
-| Empty dict | O(1) | O(1) | dict() |
-| From keyword arguments | O(n) avg, O(n^2) worst | O(n) | n = number of kwargs |
-| From list of pairs | O(n) avg, O(n^2) worst | O(n) | n = number of pairs |
-| From another dict | O(n) avg, O(n^2) worst | O(n) | n = dict size; a source that had most of its items deleted costs its former size (see [dict](dict.md)) |
-| From iterable of pairs | O(n) avg, O(n^2) worst | O(n) | n = number of pairs |
+## Complexity Reference
 
-## Basic Usage
+### dict()
 
-### Create Empty Dictionary
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `dict()` | O(1) | O(1) | An empty dict |
+| `dict(iterable)` | O(n) | O(n) | Each item must be a two-item iterable; a repeated key keeps its first position and its last value |
+| `dict(d)` where `d` is a dict | O(n) | O(n) | Same as `d.copy()`: a source that had most of its items deleted costs its former size (see [dict](dict.md)) |
+| `dict(mapping)` where `mapping` is not a dict but has `keys()` | O(n) | O(n) | Calls `keys()` once and `mapping[key]` once per key |
+| `dict(**kwargs)` | O(m) | O(m) | Keys must be strings |
+| `dict(source, **kwargs)` | O(n + m) | O(n + m) | Keyword arguments are applied after `source` and replace its values for the same key |
+
+## Building a Dictionary
+
+### From Pairs
+
+Any iterable of two-item iterables works, so `zip()` and `enumerate()` feed `dict()` directly. Each
+pair is one insertion.
 
 ```python
-# O(1)
-d = dict()  # {}
+keys = ["a", "b", "c"]
+values = [1, 2, 3]
+
+d = dict(zip(keys, values))  # O(n)
+assert d == {"a": 1, "b": 2, "c": 3}
+
+assert dict(enumerate("xy")) == {0: "x", 1: "y"}  # O(n)
+assert dict([("x", 10), ("y", 20)]) == {"x": 10, "y": 20}
+assert dict() == {}  # O(1)
+```
+
+A repeated key overwrites the value but keeps the position the key was first inserted at. An item
+that does not have exactly two elements raises.
+
+```python
+d = dict([("a", 1), ("b", 2), ("a", 3)])  # O(n)
+assert d == {"a": 3, "b": 2}
+assert list(d) == ["a", "b"]
+
+try:
+    dict([("a", 1, 2)])
+except ValueError as error:
+    assert "2 is required" in str(error)
+else:
+    raise AssertionError("expected ValueError")
+
+try:
+    dict([([1, 2], "value")])  # A list is not hashable
+except TypeError as error:
+    assert "unhashable" in str(error)
+else:
+    raise AssertionError("expected TypeError")
 ```
 
 ### From Keyword Arguments
 
-```python
-# O(n) - where n = number of kwargs
-d = dict(a=1, b=2, c=3)
-# {'a': 1, 'b': 2, 'c': 3}
+Keyword arguments are applied after the positional source, so they win for a shared key. Their
+keys must be strings, and each name can be passed only once.
 
-d = dict(name="Alice", age=30, city="NYC")
-# {'name': 'Alice', 'age': 30, 'city': 'NYC'}
+```python
+assert dict(a=1, b=2) == {"a": 1, "b": 2}  # O(m)
+
+base = {"a": 1, "b": 2}
+d = dict(base, a=3)  # O(n + m)
+assert d == {"a": 3, "b": 2}
+assert base == {"a": 1, "b": 2}
+
+try:
+    dict(**{1: "one"})
+except TypeError as error:
+    assert "keywords must be strings" in str(error)
+else:
+    raise AssertionError("expected TypeError")
+
+try:
+    dict(**{"a": 1}, **{"a": 2})
+except TypeError as error:
+    assert "multiple values" in str(error)
+else:
+    raise AssertionError("expected TypeError")
 ```
 
-### From List of Pairs
+## Copying
+
+### Copying a Dictionary
+
+`dict(d)` costs what `d.copy()` does. The copy is shallow: a mutable value is shared by both
+dicts, and `copy.deepcopy()` is the way to get independent values.
 
 ```python
-# O(n) - where n = number of pairs
-d = dict([("a", 1), ("b", 2), ("c", 3)])
-# {'a': 1, 'b': 2, 'c': 3}
+import copy
 
-d = dict([("x", 10), ("y", 20)])
-# {'x': 10, 'y': 20}
+inner = {"x": 1}
+outer = {"a": inner}
+
+shallow = dict(outer)  # O(n)
+assert shallow == outer and shallow is not outer
+assert shallow["a"] is inner
+shallow["a"]["x"] = 999
+assert outer["a"]["x"] == 999
+
+deep = copy.deepcopy(outer)
+assert deep["a"] is not inner
 ```
 
-### From Another Dictionary
+### Copying Another Mapping
+
+An object that is not a dict but has a `keys()` method is read as a mapping: `keys()` is called
+once, then the object is indexed once per key.
 
 ```python
-# O(n) - where n = dict size
-original = {"a": 1, "b": 2}
-copy = dict(original)  # {'a': 1, 'b': 2} - shallow copy
+class Mapping:
+    def __init__(self, data):
+        self.data = data
+        self.lookups = 0
 
-# Copy entire dict
-d = dict({"x": 10, "y": 20})
-# {'x': 10, 'y': 20}
-```
+    def keys(self):
+        return self.data.keys()
 
-### From zip() of Keys and Values
+    def __getitem__(self, key):
+        self.lookups += 1
+        return self.data[key]
 
-```python
-# O(n) - combine two iterables
-keys = ["a", "b", "c"]
-values = [1, 2, 3]
-
-d = dict(zip(keys, values))
-# {'a': 1, 'b': 2, 'c': 3}
-```
-
-## Complexity Details
-
-### Hashing and Insertion
-
-```python
-# O(n) - insert n key-value pairs
-# Each pair requires:
-# 1. Hash the key - O(1) average
-# 2. Store the pair - O(1) average
-# Total: O(n)
-
-pairs = [("a", 1), ("b", 2), ("c", 3), ("d", 4)]
-d = dict(pairs)  # O(4) - hash and store each pair
-```
-
-### Collision Handling
-
-```python
-# Average case: O(n)
-# Pathological collisions can degrade construction toward O(n^2)
-
-# Worst case: many keys map to the same hash/probe sequence
-
-pairs = [(i, i*10) for i in range(1000)]
-d = dict(pairs)  # O(n) average
-```
-
-### Keyword Arguments
-
-```python
-# O(n) - where n = number of kwargs
-# Each keyword becomes a key-value pair
-
-d = dict(a=1, b=2, c=3, d=4, e=5)  # O(5)
-
-# More kwargs = slower
-many = dict(**{f"key_{i}": i for i in range(100)})  # O(100)
+source = Mapping({"a": 1, "b": 2, "c": 3})
+assert dict(source) == {"a": 1, "b": 2, "c": 3}  # O(n)
+assert source.lookups == 3
 ```
 
 ## Common Patterns
 
-### Convert Pairs to Dictionary
+### Merging Dictionaries
+
+`dict(a, **b)` only works when every key of `b` is a string, and `dict(**a, **b)` also raises on a
+key the two share. `a | b` and `{**a, **b}` take any keys, and the right-hand value wins. Each
+costs O(len(a) + len(b)).
 
 ```python
-# O(n) - general conversion
-pairs = [("Alice", 25), ("Bob", 30), ("Charlie", 35)]
-ages = dict(pairs)
-# {'Alice': 25, 'Bob': 30, 'Charlie': 35}
+a = {"x": 1, 1: "one"}
+b = {"y": 2, "x": 3}
 
-# From enumerate
-items = ["a", "b", "c"]
-indexed = dict(enumerate(items))
-# {0: 'a', 1: 'b', 2: 'c'}
-```
+merged = a | b  # O(len(a) + len(b))
+assert merged == {"x": 3, 1: "one", "y": 2}
+assert {**a, **b} == merged
+assert dict(a, **b) == merged  # Every key of b is a string
 
-### Combine Lists into Dictionary
-
-```python
-# O(n) - using zip
-names = ["Alice", "Bob", "Charlie"]
-scores = [85, 92, 78]
-
-results = dict(zip(names, scores))
-# {'Alice': 85, 'Bob': 92, 'Charlie': 78}
-```
-
-### Dictionary Copying
-
-```python
-# All O(n) - shallow copy
-original = {"a": 1, "b": 2}
-
-copy1 = dict(original)          # O(n)
-copy2 = original.copy()         # O(n) - same
-copy3 = {**original}            # O(n) - unpacking
-
-# All create shallow copies
-```
-
-### Merge Dictionaries
-
-```python
-# O(n + m) - where n, m = dict sizes
-dict1 = {"a": 1, "b": 2}
-dict2 = {"c": 3, "d": 4}
-
-merged = dict(**dict1, **dict2)  # O(n+m)
-# {'a': 1, 'b': 2, 'c': 3, 'd': 4}
-
-# Or using update - also O(n+m)
-merged = dict(dict1)
-merged.update(dict2)
-```
-
-## Performance Patterns
-
-### Keyword Arguments vs Pairs
-
-```python
-# Both O(n), but different syntax
-
-# Keyword arguments - limited to valid identifiers
-d1 = dict(a=1, b=2, c=3)  # O(3)
-
-# List of pairs - any hashable key
-d2 = dict([("a", 1), ("b", 2), ("c", 3)])  # O(3)
-
-# Speed similar, but pairs allow any key
-d3 = dict([(1, "a"), (2, "b"), (None, "c")])  # O(3)
-```
-
-### From Multiple Sources
-
-```python
-# O(n) - combine kwargs and pairs
-pairs = [("x", 10), ("y", 20)]
-d = dict(pairs, z=30)  # O(3) - combine both
-# {'x': 10, 'y': 20, 'z': 30}
-```
-
-### Batch Creation
-
-```python
-# O(n) - create all at once is faster than gradual
-
-# Fast - O(n)
-data = dict([(f"key_{i}", i) for i in range(100)])
-
-# Slower - O(n) with overhead
-data = {}
-for i in range(100):
-    data[f"key_{i}"] = i
-
-# Preferably use dict() or comprehension
-data = {f"key_{i}": i for i in range(100)}  # O(n)
-```
-
-## Edge Cases
-
-### Empty Dictionary
-
-```python
-# O(1)
-d = dict()       # {}
-d = dict([])     # {}
-d = dict({})     # {}
-```
-
-### Single Pair
-
-```python
-# O(1)
-d = dict([("a", 1)])   # {'a': 1}
-d = dict(a=1)          # {'a': 1}
-```
-
-### Duplicate Keys
-
-```python
-# O(n) - last value wins
-pairs = [("a", 1), ("a", 2), ("a", 3)]
-d = dict(pairs)  # {'a': 3} - last value
-
-# A keyword argument overrides the same key in the positional argument
-d = dict({"a": 1, "b": 2}, a=3)
-assert d == {'a': 3, 'b': 2}
-# Repeating a keyword, dict(a=1, a=3), is a SyntaxError
-```
-
-### Non-hashable Keys
-
-```python
-# O(n) - error for non-hashable keys
 try:
-    pairs = [([1, 2], "value")]  # Lists not hashable
-    d = dict(pairs)  # TypeError
+    dict(**a, **b)
 except TypeError:
-    pass
+    pass  # 1 is not a string, and "x" is in both
+else:
+    raise AssertionError("expected TypeError")
 ```
 
-### Large Dictionaries
-
-```python
-# O(n) - scales linearly
-pairs = [(i, i*10) for i in range(10**6)]
-d = dict(pairs)  # O(10^6) - creates large dict
-```
-
-## Dictionary Comprehension Alternative
-
-```python
-# All O(n), but different syntax
-
-# Using dict()
-d1 = dict([("a", 1), ("b", 2), ("c", 3)])
-
-# Using dict comprehension - often preferred
-d2 = {k: v for k, v in [("a", 1), ("b", 2), ("c", 3)]}
-
-# Using dict() with zip
-keys = ["a", "b", "c"]
-values = [1, 2, 3]
-d3 = dict(zip(keys, values))
-
-# All O(n), comprehension often cleaner
-```
-
-## Shallow vs Deep Copy
-
-```python
-# dict() creates shallow copy
-inner = {"x": 1}
-outer = {"a": inner}
-
-copied = dict(outer)
-copied["a"]["x"] = 999  # Affects original!
-# outer['a']['x'] is now 999
-
-# For deep copy
-import copy
-deep = copy.deepcopy(outer)  # Doesn't affect original
-```
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use dict comprehensions for clarity: `{k: v for ...}`
-- Use dict() with zip() for pairs: `dict(zip(keys, values))`
-- Specify all data upfront if possible
-- Use keyword arguments for simple dicts
+- Pass `zip()` or a generator straight to `dict()`; a list of pairs built first holds every pair
+  as well as the dict
+- Copy with `dict(d)` or `d.copy()`; both cost O(n)
+- Merge with `a | b` or `{**a, **b}` when keys may not be strings
 
 ❌ **Avoid**:
 
-- Building dicts gradually with assignments
-- Assuming dict() is faster than `{}` (similar)
-- Confusing shallow and deep copies
-- Using non-hashable keys
+- `dict(**mapping)` to copy: it rejects non-string keys, which `dict(mapping)` accepts
+- Relying on `dict()` for independent values: the copy is shallow
 
 ## Related Functions
 
+- **[dict](dict.md)** - What the dict you built costs to use, including `dict.fromkeys()`
+- **[frozendict](frozendict.md)** - The immutable mapping (Python 3.15+)
 - **[list()](list_func.md)** - Convert to list
-- **[set()](index.md)** - Convert to set
+- **[set()](set_func.md)** - Convert to set
 - **[zip()](zip.md)** - Pair up iterables
-- **[dict.fromkeys()](dict.md)** - Create dict with default values
-
-## Version Notes
-
-- **Python 2.x**: dict() works with iterables
-- **Python 3.x**: Preserves insertion order (3.7+)
-- **All versions**: Shallow copy by default

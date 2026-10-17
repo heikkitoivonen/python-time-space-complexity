@@ -76,13 +76,14 @@ import subprocess
 import sys
 import textwrap
 import time
+import tracemalloc
 from collections.abc import Callable, Iterator
 from typing import Any
 
 import pytest
 
 DOCS = pathlib.Path(__file__).parent.parent / "docs" / "builtins"
-PAGES = {"dict.md": 7, "dict_func.md": 22}
+PAGES = {"dict.md": 7, "dict_func.md": 6}
 
 PEAK = 200_000
 KEPT = 10
@@ -533,3 +534,161 @@ class TestDocumentedExamples:
 
         assert mutated != source, f"the mutation matched nothing in dict.md:{line}"
         assert _run_block(mutated, tmp_path).returncode != 0
+
+
+# ---------------------------------------------------------------------------
+# docs/builtins/dict_func.md
+#
+# The constructor rows are settled by counting over 1,000 keys: a key class
+# that counts its `__hash__` calls shows one hash per pair for an iterable of
+# pairs, none for a dict source, whose stored hashes are reused, and two per
+# key for a non-dict mapping (one in its own `__getitem__`, one to insert). A
+# mapping that counts its `keys()` and `__getitem__` calls shows one and n.
+# The sparse-source cost of `dict(d)` is the "dict()" case of
+# TestDeletingDoesNotShrinkTheTable above.
+#
+# The O(n**2) worst case is counted for an iterable of pairs: n keys that all
+# hash alike take exactly n(n - 1)/2 `__eq__` calls, at 100 and 1,000 keys.
+# A dict source and keyword arguments are not tested under collisions.
+#
+# That a list of pairs built first holds every pair as well as the dict is a
+# tracemalloc peak over 50,000 string keys and large ints: `dict(list(zip()))`
+# peaks over 1.5x `dict(zip())` (about 2.2x on 3.15). Key and value sizes were
+# not varied.
+# ---------------------------------------------------------------------------
+
+
+class CountingKey:
+    """A key that counts how often it is hashed."""
+
+    hashes = 0
+
+    def __init__(self, value: int) -> None:
+        self.value = value
+
+    def __hash__(self) -> int:
+        CountingKey.hashes += 1
+        return hash(self.value)
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, CountingKey) and self.value == other.value
+
+
+class CollidingKey:
+    """A key whose every instance hashes to the same value; counts `__eq__` calls."""
+
+    comparisons = 0
+
+    def __init__(self, value: int) -> None:
+        self.value = value
+
+    def __hash__(self) -> int:
+        return 1
+
+    def __eq__(self, other: object) -> bool:
+        CollidingKey.comparisons += 1
+        return self is other
+
+
+class CountingMapping:
+    """A non-dict mapping that counts calls to `keys()` and `__getitem__`."""
+
+    def __init__(self, data: dict[Any, Any]) -> None:
+        self.data = data
+        self.keys_calls = 0
+        self.lookups = 0
+
+    def keys(self) -> Any:
+        self.keys_calls += 1
+        return self.data.keys()
+
+    def __getitem__(self, key: Any) -> Any:
+        self.lookups += 1
+        return self.data[key]
+
+
+class TestDictConstructorInsertsEachItemOnce:
+    """`dict(iterable)`, `dict(d)` and `dict(mapping)` are O(n): each item is taken once."""
+
+    def test_pairs_hash_each_key_once(self) -> None:
+        pairs = [(CountingKey(i), i) for i in range(1_000)]
+        CountingKey.hashes = 0
+        d = dict(pairs)
+        assert len(d) == 1_000 and CountingKey.hashes == 1_000
+
+    def test_a_dict_source_reuses_its_stored_hashes(self) -> None:
+        source = {CountingKey(i): i for i in range(1_000)}
+        CountingKey.hashes = 0
+        copied = dict(source)
+        assert copied == source and copied is not source
+        assert CountingKey.hashes == 0
+
+    def test_a_mapping_is_read_through_keys_and_getitem(self) -> None:
+        source = CountingMapping({CountingKey(i): i for i in range(1_000)})
+        CountingKey.hashes = 0
+        d = dict(source)
+        assert d == source.data
+        assert source.keys_calls == 1 and source.lookups == 1_000
+        assert CountingKey.hashes == 2_000  # one for each lookup in data, one to insert
+
+    def test_the_copy_is_shallow(self) -> None:
+        key, inner = CountingKey(1), []
+        source = {key: inner}
+        copied = dict(source)
+        assert next(iter(copied)) is key and copied[key] is inner
+
+
+class TestDictConstructorArgumentOrder:
+    """A repeated key keeps its first position and last value; keywords apply last."""
+
+    def test_a_repeated_key_keeps_its_first_position(self) -> None:
+        pairs = [("a", 1), ("b", 2), ("a", 3)]
+        d = dict(pairs)
+        assert list(d.items()) == [("a", 3), ("b", 2)]
+
+    def test_keywords_replace_the_source_values(self) -> None:
+        source = {"a": 1, "b": 2}
+        d = dict(source, a=3, c=4)
+        assert list(d.items()) == [("a", 3), ("b", 2), ("c", 4)]
+        assert source == {"a": 1, "b": 2}
+
+    def test_keyword_keys_must_be_strings(self) -> None:
+        keywords: dict[Any, str] = {1: "one"}
+        with pytest.raises(TypeError, match="keywords must be strings"):
+            dict(**keywords)
+
+    def test_non_string_keys_pass_positionally(self) -> None:
+        source = {1: "one"}
+        assert dict(source) == source
+
+
+class TestDictConstructorWorstCase:
+    """Keys that all hash alike make each insertion O(n), so construction is O(n**2)."""
+
+    @pytest.mark.parametrize("count", [100, 1_000])
+    def test_colliding_keys_compare_with_every_earlier_key(self, count: int) -> None:
+        pairs = [(CollidingKey(i), i) for i in range(count)]
+        CollidingKey.comparisons = 0
+        d = dict(pairs)
+        assert len(d) == count
+        assert CollidingKey.comparisons == count * (count - 1) // 2
+
+
+class TestDictConstructorFromALazyIterable:
+    """A list of pairs built first holds every pair as well as the dict."""
+
+    def test_a_list_of_pairs_raises_the_peak(self) -> None:
+        keys = [f"key{i}" for i in range(50_000)]
+        values = [10**20 + i for i in range(50_000)]
+
+        def peak(build: Callable[[], Any]) -> int:
+            tracemalloc.start()
+            try:
+                build()
+                return tracemalloc.get_traced_memory()[1]
+            finally:
+                tracemalloc.stop()
+
+        lazy = peak(lambda: dict(zip(keys, values, strict=True)))
+        eager = peak(lambda: dict(list(zip(keys, values, strict=True))))
+        assert eager > lazy * 1.5, f"{lazy} vs {eager}"
