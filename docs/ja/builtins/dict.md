@@ -1,66 +1,97 @@
 ---
-source_sha: 8fd3d66178b61ce76428fd4d9d654b6858f39d3c2870bb746da072fd9957bab2
+source_sha: a15a59a2e896d04888dafc57e64dd677615bec4310ef7fc6de1e8eb9c35a355e
 translated: machine
 ---
 
 # 辞書操作の計算量
 
-`dict` 型はキーと値の組を格納する可変のマッピングです。CPython ではハッシュテーブルとして実装されています。
+`dict` 型はキーと値のペアを挿入順に保持する可変のマッピングです。CPython ではハッシュテーブルなので、
+検索・挿入・削除は辞書の大きさに依存せず、すべての要素に触れる操作（コピー、反復、比較）は線形です。
 
-`n` は辞書の要素数、`k` はもう一方のオペランドまたはイテラブルの要素数です。キーのハッシュ計算と比較は O(1) とみなします。
+`n` は辞書の要素数、`m` はもう一方のオペランドの要素数です。`update()` や `fromkeys()` に渡す
+マッピングまたはイテラブル、あるいは `|` やビューの集合演算の右辺を指します。キーのハッシュ計算と比較は
+O(1) とみなし、2 つの値の比較も同様です。O(1) の検索は平均計算量です。すべてのキーが同じハッシュ値を
+持つ場合、それぞれ O(n) になります。
 
 ## 計算量リファレンス
 
+### dict
+
 | 操作 | 時間 | 空間 | 備考 |
 |-----------|------|-------|-------|
-| `len()` | O(1) | O(1) | 保持している個数を返す |
-| `access[key]` | 平均 O(1)、最悪 O(n) | O(1) | ハッシュ探索、最悪は衝突が起きた場合 |
-| `set[key] = value` | 償却 O(1) | O(1) | ハッシュ挿入、リサイズを誘発することがある |
-| `del[key]` | 平均 O(1)、最悪 O(n) | O(1) | ハッシュ削除 |
-| `key in dict` | 平均 O(1)、最悪 O(n) | O(1) | ハッシュ探索 |
-| `get(key)` | 平均 O(1)、最悪 O(n) | O(1) | ハッシュ探索 |
-| `pop(key)` | 平均 O(1)、最悪 O(n) | O(1) | ハッシュ削除 |
-| `clear()` | O(n) | O(1) | すべてのエントリを解放する必要がある |
-| `keys()` | O(1) | O(1) | ビューオブジェクト（反復には O(n)） |
-| `values()` | O(1) | O(1) | ビューオブジェクト（反復には O(n)） |
-| `items()` | O(1) | O(1) | ビューオブジェクト（反復には O(n)） |
-| `d` の反復 | O(n) | O(1) | 挿入順 |
-| `copy()` | O(n) | O(n) | すべての組の浅いコピー |
-| `update(other)`, `d \|= other` | O(k) | O(1) | k = len(other)、償却。これに `other` の反復コストが加わる。その場で変更する |
-| `d \| other` | O(n + k) | O(n + k) | 新しい辞書。`d` をコピーしてから `other` で更新する |
-| `setdefault(key, val)` | 平均 O(1) | O(1) | ハッシュ探索と挿入 |
-| `fromkeys(keys)` | O(k) | O(k) | k = len(keys) |
-| `popitem()` | O(1) | O(1) | 最後に挿入した組を取り除く（3.7 以降は LIFO） |
+| `len(d)` | O(1) | O(1) | 要素数は保存されている |
+| `d[key]`, `d.get(key, default=None)` | 平均 O(1)、最悪 O(n) | O(1) | `d[key]` はキーがなければ `KeyError` を送出する |
+| `key in d` | 平均 O(1)、最悪 O(n) | O(1) | |
+| `d[key] = value` | 償却 O(1) | O(1) | テーブルを拡張する呼び出しは O(n) で作り直す |
+| `del d[key]`, `d.pop(key[, default])` | 平均 O(1)、最悪 O(n) | O(1) | `pop()` に既定値を渡さない限り、キーがなければ `KeyError` を送出する。テーブルは縮小しない |
+| `d.setdefault(key, default=None)` | 償却 O(1) | O(1) | 1 回の検索と、キーがないときの挿入 |
+| `d.popitem()` | 償却 O(1) | O(1) | 最後に挿入したペアを取り除く。辞書が空なら `KeyError` を送出する |
+| `d.clear()` | O(n) | O(1) | すべてのキーと値を解放する |
+| `d.copy()` | O(n) | O(n) | 浅いコピー。キーと値は共有され、複製されない |
+| `dict.fromkeys(iterable, value=None)` | O(m) | O(m) | すべてのキーが同じ `value` オブジェクトを指す |
+| `d.update(other)`, `d \|= other` | 償却 O(m) | O(m) | その場で更新。加えて `other`（マッピングまたはペアのイテラブル）を反復するコスト |
+| `d \| other` | O(n + m) | O(n + m) | 新しい辞書。`d` のコピーを `other` で更新したもの。`dict` が扱うのは `dict` か `frozendict` の `other` だけで、それ以外は `other.__ror__` に任される |
+| `d` の反復、`reversed(d)` | O(n) | O(1) | 挿入順、またはその逆順 |
+| `d == other`, `d != other` | O(n) | O(1) | 順序は無視される。長さが異なれば O(1) |
 
-*注: 平均計算量 O(1) はハッシュがよく分散していることを前提としています。最悪計算量 O(n) は病的なハッシュ衝突が起きた場合に生じますが、Python のランダム化ハッシュのもとではめったに起こりません。*
+### ビュー
 
-要素を削除してもテーブルは縮小しません。大半の要素を削除した後も、テーブルを走査する操作（反復、`copy()`、`other.update(d)`、`|`、`==`、`dict(d)`）は、後の挿入でリサイズが起きるまで、辞書の以前のサイズに比例した時間がかかります。`len()` と検索は影響を受けません。
+`d.keys()`、`d.values()`、`d.items()` はビューです。`d` への参照を持ち、何もコピーせずに `d` への
+その後の変更をすべて反映します。
 
-## 実装の詳細
+| 操作 | 時間 | 空間 | 備考 |
+|-----------|------|-------|-------|
+| `d.keys()`, `d.values()`, `d.items()` | O(1) | O(1) | |
+| `len(view)`, `view.mapping` | O(1) | O(1) | `mapping` は `d` の読み取り専用プロキシ |
+| ビューの反復、`reversed(view)` | O(n) | O(1) | |
+| `key in d.keys()`, `(key, value) in d.items()` | 平均 O(1)、最悪 O(n) | O(1) | キーの検索 1 回。`items()` ではさらに値の比較 1 回 |
+| `value in d.values()` | O(n) | O(1) | 値には索引がないので走査する |
+| `view & other` | O(m) | O(min(n, m)) | `keys()` と `items()` のビュー。`other` が集合か `keys()` または `items()` のビューなら時間は O(min(n, m)) |
+| `view \| other`, `view - other`, `view ^ other` | O(n + m) | O(n + m) | いずれも新しい `set` を作る |
+| `view.isdisjoint(other)` | O(m) | O(1) | `other` が集合か `keys()` または `items()` のビューなら O(min(n, m))。最初の共通要素で止まる |
 
-### ハッシュテーブルの構造
+要素を削除してもテーブルは縮小しません。要素の大半を取り除いた後も、テーブルを走査する操作
+（`d` やビューの反復、`copy()`、`d | other`、`other.update(d)`、`d == other`、`dict(d)`）は、
+後の挿入でリサイズが起きるまで、辞書の以前の大きさに比例する時間がかかります。`len()` と検索には
+影響しません。
 
-CPython のハッシュテーブルは次のようになっています。
+## 検索と衝突
 
-- **ハッシュ関数**: `str` と `bytes` には SipHash13（Python 3.11 以降の既定）、ほかの型は型ごとのハッシュを使う
-- **衝突の処理**: 探査によるオープンアドレス法
-- **成長の係数**: 負荷率を超えると約 2〜4 倍
-- **Python 3.6（CPython）**: コンパクトな辞書が実装上の詳細として挿入順序を保つ
-
-### ハッシュ衝突の影響
+検索はキーのハッシュを計算し、ハッシュ値が同じ格納済みのキーとだけ比較します。ハッシュがよく分散して
+いれば比較は多くても 1 回です。多くのキーが同じハッシュ値を持つと、検索はそれらと順に比較するので O(n) に
+劣化します。
 
 ```python
-# Best case: perfect hashing (O(1))
-d = {i: i for i in range(1000)}
-value = d[500]  # O(1)
+class Key:
+    comparisons = 0
 
-# Worst case: hash collisions (degraded, but very rare)
-# CPython mitigates this with randomized hashing
+    def __init__(self, name, hash_value):
+        self.name = name
+        self.hash_value = hash_value
+
+    def __hash__(self):
+        return self.hash_value
+
+    def __eq__(self, other):
+        Key.comparisons += 1
+        return self.name == other.name
+
+spread = {Key(i, i): i for i in range(100)}     # O(n)
+Key.comparisons = 0
+assert spread[Key(99, 99)] == 99                # O(1)
+assert Key.comparisons == 1                     # only the key with the same hash
+
+colliding = {Key(i, 1): i for i in range(100)}  # O(n²) - each insertion compares
+Key.comparisons = 0
+assert colliding[Key(99, 1)] == 99              # O(n) - compares every key before it
+assert Key.comparisons == 100
 ```
 
-### 削除してもテーブルは縮小しない
+## 削除してもテーブルは縮小しない
 
-`del` と `pop()` はテーブルを最大サイズのまま残すため、走査はかつて存在したすべてのスロットを訪れます。大半の要素を失った辞書に対しては `copy()` がコンパクトな辞書を作るので、その後の走査は再び安価になります。
+`del` と `pop()` はテーブルを最大の大きさのまま残すので、走査はそれまでに持っていたすべてのスロットを
+たどります。要素の大半を失った辞書を `copy()` するとコンパクトな辞書ができ、その後の走査は再び安く
+なります。
 
 ```python
 import sys
@@ -79,78 +110,140 @@ assert sys.getsizeof(d) < full     # sized for 10 items
 assert list(d) == keys             # O(10)
 ```
 
-### 挿入順序の保証
+### 最も古い要素の削除
+
+テーブルの先頭でも同じことが起きます。`next(iter(d))` はそれまでの削除で空いたスロットをすべて
+読み飛ばすので、最も古いキーをループで削除すると 1 回あたり O(n)、辞書全体で O(n²) かかります。
+`collections.OrderedDict.popitem(last=False)` は最も古い要素を O(1) で取り除きます。
 
 ```python
-# Python 3.7+ guarantees insertion order (language guarantee)
+from collections import OrderedDict
+
+d = dict.fromkeys(range(5))
+oldest = next(iter(d))      # O(1) here; O(deleted so far) in a loop
+del d[oldest]
+assert list(d) == [1, 2, 3, 4]
+
+od = OrderedDict.fromkeys(range(5))
+assert od.popitem(last=False) == (0, None)   # O(1)
+assert list(od) == [1, 2, 3, 4]
+```
+
+## ビュー
+
+ビューは O(1) で作られ、使った時点の辞書を反映します。`keys()` と `items()` での所属判定は
+ハッシュ検索、`values()` での所属判定は走査です。`keys()` と `items()` の集合演算は新しい `set`
+を返します。
+
+```python
+d = {'a': 1, 'b': 2}
+keys = d.keys()                 # O(1) - no copy
+d['c'] = 3
+assert list(keys) == ['a', 'b', 'c']  # O(n) - sees the new key
+
+assert 'b' in keys              # O(1)
+assert ('b', 2) in d.items()    # O(1) - key lookup, then one value comparison
+assert 3 in d.values()          # O(n) - a scan
+
+assert keys & {'a', 'z'} == {'a'}           # O(min(n, m)) with a set
+assert keys - ['a'] == {'b', 'c'}           # O(n + m)
+assert keys.isdisjoint({'x', 'y'})          # O(min(n, m)) with a set
+assert keys.mapping['a'] == 1               # O(1) - a read-only proxy
+```
+
+## | と update() による結合
+
+`d | other` は `d` をコピーしてから `other` の要素をすべて挿入するので、どちらが大きくても
+O(n + m) です。`d |= other` と `d.update(other)` は `d` 自体に挿入し、O(m) で済みます。
+`update()` はペアのイテラブルとキーワード引数も受け付けます。
+
+```python
+defaults = {'color': 'red', 'size': 10}
+overrides = {'size': 12}
+
+merged = defaults | overrides       # O(n + m) - a new dict
+assert merged == {'color': 'red', 'size': 12}
+assert defaults['size'] == 10
+
+config = defaults
+config |= overrides                 # O(m) - in place
+assert config is defaults and defaults['size'] == 12
+
+config.update([('debug', True)], verbose=False)  # O(m)
+assert list(config) == ['color', 'size', 'debug', 'verbose']
+```
+
+## 挿入順序
+
+反復は挿入順に従い、`reversed()` はそれを逆にたどります。既存のキーへの代入はその位置を保ちます。
+`popitem()` は最後に挿入したペアを取り除きます。
+
+```python
 d = {}
 d['a'] = 1
 d['b'] = 2
 d['c'] = 3
-# Iteration order: a, b, c (guaranteed)
+d['a'] = 10                         # O(1) - keeps its position
+
+assert list(d) == ['a', 'b', 'c']   # O(n)
+assert list(reversed(d)) == ['c', 'b', 'a']  # O(n)
+assert d.popitem() == ('c', 3)      # O(1) - last in, first out
+assert d == {'b': 2, 'a': 10}       # O(n) - order is ignored
 ```
 
-## バージョン別の注記
+## キーはハッシュ可能でなければならない
 
-| バージョン | 変更点 |
-|---------|--------|
-| Python 3.6 | CPython のコンパクトな辞書が挿入順序を保つ（実装上の詳細） |
-| Python 3.7+ | 挿入順序が言語仕様で保証される |
-| Python 3.9+ | 辞書の結合・更新演算子（`\|`、`\|=`） |
-| Python 3.10+ | 辞書に対するパターンマッチング |
-| Python 3.11+ | キーがすべて Unicode 文字列の場合、サイズが 23% 小さくなる |
-| Python 3.15+ | [`frozendict`](frozendict.md)：不変でハッシュ可能な辞書 |
-
-## 実装ごとの比較
-
-### CPython
-標準的なハッシュテーブル実装で、高度に最適化されている。
-
-### PyPy
-計算量はほぼ同じで、JIT コンパイルによりさらに最適化される場合がある。
-
-### Jython
-下層で Java の HashMap を使うが、O(1) という特性は同じ。
-
-### IronPython
-CPython と同様のハッシュテーブル実装。
-
-## ベストプラクティス
-
-✅ **推奨**:
-
-- キーと値の探索には辞書を使う
-- 辞書内包表記を活用する: `{k: v for k, v in items}`
-- 条件付きの挿入には `setdefault()` を使う
-
-❌ **避けるべきこと**:
-
-- 移植性のために、Python 3.7 未満で挿入順序に頼らない
-- ハッシュ不可能な型（リスト、辞書、集合）をキーにする
-- ハッシュ関数の質が悪いまま非常に大きな辞書を作る
-
-## ハッシュ関数に関する注意
+検索のたびに、また `d[key] = value` のたびにキーはハッシュされます。リスト、辞書、集合は可変で
+ハッシュ不可能なのでキーにできません。同じハッシュ可能な要素からなるタプルや `frozenset` ならキーに
+できます。
 
 ```python
-# Hashable types work as keys
 d = {
     (1, 2): 'tuple_key',
     'string': 'str_key',
     42: 'int_key',
-    frozenset([1, 2]): 'frozen_key'
+    frozenset([1, 2]): 'frozen_key',
 }
+assert d[frozenset([2, 1])] == 'frozen_key'   # O(1) after hashing the key
 
-# Unhashable types will fail
-# d[[1, 2]] = 'fails'  # TypeError
-# d[{1, 2}] = 'fails'  # TypeError
+for key in ([1, 2], {1, 2}, {'a': 1}):
+    try:
+        d[key] = 'fails'
+    except TypeError as error:
+        assert 'unhashable' in str(error)
+    else:
+        raise AssertionError(f'{type(key).__name__} must not be usable as a key')
 ```
+
+## パフォーマンスのベストプラクティス
+
+✅ **推奨**:
+
+- キーによる検索には辞書を使う。リストで必要な O(n) の走査ではなく O(1) で済む
+- キーがない場合の処理には `get()` か `setdefault()` を使い、検索を 2 回ではなく 1 回にする
+- 辞書への追加には `d |= other` か `update()` を使えば O(m)。`d | other` は先に `d` をコピーする
+- 要素の大半を失った辞書はコピーし、その後の走査を現在の大きさのコストにする
+
+❌ **避けるべきこと**:
+
+- ループ内での `value in d.values()` - 各判定が O(n)。逆引きの辞書か値の集合を持っておく
+- `del d[next(iter(d))]` をループで使って最も古いキーを削除すること - 全体で O(n²)。
+  `OrderedDict.popitem(last=False)` を使う
+- `d = d | other` を繰り返して辞書を組み立てること - 毎回それまでの内容をすべてコピーする
+- `__hash__` の質が悪いキー - 多くが衝突すると、すべての検索が O(n) に劣化する
+
+## バージョン別の注記
+
+- **Python 3.7+**: 挿入順序が言語仕様になった。CPython 3.6 ではすでに保たれていた
+- **Python 3.9+**: 結合演算子 `|` と更新演算子 `|=`
+- **Python 3.15+**: [`frozendict`](frozendict.md)、不変でハッシュ可能な辞書
 
 ## 関連する型
 
 - **[集合](set.md)** - 順序を持たない重複のない要素
 - **[frozendict](frozendict.md)** - 不変でハッシュ可能な辞書（Python 3.15+）
 - **[Defaultdict](../stdlib/collections.md#defaultdict)** - 既定値を自動で用意する
-- **[OrderedDict](../stdlib/collections.md#ordereddict)** - 明示的な順序付け（3.6 より前）
+- **[OrderedDict](../stdlib/collections.md#ordereddict)** - 両端からの O(1) の削除と `move_to_end()`
 - **[ChainMap](../stdlib/collections.md#chainmap)** - 複数の辞書をまとめて見る
 
 ## さらに読む

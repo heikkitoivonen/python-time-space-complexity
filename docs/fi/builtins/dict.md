@@ -1,72 +1,99 @@
 ---
-source_sha: 8fd3d66178b61ce76428fd4d9d654b6858f39d3c2870bb746da072fd9957bab2
+source_sha: a15a59a2e896d04888dafc57e64dd677615bec4310ef7fc6de1e8eb9c35a355e
 translated: machine
 ---
 
 # Sanakirjaoperaatioiden vaativuus
 
-Tyyppi `dict` on muuttuva kuvaus, joka tallentaa avain-arvo-pareja. CPythonissa se on toteutettu hajautustauluna.
+Tyyppi `dict` on muuttuva kuvaus, joka tallentaa avain-arvo-parit lisäysjärjestyksessä. CPythonissa
+se on hajautustaulu, joten haut, lisäykset ja poistot eivät riipu sanakirjan koosta, ja jokaiseen
+alkioon koskevat operaatiot - kopiointi, iterointi, vertailu - ovat lineaarisia.
 
-`n` on sanakirjan alkioiden määrä ja `k` toisen operandin tai iteroitavan alkioiden määrä.
-Avainten hajautus ja vertailu oletetaan O(1)-operaatioiksi.
+`n` on sanakirjan alkioiden määrä ja `m` toisen operandin alkioiden määrä: `update()`- tai
+`fromkeys()`-metodille annetun kuvauksen tai iteroitavan, tai `|`-operaattorin tai näkymän
+joukko-operaation oikeanpuoleisen operandin. Avainten hajautus ja vertailu oletetaan
+O(1)-operaatioiksi, samoin kahden arvon vertailu. O(1)-haut ovat keskimääräisiä tapauksia: jos
+jokainen avain saa saman tiivisteen, kukin niistä vie sen sijaan O(n).
 
 ## Vaativuustaulukko
 
+### dict
+
 | Operaatio | Aika | Tila | Huomiot |
 |-----------|------|-------|-------|
-| `len()` | O(1) | O(1) | Suora lukumäärä |
-| `access[key]` | O(1) keskim., O(n) pahin | O(1) | Hajautushaku; pahin tapaus törmäysten kanssa |
-| `set[key] = value` | O(1) tasoitettu | O(1) | Hajautuslisäys; voi laukaista kokomuutoksen |
-| `del[key]` | O(1) keskim., O(n) pahin | O(1) | Hajautuspoisto |
-| `key in dict` | O(1) keskim., O(n) pahin | O(1) | Hajautushaku |
-| `get(key)` | O(1) keskim., O(n) pahin | O(1) | Hajautushaku |
-| `pop(key)` | O(1) keskim., O(n) pahin | O(1) | Hajautuspoisto |
-| `clear()` | O(n) | O(1) | Kaikki tietueet on vapautettava |
-| `keys()` | O(1) | O(1) | Näkymäolio (iterointi O(n)) |
-| `values()` | O(1) | O(1) | Näkymäolio (iterointi O(n)) |
-| `items()` | O(1) | O(1) | Näkymäolio (iterointi O(n)) |
-| `d`:n iterointi | O(n) | O(1) | Lisäysjärjestyksessä |
-| `copy()` | O(n) | O(n) | Pinnallinen kopio kaikista pareista |
-| `update(other)`, `d \|= other` | O(k) | O(1) | k = len(other), tasoitettu, lisäksi `other`-olion iteroinnin kustannus; muokkaa paikallaan |
-| `d \| other` | O(n + k) | O(n + k) | Uusi sanakirja: kopio `d`:stä, jota päivitetään `other`-olion alkioilla |
-| `setdefault(key, val)` | O(1) keskim. | O(1) | Hajautushaku + lisäys |
-| `fromkeys(keys)` | O(k) | O(k) | k = len(keys) |
-| `popitem()` | O(1) | O(1) | Poistaa viimeksi lisätyn parin (LIFO versiosta 3.7 alkaen) |
+| `len(d)` | O(1) | O(1) | Lukumäärä on tallennettu |
+| `d[key]`, `d.get(key, default=None)` | O(1) keskim., O(n) pahin | O(1) | `d[key]` nostaa `KeyError`-poikkeuksen puuttuvalle avaimelle |
+| `key in d` | O(1) keskim., O(n) pahin | O(1) | |
+| `d[key] = value` | O(1) tasoitettu | O(1) | Kutsu, joka kasvattaa taulua, rakentaa sen uudelleen ajassa O(n) |
+| `del d[key]`, `d.pop(key[, default])` | O(1) keskim., O(n) pahin | O(1) | Puuttuva avain nostaa `KeyError`-poikkeuksen, ellei `pop()`-metodille anneta oletusarvoa; taulua ei pienennetä |
+| `d.setdefault(key, default=None)` | O(1) tasoitettu | O(1) | Yksi haku sekä lisäys, kun avain puuttuu |
+| `d.popitem()` | O(1) tasoitettu | O(1) | Poistaa viimeksi lisätyn parin; nostaa `KeyError`-poikkeuksen, kun sanakirja on tyhjä |
+| `d.clear()` | O(n) | O(1) | Vapauttaa jokaisen avaimen ja arvon |
+| `d.copy()` | O(n) | O(n) | Pinnallinen: avaimet ja arvot jaetaan, niitä ei kopioida |
+| `dict.fromkeys(iterable, value=None)` | O(m) | O(m) | Jokainen avain osoittaa samaan `value`-olioon |
+| `d.update(other)`, `d \|= other` | O(m) tasoitettu | O(m) | Paikallaan, lisäksi `other`-olion iteroinnin kustannus: kuvaus tai parien iteroitava |
+| `d \| other` | O(n + m) | O(n + m) | Uusi sanakirja: kopio `d`:stä päivitettynä `other`-oliosta. `dict` käsittelee vain `dict`- tai `frozendict`-tyyppisen `other`-olion; muut jätetään `other.__ror__`-metodille |
+| `d`:n iterointi, `reversed(d)` | O(n) | O(1) | Lisäysjärjestyksessä tai sen käänteisessä järjestyksessä |
+| `d == other`, `d != other` | O(n) | O(1) | Järjestyksellä ei ole väliä; O(1), kun pituudet eroavat |
 
-*Huomio: keskimääräinen O(1) edellyttää hyvää tiivisteiden jakaumaa. Pahin tapaus O(n) syntyy patologisista tiivistetörmäyksistä, mikä on harvinaista Pythonin satunnaistetun hajautuksen ansiosta.*
+### Näkymät
 
-Alkioiden poistaminen ei pienennä taulua. Kun suurin osa alkioista on poistettu, taulun
-läpikäyvät operaatiot - iterointi, `copy()`, `other.update(d)`, `|`, `==` ja `dict(d)` - vievät
-yhä aikaa suhteessa sanakirjan aiempaan kokoon, kunnes myöhemmät lisäykset laukaisevat
-kokomuutoksen. `len()` ja haut eivät muutu.
+`d.keys()`, `d.values()` ja `d.items()` ovat näkymiä: ne viittaavat `d`:hen ja näkevät jokaisen
+myöhemmän muutoksen siihen kopioimatta mitään.
 
-## Toteutuksen yksityiskohdat
+| Operaatio | Aika | Tila | Huomiot |
+|-----------|------|-------|-------|
+| `d.keys()`, `d.values()`, `d.items()` | O(1) | O(1) | |
+| `len(view)`, `view.mapping` | O(1) | O(1) | `mapping` on `d`:n vain luku -välityskuvaus |
+| Näkymän iterointi, `reversed(view)` | O(n) | O(1) | |
+| `key in d.keys()`, `(key, value) in d.items()` | O(1) keskim., O(n) pahin | O(1) | Yksi avainhaku sekä `items()`-näkymällä arvojen vertailu |
+| `value in d.values()` | O(n) | O(1) | Arvoja ei ole indeksoitu, joten tämä käy ne läpi |
+| `view & other` | O(m) | O(min(n, m)) | `keys()`- ja `items()`-näkymät; aika O(min(n, m)), kun `other` on joukko tai `keys()`- tai `items()`-näkymä |
+| `view \| other`, `view - other`, `view ^ other` | O(n + m) | O(n + m) | Kukin rakentaa uuden `set`-olion |
+| `view.isdisjoint(other)` | O(m) | O(1) | O(min(n, m)), kun `other` on joukko tai `keys()`- tai `items()`-näkymä; pysähtyy ensimmäiseen yhteiseen alkioon |
 
-### Hajautustaulun rakenne
+Alkioiden poistaminen ei pienennä taulua. Kun suurin osa alkioista on poistettu, taulun läpi
+käyvät operaatiot - `d`:n tai näkymän iterointi, `copy()`, `d | other`, `other.update(d)`,
+`d == other` ja `dict(d)` - vievät yhä aikaa suhteessa sanakirjan aiempaan kokoon, kunnes
+myöhemmät lisäykset laukaisevat koon muuttamisen. `len()` ja haut eivät muutu.
 
-CPython käyttää hajautustaulua, jossa on:
+## Haut ja törmäykset
 
-- **Hajautusfunktio**: SipHash13 tyypeille `str`/`bytes` (oletus Python 3.11:stä alkaen); muut tyypit käyttävät tyyppikohtaista hajautusta
-- **Törmäysten käsittely**: Avoin osoitus luotauksella
-- **Kasvukerroin**: noin 2-4x, kun täyttöaste ylittyy
-- **Python 3.6 (CPython)**: Tiivis sanakirja säilyttää lisäysjärjestyksen toteutuksen yksityiskohtana
-
-### Tiivistetörmäysten vaikutus
+Haku hajauttaa avaimen ja vertaa sitä vain niihin tallennettuihin avaimiin, joilla on sama
+tiiviste. Hyvin jakautuvalla tiivisteellä vertailuja on enintään yksi. Kun monella avaimella on sama
+tiiviste, haku vertaa vuorollaan jokaiseen niistä, joten se heikkenee O(n):ään.
 
 ```python
-# Best case: perfect hashing (O(1))
-d = {i: i for i in range(1000)}
-value = d[500]  # O(1)
+class Key:
+    comparisons = 0
 
-# Worst case: hash collisions (degraded, but very rare)
-# CPython mitigates this with randomized hashing
+    def __init__(self, name, hash_value):
+        self.name = name
+        self.hash_value = hash_value
+
+    def __hash__(self):
+        return self.hash_value
+
+    def __eq__(self, other):
+        Key.comparisons += 1
+        return self.name == other.name
+
+spread = {Key(i, i): i for i in range(100)}     # O(n)
+Key.comparisons = 0
+assert spread[Key(99, 99)] == 99                # O(1)
+assert Key.comparisons == 1                     # only the key with the same hash
+
+colliding = {Key(i, 1): i for i in range(100)}  # O(n²) - each insertion compares
+Key.comparisons = 0
+assert colliding[Key(99, 1)] == 99              # O(n) - compares every key before it
+assert Key.comparisons == 100
 ```
 
-### Poistaminen ei pienennä taulua
+## Poistaminen ei pienennä taulua
 
-`del` ja `pop()` jättävät taulun suurimpaan kokoonsa, joten sen läpikäynti käy yhä läpi
-jokaisen paikan, joka sillä on ollut. Kun sanakirja on menettänyt suurimman osan
-alkioistaan, `copy()` rakentaa tiiviin sanakirjan, jolloin myöhemmät läpikäynnit ovat taas halpoja.
+`del` ja `pop()` jättävät taulun suurimpaan kokoonsa, joten sen läpikäynti käy yhä jokaisen
+paikan, joka sillä on ollut. `copy()` sanakirjasta, joka on menettänyt suurimman osan
+alkioistaan, rakentaa tiiviin sanakirjan, mikä tekee myöhemmistä läpikäynneistä taas halpoja.
 
 ```python
 import sys
@@ -85,78 +112,141 @@ assert sys.getsizeof(d) < full     # sized for 10 items
 assert list(d) == keys             # O(10)
 ```
 
-### Lisäysjärjestyksen takuu
+### Vanhimman alkion poistaminen
+
+Sama pätee taulun alkupäähän. `next(iter(d))` ohittaa jokaisen paikan, jonka aiemmat poistot
+tyhjensivät, joten vanhimman avaimen poistaminen silmukassa maksaa O(n) kutsua kohden ja O(n²)
+koko sanakirjalle. `collections.OrderedDict.popitem(last=False)` poistaa vanhimman alkion ajassa
+O(1).
 
 ```python
-# Python 3.7+ guarantees insertion order (language guarantee)
+from collections import OrderedDict
+
+d = dict.fromkeys(range(5))
+oldest = next(iter(d))      # O(1) here; O(deleted so far) in a loop
+del d[oldest]
+assert list(d) == [1, 2, 3, 4]
+
+od = OrderedDict.fromkeys(range(5))
+assert od.popitem(last=False) == (0, None)   # O(1)
+assert list(od) == [1, 2, 3, 4]
+```
+
+## Näkymät
+
+Näkymä luodaan ajassa O(1), ja se heijastaa sanakirjaa sellaisena kuin se on käyttöhetkellä.
+Jäsenyys `keys()`- ja `items()`-näkymissä on hajautushaku; jäsenyys `values()`-näkymässä on
+läpikäynti. `keys()`- ja `items()`-näkymien joukko-operaatiot palauttavat uuden `set`-olion.
+
+```python
+d = {'a': 1, 'b': 2}
+keys = d.keys()                 # O(1) - no copy
+d['c'] = 3
+assert list(keys) == ['a', 'b', 'c']  # O(n) - sees the new key
+
+assert 'b' in keys              # O(1)
+assert ('b', 2) in d.items()    # O(1) - key lookup, then one value comparison
+assert 3 in d.values()          # O(n) - a scan
+
+assert keys & {'a', 'z'} == {'a'}           # O(min(n, m)) with a set
+assert keys - ['a'] == {'b', 'c'}           # O(n + m)
+assert keys.isdisjoint({'x', 'y'})          # O(min(n, m)) with a set
+assert keys.mapping['a'] == 1               # O(1) - a read-only proxy
+```
+
+## Yhdistäminen: | ja update()
+
+`d | other` kopioi `d`:n ja lisää sitten jokaisen `other`-olion alkion, joten se on O(n + m)
+riippumatta siitä, kumpi puoli on suurempi. `d |= other` ja `d.update(other)` lisäävät suoraan
+`d`:hen ja maksavat vain O(m). `update()` hyväksyy myös parien iteroitavan ja avainsana-argumentit.
+
+```python
+defaults = {'color': 'red', 'size': 10}
+overrides = {'size': 12}
+
+merged = defaults | overrides       # O(n + m) - a new dict
+assert merged == {'color': 'red', 'size': 12}
+assert defaults['size'] == 10
+
+config = defaults
+config |= overrides                 # O(m) - in place
+assert config is defaults and defaults['size'] == 12
+
+config.update([('debug', True)], verbose=False)  # O(m)
+assert list(config) == ['color', 'size', 'debug', 'verbose']
+```
+
+## Lisäysjärjestys
+
+Iterointi noudattaa lisäysjärjestystä, ja `reversed()` käy sen läpi takaperin. Olemassa olevaan
+avaimeen sijoittaminen säilyttää sen paikan. `popitem()` poistaa viimeksi lisätyn parin.
+
+```python
 d = {}
 d['a'] = 1
 d['b'] = 2
 d['c'] = 3
-# Iteration order: a, b, c (guaranteed)
+d['a'] = 10                         # O(1) - keeps its position
+
+assert list(d) == ['a', 'b', 'c']   # O(n)
+assert list(reversed(d)) == ['c', 'b', 'a']  # O(n)
+assert d.popitem() == ('c', 3)      # O(1) - last in, first out
+assert d == {'b': 2, 'a': 10}       # O(n) - order is ignored
 ```
 
-## Versiohuomiot
+## Avainten on oltava hajautettavia
 
-| Versio | Muutos |
-|---------|--------|
-| Python 3.6 | CPythonin tiivis sanakirja säilyttää lisäysjärjestyksen (toteutuksen yksityiskohta) |
-| Python 3.7+ | Kielimäärittely takaa lisäysjärjestyksen |
-| Python 3.9+ | Sanakirjojen yhdistämis- ja päivitysoperaattorit (`\|`, `\|=`) |
-| Python 3.10+ | Hahmontunnistus sanakirjoilla |
-| Python 3.11+ | 23 % pienempi, kun kaikki avaimet ovat Unicode-merkkijonoja |
-| Python 3.15+ | [`frozendict`](frozendict.md), muuttumaton ja hajautettava sanakirja |
-
-## Toteutusten vertailu
-
-### CPython
-Standardi hajautustaulutoteutus, erittäin optimoitu.
-
-### PyPy
-Samankaltainen vaativuus, JIT-käännös voi tuoda lisäoptimointia.
-
-### Jython
-Käyttää taustalla Javan HashMap-rakennetta, samat O(1)-ominaisuudet.
-
-### IronPython
-Samankaltainen hajautustaulutoteutus kuin CPythonissa.
-
-## Parhaat käytännöt
-
-✅ **Tee näin**:
-
-- Käytä sanakirjaa avain-arvo-hakuihin
-- Hyödynnä sanakirjakoosteita: `{k: v for k, v in items}`
-- Käytä `setdefault()`-metodia ehdolliseen lisäykseen
-
-❌ **Vältä**:
-
-- Älä luota lisäysjärjestykseen Python-versioissa < 3.7, jos tarvitset siirrettävää käyttäytymistä
-- Hajautuskelvottomia tyyppejä avaimina (listat, sanakirjat, joukot)
-- Erittäin suuria sanakirjoja huonoilla hajautusfunktioilla
-
-## Hajautusfunktioon liittyviä huomioita
+Jokainen haku ja jokainen `d[key] = value` hajauttaa avaimen. Listat, sanakirjat ja joukot ovat
+muuttuvia eivätkä hajautettavia, joten ne eivät kelpaa avaimiksi; samoista hajautettavista
+alkioista koostuva monikko tai `frozenset` kelpaa.
 
 ```python
-# Hashable types work as keys
 d = {
     (1, 2): 'tuple_key',
     'string': 'str_key',
     42: 'int_key',
-    frozenset([1, 2]): 'frozen_key'
+    frozenset([1, 2]): 'frozen_key',
 }
+assert d[frozenset([2, 1])] == 'frozen_key'   # O(1) after hashing the key
 
-# Unhashable types will fail
-# d[[1, 2]] = 'fails'  # TypeError
-# d[{1, 2}] = 'fails'  # TypeError
+for key in ([1, 2], {1, 2}, {'a': 1}):
+    try:
+        d[key] = 'fails'
+    except TypeError as error:
+        assert 'unhashable' in str(error)
+    else:
+        raise AssertionError(f'{type(key).__name__} must not be usable as a key')
 ```
+
+## Suorituskyvyn parhaat käytännöt
+
+✅ **Tee näin**:
+
+- Käytä sanakirjaa avaimella hakemiseen: O(1) listan vaatiman O(n)-läpikäynnin sijaan
+- Käytä `get()`- tai `setdefault()`-metodia puuttuvan avaimen käsittelyyn yhdellä haulla kahden sijaan
+- Käytä `d |= other` tai `update()` lisätäksesi sanakirjaan ajassa O(m); `d | other` kopioi ensin `d`:n
+- Kopioi sanakirja, joka on menettänyt suurimman osan alkioistaan, jotta myöhemmät läpikäynnit maksavat sen nykyisen koon
+
+❌ **Vältä**:
+
+- `value in d.values()` silmukassa - jokainen testi on O(n); pidä käänteistä sanakirjaa tai arvojen joukkoa
+- Vanhimman avaimen poistamista `del d[next(iter(d))]` silmukassa - yhteensä O(n²); käytä
+  `OrderedDict.popitem(last=False)`
+- Sanakirjan kokoamista toistuvalla `d = d | other` - jokainen askel kopioi kaiken siihen asti kertyneen
+- Avaimia, joilla on huono `__hash__` - kun moni törmää, jokainen haku heikkenee O(n):ään
+
+## Versiohuomiot
+
+- **Python 3.7+**: Lisäysjärjestys on osa kieltä; CPython 3.6 säilytti sen jo
+- **Python 3.9+**: Yhdistämisoperaattori `|` ja päivitysoperaattori `|=`
+- **Python 3.15+**: [`frozendict`](frozendict.md), muuttumaton ja hajautettava sanakirja
 
 ## Liittyvät tyypit
 
 - **[Joukko](set.md)** - Järjestämättömät uniikit alkiot
 - **[frozendict](frozendict.md)** - Muuttumaton, hajautettava sanakirja (Python 3.15+)
 - **[Defaultdict](../stdlib/collections.md#defaultdict)** - Automaattiset oletusarvot
-- **[OrderedDict](../stdlib/collections.md#ordereddict)** - Eksplisiittinen järjestys (ennen 3.6)
+- **[OrderedDict](../stdlib/collections.md#ordereddict)** - O(1)-poisto kummastakin päästä ja `move_to_end()`
 - **[ChainMap](../stdlib/collections.md#chainmap)** - Useita sanakirjanäkymiä
 
 ## Lisälukemista

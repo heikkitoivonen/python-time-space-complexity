@@ -2,15 +2,18 @@
 
 These cover the rows and paragraphs that pin the dict page to the official
 CPython time-complexity table: iteration, `|` and `|=`, `update()` iterating
-its argument, and the hash table that deletion does not shrink. The lookup
-rows are timed in tests/test_builtin_complexity.py.
+its argument, and the hash table that deletion does not shrink. They also
+cover the dict page's rows beyond that table: collisions, `popitem()`,
+removing the oldest key, equality and the views. The lookup rows are timed in
+tests/test_builtin_complexity.py.
 
 Measurement scope:
 
 * Deletion is observed through `sys.getsizeof()`: a dict of 200,000 int keys
   keeps its size after all but 10 are removed with `del` or with `pop()`.
 * The walking operations are timed on that sparse dict against a fresh dict
-  holding the same 10 keys: iteration, `items()`, `copy()`, `dict(d)`,
+  holding the same 10 keys: iteration, `items()`, `values()`, `reversed()`,
+  `copy()`, `dict(d)`,
   `other.update(d)`, `d | {}` and `d == twin` must each cost more than 50x
   (locally they cost thousands of times more). `len()` and a lookup are held
   under 5x, so the gap is the table walk and not the dict being larger in
@@ -24,16 +27,45 @@ Measurement scope:
 * `d | other` is asserted to return a new dict and leave `d` unchanged,
   `d |= other` to keep the object, and `update()` to take every item of a
   counting iterator of pairs.
+* Lookups count `__eq__` calls on keys with a fixed `__hash__`: with distinct
+  hashes a lookup makes one comparison at 100 and at 1,000 keys; with one
+  shared hash it makes exactly n.
+* `popitem()` is asserted LIFO and to raise `KeyError` when empty. After the
+  newest 199,000 of 200,000 keys are deleted, draining the 1,000 left with
+  `popitem()` is held under 20x one `list(d)` walk; a scan per call would
+  cost about 1,000x.
+* Removing the oldest key with `del d[next(iter(d))]` is timed draining 2,000
+  and 32,000 items: the dict must cost more than x64 (quadratic predicts
+  x256) and `OrderedDict.popitem(last=False)` less than x64 (linear predicts
+  x16).
+* `d == other` makes no value comparison when the lengths differ, and one per
+  value when they are equal (1,000 items).
+* Views are asserted live. `value in d.values()` makes 1,000 comparisons to
+  find the last of 1,000 values; `(k, v) in d.items()` one hash and one key
+  comparison. `view & other` and `view.isdisjoint(other)` on a 10-key dict's
+  `keys()` view, and on its `items()` view against an `items()` view, are
+  run against 1,000 counted objects that `other` holds. They hash none of
+  them when `other` is a set or a `keys()` or `items()` view, and all of them
+  when it is a list or a `values()` view, so the smaller operand is iterated
+  only in the first case. `|`, `-`, `^` and `&` are checked to return a new
+  `set`, not timed; `d | pairs` raises `TypeError` and `d |= pairs` does not.
+* `dict.fromkeys()` is asserted to share one value object, and `get()` and
+  `setdefault()` to hash a counted key once where `key in d` then `d[key]`
+  hashes it twice.
 * Every fenced Python block on both pages runs in its own subprocess, and a
   mutated assertion in one of them is asserted to fail.
 
 Not settled here:
 
-* The O(n) worst case under full hash collisions is read from
-  Objects/dictobject.c's probing loop; the collision test for the shared
-  table code is in tests/test_frozendict_complexity.py on 3.15.
+* The collision counts cover successful lookups, with a fresh key equal to
+  the last one inserted, when every key hashes to 1. Failed lookups and keys
+  whose hashes differ but land on the same slot were not counted.
 * How many insertions a sparse dict takes before it resizes depends on the
   free slots left in its table; only that it happens is asserted.
+* The view set operations were observed only with `other` the larger
+  operand; `items()` views were run only against an `items()` view.
+* The O(n²) front-removal measurement inserts nothing while draining; mixed
+  with insertions, periodic resizes compact the table and bound the scan.
 """
 
 from __future__ import annotations
@@ -50,7 +82,7 @@ from typing import Any
 import pytest
 
 DOCS = pathlib.Path(__file__).parent.parent / "docs" / "builtins"
-PAGES = {"dict.md": 4, "dict_func.md": 22}
+PAGES = {"dict.md": 7, "dict_func.md": 22}
 
 PEAK = 200_000
 KEPT = 10
@@ -90,12 +122,15 @@ class TestDeletingDoesNotShrinkTheTable:
 
     @pytest.mark.timing
     @pytest.mark.parametrize(
-        "name", ["iterate", "items", "copy", "dict()", "other.update", "or", "eq"]
+        "name",
+        ["iterate", "items", "values", "reversed", "copy", "dict()", "other.update", "or", "eq"],
     )
     def test_walking_costs_the_former_size(self, name: str) -> None:
         operations: dict[str, Callable[[dict[int, int]], Any]] = {
             "iterate": list,
             "items": lambda d: list(d.items()),
+            "values": lambda d: list(d.values()),
+            "reversed": lambda d: list(reversed(d)),
             "copy": lambda d: d.copy(),
             "dict()": dict,
             "other.update": lambda d: {}.update(d),
@@ -177,6 +212,271 @@ class TestMerging:
     def test_iteration_follows_insertion_order(self) -> None:
         d = {"c": 1, "a": 2, "b": 3}
         assert list(d) == ["c", "a", "b"]
+
+
+# dict.md: lookups, popitem, removing the oldest key, equality and views.
+
+
+class Counted:
+    """A key or value whose hash is fixed and whose __hash__ and __eq__ calls are counted."""
+
+    hashes = 0
+    comparisons = 0
+
+    def __init__(self, name: int, hash_value: int | None = None) -> None:
+        self.name = name
+        self.hash_value = name if hash_value is None else hash_value
+
+    def __hash__(self) -> int:
+        Counted.hashes += 1
+        return self.hash_value
+
+    def __eq__(self, other: object) -> bool:
+        Counted.comparisons += 1
+        return isinstance(other, Counted) and self.name == other.name
+
+    @classmethod
+    def reset(cls) -> None:
+        cls.hashes = 0
+        cls.comparisons = 0
+
+
+class TestLookupsCompareOnlyMatchingHashes:
+    """A lookup is one comparison with spread hashes and O(n) when every key collides."""
+
+    @pytest.mark.parametrize("size", [100, 1_000])
+    def test_spread_hashes_cost_one_comparison(self, size: int) -> None:
+        d = {Counted(i): i for i in range(size)}
+        Counted.reset()
+        assert d[Counted(size - 1)] == size - 1
+        assert Counted.comparisons == 1
+
+    @pytest.mark.parametrize("size", [100, 1_000])
+    def test_colliding_keys_are_compared_in_turn(self, size: int) -> None:
+        d = {Counted(i, 1): i for i in range(size)}
+        Counted.reset()
+        assert d[Counted(size - 1, 1)] == size - 1
+        assert Counted.comparisons == size
+
+
+class TestPopitem:
+    """popitem() is LIFO, raises KeyError when empty, and is amortized O(1).
+
+    After the newest 199,000 of 200,000 keys are deleted, the first popitem()
+    skips their slots and later calls do not, so draining the 1,000 left costs
+    about one walk of the table. A per-call scan would cost 1,000 walks; the
+    drain is held under 20.
+    """
+
+    def test_last_in_first_out(self) -> None:
+        d = {"a": 1, "b": 2}
+        d["c"] = 3
+        assert d.popitem() == ("c", 3)
+        assert d.popitem() == ("b", 2)
+
+    def test_empty_raises_key_error(self) -> None:
+        with pytest.raises(KeyError):
+            {}.popitem()
+
+    @pytest.mark.timing
+    def test_draining_after_tail_deletions_walks_the_table_once(self) -> None:
+        kept = 1_000
+
+        def tail_deleted() -> dict[int, int]:
+            d = {i: i for i in range(PEAK)}
+            for i in range(kept, PEAK):
+                del d[i]
+            return d
+
+        def drain(d: dict[int, int]) -> None:
+            while d:
+                d.popitem()
+
+        dicts = iter([tail_deleted() for _ in range(5)])
+        drain_ns = best_ns(lambda: drain(next(dicts)), repeats=5, inner=1)
+        walked = tail_deleted()
+        walk_ns = best_ns(lambda: list(walked))
+        assert drain_ns < walk_ns * 20, f"walk {walk_ns:.0f}ns, drain {drain_ns:.0f}ns"
+
+
+class TestRemovingTheOldestItem:
+    """`del d[next(iter(d))]` in a loop is O(n²); OrderedDict.popitem(last=False) is O(n).
+
+    Draining 2,000 and 32,000 items: quadratic predicts x256 and linear x16.
+    The dict must cost more than x64 and the OrderedDict less than x64
+    (locally about x290 and x19).
+    """
+
+    @staticmethod
+    def drain_dict(size: int) -> int:
+        d = dict.fromkeys(range(size))
+        start = time.perf_counter_ns()
+        for _ in range(size):
+            del d[next(iter(d))]
+        return time.perf_counter_ns() - start
+
+    @staticmethod
+    def drain_ordereddict(size: int) -> int:
+        from collections import OrderedDict
+
+        d = OrderedDict.fromkeys(range(size))
+        start = time.perf_counter_ns()
+        for _ in range(size):
+            d.popitem(last=False)
+        return time.perf_counter_ns() - start
+
+    @pytest.mark.timing
+    def test_dict_front_removal_is_quadratic(self) -> None:
+        small = min(self.drain_dict(2_000) for _ in range(3))
+        large = min(self.drain_dict(32_000) for _ in range(3))
+        assert large > small * 64, f"x{large / small:.1f}"
+
+    @pytest.mark.timing
+    def test_ordereddict_front_removal_is_linear(self) -> None:
+        small = min(self.drain_ordereddict(2_000) for _ in range(3))
+        large = min(self.drain_ordereddict(32_000) for _ in range(3))
+        assert large < small * 64, f"x{large / small:.1f}"
+
+    def test_ordereddict_pops_the_oldest(self) -> None:
+        from collections import OrderedDict
+
+        od = OrderedDict.fromkeys("abc")
+        assert od.popitem(last=False) == ("a", None)
+
+
+class TestEquality:
+    """`d == other` ignores order and compares nothing when the lengths differ."""
+
+    def test_order_is_ignored(self) -> None:
+        assert {"a": 1, "b": 2} == {"b": 2, "a": 1}
+
+    def test_different_lengths_compare_no_values(self) -> None:
+        a = {i: Counted(i) for i in range(1_000)}
+        b = {i: Counted(i) for i in range(999)}
+        Counted.reset()
+        assert a != b
+        assert Counted.comparisons == 0
+
+    def test_equal_lengths_compare_each_value(self) -> None:
+        a = {i: Counted(i) for i in range(1_000)}
+        b = {i: Counted(i) for i in range(1_000)}
+        Counted.reset()
+        assert a == b
+        assert Counted.comparisons == 1_000
+
+
+class TestViews:
+    """Views are live and O(1) to make; `&` and isdisjoint() iterate the smaller set.
+
+    A set or list of 1,000 counted objects is combined with the keys view of a
+    10-key dict. Every element of `other` that the operation iterates is
+    looked up in the dict, so it is hashed once: 0 hashes means `other` was not
+    iterated, and 1,000 means it was.
+    """
+
+    def test_views_are_live(self) -> None:
+        d = {"a": 1}
+        keys, values, items = d.keys(), d.values(), d.items()
+        d["b"] = 2
+        assert list(keys) == ["a", "b"] and list(values) == [1, 2]
+        assert list(items) == [("a", 1), ("b", 2)]
+        assert keys.mapping["b"] == 2
+
+    def test_mapping_is_read_only(self) -> None:
+        d = {"a": 1}
+        with pytest.raises(TypeError):
+            d.keys().mapping["a"] = 2  # type: ignore[index]
+
+    def test_values_membership_scans(self) -> None:
+        d = {i: Counted(i) for i in range(1_000)}
+        Counted.reset()
+        assert Counted(999) in d.values()
+        assert Counted.comparisons == 1_000
+
+    def test_items_membership_is_one_lookup(self) -> None:
+        d = {Counted(i): i for i in range(1_000)}
+        Counted.reset()
+        assert (Counted(999), 999) in d.items()
+        assert Counted.hashes == 1 and Counted.comparisons == 1
+
+    @staticmethod
+    def large_other(kind: str) -> Any:
+        """1,000 counted objects, none equal to the keys 0-9, in the given container."""
+        objects = [Counted(i + 10) for i in range(1_000)]
+        containers: dict[str, Callable[[], Any]] = {
+            "set": lambda: set(objects),
+            "list": lambda: objects,
+            "keys view": lambda: dict.fromkeys(objects).keys(),
+            "items view": lambda: dict.fromkeys(objects, 0).items(),
+            "values view": lambda: dict(enumerate(objects)).values(),
+        }
+        return containers[kind]()
+
+    # Iterating `other` hashes each element once; a set or a keys or items view
+    # is not iterated when it is the larger operand.
+    ITERATED = {"set": 0, "list": 1_000, "keys view": 0, "items view": 0, "values view": 1_000}
+
+    @pytest.mark.parametrize("kind", list(ITERATED))
+    def test_intersection_iterates_other_only_when_it_must(self, kind: str) -> None:
+        d = dict.fromkeys(range(10))
+        view = d.items() if kind == "items view" else d.keys()
+        other = self.large_other(kind)
+        Counted.reset()
+        assert view & other == set()
+        assert Counted.hashes == self.ITERATED[kind]
+
+    @pytest.mark.parametrize("kind", list(ITERATED))
+    def test_isdisjoint_iterates_other_only_when_it_must(self, kind: str) -> None:
+        d = dict.fromkeys(range(10))
+        view = d.items() if kind == "items view" else d.keys()
+        other = self.large_other(kind)
+        Counted.reset()
+        assert view.isdisjoint(other)
+        assert Counted.hashes == self.ITERATED[kind]
+
+    def test_set_operations_return_new_sets(self) -> None:
+        keys = {"a": 1, "b": 2}.keys()
+        results = [keys | ["c"], keys - ["a"], keys ^ {"b", "c"}, keys & {"a"}]
+        assert results == [{"a", "b", "c"}, {"b"}, {"a", "c"}, {"a"}]
+        assert all(type(result) is set for result in results)
+
+
+class TestMergeOperands:
+    """`d | other` needs a dict; `|=` and update() take any mapping or iterable of pairs."""
+
+    def test_or_rejects_pairs(self) -> None:
+        with pytest.raises(TypeError):
+            _ = {"a": 1} | [("b", 2)]  # type: ignore[operator]
+
+    def test_ior_accepts_pairs(self) -> None:
+        d = {"a": 1}
+        d |= [("b", 2)]
+        assert d == {"a": 1, "b": 2}
+
+
+class TestSingleLookupMethods:
+    """fromkeys() shares one value; get() and setdefault() hash the key once."""
+
+    def test_fromkeys_shares_the_value(self) -> None:
+        d = dict.fromkeys("abc", [])
+        assert d["a"] is d["b"] is d["c"]
+
+    def test_get_hashes_once_where_in_then_index_hashes_twice(self) -> None:
+        d = {Counted(1): "one"}
+        key = Counted(1)
+        Counted.reset()
+        assert d.get(key) == "one"
+        assert Counted.hashes == 1
+        Counted.reset()
+        assert key in d and d[key] == "one"
+        assert Counted.hashes == 2
+
+    def test_setdefault_hashes_once(self) -> None:
+        d: dict[Counted, list[int]] = {}
+        key = Counted(1)
+        Counted.reset()
+        d.setdefault(key, []).append(1)
+        assert Counted.hashes == 1 and d[key] == [1]
 
 
 def _blocks(page: str) -> list[tuple[int, str]]:
