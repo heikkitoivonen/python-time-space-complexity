@@ -1,282 +1,141 @@
 # tuple() Function Complexity
 
-The `tuple()` function creates tuples from iterables or creates empty tuples.
+`tuple()` builds a tuple from nothing or from any iterable. When the argument is already an exact
+`tuple`, it returns that same object in O(1): a tuple cannot change, so there is nothing to copy.
+Every other argument, including an instance of a `tuple` subclass, is iterated into an exact
+`tuple`, and the copy is shallow: it holds references to the items the argument yields, not copies
+of them. What the resulting tuple
+costs to use is on the [tuple](tuple.md) page.
 
-## Complexity Analysis
+`n` is the items the argument yields. The bounds count those items and treat taking one item
+from the argument as O(1); iterating a generator, a `map()` or another lazy iterable costs whatever
+producing its items costs on top, as CPython's own time-complexity table says for `l.extend(t)`.
+Space is the new tuple's references to those items; the items themselves are shared, not copied.
 
-| Case | Time | Space | Notes |
-|------|------|-------|-------|
-| Empty tuple | O(1) | O(1) | tuple() |
-| From iterable | O(n) | O(n) | n = iterable length |
-| From string | O(n) | O(n) | n = string length |
-| From tuple (exact) | O(1) | O(1) | Returns same object |
-| From list | O(n) | O(n) | Creates new tuple |
+## Complexity Reference
 
-## Basic Usage
+### tuple()
 
-### Create Empty Tuple
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `tuple()` | O(1) | O(1) | An empty tuple |
+| `tuple(t)` where `t` is an exact tuple | O(1) | O(1) | Returns `t` itself |
+| `tuple(iterable)` | O(n) | O(n) | Takes every item; an iterator or generator is left exhausted |
+| `tuple(lst)` where `lst` is a list, or a tuple subclass instance | O(n) | O(n) | An exact tuple of the items it yields |
+| `tuple(d)` where `d` is a dict, set or dict view | O(n) | O(n) | Walks the hash table: one that had most of its items removed costs its former size (see [dict](dict.md)) |
+
+## Building a Tuple
+
+### From an Iterable
+
+Any iterable works. A string yields its characters, a dict its keys, and a `range` its numbers;
+each item costs one step.
 
 ```python
-# O(1)
-t = tuple()  # ()
+assert tuple() == ()  # O(1)
+assert tuple("abc") == ("a", "b", "c")  # O(n)
+assert tuple([1, 2, 3]) == (1, 2, 3)  # O(n)
+assert tuple(range(1, 10, 2)) == (1, 3, 5, 7, 9)  # O(n)
+assert tuple({"a": 1, "b": 2}) == ("a", "b")  # O(n)
+assert tuple({"a": 1, "b": 2}.items()) == (("a", 1), ("b", 2))  # O(n)
+assert sorted(tuple({3, 1, 2})) == [1, 2, 3]  # A set's order is not defined
 ```
 
-### From List
+### From an Iterator
+
+An iterator or generator is consumed: `tuple()` takes every item, so a second pass over the same
+iterator finds nothing.
 
 ```python
-# O(n) - where n = list length
-t = tuple([1, 2, 3])      # (1, 2, 3)
-t = tuple([1, 2, 3, 4])   # (1, 2, 3, 4)
+def squares(limit):
+    for x in range(limit):
+        yield x * x
+
+gen = squares(5)
+assert tuple(gen) == (0, 1, 4, 9, 16)  # O(n)
+assert tuple(gen) == ()  # Already exhausted
 ```
 
-### From String
+## Copying
+
+### An Exact Tuple Is Returned As Is
+
+`tuple(t)` on an exact tuple returns the same object, so it costs O(1) at any size. A list, or an
+instance of a `tuple` subclass, is copied element by element in O(n); the result is always an
+exact `tuple`. The copy is shallow either way: a mutable element is shared, and `copy.deepcopy()`
+is the way to get independent elements.
 
 ```python
-# O(n) - where n = string length
-t = tuple("hello")   # ('h', 'e', 'l', 'l', 'o')
-t = tuple("abc")     # ('a', 'b', 'c')
-```
+class Point(tuple):
+    pass
 
-### From Other Iterables
+t = (1, [2, 3])
+assert tuple(t) is t  # O(1)
 
-```python
-# O(n) - where n = iterable length
-t = tuple((1, 2, 3))         # (1, 2, 3)
-t = tuple({1, 2, 3})         # Order depends on set iteration
-t = tuple(range(5))          # (0, 1, 2, 3, 4)
-t = tuple(map(str, [1, 2]))  # ('1', '2')
-```
+p = Point(t)
+copied = tuple(p)  # O(n)
+assert copied == t and copied is not p
+assert type(copied) is tuple
 
-### From Dictionary
-
-```python
-# O(n) - uses dict keys
-d = {"a": 1, "b": 2, "c": 3}
-t = tuple(d)  # ('a', 'b', 'c') - keys in insertion order
-```
-
-## Complexity Details
-
-### Iterating and Copying
-
-```python
-# O(n) - must iterate to create tuple
-original = [1, 2, 3, 4, 5]
-t = tuple(original)  # O(5) - creates (1, 2, 3, 4, 5)
-
-# Each element is accessed once
-for item in iterable:  # O(n)
-    add to tuple
-```
-
-### From String
-
-```python
-# O(n) - linear in string length
-short = tuple("ab")        # O(2) - ('a', 'b')
-long = tuple("a" * 1000)   # O(1000)
-
-# Each character becomes one tuple item
-```
-
-### From Range
-
-```python
-# O(n) - must materialize all values
-small = tuple(range(5))      # O(5) - (0, 1, 2, 3, 4)
-large = tuple(range(10**6))  # O(10^6) - slow!
-
-# range() is lazy, tuple() forces evaluation
+items = [[1], [2]]
+frozen = tuple(items)  # O(n)
+assert frozen[0] is items[0]  # The element is shared
+items.append([3])
+assert frozen == ([1], [2])  # The tuple's length does not follow the list
 ```
 
 ## Common Patterns
 
-### Convert Iterable to Tuple
+### Making a Hashable Key From a List
+
+A list cannot be a dict key or a set member; a tuple of hashable items can. Converting costs O(n),
+and hashing the new tuple the first time costs O(n) on top, plus each element's own hash.
 
 ```python
-# O(n) - general conversion
-def process_items(items):
-    items_tuple = tuple(items)  # O(n) - ensure immutable
-    # Now can hash, use in set, etc.
-    return items_tuple[0]  # O(1)
+seen = set()
+for row in ([1, 2], [2, 1], [1, 2]):
+    seen.add(tuple(row))  # O(n) to build, O(n) to hash
 
-# Useful for generators
-gen = (x for x in range(5))
-t = tuple(gen)  # (0, 1, 2, 3, 4)
+assert seen == {(1, 2), (2, 1)}
 ```
 
-### Create Tuple from List
+### A Literal of Constants Is Built Once
+
+A parenthesised tuple whose items are all constants is folded into a single constant when the code
+is compiled, so evaluating it costs O(1) and returns the same object each time. `tuple([...])`
+builds a list and then a tuple on every call.
 
 ```python
-# O(n) - copy to immutable
-lst = [1, 2, 3]
-t = tuple(lst)  # (1, 2, 3)
+def literal():
+    return (1, 2, 3)
 
-# Safe - can't be modified
-# lst.append(4)  # OK - modifies list
-# t.append(4)    # AttributeError - tuple immutable
+def converted():
+    return tuple([1, 2, 3])
+
+assert literal() is literal()  # Built once, when compiled
+assert converted() == literal() and converted() is not converted()
 ```
 
-### Unpacking Tuple
-
-```python
-# O(1) - unpack is fast
-t = (1, 2, 3)
-
-# Unpacking
-a, b, c = t  # O(1) - constant time
-x, *rest = t  # O(1) - unpacking
-
-# Useful with tuple()
-items = tuple(range(3))
-x, y, z = items  # O(1)
-```
-
-## Performance Patterns
-
-### Tuple Literal vs tuple()
-
-```python
-# Both O(n) but different syntax
-
-# Literal - faster, no function call
-t1 = (1, 2, 3, 4, 5)  # O(n)
-
-# Function - more flexible
-t2 = tuple([1, 2, 3, 4, 5])  # O(n)
-t3 = tuple(range(5))  # O(n)
-
-# Literal usually preferred for constants
-```
-
-### Tuple as Cache Key
-
-```python
-# O(n) - create tuple for caching
-from functools import lru_cache
-
-@lru_cache(maxsize=128)
-def compute(values):
-    return sum(values)
-
-# Convert to tuple before caching (hashable)
-result = compute(tuple([1, 2, 3]))  # O(3)
-result = compute((1, 2, 3))  # O(1) - cache hit
-```
-
-### Batch Conversion
-
-```python
-# O(n * m) - n items, m = avg iterable length
-data = [[1, 2], [3, 4], [5, 6]]
-tuples = [tuple(item) for item in data]  # O(n*m)
-
-# Using map
-tuples = list(map(tuple, data))  # O(n*m)
-```
-
-## Edge Cases
-
-### Empty Tuple
-
-```python
-# O(1)
-t = tuple()       # ()
-t = tuple([])     # ()
-t = tuple("")     # ()
-```
-
-### Single Item
-
-```python
-# O(1) - must use trailing comma for single item
-t = (1,)  # (1,) - tuple
-x = (1)   # 1 - just int!
-
-# tuple() handles this
-t = tuple([1])  # (1,)
-```
-
-### Very Large Tuple
-
-```python
-# O(n) - allocates large tuple
-huge_range = range(10**9)
-t = tuple(huge_range)  # O(10^9) - very slow and memory-intensive!
-
-# Better - keep as range
-for item in huge_range:  # No allocation
-    process(item)
-```
-
-### Nested Tuples
-
-```python
-# O(n) - contains other tuples
-inner1 = (1, 2)
-inner2 = (3, 4)
-outer = (inner1, inner2)  # ((1, 2), (3, 4))
-
-# Shallow copy
-copied = tuple(outer)  # Still contains references to inner tuples
-```
-
-### Immutability
-
-```python
-# O(1) - immutable, cannot modify
-t = (1, 2, 3)
-
-# Cannot change
-# t[0] = 10  # TypeError - tuple doesn't support item assignment
-# t.append(4)  # AttributeError - no append method
-
-# But contents can be mutable
-t_with_list = ([1, 2], [3, 4])
-t_with_list[0][0] = 999  # OK - modifies inner list
-```
-
-## Tuple Unpacking
-
-```python
-# O(1) - unpacking is very fast
-t = (1, 2, 3)
-
-# Single assignment
-a, b, c = t  # O(1)
-
-# With unpacking operator
-x, *rest = t  # O(1)
-
-# Extended unpacking
-a, *middle, z = t  # O(1)
-```
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use tuple() to convert iterables to immutable
-- Use tuples for hashable sequences (dict keys, set members)
-- Use tuple unpacking for readability
-- Use tuple literal (1, 2, 3) for constants
+- Pass a tuple straight through: `tuple(t)` on an exact tuple is free, so there is no cost in
+  normalising an argument that is already a tuple
+- Write a literal such as `(1, 2, 3)` for a fixed set of constants; it is built once
+- Call `tuple()` on an iterator or generator when the items are needed more than once
 
 ❌ **Avoid**:
 
-- Using tuple() when you need to modify items (use list)
-- Creating tuples from very large iterables (memory)
-- Forgetting trailing comma for single-item tuple: (1) vs (1,)
-- Assuming tuple is always faster (usually similar to list)
+- Relying on `tuple()` for independent elements: the copy is shallow
+- `tuple()` on a dict or set that had most of its items removed, in a loop: each call walks the
+  former size
 
 ## Related Functions
 
+- **[tuple](tuple.md)** - What the tuple you built costs to use
 - **[list()](list_func.md)** - Convert to list
 - **[set()](set_func.md)** - Convert to set
 - **[dict()](dict_func.md)** - Convert to dictionary
 - **[zip()](zip.md)** - Create tuples from iterables
-
-## Version Notes
-
-- **Python 2.x**: tuple() available, creates tuples
-- **Python 3.x**: Same behavior
-- **All versions**: Immutable, hashable sequences
+- **[copy](../stdlib/copy.md)** - Shallow and deep copies
