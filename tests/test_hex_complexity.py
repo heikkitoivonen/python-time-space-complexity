@@ -122,7 +122,7 @@ class TestOneCharacterPerHexDigit:
         assert hex(0) == "0x0"
 
     @pytest.mark.serial
-    def test_peak_space_is_linear_in_the_digit_count(self) -> None:
+    def test_peak_space_is_one_to_two_bytes_per_digit(self) -> None:
         value = (1 << 1_000_000) - 1
         digits = 1_000_000 // 4
 
