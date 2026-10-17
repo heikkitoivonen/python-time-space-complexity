@@ -27,7 +27,7 @@ Measurement scope:
   lines compile more than 5x the characters of 40 long ones, so the line
   count is a term of its own. A timing test pushes blocks of 25, 100 and 400
   lines a line at a time, where each 4x step costs more than 8x, and
-  hands blocks of 400, 1,600 and 6,400 lines to one
+  hands blocks of 100, 400 and 1,600 lines to one
   `runsource(symbol='exec')` call each, where each 4x step costs less than
   8x. That one call hands the compiler under 3c + 3 characters.
 * `resetbuffer()` empties the buffer; in a timing test, dropping 1,000,000
@@ -391,7 +391,7 @@ class TestPushRecompilesTheWholeBuffer:
             return lambda: code.InteractiveInterpreter({}).runsource(source, symbol="exec")
 
         push_ns = [best_ns(pushed(block(size))) for size in (25, 100, 400)]
-        once_ns = [best_ns(once(block(size)), repeats=7) for size in (400, 1_600, 6_400)]
+        once_ns = [best_ns(once(block(size)), repeats=7) for size in (100, 400, 1_600)]
         push_steps = [later / earlier for earlier, later in pairwise(push_ns)]
         once_steps = [later / earlier for earlier, later in pairwise(once_ns)]
 

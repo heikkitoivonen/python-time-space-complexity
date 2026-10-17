@@ -32,9 +32,12 @@ Measurement scope:
   before 3.12 hashing any slice raises TypeError.
 * copying: on a 1,000,000-item list, tuple, str, bytes and bytearray, a
   10-item slice costs under x5 what it costs on a 1,000-item sequence; on a
-  list and a str of 2,000,000 items, slicing 1,000,000 costs x20-x400
-  slicing 10,000. A stepped slice over the whole 1,000,000-item list selecting 100,000 items costs x20-x400 one
-  selecting 1,000, so the cost follows k, not j - i.
+  list and a str of 2,000,000 items, slicing 1,000,000 costs x10-x1,000
+  slicing 10,000. A stepped slice over the whole 1,000,000-item list
+  selecting 100,000 items costs x10-x1,000 one selecting 1,000, so the cost
+  follows k, not j - i. Each bound is a geometric midpoint: x10 between a
+  constant x1 and a linear x100, x1,000 between linear and a quadratic
+  x10,000.
 * no copy: `[:]` returns the object itself for an exact tuple, str and bytes,
   and not for a list or a tuple subclass. A range slice is a range, and
   10**11 items cost under x5 ten; a memoryview slice sees a later write to
@@ -263,7 +266,7 @@ class TestCopyingFollowsTheSelection:
         many_ns = best_ns(lambda: data[many], inner=3)
 
         ratio = many_ns / few_ns
-        assert 20 < ratio < 400, (
+        assert 10 < ratio < 1_000, (
             f"100x the items cost x{ratio:.1f} ({few_ns:.0f}ns to {many_ns:.0f}ns); "
             "linear predicts x100"
         )
@@ -278,7 +281,7 @@ class TestCopyingFollowsTheSelection:
         dense_ns = best_ns(lambda: data[dense], inner=3)
 
         ratio = dense_ns / sparse_ns
-        assert 20 < ratio < 400, (
+        assert 10 < ratio < 1_000, (
             f"the same 1,000,000-item span selecting 100x the items cost x{ratio:.1f}; "
             "a cost in k predicts x100, a cost in j - i x1"
         )

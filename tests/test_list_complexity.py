@@ -50,10 +50,11 @@ Measurement scope:
 * `l1 + l2` returns a new list. With 1,000-element operands as the base, a
   100,000-element left or right operand costs over 20x more, and 100x both
   operands peaks over 50x higher.
-* `l * k`: the result has n·k elements, and 100x k at n = 100, or
-  100x n at k = 10, costs over 20x more. `l *= k` keeps the object, `l *= 0`
-  empties it, and from n = 100, k = 10, either 100x k or 100x n costs over 20x
-  more. `l += t` keeps the
+* `l * k`: the result has n·k elements, and 1,000x k at n = 100, or
+  1,000x n at k = 10, costs over 30x more. `l *= k` keeps the object, `l *= 0`
+  empties it, and from n = 100, k = 10, either 1,000x k or 1,000x n costs over
+  30x more. 30x is near the geometric midpoint of a constant x1 and a linear
+  x1,000. `l += t` keeps the
   object and accepts an iterator. Starting from 1,000 elements, batches of
   20 `+=` operations with 1,000, 10,000 and 100,000 added elements per call
   cost between 3x and 30x per tenfold step (linear predicts 10x, quadratic
@@ -386,25 +387,25 @@ class TestRepetitionScalesWithBothFactors:
         assert (base * 3)[200:] == base
 
     @pytest.mark.timing
-    def test_a_hundred_times_k_costs_far_more(self) -> None:
+    def test_a_thousand_times_k_costs_far_more(self) -> None:
         base = list(range(100))
 
         few_ns = best_ns(lambda: base * 10, inner=100)
-        many_ns = best_ns(lambda: base * 1_000)
+        many_ns = best_ns(lambda: base * 10_000)
 
         ratio = many_ns / few_ns
-        assert ratio > 20, f"100x k cost only x{ratio:.1f}: {few_ns:.0f} vs {many_ns:.0f} ns"
+        assert ratio > 30, f"1,000x k cost only x{ratio:.1f}: {few_ns:.0f} vs {many_ns:.0f} ns"
 
     @pytest.mark.timing
-    def test_a_hundred_times_n_costs_far_more(self) -> None:
+    def test_a_thousand_times_n_costs_far_more(self) -> None:
         short = list(range(10))
-        long = list(range(1_000))
+        long = list(range(10_000))
 
         short_ns = best_ns(lambda: short * 10, inner=100)
         long_ns = best_ns(lambda: long * 10)
 
         ratio = long_ns / short_ns
-        assert ratio > 20, f"100x n cost only x{ratio:.1f}: {short_ns:.0f} vs {long_ns:.0f} ns"
+        assert ratio > 30, f"1,000x n cost only x{ratio:.1f}: {short_ns:.0f} vs {long_ns:.0f} ns"
 
 
 class TestIterationAndMinMax:
@@ -629,13 +630,13 @@ class TestInPlaceOperators:
             return step
 
         few_ns = best_ns_on_copy(base, repeat(10), 1, repeats=50)
-        many_ns = best_ns_on_copy(base, repeat(1_000), 1, repeats=50)
-        long_ns = best_ns_on_copy(list(range(10_000)), repeat(10), 1, repeats=50)
+        many_ns = best_ns_on_copy(base, repeat(10_000), 1, repeats=50)
+        long_ns = best_ns_on_copy(list(range(100_000)), repeat(10), 1, repeats=50)
 
         ratio = many_ns / few_ns
-        assert ratio > 20, f"100x k cost only x{ratio:.1f}: {few_ns:.0f} vs {many_ns:.0f} ns"
+        assert ratio > 30, f"1,000x k cost only x{ratio:.1f}: {few_ns:.0f} vs {many_ns:.0f} ns"
         ratio = long_ns / few_ns
-        assert ratio > 20, f"100x n cost only x{ratio:.1f}: {few_ns:.0f} vs {long_ns:.0f} ns"
+        assert ratio > 30, f"1,000x n cost only x{ratio:.1f}: {few_ns:.0f} vs {long_ns:.0f} ns"
 
 
 class TestComparisonsStopEarly:
