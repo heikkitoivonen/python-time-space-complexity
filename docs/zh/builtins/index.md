@@ -1,5 +1,5 @@
 ---
-source_sha: 957fa9d2145f345a4c8470e71bad85481332e01c453329fde9ba44b1e73ce542
+source_sha: ba03519eb1cf16ee0c4516e074eee5297b646048a43805cbb3976c1cad828ae8
 translated: machine
 ---
 
@@ -130,7 +130,7 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 | [`bytearray()`](bytearray_func.md) | O(n) | O(n) | n 为来源的长度 |
 | [`memoryview()`](memoryview_func.md) | O(1) | O(1) | 缓冲区上的视图，从不复制 |
 | [`list()`](list_func.md) | O(n) | O(n) | n 为可迭代对象的长度 |
-| [`tuple()`](tuple_func.md) | O(n) | O(n) | 参数已经是元组时为 O(1) |
+| [`tuple()`](tuple_func.md) | O(n) | O(n) | 参数恰好是元组（而非其子类）时为 O(1) |
 | [`dict()`](dict_func.md) | O(n) | O(n) | 哈希冲突下最坏为 O(n²) |
 | [`set()`](set_func.md) | O(n) | O(n) | 哈希冲突下最坏为 O(n²) |
 | [`frozenset()`](frozenset_func.md) | O(n) | O(n) | 参数恰好是 frozenset（而非其子类）时为 O(1) |

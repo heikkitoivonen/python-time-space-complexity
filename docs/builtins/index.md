@@ -128,7 +128,7 @@ under Notes is what you pay to consume it.
 | [`bytearray()`](bytearray_func.md) | O(n) | O(n) | n = length of the source |
 | [`memoryview()`](memoryview_func.md) | O(1) | O(1) | A view over the buffer, never a copy |
 | [`list()`](list_func.md) | O(n) | O(n) | n = length of the iterable |
-| [`tuple()`](tuple_func.md) | O(n) | O(n) | O(1) when the argument is already a tuple |
+| [`tuple()`](tuple_func.md) | O(n) | O(n) | O(1) when the argument is an exact tuple, not a subclass |
 | [`dict()`](dict_func.md) | O(n) | O(n) | O(n²) worst case with hash collisions |
 | [`set()`](set_func.md) | O(n) | O(n) | O(n²) worst case with hash collisions |
 | [`frozenset()`](frozenset_func.md) | O(n) | O(n) | O(1) when the argument is an exact frozenset, not a subclass |

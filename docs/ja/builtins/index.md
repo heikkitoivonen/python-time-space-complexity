@@ -1,5 +1,5 @@
 ---
-source_sha: 957fa9d2145f345a4c8470e71bad85481332e01c453329fde9ba44b1e73ce542
+source_sha: ba03519eb1cf16ee0c4516e074eee5297b646048a43805cbb3976c1cad828ae8
 translated: machine
 ---
 
@@ -129,7 +129,7 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 | [`bytearray()`](bytearray_func.md) | O(n) | O(n) | n は元データの長さ |
 | [`memoryview()`](memoryview_func.md) | O(1) | O(1) | バッファへのビューであり、コピーは作らない |
 | [`list()`](list_func.md) | O(n) | O(n) | n はイテラブルの長さ |
-| [`tuple()`](tuple_func.md) | O(n) | O(n) | 引数がすでにタプルなら O(1) |
+| [`tuple()`](tuple_func.md) | O(n) | O(n) | 引数がサブクラスではないタプルそのものなら O(1) |
 | [`dict()`](dict_func.md) | O(n) | O(n) | ハッシュ衝突がある最悪の場合は O(n²) |
 | [`set()`](set_func.md) | O(n) | O(n) | ハッシュ衝突がある最悪の場合は O(n²) |
 | [`frozenset()`](frozenset_func.md) | O(n) | O(n) | 引数がサブクラスではない frozenset そのものなら O(1) |
