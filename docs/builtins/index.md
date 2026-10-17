@@ -163,7 +163,7 @@ under Notes is what you pay to consume it.
 | [`None`](none.md) | O(1) | O(1) | Singleton; compare with `is` |
 | [`True`](true.md) | O(1) | O(1) | Singleton `bool` |
 | [`False`](false.md) | O(1) | O(1) | Singleton `bool` |
-| [`NotImplemented`](notimplemented.md) | O(1) | O(1) | Returned by operators that decline |
+| [`NotImplemented`](notimplemented.md) | O(1) | O(1) | Returned by a special method to decline the operation |
 | [`Ellipsis`](ellipsis.md) | O(1) | O(1) | The `...` singleton |
 | [`__debug__`](debug.md) | O(1) | O(1) | Folded in at compile time; `-O` drops the code it guards |
 

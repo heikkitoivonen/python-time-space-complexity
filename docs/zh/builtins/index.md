@@ -1,5 +1,5 @@
 ---
-source_sha: fb76ee69cf68c702e72aa4441f3bdaaedba80ad682a3e3988c5de4b252f36f31
+source_sha: 8087660f9486a4bcaaf7224cf8501739f61fbcf2fa63599a42ce1139493fb06f
 translated: machine
 ---
 
@@ -165,7 +165,7 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 | [`None`](none.md) | O(1) | O(1) | 单例；用 `is` 比较 |
 | [`True`](true.md) | O(1) | O(1) | 单例 `bool` |
 | [`False`](false.md) | O(1) | O(1) | 单例 `bool` |
-| [`NotImplemented`](notimplemented.md) | O(1) | O(1) | 运算符不支持该操作时返回 |
+| [`NotImplemented`](notimplemented.md) | O(1) | O(1) | 特殊方法拒绝执行该操作时返回 |
 | [`Ellipsis`](ellipsis.md) | O(1) | O(1) | `...` 单例 |
 | [`__debug__`](debug.md) | O(1) | O(1) | 编译期折叠；`-O` 会移除它保护的代码 |
 

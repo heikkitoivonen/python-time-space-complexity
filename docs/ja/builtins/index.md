@@ -1,5 +1,5 @@
 ---
-source_sha: fb76ee69cf68c702e72aa4441f3bdaaedba80ad682a3e3988c5de4b252f36f31
+source_sha: 8087660f9486a4bcaaf7224cf8501739f61fbcf2fa63599a42ce1139493fb06f
 translated: machine
 ---
 
@@ -164,7 +164,7 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 | [`None`](none.md) | O(1) | O(1) | シングルトン、`is` で比較する |
 | [`True`](true.md) | O(1) | O(1) | シングルトンの `bool` |
 | [`False`](false.md) | O(1) | O(1) | シングルトンの `bool` |
-| [`NotImplemented`](notimplemented.md) | O(1) | O(1) | 処理を辞退する演算子が返す |
+| [`NotImplemented`](notimplemented.md) | O(1) | O(1) | 特殊メソッドが操作を辞退するときに返す |
 | [`Ellipsis`](ellipsis.md) | O(1) | O(1) | `...` のシングルトン |
 | [`__debug__`](debug.md) | O(1) | O(1) | コンパイル時に畳み込まれる。`-O` は守っているコードを削除する |
 
