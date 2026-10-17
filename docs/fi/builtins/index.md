@@ -1,5 +1,5 @@
 ---
-source_sha: 8087660f9486a4bcaaf7224cf8501739f61fbcf2fa63599a42ce1139493fb06f
+source_sha: 22106090538c8076aed9a98298900db2e126aa0620cb2f3716b812884cd44eda
 translated: machine
 ---
 
@@ -155,9 +155,9 @@ mainittu kustannus on se, minkä maksat iteraattorin läpikäynnistä.
 
 | Funktio | Aika | Tila | Huomiot |
 |----------|------|-------|-------|
-| [`print()`](print.md) | O(n) | O(n) | n = tulosteen kokonaispituus; I/O hallitsee kustannusta |
+| [`print()`](print.md) | O(n + k) | O(m) | n = kirjoitetut merkit, k = argumenttien määrä, m = pisin merkkijonoksi muunnettu argumentti; yksi `write()` kutakin argumenttia ja erotinta kohden |
 | [`input()`](input.md) | O(k) | O(k) | k = luetun rivin pituus |
-| [`open()`](open.md) | O(1)* | O(1) | * järjestelmäkutsu; luku ja kirjoitus maksavat sen minkä siirtävät |
+| [`open()`](open.md) | O(1)* | O(b) | * järjestelmäkutsu; b = puskurin koko; luku ja kirjoitus maksavat sen minkä siirtävät |
 | [`help()`](help.md) | O(D) | O(D) | D = olion dokumentoinnin hinta, jonka sivu erittelee kullekin oliotyypille |
 | [`breakpoint()`](breakpoint.md) | O(1) | O(1) | Luovuttaa hallinnan virheenjäljittimelle |
 

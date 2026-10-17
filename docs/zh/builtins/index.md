@@ -1,5 +1,5 @@
 ---
-source_sha: 8087660f9486a4bcaaf7224cf8501739f61fbcf2fa63599a42ce1139493fb06f
+source_sha: 22106090538c8076aed9a98298900db2e126aa0620cb2f3716b812884cd44eda
 translated: machine
 ---
 
@@ -152,9 +152,9 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 
 | 函数 | 时间 | 空间 | 备注 |
 |----------|------|-------|-------|
-| [`print()`](print.md) | O(n) | O(n) | n 为输出总长度；开销以 I/O 为主 |
+| [`print()`](print.md) | O(n + k) | O(m) | n 为写出的字符数，k 为参数个数，m 为转换后最长参数的长度；每个参数和分隔符各调用一次 `write()` |
 | [`input()`](input.md) | O(k) | O(k) | k 为读取行的长度 |
-| [`open()`](open.md) | O(1)* | O(1) | * 系统调用；读写的开销取决于数据量 |
+| [`open()`](open.md) | O(1)* | O(b) | * 系统调用；b 为缓冲区大小；读写的开销取决于数据量 |
 | [`help()`](help.md) | O(D) | O(D) | D 为为该对象生成文档的开销，页面按对象种类分别给出 |
 | [`breakpoint()`](breakpoint.md) | O(1) | O(1) | 把控制权交给调试器 |
 

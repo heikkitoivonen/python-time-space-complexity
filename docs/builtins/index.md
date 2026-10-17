@@ -150,9 +150,9 @@ under Notes is what you pay to consume it.
 
 | Function | Time | Space | Notes |
 |----------|------|-------|-------|
-| [`print()`](print.md) | O(n) | O(n) | n = total output length; I/O dominates |
+| [`print()`](print.md) | O(n + k) | O(m) | n = characters written, k = arguments, m = longest converted argument; one `write()` per argument and separator |
 | [`input()`](input.md) | O(k) | O(k) | k = length of the line read |
-| [`open()`](open.md) | O(1)* | O(1) | * a system call; reads and writes cost what they move |
+| [`open()`](open.md) | O(1)* | O(b) | * a system call; b = buffer size; reads and writes cost what they move |
 | [`help()`](help.md) | O(D) | O(D) | D = documenting the object, which the page prices for each kind of object |
 | [`breakpoint()`](breakpoint.md) | O(1) | O(1) | Hands control to the debugger |
 
