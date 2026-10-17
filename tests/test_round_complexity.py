@@ -23,9 +23,11 @@ Measurement scope:
   neighbour; round(2.675, 2) is 2.67 because the float is below the half.
 * float to int: the result of round(sys.float_info.max) has 1,024 bits;
   infinities raise OverflowError and NaN raises ValueError.
-* float digits: round(x, 2) for x = 1.2345e300 costs more than x8 what it
-  costs for x = 1.2345e75, four times fewer digits, where a cost linear in
-  the digits produced predicts x4 and a quadratic one x16. round(1.5, 300)
+* float digits: round(x, 2) is timed at x = 1.2345e3, 1.2345e30 and
+  1.2345e300. The cost increase over the second interval exceeds 20x the
+  first increase. Subtracting adjacent timings cancels fixed call overhead:
+  linear digit processing predicts about 10x, quadratic about 100x.
+  round(1.5, 300)
   costs under x3 what round(1.5, 2) does, since the expansion ends after
   one decimal.
 * float ndigits limits: ndigits of 324 and 10**100 return x, and -309
@@ -53,6 +55,9 @@ Not settled here:
   not separated from the interpreter's own allocations by measurement.
 * The float timing varies d through x's magnitude only. d set by ndigits
   is bounded by where x's exact expansion ends, and is not timed apart.
+  The finite float exponent range limits the probe to hundreds of digits;
+  superlinear growth here does not establish the worst-case quadratic bound,
+  which follows from the digit-generation loops in Python/dtoa.c.
   A tiny abs(x) adds a scaling step inside _Py_dg_dtoa that is bounded by
   the float's exponent range and is not priced.
 * The k² term of round(n, -k) is a grade-school bound; the measured growth
@@ -151,16 +156,19 @@ class TestFloatDecimalPlaces:
 
     @pytest.mark.timing
     def test_cost_grows_faster_than_the_digits_produced(self) -> None:
-        fewer = 1.2345e75
-        more = 1.2345e300
+        durations = [
+            best_ns(lambda x=value: round(x, 2), inner=2_000)
+            for value in (1.2345e3, 1.2345e30, 1.2345e300)
+        ]
+        increases = [
+            after - before for before, after in zip(durations, durations[1:], strict=False)
+        ]
 
-        fewer_ns = best_ns(lambda: round(fewer, 2), inner=200)
-        more_ns = best_ns(lambda: round(more, 2), inner=50)
-
-        ratio = more_ns / fewer_ns
-        assert ratio > 8, (
-            f"four times the digits cost x{ratio:.1f} ({fewer_ns:.0f}ns to {more_ns:.0f}ns); "
-            "linear predicts x4 and quadratic x16"
+        assert increases[0] > 0, f"round: {durations} ns, increases {increases} ns"
+        ratio = increases[1] / increases[0]
+        assert ratio > 20, (
+            f"round: {durations} ns, increases {increases} ns, increase ratio x{ratio:.1f}; "
+            "linear predicts about x10 and quadratic about x100"
         )
 
     @pytest.mark.timing

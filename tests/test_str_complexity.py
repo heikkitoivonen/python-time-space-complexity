@@ -53,7 +53,9 @@ Measurement scope:
   and x1,000 for all four padding methods; `center(5)` of a 10,000,000- and
   a 100,000-character string costs under x3 apart.
 * `lstrip(chars)` stripping 1,000 characters that sit only at the end of
-  `chars` costs over x10 with 10,000 characters of `chars` against 100, and
+  `chars` is timed with 1,000, 10,000 and 100,000 characters of `chars`:
+  each tenfold step costs between 3x and 30x, excluding constant and
+  quadratic growth in `chars`. Separately,
   with 10,000 characters of `chars` stripping 10,000 characters costs over
   x10 stripping 100, so the two multiply; stripping nothing costs over x100 with 1,000,000 characters of `chars`
   against 100, the O(c) of reading `chars`.
@@ -410,14 +412,21 @@ class TestStripLooksUpEachStrippedCharacter:
 
     @pytest.mark.timing
     def test_the_cost_grows_with_chars_times_stripped(self) -> None:
-        """1,000 characters stripped, each found only at the end of `chars`:
-        `chars` of 10,000 characters must cost over x10 `chars` of 100."""
+        """Hold 1,000 stripped characters fixed while `chars` grows 100x.
+
+        Each tenfold step predicts 10x for a linear scan, 1x for a constant
+        lookup and 100x for quadratic work. The shortest scan has 1,000
+        characters so call overhead and short-scan costs do not dominate.
+        """
         text = "a" * 1_000 + "x"
-        short_chars, long_chars = "b" * 99 + "a", "b" * 9_999 + "a"
+        durations = []
+        for size in (1_000, 10_000, 100_000):
+            chars = "b" * (size - 1) + "a"
+            assert text.lstrip(chars) == "x"
+            durations.append(best_ns(lambda chars=chars: text.lstrip(chars), inner=10))
+        ratios = [after / before for before, after in pairwise(durations)]
 
-        ratio = growth(lambda: text.lstrip(short_chars), lambda: text.lstrip(long_chars), inner=10)
-
-        assert ratio > LINEAR, f"100x longer chars cost x{ratio:.1f}"
+        assert all(3 < ratio < 30 for ratio in ratios), f"lstrip: {durations} ns, x{ratios}"
 
     @pytest.mark.timing
     def test_the_cost_grows_with_stripped_times_chars(self) -> None:

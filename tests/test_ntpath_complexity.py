@@ -38,8 +38,8 @@ Measurement scope:
   `normcase`, `join` of L/10 one-character components and
   `commonpath` of two such paths are timed at L = 1,000, 10,000 and 100,000;
   each 10x step costs under 30x, where quadratic predicts 100x.
-  `splitdrive` scans UNC shares with server names of 100,000, 1,000,000 and
-  10,000,000 characters in batches of 20 calls; each 10x step costs between
+  `splitdrive` scans UNC shares with server names of 10,000, 100,000 and
+  1,000,000 characters in batches of 100 calls; each 10x step costs between
   3x and 30x, separating constant and quadratic growth from linear. The
   share has no tail, so the Python fallback scans it without large path
   slices whose allocation thresholds can dominate timings. These are str
@@ -521,10 +521,10 @@ class TestStringFunctionsAreLinear:
     @pytest.mark.timing
     def test_splitdrive_scans_a_unc_share_linearly(self) -> None:
         durations = []
-        for size in (100_000, 1_000_000, 10_000_000):
+        for size in (10_000, 100_000, 1_000_000):
             path = "\\\\" + "s" * size + "\\share"
             assert ntpath.splitdrive(path) == (path, "")
-            durations.append(best_ns(functools.partial(ntpath.splitdrive, path), inner=20))
+            durations.append(best_ns(functools.partial(ntpath.splitdrive, path), inner=100))
 
         ratios = [after / before for before, after in zip(durations, durations[1:], strict=False)]
         assert all(3 < ratio < 30 for ratio in ratios), f"splitdrive: {durations} ns, x{ratios}"

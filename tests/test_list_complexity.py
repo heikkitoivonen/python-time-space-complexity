@@ -54,8 +54,11 @@ Measurement scope:
   100x n at k = 10, costs over 20x more. `l *= k` keeps the object, `l *= 0`
   empties it, and from n = 100, k = 10, either 100x k or 100x n costs over 20x
   more. `l += t` keeps the
-  object, accepts an iterator, and adding 10,000 elements to a 1,000-element
-  list costs over 20x what adding 100 does.
+  object and accepts an iterator. Starting from 1,000 elements, batches of
+  20 `+=` operations with 1,000, 10,000 and 100,000 added elements per call
+  cost between 3x and 30x per tenfold step (linear predicts 10x, quadratic
+  100x). The initial list copy and final list destruction are outside the
+  timer; growth and resizing within each batch are included.
 * With elements that count `==`, `<` and `>` and are equal only as distinct
   objects: lists of 1,000 and 1,001 elements compare no elements for `==` or
   `!=`; two equal 1,000-element lists compare 1,000, and 1 when the first
@@ -592,20 +595,20 @@ class TestInPlaceOperators:
 
     @pytest.mark.timing
     def test_plus_equals_costs_the_added_elements(self) -> None:
-        few = list(range(100))
-        many = list(range(10_000))
-
         def add(items: list[int]) -> Callable[[list[int]], None]:
             def step(data: list[int]) -> None:
                 data += items
 
             return step
 
-        few_ns = best_ns_on_copy(list(range(SMALL)), add(few), 1, repeats=50)
-        many_ns = best_ns_on_copy(list(range(SMALL)), add(many), 1, repeats=50)
+        source = list(range(SMALL))
+        durations = [
+            best_ns_on_copy(source, add(list(range(size))), count=20, repeats=7)
+            for size in (1_000, 10_000, 100_000)
+        ]
+        ratios = [after / before for before, after in pairwise(durations)]
 
-        ratio = many_ns / few_ns
-        assert ratio > 20, f"100x len(t) cost only x{ratio:.1f}: {few_ns:.0f} vs {many_ns:.0f} ns"
+        assert all(3 < ratio < 30 for ratio in ratios), f"+=: {durations} ns, x{ratios}"
 
     def test_times_equals_repeats_the_same_object(self) -> None:
         data = [1, 2, 3]
