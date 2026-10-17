@@ -1,5 +1,5 @@
 ---
-source_sha: 3755c77a0986670532a0b0ef871ac355ccae5598cc01682c68b3933a264532bb
+source_sha: 1ed7ab17216561e0d1c11de99c9c29e123937fe2aaea718acac80514978333ed
 translated: machine
 ---
 
@@ -111,10 +111,10 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 | [`delattr()`](delattr.md) | O(1) | O(1) | ハッシュテーブルからの削除 |
 | [`dir()`](dir.md) | O(k + p + n log n) | O(n) | クラスの辞書をマージしてから名前をソート |
 | [`vars()`](vars.md) | O(1) | O(1) | `__dict__` への参照を返し、コピーはしない |
-| [`super()`](super.md) | O(d) | O(d) | MRO をたどるが、MRO はキャッシュされている |
+| [`super()`](super.md) | O(p) | O(1) | p は探索が止まる MRO 上の位置、`obj.attr` と違ってキャッシュされない |
 | [`property()`](property.md) | O(1) | O(1) | デスクリプタの生成とアクセス |
 | [`classmethod()`](classmethod.md) | O(1) | O(1) | デスクリプタの生成、キャッシュ済みの探索は O(1)、ミス時は O(d) |
-| [`staticmethod()`](staticmethod.md) | O(1) | O(1) | デスクリプタの生成、探索は O(d) |
+| [`staticmethod()`](staticmethod.md) | O(1) | O(1) | デスクリプタの生成、アクセスすると関数そのものを返す |
 
 ### 型のコンストラクタ
 
@@ -133,7 +133,7 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 | [`dict()`](dict_func.md) | O(n) | O(n) | ハッシュ衝突がある最悪の場合は O(n²) |
 | [`set()`](set_func.md) | O(n) | O(n) | ハッシュ衝突がある最悪の場合は O(n²) |
 | [`frozenset()`](frozenset_func.md) | O(n) | O(n) | 引数がすでに frozenset なら O(1) |
-| [`slice()`](slice.md) | O(1) | O(1) | 添字を保持するだけで、適用には O(k) かかる |
+| [`slice()`](slice.md) | O(1) | O(1) | 添字を保持するだけで、k 個の要素をコピーする型では適用に O(k) かかる |
 | [`object()`](object_func.md) | O(1) | O(1) | すべてのクラスの基底 |
 | [`sentinel()`](sentinel.md) | O(1) | O(1) | Python 3.15+。一意の名前付きマーカーで、`is` で比較する |
 

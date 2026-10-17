@@ -1,5 +1,5 @@
 ---
-source_sha: 3755c77a0986670532a0b0ef871ac355ccae5598cc01682c68b3933a264532bb
+source_sha: 1ed7ab17216561e0d1c11de99c9c29e123937fe2aaea718acac80514978333ed
 translated: machine
 ---
 
@@ -112,10 +112,10 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 | [`delattr()`](delattr.md) | O(1) | O(1) | 哈希表删除 |
 | [`dir()`](dir.md) | O(k + p + n log n) | O(n) | 合并各类的字典，然后对名称排序 |
 | [`vars()`](vars.md) | O(1) | O(1) | 返回 `__dict__` 的引用，不复制 |
-| [`super()`](super.md) | O(d) | O(d) | 沿 MRO 查找，MRO 有缓存 |
+| [`super()`](super.md) | O(p) | O(1) | p 为查找停止处在 MRO 中的位置；与 `obj.attr` 不同，不经过缓存 |
 | [`property()`](property.md) | O(1) | O(1) | 描述符的创建与访问 |
 | [`classmethod()`](classmethod.md) | O(1) | O(1) | 创建描述符；缓存命中时查找为 O(1)，未命中时为 O(d) |
-| [`staticmethod()`](staticmethod.md) | O(1) | O(1) | 创建描述符；查找为 O(d) |
+| [`staticmethod()`](staticmethod.md) | O(1) | O(1) | 创建描述符；访问时返回函数本身 |
 
 ### 类型构造器
 
@@ -134,7 +134,7 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 | [`dict()`](dict_func.md) | O(n) | O(n) | 哈希冲突下最坏为 O(n²) |
 | [`set()`](set_func.md) | O(n) | O(n) | 哈希冲突下最坏为 O(n²) |
 | [`frozenset()`](frozenset_func.md) | O(n) | O(n) | 参数已经是 frozenset 时为 O(1) |
-| [`slice()`](slice.md) | O(1) | O(1) | 只保存索引；实际应用时为 O(k) |
+| [`slice()`](slice.md) | O(1) | O(1) | 只保存索引；对会复制 k 个元素的类型，实际应用时为 O(k) |
 | [`object()`](object_func.md) | O(1) | O(1) | 所有类的基类 |
 | [`sentinel()`](sentinel.md) | O(1) | O(1) | Python 3.15+；唯一的具名标记值，用 `is` 比较 |
 

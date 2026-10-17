@@ -110,10 +110,10 @@ under Notes is what you pay to consume it.
 | [`delattr()`](delattr.md) | O(1) | O(1) | Hash table deletion |
 | [`dir()`](dir.md) | O(k + p + n log n) | O(n) | Merges the class dictionaries, then sorts the names |
 | [`vars()`](vars.md) | O(1) | O(1) | Returns the `__dict__` reference, no copy |
-| [`super()`](super.md) | O(d) | O(d) | Walks the MRO, which is cached |
+| [`super()`](super.md) | O(p) | O(1) | p = MRO position where the lookup stops; not cached, unlike `obj.attr` |
 | [`property()`](property.md) | O(1) | O(1) | Descriptor creation and access |
 | [`classmethod()`](classmethod.md) | O(1) | O(1) | Descriptor creation; a cached lookup is O(1), a miss O(d) |
-| [`staticmethod()`](staticmethod.md) | O(1) | O(1) | Descriptor creation; lookup is O(d) |
+| [`staticmethod()`](staticmethod.md) | O(1) | O(1) | Descriptor creation; access returns the function itself |
 
 ### Type Constructors
 
@@ -132,7 +132,7 @@ under Notes is what you pay to consume it.
 | [`dict()`](dict_func.md) | O(n) | O(n) | O(n²) worst case with hash collisions |
 | [`set()`](set_func.md) | O(n) | O(n) | O(n²) worst case with hash collisions |
 | [`frozenset()`](frozenset_func.md) | O(n) | O(n) | O(1) when the argument is already a frozenset |
-| [`slice()`](slice.md) | O(1) | O(1) | Only stores indices; applying it costs O(k) |
+| [`slice()`](slice.md) | O(1) | O(1) | Only stores indices; applying it costs O(k) for a type that copies the k items |
 | [`object()`](object_func.md) | O(1) | O(1) | The base of every class |
 | [`sentinel()`](sentinel.md) | O(1) | O(1) | Python 3.15+; a unique named marker, compared with `is` |
 

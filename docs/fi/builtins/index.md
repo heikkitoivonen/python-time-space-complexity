@@ -1,5 +1,5 @@
 ---
-source_sha: 3755c77a0986670532a0b0ef871ac355ccae5598cc01682c68b3933a264532bb
+source_sha: 1ed7ab17216561e0d1c11de99c9c29e123937fe2aaea718acac80514978333ed
 translated: machine
 ---
 
@@ -115,10 +115,10 @@ mainittu kustannus on se, minkä maksat iteraattorin läpikäynnistä.
 | [`delattr()`](delattr.md) | O(1) | O(1) | Poisto hajautustaulusta |
 | [`dir()`](dir.md) | O(k + p + n log n) | O(n) | Yhdistää luokkien sanakirjat ja järjestää sitten nimet |
 | [`vars()`](vars.md) | O(1) | O(1) | Palauttaa viitteen `__dict__`-sanakirjaan, ei kopiota |
-| [`super()`](super.md) | O(d) | O(d) | Kulkee MRO:n läpi, joka on välimuistissa |
+| [`super()`](super.md) | O(p) | O(1) | p = MRO:n kohta, johon haku pysähtyy; ei välimuistissa, toisin kuin `obj.attr` |
 | [`property()`](property.md) | O(1) | O(1) | Kuvaajan luonti ja käyttö |
 | [`classmethod()`](classmethod.md) | O(1) | O(1) | Kuvaajan luonti; haku välimuistista on O(1), muuten O(d) |
-| [`staticmethod()`](staticmethod.md) | O(1) | O(1) | Kuvaajan luonti; haku on O(d) |
+| [`staticmethod()`](staticmethod.md) | O(1) | O(1) | Kuvaajan luonti; käyttö palauttaa itse funktion |
 
 ### Tyyppien konstruktorit
 
@@ -137,7 +137,7 @@ mainittu kustannus on se, minkä maksat iteraattorin läpikäynnistä.
 | [`dict()`](dict_func.md) | O(n) | O(n) | O(n²) pahimmassa tapauksessa hajautustörmäyksillä |
 | [`set()`](set_func.md) | O(n) | O(n) | O(n²) pahimmassa tapauksessa hajautustörmäyksillä |
 | [`frozenset()`](frozenset_func.md) | O(n) | O(n) | O(1) kun argumentti on jo frozenset |
-| [`slice()`](slice.md) | O(1) | O(1) | Tallettaa vain indeksit; sen soveltaminen maksaa O(k) |
+| [`slice()`](slice.md) | O(1) | O(1) | Tallettaa vain indeksit; sen soveltaminen maksaa O(k) tyypille, joka kopioi k alkiota |
 | [`object()`](object_func.md) | O(1) | O(1) | Jokaisen luokan perusta |
 | [`sentinel()`](sentinel.md) | O(1) | O(1) | Python 3.15+; yksilöllinen nimetty merkkiarvo, jota verrataan `is`-operaattorilla |
 
