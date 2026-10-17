@@ -1,27 +1,115 @@
-# type() Function
+# type() Function Complexity
 
-The `type()` function returns the type of an object or creates a new type (class) dynamically.
+`type(obj)` returns the class of an object. `type(name, bases, namespace)` creates a new class, which
+is the same work a `class` statement does once its body has run: copy the namespace, compute the
+method resolution order (MRO), and store both on the class. The MRO is computed when the class is
+created and kept as `__mro__`.
+
+`n` is the entries in the class namespace, `h` the classes in the resulting MRO,
+`len(C.__mro__)`, `b` the direct bases, and `s` the direct subclasses of a class. Attribute names are
+hashed in O(1), and a class's `__slots__` are treated as a few names. The bounds are for `type`
+itself: a custom metaclass, `__prepare__`, `__init_subclass__` or `__set_name__` adds whatever work
+its own code does.
 
 ## Complexity Reference
 
-Let `n` be the class namespace size, `h` the number of classes in the resulting
-method resolution order (MRO), and `b` the number of direct bases. Bounds use
-the built-in `type` implementation; custom metaclass and class-creation hooks
-can add arbitrary work.
+### type
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `type(obj)` | O(1) | O(1) | Get object type |
-| `type(name, bases, dict)` | O(n) | O(n) | Create class with fixed bases and ordinary attributes; changing the hierarchy also changes MRO computation costs |
-| `type.mro(C)` / `C.mro()`, single inheritance | O(h) | O(h) | Computes the order and returns a fresh list |
-| `type.mro(C)` / `C.mro()`, multiple inheritance | O(b²h²) worst case | O(h) | C3 merge; cost depends on the hierarchy's shape |
-| `C.__mro__` | O(1) | O(1) | Returns the stored tuple |
+| `type(obj)` | O(1) | O(1) | Returns the object's class itself; an overridden `__class__` attribute does not change it |
+| `type(name, bases, namespace)`, zero or one base | O(n + h) | O(n + h) | Copies the namespace, and stores a new MRO tuple of h classes on the class |
+| `type(name, bases, namespace)`, several bases | O(n + b²h²) worst case | O(n + h) | Adds the C3 merge that `type.mro()` performs |
 
-## Method Resolution Order
+### Method Resolution Order
 
-Use `C.__mro__` to read the stored order. Calling `type.mro(C)` computes a new
-list from the bases without replacing that tuple. A metaclass can override
-`C.mro()`; the bounds above apply to `type.mro(C)` itself.
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `C.__mro__` | O(1) | O(1) | The tuple stored when the class was created |
+| `type.mro(C)`, `C.mro()`, zero or one base | O(h) | O(h) | Computes the order again and returns a new list |
+| `type.mro(C)`, `C.mro()`, several bases | O(b²h²) worst case | O(h) | C3 merge; how close it comes to the worst case depends on the hierarchy's shape |
+
+### Class Attributes
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `C.__bases__`, `C.__base__`, `C.__name__`, `C.__qualname__` | O(1) | O(1) | Stored on the class |
+| `C.__dict__` | O(1) | O(1) | A read-only `mappingproxy` view of the namespace, not a copy |
+| `C.__subclasses__()` | O(s) | O(s) | A new list of the direct subclasses that are still alive |
+
+## Getting an Object's Type
+
+### type() Versus isinstance()
+
+`type(obj)` reads the object's class, so `type(obj) is C` is an O(1) exact-class test that rejects
+subclasses. [`isinstance()`](isinstance.md) accepts subclasses: it is O(1) when the class matches
+exactly and otherwise scans the MRO.
+
+```python
+class Animal:
+    pass
+
+class Dog(Animal):
+    pass
+
+dog = Dog()
+
+assert type(dog) is Dog             # O(1)
+assert type(dog) is not Animal      # O(1) - exact class only
+assert isinstance(dog, Dog)         # O(1) - exact match
+assert isinstance(dog, Animal)      # O(h) - scans the MRO
+assert type(Dog) is type            # The class of a class is its metaclass
+```
+
+### type() Versus __class__
+
+`obj.__class__` is an attribute lookup, and a class can override it, as proxy objects do.
+`type(obj)` cannot be overridden. `isinstance()` also consults `__class__`, so the two tests can
+disagree.
+
+```python
+class Proxy:
+    @property
+    def __class__(self):
+        return int
+
+proxy = Proxy()
+
+assert type(proxy) is Proxy          # O(1) - the real class
+assert proxy.__class__ is int        # Whatever the attribute returns
+assert isinstance(proxy, int)        # Falls back to __class__
+assert type(proxy) is not int
+```
+
+## Creating Classes Dynamically
+
+### The Three-Argument Form
+
+The namespace is copied into the new class, so changing the dictionary afterwards does not change
+the class.
+
+```python
+def greet(self):
+    return f"Hello, {self.name}"
+
+namespace = {"species": "human", "greet": greet}
+Person = type("Person", (), namespace)  # O(n + h)
+
+namespace["species"] = "changed"
+assert Person.species == "human"        # The class holds its own copy
+
+person = Person()
+person.name = "Alice"
+assert person.greet() == "Hello, Alice"
+assert Person.__mro__ == (Person, object)
+```
+
+### Inheritance and the MRO
+
+Every class stores its own MRO, so creating a class below a deep chain copies the h classes above
+it. Read `C.__mro__` to get the stored order; `type.mro(C)` computes a new list from the bases each
+time and leaves the stored tuple alone. A metaclass can override `C.mro()`; the bounds above are for
+`type.mro(C)` itself.
 
 ```python
 class Base:
@@ -30,197 +118,114 @@ class Base:
 class Child(Base):
     pass
 
-stored = Child.__mro__             # O(1)
-order = type.mro(Child)             # O(h), single inheritance
+stored = Child.__mro__              # O(1)
+order = type.mro(Child)             # O(h), one base
 assert order == [Child, Base, object]
 assert Child.mro() == order
 assert Child.__mro__ is stored
+
+Leaf = type("Leaf", (Child,), {})   # O(n + h)
+assert Leaf.__mro__ == (Leaf, Child, Base, object)
 ```
 
-## Getting Object Type
-
-### Basic Type Checking - Time: O(1)
-
-```python
-# Get type of object - O(1)
-print(type(42))           # <class 'int'>
-print(type("hello"))      # <class 'str'>
-print(type([1, 2, 3]))    # <class 'list'>
-print(type({'a': 1}))     # <class 'dict'>
-print(type(True))         # <class 'bool'>
-```
-
-### Comparing Types
+With several bases, the C3 merge places every class after all its subclasses and keeps each
+class's bases in the order they were listed.
 
 ```python
-value = 42
-
-# Check type - O(1)
-if type(value) == int:
-    print("Is integer")
-
-if type(value) is int:  # Preferred
-    print("Is integer")
-
-# Use isinstance() for subclass checking - O(1)
-if isinstance(value, (int, float)):
-    print("Is number")
-```
-
-### Type of Classes
-
-```python
-class MyClass:
+class A:
     pass
 
-obj = MyClass()
-
-# Type of instance - O(1)
-print(type(obj))  # <class '__main__.MyClass'>
-
-# Type of class - O(1)
-print(type(MyClass))  # <class 'type'>
-
-# Get class from instance - O(1)
-cls = type(obj)
-print(cls.__name__)  # 'MyClass'
-```
-
-## Creating Classes Dynamically
-
-### Type Constructor - Time: O(n) where n = attributes
-
-```python
-# Create class dynamically - O(n)
-# type(name, bases, dict)
-
-# Equivalent to:
-# class MyClass:
-#     x = 10
-#     def method(self): return self.x
-
-MyClass = type('MyClass', (), {
-    'x': 10,
-    'method': lambda self: self.x
-})
-
-obj = MyClass()
-print(obj.x)        # 10
-print(obj.method()) # 10
-```
-
-### Dynamic Class with Methods
-
-```python
-# Create class with methods - O(n)
-def __init__(self, name):
-    self.name = name
-
-def greet(self):
-    return f"Hello, {self.name}"
-
-Person = type('Person', (), {
-    '__init__': __init__,
-    'greet': greet
-})
-
-p = Person("Alice")
-print(p.greet())  # Hello, Alice
-```
-
-### Class with Inheritance
-
-```python
-# Create class with base - O(n)
-class Base:
-    def base_method(self):
-        return "from base"
-
-Derived = type('Derived', (Base,), {
-    'derived_method': lambda self: "from derived"
-})
-
-obj = Derived()
-print(obj.base_method())     # from base
-print(obj.derived_method())  # from derived
-```
-
-## type() vs isinstance()
-
-```python
-value = 42
-
-# type() - exact type match - O(1)
-if type(value) is int:
-    print("Exact integer")
-
-# isinstance() - checks subclass too - O(1)
-if isinstance(value, int):
-    print("Integer or subclass")
-
-# isinstance() preferred for most cases
-class MyInt(int):
+class B(A):
     pass
 
-val = MyInt(5)
+class C(A):
+    pass
 
-print(type(val) is int)       # False
-print(isinstance(val, int))   # True (preferred)
+D = type("D", (B, C), {})  # Includes the C3 merge
+assert D.__mro__ == (D, B, C, A, object)
+assert D.__bases__ == (B, C)
 ```
 
-## Metaclasses
+### Metaclasses
 
-### Using type as Metaclass
+A class statement calls its metaclass with the name, the bases and the namespace the body built,
+and `type` is the default metaclass. Hooks run as part of creating the class and add their own
+cost: `__set_name__` once for each namespace value that defines it, and the base class's
+`__init_subclass__` once.
 
 ```python
-# type is the metaclass of all classes
-class MyMeta(type):
+calls = []
+
+class Recording(type):
     def __new__(mcs, name, bases, namespace):
-        print(f"Creating class {name}")
+        calls.append(name)
         return super().__new__(mcs, name, bases, namespace)
 
-# Create class with metaclass - O(n)
-MyClass = MyMeta('MyClass', (), {})
-# Output: Creating class MyClass
+class Plugin(metaclass=Recording):
+    pass
+
+Tool = Recording("Tool", (Plugin,), {})  # The same call the class statement makes
+
+assert calls == ["Plugin", "Tool"]
+assert type(Tool) is Recording
 ```
 
-## Best Practices
+## Inspecting Classes
+
+`C.__dict__` is a live, read-only view of the class namespace; reading it copies nothing.
+`C.__subclasses__()` lists only direct subclasses, in a new list each call.
 
 ```python
-value = 42
-obj = value
+from types import MappingProxyType
 
-# type() is O(1) - it reads a pointer on the object. isinstance() is O(k*d)
-# in the number of candidate types and the MRO length, and an ABC or a custom
-# __instancecheck__ can do arbitrary work
-# ✅ DO: Use isinstance() for type checking
-if isinstance(value, (int, float)):
-    print("Is number")
+class Base:
+    limit = 10
 
-# ✅ DO: Use type() for exact type match when needed
-if type(value) is int:
-    print("Exactly int, not subclass")
-
-# ✅ DO: Use __class__ for more specific type
-print(obj.__class__.__name__)
-
-# ❌ DON'T: Use type() for isinstance() purposes
-if type(value) == int:
-    print("Doesn't check subclasses")
-
-# ❌ DON'T: Compare types with ==, use 'is'
-if type(value) == int:  # Works but less preferred
+class Left(Base):
     pass
-if type(value) is int:  # Preferred
+
+class Right(Base):
     pass
+
+class Far(Left):
+    pass
+
+view = Base.__dict__                # O(1) - no copy
+assert isinstance(view, MappingProxyType)
+Base.extra = 1
+assert view["extra"] == 1           # The view sees later changes
+
+try:
+    view["limit"] = 20
+except TypeError as error:
+    assert "does not support item assignment" in str(error)
+else:
+    raise AssertionError("expected TypeError")
+
+assert Base.__subclasses__() == [Left, Right]  # O(s) - Far is not direct
 ```
+
+## Performance Best Practices
+
+✅ **Do**:
+
+- Read `C.__mro__`, which is stored, rather than calling `C.mro()`, which computes the order again
+- Use `type(obj) is C` for an exact-class test and `isinstance()` when subclasses should match
+- Create classes once, at module level, rather than inside a function called repeatedly
+
+❌ **Avoid**:
+
+- Creating a class per call or per object: each costs at least O(n + h) and keeps its own MRO tuple
+- Relying on `obj.__class__` when the real class matters; `type(obj)` cannot be overridden
 
 ## Related Functions
 
-- [isinstance() Function](isinstance.md) - Type checking with inheritance
-- [issubclass() Function](issubclass.md) - Subclass checking
-- [dir() Function](dir.md) - List attributes
-- [vars() Function](vars.md) - Get __dict__
+- **[isinstance()](isinstance.md)** - Type checks that accept subclasses, and what they cost
+- **[issubclass()](issubclass.md)** - Subclass checks between two classes
+- **[object()](object_func.md)** - The cached class-side attribute lookup every class starts with
+- **[setattr()](setattr.md)** - Assigning to a class invalidates its subclasses' attribute caches
+- **[super()](super.md)** - Lookups that follow the MRO from a given position
+- **[vars()](vars.md)** - The `__dict__` of an object or class
 
 ## Further Reading
 
