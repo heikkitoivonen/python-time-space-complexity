@@ -1,5 +1,5 @@
 ---
-source_sha: de99464e0331090ae32f9a54aedfc93f6273c1a2b0ad006d3cfa0bd691702950
+source_sha: 2aacfe616e01553fd9d0e1817b70ce9763b3db9537696602dd1f6a61b9551172
 translated: machine
 ---
 
@@ -63,7 +63,7 @@ translated: machine
 
 ## 为什么可以信任本文档？
 
-本文档由多个 AI 编码代理（Amp、Claude、Gemini CLI、Kiro、Copilot、Codex 等）和模型（Opus 4.5+、Sonnet 4.5、Gemini 3 Pro、gpt-5.2+ 等）与人类贡献者共同审阅和完善。每个代理带来不同的视角、发现不同的问题，从而形成充分的交叉验证。包含 16000 多个单元测试的测试套件会对照 Python 的实际行为验证这些复杂度结论。
+本文档由多个 AI 编码代理（Amp、Claude、Gemini CLI、Kiro、Copilot、Codex 等）和模型（Opus 4.5+、Sonnet 4.5、Gemini 3 Pro、gpt-5.2+ 等）与人类贡献者共同审阅和完善。此外，每个页面都至少经过以下一个模型的审阅：Anthropic 的 Opus 5、Opus 5.5 或 Fable 5.1，或 OpenAI 的 GPT-6-Astra 或 GPT-6.1-Sol。每个代理带来不同的视角、发现不同的问题，从而形成充分的交叉验证。包含 16000 多个单元测试的测试套件会对照 Python 的实际行为验证这些复杂度结论。
 
 本项目还**完全开源**——任何人都可以审阅内容、[提交问题](https://github.com/heikkitoivonen/python-time-space-complexity/issues)或[提出改进](https://github.com/heikkitoivonen/python-time-space-complexity/pulls)。所有来源均已注明，结论基于 Python 官方文档和 CPython 源代码。
 

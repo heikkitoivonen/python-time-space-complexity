@@ -58,7 +58,7 @@ See [Lists](builtins/list.md) for detailed analysis.
 
 ## Why Trust This Documentation?
 
-This documentation has been reviewed and refined by multiple AI coding agents (Amp, Claude, Gemini CLI, Kiro, Copilot, Codex, ...) and models (Opus 4.5+, Sonnet 4.5, Gemini 3 Pro, gpt-5.2+, ...) working alongside human contributors. Each agent brings different perspectives and catches different issues, resulting in thorough cross-validation. A suite of more than 16,000 unit tests validates complexity claims against actual Python behavior.
+This documentation has been reviewed and refined by multiple AI coding agents (Amp, Claude, Gemini CLI, Kiro, Copilot, Codex, ...) and models (Opus 4.5+, Sonnet 4.5, Gemini 3 Pro, gpt-5.2+, ...) working alongside human contributors. Every page has also been reviewed with at least one of Anthropic's Opus 5, Opus 5.5 or Fable 5.1, or OpenAI's GPT-6-Astra or GPT-6.1-Sol. Each agent brings different perspectives and catches different issues, resulting in thorough cross-validation. A suite of more than 16,000 unit tests validates complexity claims against actual Python behavior.
 
 It's also **fully open source**—anyone can review the content, [file issues](https://github.com/heikkitoivonen/python-time-space-complexity/issues), or [submit improvements](https://github.com/heikkitoivonen/python-time-space-complexity/pulls). All sources are cited, and claims are based on official Python documentation and CPython source code.
 
