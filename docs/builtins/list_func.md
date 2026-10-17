@@ -1,297 +1,146 @@
 # list() Function Complexity
 
-The `list()` function creates lists from iterables or creates empty lists.
+`list()` builds a new list from nothing or from any iterable. It always builds a new object, even
+when the argument is already a list, and the copy is shallow: the new list holds references to the
+same elements, not copies of them. What the resulting list costs to use is on the
+[list](list.md) page.
 
-## Complexity Analysis
+`n` is the items the argument yields. The bounds count those items and treat taking one item
+from the argument as O(1); iterating a generator, a `map()` or another lazy iterable costs whatever
+producing its items costs on top, as CPython's own time-complexity table says for `l.extend(t)`.
+Space is the new list's references to those items; the items themselves are shared, not copied.
 
-| Case | Time | Space | Notes |
-|------|------|-------|-------|
-| Empty list | O(1) | O(1) | list() |
-| From iterable | O(n) | O(n) | n = iterable length |
-| From string | O(n) | O(n) | n = string length |
-| From range | O(n) | O(n) | n = range size |
-| Shallow copy | O(n) | O(n) | n = list length |
+## Complexity Reference
 
-## Basic Usage
+### list()
 
-### Create Empty List
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `list()` | O(1) | O(1) | An empty list |
+| `list(iterable)` | O(n) | O(n) | Takes every item; an iterator or generator is left exhausted |
+| `list(lst)` where `lst` is a list or tuple | O(n) | O(n) | A new list holding the same elements; for a list, same as `lst.copy()` or `lst[:]` |
+| `list(d)` where `d` is a dict, set or dict view | O(n) | O(n) | Walks the hash table: one that had most of its items removed costs its former size (see [dict](dict.md)) |
+
+## Building a List
+
+### From an Iterable
+
+Any iterable works. A string yields its characters, a dict its keys, and a `range` its numbers;
+each item costs one step.
 
 ```python
-# O(1)
-lst = list()  # []
+assert list() == []  # O(1)
+assert list("abc") == ["a", "b", "c"]  # O(n)
+assert list(range(1, 10, 2)) == [1, 3, 5, 7, 9]  # O(n)
+assert list((1, 2, 3)) == [1, 2, 3]  # O(n)
+assert list({"a": 1, "b": 2}) == ["a", "b"]  # O(n)
+assert list({"a": 1, "b": 2}.items()) == [("a", 1), ("b", 2)]  # O(n)
+assert sorted(list({3, 1, 2})) == [1, 2, 3]  # A set's order is not defined
 ```
 
-### From String
+### From an Iterator
+
+An iterator or generator is consumed: `list()` takes every item, so a second pass over the same
+iterator finds nothing. Keep the list, not the iterator, when the items are needed twice.
 
 ```python
-# O(n) - where n = string length
-lst = list("hello")  # ['h', 'e', 'l', 'l', 'o']
-lst = list("abc")    # ['a', 'b', 'c']
+def squares(limit):
+    for x in range(limit):
+        yield x * x
+
+gen = squares(5)
+assert list(gen) == [0, 1, 4, 9, 16]  # O(n)
+assert list(gen) == []  # Already exhausted
+
+numbers = map(int, ["1", "2", "3"])
+assert list(numbers) == [1, 2, 3]  # O(n)
+assert next(numbers, None) is None
 ```
 
-### From Range
+## Copying
+
+### Copying a List
+
+`list(lst)`, `lst.copy()`, `lst[:]` and `copy.copy(lst)` all build a new list of the same `n`
+references in O(n). The copy is shallow: a mutable element is shared by both lists, and
+`copy.deepcopy()` is the way to get independent elements.
 
 ```python
-# O(n) - where n = range size
-lst = list(range(5))           # [0, 1, 2, 3, 4]
-lst = list(range(1, 10, 2))    # [1, 3, 5, 7, 9]
-lst = list(range(10, 0, -1))   # [10, 9, 8, ..., 1]
-```
+import copy
 
-### From Other Iterables
+inner = [1, 2, 3]
+outer = [inner, [4]]
 
-```python
-# O(n) - where n = number of items
-lst = list([1, 2, 3])          # [1, 2, 3] (copy)
-lst = list((1, 2, 3))          # [1, 2, 3] (from tuple)
-lst = list({1, 2, 3})          # [1, 2, 3] (from set - unordered)
-lst = list({"a": 1, "b": 2})   # ['a', 'b'] (dict keys)
-lst = list(map(str, [1, 2]))   # ['1', '2'] (from generator)
-```
+shallow = list(outer)  # O(n)
+assert shallow == outer and shallow is not outer
+assert shallow[0] is inner
+assert outer.copy() == outer[:] == copy.copy(outer) == shallow
 
-### From Generator
+shallow[0][0] = 999
+assert inner == [999, 2, 3]  # The element is shared
 
-```python
-# O(n) - consumes generator
-def gen():
-    yield 1
-    yield 2
-    yield 3
-
-lst = list(gen())  # [1, 2, 3] - O(n)
-```
-
-## Complexity Details
-
-### Iterating and Copying
-
-```python
-# O(n) - must iterate to copy
-original = [1, 2, 3, 4, 5]
-copy = list(original)  # O(5) - shallow copy
-
-# Each element is accessed once
-copy = []
-for item in iterable:  # O(n)
-    copy.append(item)
-
-# vs slicing - also O(n)
-copy = original[:]  # O(n) - same complexity
-```
-
-### From String
-
-```python
-# O(n) - linear in string length
-short = list("ab")     # O(2) - ["a", "b"]
-long = list("a" * 1000)  # O(1000)
-
-# Each character becomes one list item
-```
-
-### From Range
-
-```python
-# O(n) - must materialize all values
-small = list(range(5))     # O(5)
-large = list(range(10**6))  # O(10^6) - slow!
-
-# range() is lazy, list() forces evaluation
-r = range(10**9)           # O(1) - just create range
-lst = list(r)              # O(10^9) - materialize all!
+deep = copy.deepcopy(outer)
+assert deep[0] is not inner
 ```
 
 ## Common Patterns
 
-### Convert Iterable to List
+### Taking a Snapshot Before Mutating
+
+Changing a dict's size while iterating it raises `RuntimeError`. Copying its keys with `list()`
+first costs O(n) once and lets the loop add and delete keys freely.
 
 ```python
-# O(n) - general conversion
-def process_items(items):
-    items_list = list(items)  # O(n) - ensure it's a list
-    # Now can index, slice, etc.
-    return items_list[0]  # O(1)
+stock = {"apples": 0, "pears": 3, "plums": 0}
 
-# Useful for generators
-gen = (x for x in range(5))
-lst = list(gen)  # [0, 1, 2, 3, 4]
+for name in list(stock):  # O(n) snapshot of the keys
+    if stock[name] == 0:
+        del stock[name]
+
+assert stock == {"pears": 3}
+
+try:
+    for name in stock:
+        stock[name + "!"] = 1
+except RuntimeError as error:
+    assert "changed size during iteration" in str(error)
+else:
+    raise AssertionError("expected RuntimeError")
 ```
 
-### String Manipulation
+### Turning Characters Into a List and Back
+
+A string is immutable, so each change made by slicing builds a new string in O(n), and `k` changes
+cost O(kn). Converting to a list, assigning in O(1) each and joining once costs O(n + k).
 
 ```python
-# O(n) - convert string to list of characters
-text = "hello"
-chars = list(text)  # ['h', 'e', 'l', 'l', 'o']
-
-# Modify
-chars[0] = 'H'
-
-# Convert back
-result = "".join(chars)  # "Hello"
+chars = list("hello")  # O(n)
+chars[0] = "H"  # O(1)
+chars[-1] = "O"
+assert "".join(chars) == "HellO"  # O(n)
 ```
 
-### List Comprehension Alternative
-
-```python
-# Both O(n), but comprehensions often faster
-data = range(1000)
-
-# Using list() with generator
-lst = list(x * 2 for x in data)  # O(n)
-
-# Using list comprehension
-lst = [x * 2 for x in data]      # O(n) - often faster
-```
-
-## Performance Patterns
-
-### Copying Lists
-
-```python
-# All O(n), different ways
-original = [1, 2, 3, 4, 5]
-
-# Using list()
-copy1 = list(original)      # O(n)
-
-# Using slicing
-copy2 = original[:]         # O(n)
-
-# Using copy.copy()
-import copy
-copy3 = copy.copy(original) # O(n)
-
-# All have same complexity
-```
-
-### vs List Literal
-
-```python
-# O(n) - both create list with items
-lst1 = [1, 2, 3, 4, 5]      # Literal - O(n) to parse
-lst2 = list([1, 2, 3, 4, 5])  # O(n) to copy
-
-# Literal is usually faster (no copying)
-```
-
-### From Generator Expression
-
-```python
-# O(n) - materialize all values
-nums = (x**2 for x in range(100))
-lst = list(nums)  # O(100) - consume generator
-
-# vs list comprehension
-lst = [x**2 for x in range(100)]  # O(100)
-
-# Comprehensions often faster
-```
-
-## Edge Cases
-
-### Empty Iterable
-
-```python
-# O(1)
-lst = list("")            # []
-lst = list([])            # []
-lst = list(set())         # []
-lst = list(range(0))      # []
-```
-
-### Single Item
-
-```python
-# O(1)
-lst = list("a")       # ['a']
-lst = list([1])       # [1]
-lst = list(range(1))  # [0]
-```
-
-### Very Large Iterable
-
-```python
-# O(n) - allocates large list
-huge_range = range(10**9)
-lst = list(huge_range)  # O(10^9) - very slow and memory-intensive!
-
-# Better - process items without materializing
-for item in huge_range:  # Doesn't create list
-    process(item)
-```
-
-### Nested Lists
-
-```python
-# O(n) - shallow copy
-inner = [1, 2, 3]
-outer = [[inner]]
-
-copied = list(outer)  # O(1) shallow copy
-copied[0][0][0] = 999  # Affects original!
-# inner is now [999, 2, 3]
-
-# For deep copy
-import copy
-deep = copy.deepcopy(outer)  # O(n) - true independent copy
-```
-
-## String Conversion
-
-```python
-# Different from str() to list
-text = "hello"
-
-str_to_list = list(text)      # ['h', 'e', 'l', 'l', 'o'] - O(n)
-split_text = text.split("")   # ValueError!
-split_text = list(text)       # Only way with empty separator
-
-# Split on delimiter
-words = text.split("l")       # ['he', '', 'o']
-```
-
-## Memory Considerations
-
-```python
-# list() uses more memory than range()
-small_range = range(10**6)    # Minimal memory - O(1)
-small_list = list(range(10))  # Small but uses memory - O(10)
-
-# Materialize only if needed
-# Don't do:
-lst = list(range(10**9))  # ~40GB of memory!
-
-# Instead:
-for item in range(10**9):  # Iterates without storing
-    process(item)
-```
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use list() to convert iterables to lists when indexing needed
-- Use list comprehensions instead of list(map(...))
-- Avoid materializing huge ranges unnecessarily
-- Use slicing for copying: `copy = lst[:]`
+- Call `list()` on an iterator or generator when the items are needed more than once; the iterator
+  itself can be read only once
+- Iterate a `range` or generator directly when one pass is enough; `list()` holds all n items
+- Snapshot a dict's keys with `list(d)` before deleting from it in a loop
 
 ❌ **Avoid**:
 
-- list(range(10**9)) - materializes huge list
-- Assuming list() is faster than `[...]` literal
-- Deep nesting without deepcopy when needed
-- Creating list of lists without understanding shallow copy
+- Relying on `list()` for independent elements: the copy is shallow
+- `list()` on a dict or set that had most of its items removed, in a loop: each call walks the
+  former size
 
 ## Related Functions
 
-- **[tuple()](index.md)** - Convert to tuple
-- **[set()](index.md)** - Convert to set
+- **[list](list.md)** - What the list you built costs to use
+- **[tuple()](tuple_func.md)** - Convert to tuple
+- **[set()](set_func.md)** - Convert to set
 - **[dict()](dict_func.md)** - Convert to dictionary
-- **[range()](range.md)** - Generate numbers (lazy)
-
-## Version Notes
-
-- **Python 2.x**: Works with iterables and old-style classes
-- **Python 3.x**: Works with all iterables (generators, etc.)
-- **All versions**: Creates shallow copy by default
+- **[range()](range.md)** - Generate numbers lazily
+- **[sorted()](sorted.md)** - Build a new sorted list from an iterable
+- **[copy](../stdlib/copy.md)** - Shallow and deep copies
