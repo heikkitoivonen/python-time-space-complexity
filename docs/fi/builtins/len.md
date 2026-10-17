@@ -1,241 +1,232 @@
 ---
-source_sha: f560aa69dca68d409ee9d1a4bc543c05428effbcd89ce921b8ebe6fe1a21a8fe
+source_sha: 0aa31d8e74b3cf287660536daef3aa50acfed3e07167aeb3888371da0ed5c807
 translated: machine
 ---
 
 # len()-funktion vaativuus
 
-Funktio `len()` palauttaa säiliöolion sisältämien alkioiden lukumäärän.
+`len(obj)` palauttaa säiliön alkioiden lukumäärän. Jokainen sisäänrakennettu säiliö pitää
+alkiomääränsä tallessa oliossa, joten `len()` lukee sen laskematta, oli säiliö kuinka suuri
+tahansa. Muille olioille `len()` kutsuu olion luokan määrittelemää `__len__`-metodia ja maksaa
+sen, mitä metodi maksaa.
 
-## Vaativuus tyypeittäin
+Sisäänrakennettujen tyyppien rivit eivät riipu säiliön koosta. `f` on aika, jonka luokan itse
+määrittelemä metodi - `__len__`, `__bool__` tai `__length_hint__` - vie O(1)-kutsun päälle;
+kaiken, mitä metodi varaa muistia, se varaa O(1)-tilan päälle. `ChainMap`-oliolle `m` on sen
+sanakirjojen määrä, `t` niiden avainten määrä laskettuna yhteen kaikista sanakirjoista
+kaksoiskappaleet mukaan lukien, ja `u` niistä erillisten avainten määrä.
 
-| Tyyppi | Aika | Tila | Huomiot |
-|------|------|-------|-------|
-| `list` | O(1) | O(1) | Suora pituusattribuutti |
-| `tuple` | O(1) | O(1) | Pituus tallennettu olioon |
-| `dict` | O(1) | O(1) | Ylläpitää kokoa |
-| `set` | O(1) | O(1) | Ylläpitää kokoa |
-| `str` | O(1) | O(1) | Pituus tallennettu olioon |
-| `bytes` | O(1) | O(1) | Pituus tallennettu olioon |
-| `range` | O(1) | O(1) | Tallennettu: lasketaan kerran, kun range luodaan |
-| `deque` | O(1) | O(1) | Ylläpitää kokoa |
-| `defaultdict` | O(1) | O(1) | Peritty sanakirjalta |
-| `OrderedDict` | O(1) | O(1) | Ylläpitää kokoa |
+## Vaativuusviite
 
-## Sisäänrakennetut säiliötyypit
+### Sisäänrakennetut tyypit
 
-Kaikki sisäänrakennetut säiliötyypit pitävät pituutensa muistissa ja palauttavat sen vakioajassa:
+| Operaatio | Aika | Tila | Huomiot |
+|-----------|------|-------|-------|
+| `len(lst)`, `len(tpl)` | O(1) | O(1) | `list` ja `tuple` |
+| `len(s)` | O(1) | O(1) | `str`: laskee merkit (koodipisteet), ei koodattuja tavuja |
+| `len(b)`, `len(ba)` | O(1) | O(1) | `bytes` ja `bytearray`: laskee tavut |
+| `len(mv)` | O(1) | O(1) | `memoryview`, jolla on vähintään yksi ulottuvuus: ensimmäisen ulottuvuuden pituus, ei alkioiden kokonaismäärä |
+| `len(d)`, `len(d.keys())`, `len(d.values())`, `len(d.items())` | O(1) | O(1) | `dict` ja sen näkymät |
+| `len(fd)` | O(1) | O(1) | `frozendict`, Python 3.15+ |
+| `len(st)`, `len(fs)` | O(1) | O(1) | `set` ja `frozenset` |
+| `len(r)` | O(1) | O(1) | `range`: pituus lasketaan kerran, kun range luodaan; nostaa `OverflowError`-poikkeuksen, kun pituus ylittää `sys.maxsize`:n |
 
-```python
-# All O(1)
-lst = [1, 2, 3, 4, 5]
-length = len(lst)  # O(1) - stored length
+### Standardikirjaston säiliöt
 
-tpl = (1, 2, 3)
-length = len(tpl)  # O(1) - length stored in the tuple
+| Operaatio | Aika | Tila | Huomiot |
+|-----------|------|-------|-------|
+| `len(dq)` | O(1) | O(1) | `collections.deque` |
+| `len(dd)`, `len(od)`, `len(c)` | O(1) | O(1) | `defaultdict`, `OrderedDict` ja `Counter` ovat `dict`-tyypin aliluokkia |
+| `len(cm)` | O(m + t) | O(m + u) | `collections.ChainMap` rakentaa jokaisella kutsulla joukon kaikkien sanakirjojensa kaikista avaimista |
 
-dct = {'a': 1, 'b': 2}
-length = len(dct)  # O(1) - maintains size
+### Muut oliot
 
-s = "hello"
-length = len(s)    # O(1) - length stored in the string
-```
+| Operaatio | Aika | Tila | Huomiot |
+|-----------|------|-------|-------|
+| `len(obj)` | O(f) | O(1) | Kutsuu `type(obj).__len__`; olion omaa `__len__`-nimistä attribuuttia ei huomioida. Tuloksen on oltava kokonaisluku (`int` tai olio, jolla on `__index__`) väliltä 0 - `sys.maxsize` |
+| `len(gen)`, `len(iterator)` | O(1) | O(1) | Generaattoreilla ja iteraattoreilla, joilla ei ole `__len__`-metodia, ei ole pituutta: nostaa `TypeError`-poikkeuksen |
+| `bool(obj)`, `if obj:` | O(1) tai O(f) | O(1) | O(1) sisäänrakennetulle säiliölle; luokka, jolla on `__len__` mutta ei `__bool__`-metodia, on tosi, kun `__len__` palauttaa nollasta poikkeavan arvon |
+| `operator.length_hint(obj, default=0)` | O(1) tai O(f) | O(1) | `len(obj)`, jos oliolla on pituus, muuten `obj.__length_hint__()`, muuten `default`; ei koskaan iteroi oliota `obj` itse |
 
-## Omat oliot
+## Sisäänrakennetut säiliöt
 
-Omille luokille `len()` kutsuu metodia `__len__()`:
-
-```python
-class MyContainer:
-    def __init__(self, items):
-        self.items = items
-    
-    def __len__(self):
-        # Your implementation determines complexity
-        return len(self.items)  # O(1) if efficient
-
-# Usage
-obj = MyContainer([1, 2, 3])
-length = len(obj)  # O(1) - delegates to cached length
-
-# Inefficient implementation
-class BadContainer:
-    def __init__(self, items):
-        self.items = items
-    
-    def __len__(self):
-        # Recomputes from scratch - O(n)!
-        return sum(1 for _ in self.items)
-
-obj = BadContainer([1, 2, 3])
-length = len(obj)  # O(n) - iterates through items
-```
-
-## Generaattorilausekkeet ja iteraattorit
-
-`len()` EI toimi generaattoreiden eikä iteraattoreiden kanssa:
+`len()` maksaa saman kolmen alkion säiliölle kuin miljoonan alkion säiliölle. Merkkijonosta
+(`str`) se laskee merkit, joten tulos voi poiketa koodattujen tavujen (`bytes`) määrästä.
 
 ```python
-# Works - list has cached length
-lst = [1, 2, 3, 4, 5]
-length = len(lst)  # O(1)
+items = list(range(1_000_000))
+assert len(items) == 1_000_000  # O(1)
+assert len((1, 2, 3)) == 3  # O(1)
 
-# Fails - generators don't have length
-gen = (x for x in range(5))
-# length = len(gen)  # TypeError: object of type 'generator' has no len()
+d = {"a": 1, "b": 2}
+assert len(d) == len(d.keys()) == len(d.items()) == 2  # O(1)
+assert len({1, 2, 2, 3}) == 3  # O(1)
 
-# Must consume iterator to count
-count = sum(1 for x in gen)  # O(n) - must iterate
-```
-
-## Yleisiä ratkaisumalleja
-
-### Säiliön tyhjyyden tarkistaminen
-
-```python
-def process(item):
-    pass
-
-container = [1, 2, 3]
-generator = (x for x in range(3))
-
-# Correct - O(1), doesn't create list
-if len(container) > 0:
-    process(container)
-
-# Also correct - O(1), more Pythonic
-if container:
-    process(container)
-
-# Inefficient - creates a list
-if len(list(generator)) > 0:  # O(n) - forces evaluation
-    process(generator)
-```
-
-### Koon tarkistaminen
-
-```python
-def process_list(items):
-    if len(items) == 0:      # O(1)
-        raise ValueError("Empty list")
-    if len(items) > 1000:    # O(1)
-        raise ValueError("Too large")
-    
-    # Process items
-    for item in items:
-        pass
-```
-
-### Säiliöiden kokojen vertailu
-
-```python
-list1, list2 = [1, 2, 3], [4, 5]
-
-# All O(1)
-if len(list1) > len(list2):
-    smaller = list2
-    larger = list1
-else:
-    smaller = list1
-    larger = list2
-
-# More efficient than computing actual difference
-if len(list1) != len(list2):
-    print("Different sizes")
-```
-
-## Suorituskykyhuomioita
-
-### Pituusoperaatiot silmukoissa
-
-```python
-def process(item):
-    pass
-
-items = [1, 2, 3]
-
-# O(n) - good, length is O(1)
-for i in range(len(items)):
-    process(items[i])
-
-# Also O(n) - length check is O(1) per iteration
-count = 0
-while count < len(items):
-    process(items[count])
-    count += 1
-```
-
-### Pituuden esilaskenta
-
-```python
-def process(item):
-    pass
-
-items = list(range(100_000))
-
-# Don't do this - wastes a variable
-length = len(items)
-for i in range(length):  # length already O(1)
-    process(items[i])
-
-# Instead - directly use len() which is O(1)
-for i in range(len(items)):
-    process(items[i])
-```
-
-## Erikoistapaukset
-
-### Range-oliot
-
-```python
-# Range length is O(1), not O(n)
-r = range(10**9)
-length = len(r)  # O(1) - stored when the range was built
-
-# Computed once from start, stop, step, then stored
-# So even huge ranges have O(1) length
-```
-
-### Merkkijonojen koodaus
-
-```python
-# All string types have O(1) length
-s = "hello"
-length = len(s)  # O(1) - character count
-
-b = b"hello"
-length = len(b)  # O(1) - byte count
-
-# Note: len(str) counts characters, not bytes
 s = "café"
-print(len(s))      # 4 - four characters
-print(len(s.encode('utf-8')))  # 5 - five bytes
+assert len(s) == 4  # O(1) - characters
+assert len(s.encode("utf-8")) == 5  # O(1) - bytes, after an O(n) encode
+
+grid = memoryview(bytes(12)).cast("B", shape=[3, 4])
+assert len(grid) == 3  # O(1) - the first dimension
+assert grid.nbytes == 12
 ```
 
-## Versiohuomiot
+## Range-oliot
 
-- **Python 2.x**: `len()` toimii sisäänrakennetuilla tyypeillä ja omalla `__len__`-metodilla
-- **Python 3.x**: Sama käyttäytyminen, johdonmukaisemmin
-- **Kaikki versiot**: O(1) sisäänrakennetuille säiliöille (ne pitävät pituuden muistissa)
+Range laskee pituutensa arvoista `start`, `stop` ja `step` luontihetkellä, ja `len()` palauttaa
+tallennetun arvon. Range voi olla pidempi kuin `sys.maxsize`, mutta `len()`:n on palautettava
+indeksin kokoinen kokonaisluku, joten se nostaa tällaiselle rangelle `OverflowError`-poikkeuksen.
+Indeksointi ja `in` toimivat silti.
 
-## Liittyvät funktiot
+```python
+import sys
 
-- **[all()](all.md)** - Tarkistaa, ovatko kaikki alkiot tosia
-- **[any()](any.md)** - Tarkistaa, onko jokin alkio tosi
-- **[max()](max.md)** - Etsii suurimman arvon
-- **[min()](min.md)** - Etsii pienimmän arvon
-- **[sum()](sum.md)** - Laskee alkioiden summan
+r = range(0, 10**9, 3)
+assert len(r) == 333_333_334  # O(1)
 
-## Parhaat käytännöt
+huge = range(10**20)
+try:
+    len(huge)
+except OverflowError as error:
+    assert "too large" in str(error)
+else:
+    raise AssertionError("expected OverflowError")
+
+assert 10**20 > sys.maxsize
+assert huge[-1] == 10**20 - 1  # O(1)
+assert 10**19 in huge  # O(1)
+```
+
+## Luokat, joilla on __len__
+
+`len(obj)` kutsuu olion luokan `__len__`-metodia, joten metodi määrää kustannuksen. Jos metodi
+pitää lukua yllä tai delegoi sisäänrakennetulle säiliölle, se on O(1); jos se laskee iteroimalla,
+se on O(n) jokaisella kutsulla. `len()` tarkistaa tuloksen: negatiivinen arvo nostaa
+`ValueError`-poikkeuksen, ja arvo, joka ei ole kokonaisluku, nostaa `TypeError`-poikkeuksen.
+
+```python
+class Stored:
+    def __init__(self, items):
+        self.items = list(items)
+
+    def __len__(self):
+        return len(self.items)  # O(1) - delegates to the list
+
+
+class Counted:
+    def __init__(self, items):
+        self.items = list(items)
+
+    def __len__(self):
+        return sum(1 for _ in self.items)  # O(n) - walks every item on each call
+
+
+assert len(Stored(range(5))) == len(Counted(range(5))) == 5
+
+
+class Negative:
+    def __len__(self):
+        return -1
+
+
+try:
+    len(Negative())
+except ValueError as error:
+    assert ">= 0" in str(error)
+else:
+    raise AssertionError("expected ValueError")
+```
+
+Totuusarvon testaus käyttää myös `__len__`-metodia, kun luokka ei määrittele `__bool__`-metodia,
+joten `if obj:` maksaa saman kuin `len(obj)`.
+
+```python
+class Box:
+    calls = 0
+
+    def __init__(self, items):
+        self.items = list(items)
+
+    def __len__(self):
+        Box.calls += 1
+        return len(self.items)
+
+
+assert not Box([])  # calls __len__
+assert Box([1])
+assert Box.calls == 2
+```
+
+## Iteraattorit ja generaattorit
+
+Generaattori, kuten mikä tahansa iteraattori ilman `__len__`-metodia, ei tiedä, montako alkiota
+se tuottaa, joten `len()` nostaa `TypeError`-poikkeuksen. Alkioiden laskeminen kuluttaa ne, ajassa
+O(n). `operator.length_hint()` kysyy iteroimatta: se antaa tarkan jäljellä olevien alkioiden määrän sisäänrakennetun säiliön
+iteraattorille ja generaattorille arvon `default`.
+
+```python
+import operator
+
+gen = (x * x for x in range(5))
+try:
+    len(gen)
+except TypeError as error:
+    assert "has no len()" in str(error)
+else:
+    raise AssertionError("expected TypeError")
+
+assert operator.length_hint(gen, -1) == -1  # O(1) - a generator gives no hint
+assert sum(1 for _ in gen) == 5  # O(n) - and the generator is now exhausted
+assert list(gen) == []
+
+it = iter([10, 20, 30])
+next(it)
+assert operator.length_hint(it) == 2  # O(1)
+assert list(it) == [20, 30]  # nothing was consumed
+```
+
+## ChainMap
+
+`ChainMap` ei tallenna alkiomäärää. Jokainen `len()`-kutsu rakentaa joukon kaikkien sen
+sanakirjojen avaimista, joten se maksaa jokaisen sanakirjan ja jokaisen niiden avaimen verran, ja
+useassa sanakirjassa oleva avain lasketaan kerran.
+
+```python
+from collections import ChainMap
+
+defaults = {"color": "red", "size": 10}
+overrides = {"color": "blue"}
+settings = ChainMap(overrides, defaults)
+
+assert len(settings) == 2  # O(m + t) - "color" is in both maps
+```
+
+## Suorituskyvyn parhaat käytännöt
 
 ✅ **Tee näin**:
 
-- Käytä `len()`-funktiota säiliön tyhjyyden tarkistamiseen (se on O(1))
-- Käytä muotoa `if container:` totuusarvotarkistuksiin
-- Tallenna pituus muuttujaan vain, jos sitä käytetään toistuvasti tiukoissa silmukoissa
+- Kutsu `len()`-funktiota vapaasti sisäänrakennetuille säiliöille, myös silmukan ehdossa; se on O(1)
+- Käytä tyhjyyden tarkistukseen `if container:`; se on O(1) sisäänrakennetuille säiliöille
+- Pidä omassa säiliössäsi lukua yllä tai delegoi sisäänrakennetulle säiliölle, jotta `__len__` on O(1)
+- Käytä `operator.length_hint()`-funktiota puskurin mitoittamiseen sisäänrakennetun säiliön
+  iteraattorista kuluttamatta sitä
 
 ❌ **Vältä**:
 
-- `len(list(generator))` generaattorin alkioiden laskemiseen (O(n))
-- Pituuden uudelleenlaskentaa `__len__`-metodissa (se tulisi pitää muistissa)
-- Oletusta, että generaattoreilla on pituus (niillä ei ole)
+- `len(list(iterator))` pelkkään laskemiseen: se rakentaa O(n)-kokoisen listan;
+  `sum(1 for _ in iterator)` laskee O(1)-tilassa, mutta kummassakin tapauksessa iteraattori kuluu
+- Iteroivaa `__len__`-metodia; `if obj:` kutsuu sitä myös, kun luokalla ei ole `__bool__`-metodia
+- `len()`-kutsua `ChainMap`-oliolle silmukassa: jokainen kutsu käy läpi jokaisen sanakirjan
+
+## Versiohuomiot
+
+- **Python 3.15+**: `len()` on O(1) `frozendict`-oliolle
+
+## Liittyvät funktiot
+
+- **[bool()](bool_func.md)** - Totuusarvon testaus turvautuu `__len__`-metodiin
+- **[iter()](iter.md)** - Generaattoreilla ja useimmilla iteraattoreilla ei ole pituutta
+- **[range](range.md)** - Range laskee pituutensa luontihetkellä
+- **[sum()](sum.md)** - Iteraattorin alkioiden laskeminen
+- **[collections](../stdlib/collections.md)** - `deque`, `Counter` ja `ChainMap`
+- **[operator](../stdlib/operator.md)** - `length_hint()` iteraattoreille
