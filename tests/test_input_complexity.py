@@ -36,6 +36,9 @@ Measurement scope:
   `readline()` raises is not called. With `readline` imported the prompt
   arrives on the terminal and not on stderr, the first line grows the history
   by one entry equal to it, and a second identical line leaves it at one.
+  The driver drains both the terminal and stderr until EOF before waiting
+  for exit. A child that writes 1 MiB to each after its last input, including
+  a terminal drain, verifies that unread output cannot block completion.
 * Every fenced Python block runs in its own subprocess, and a mutated
   assertion in one of them is asserted to fail.
 
@@ -58,6 +61,7 @@ Not settled here:
 
 from __future__ import annotations
 
+import errno
 import io
 import os
 import pathlib
@@ -344,6 +348,42 @@ def wait_for_prompt(controller: int, prompt: bytes, shown: bytes) -> bytes:
     return shown
 
 
+def finish_terminal_child(
+    process: subprocess.Popen[bytes], controller: int, shown: bytes
+) -> tuple[str, str]:
+    """Drain both output channels before waiting for exit. On macOS a
+    terminal drain can wait for the master to read even a short final echo."""
+    assert process.stderr is not None
+    error_fd = process.stderr.fileno()
+    output = {controller: bytearray(shown), error_fd: bytearray()}
+    pending = list(output)
+    deadline = time.monotonic() + 60
+    while pending:
+        remaining = deadline - time.monotonic()
+        assert remaining > 0, (
+            f"child did not close its output; terminal: {output[controller][-4096:]!r}; "
+            f"stderr: {output[error_fd][-4096:]!r}"
+        )
+        ready, _, _ = select.select(pending, [], [], min(remaining, 0.2))
+        for fd in ready:
+            try:
+                chunk = os.read(fd, 65536)
+            except OSError as error:
+                if fd != controller or error.errno != errno.EIO:
+                    raise
+                # Linux reports the closed slave as EIO; macOS returns EOF.
+                chunk = b""
+            if chunk:
+                output[fd].extend(chunk)
+            else:
+                pending.remove(fd)
+    process.wait(timeout=max(0.1, deadline - time.monotonic()))
+    shown_text = output[controller].decode(errors="replace")
+    errors = output[error_fd].decode(errors="replace")
+    assert process.returncode == 0, f"child exited {process.returncode}: {errors}"
+    return shown_text, errors
+
+
 @pytest.mark.skipif(
     sys.platform == "win32",
     reason="platform: Windows has no pseudo-terminal (os.openpty) and no readline module",
@@ -390,21 +430,14 @@ class TestOnATerminal:
                     # call's distinct prompt means it is ready for another line.
                     shown = wait_for_prompt(controller, f"P{index}> ".encode(), shown)
                     os.write(controller, b"hi \r")
-            _, errors = process.communicate(timeout=60)
-            while select.select([controller], [], [], 0.2)[0]:
-                try:
-                    chunk = os.read(controller, 4096)
-                except OSError:
-                    break
-                if not chunk:
-                    break
-                shown += chunk
+            return finish_terminal_child(process, controller, shown)
         finally:
             if process.poll() is None:
                 process.kill()
                 process.wait()
             os.close(controller)
-        return shown.decode(errors="replace"), errors.decode(errors="replace")
+            if process.stderr is not None:
+                process.stderr.close()
 
     def test_without_readline(self, tmp_path: pathlib.Path) -> None:
         shown, errors = self.run(tmp_path, "plain")
@@ -434,6 +467,30 @@ class TestOnATerminal:
         assert "RESULT ['hi ', 'hi '] [1, 1] 'hi '" in errors, errors
         assert shown.count("P0> ") >= 2, shown
         assert shown.count("P1> ") >= 2, shown
+
+    def test_output_after_the_last_input_is_drained_before_exit(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """Output larger than either channel's buffer makes the child depend
+        on its parent reading, on Linux as well as macOS. No sleep or timing
+        ratio is needed to establish that both channels are drained."""
+        source = TERMINAL_CHILD.replace(
+            "report = repr(lines)",
+            "import termios\n"
+            "sys.stdout.write('~' * 1_048_576)\n"
+            "sys.stdout.flush()\n"
+            "termios.tcdrain(sys.stdout.fileno())\n"
+            "sys.stderr.write('!' * 1_048_576)\n"
+            "sys.stderr.flush()\n"
+            "report = repr(lines)",
+        )
+        assert source != TERMINAL_CHILD
+
+        shown, errors = self.run(tmp_path, "readline", source)
+
+        assert shown.count("~") == 1_048_576
+        assert errors.count("!") == 1_048_576
+        assert "RESULT ['hi ', 'hi '] [1, 1] 'hi '" in errors, errors[-4096:]
 
 
 def _blocks() -> list[tuple[int, str]]:
