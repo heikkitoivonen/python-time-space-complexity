@@ -721,7 +721,7 @@ class TestStrComplexity:
         large_str = "a" * self.LARGE_SIZE
 
         small_slice_time = measure_time(lambda: large_str[: self.SMALL_SIZE], iterations=50)
-        large_slice_time = measure_time(lambda: large_str[: self.LARGE_SIZE], iterations=50)
+        large_slice_time = measure_time(lambda: large_str[1:], iterations=50)
 
         assert is_linear_time(small_slice_time, large_slice_time, self.SIZE_RATIO), (
             f"Slicing doesn't scale linearly: {small_slice_time:.2e}s vs {large_slice_time:.2e}s"
