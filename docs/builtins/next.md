@@ -1,170 +1,188 @@
 # next() Function Complexity
 
-The `next()` function retrieves the next item from an iterator by calling its `__next__()` method.
+The `next()` function takes the next item from an iterator by calling its `__next__()` method once.
+It adds O(1) work of its own, so the cost of a call is the cost of producing one item, which depends
+on the iterator.
+
+`k` is the items a `filter` iterator examines to return one: the items it skips, plus the one it
+returns. `m` is the input iterables of a `map` iterator. A user-defined `__next__`, a generator's
+body, the function, predicate or callable an iterator calls, and the `==` comparison with a sentinel
+cost what they do; the bounds below are the work `next()` and the built-in iterators add to them.
 
 ## Complexity Reference
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `next(iterator)` | O(1)* | O(1) | Get next item from iterator |
-| `next(iterator, default)` | O(1)* | O(1) | Get next or return default |
+| `next(iterator)` | O(1) | O(1) | Iterators over `list`, `tuple`, `str`, `bytes` and `range`; any other iterator costs what its `__next__` does |
+| `next(iterator, default)` | Same as `next(iterator)` | Same as `next(iterator)` | Returns `default` instead of raising `StopIteration` |
+| `next()` on a `dict` or `set` iterator | O(1) amortized | O(1) | A full pass is O(n) in the n entries, but deleting entries one at a time does not shrink the table: after deleting most of them a pass costs the table's former size |
+| `next()` on a generator | Cost of the body | Cost of the body | Runs the body from where it last stopped to the next `yield` |
+| `next()` on a `filter` iterator | O(k) | O(1) | Plus one predicate test per examined item |
+| `next()` on a `map` iterator | O(m) | O(m) | One item is taken from each input, plus one call of the function |
+| `next()` on `iter(callable, sentinel)` | O(1) | O(1) | Plus one call of the callable and one `==` comparison of its result with `sentinel` |
+| `next(iterable)` on a non-iterator | O(1) | O(1) | Raises `TypeError`; call `iter()` on a list or `range` first |
 
-*O(1) for list/tuple/range iterators; filter/map iterators may skip items (O(k) where k items filtered)
+## Taking Items One at a Time
 
-## Basic Usage
+### Getting the Next Item
 
-### Getting Next Item
-
-```python
-# Create iterator - O(1)
-it = iter([1, 2, 3])  # O(1)
-
-# Get next items - O(1) each
-item1 = next(it)  # 1 - O(1)
-item2 = next(it)  # 2 - O(1)
-item3 = next(it)  # 3 - O(1)
-
-# next() raises StopIteration when exhausted
-try:
-    item4 = next(it)  # Raises StopIteration
-except StopIteration:
-    print("Iterator exhausted")
-```
-
-### Using Default Value
+Each call produces one item. After the last one, `next()` raises `StopIteration`.
 
 ```python
-# Use default to avoid exception - O(1)
 it = iter([1, 2, 3])
 
-next(it)  # 1
-next(it)  # 2
-next(it)  # 3
-item = next(it, "END")  # "END" - returns default, no exception
-
-# Useful for safe iteration
-value = next(iterator, None)  # Returns None if exhausted
-```
-
-## Manual Iterator Control
-
-### Step Through Sequences
-
-```python
-# Manually iterate - O(1) per step
-it = iter("hello")
-
-first = next(it)   # 'h' - O(1)
-second = next(it)  # 'e' - O(1)
-third = next(it)   # 'l' - O(1)
-
-# Continue with rest
-for char in it:  # O(1) each
-    print(char)  # 'l', 'o'
-```
-
-### Mixing Manual and For Loop
-
-```python
-# Get first item manually
-it = iter([10, 20, 30, 40])
-first = next(it)  # 10 - O(1)
-
-# Process rest in for loop
-for item in it:  # O(1) each iteration
-    print(item)  # 20, 30, 40
-```
-
-## Generator Functions
-
-### Generators and next()
-
-```python
-# Generator function
-def count_up(max):
-    i = 0
-    while i < max:
-        yield i
-        i += 1
-
-# Create generator - O(1)
-gen = count_up(3)  # O(1)
-
-# Use next() to step through - O(1) per step
-val1 = next(gen)  # 0 - O(1)
-val2 = next(gen)  # 1 - O(1)
-val3 = next(gen)  # 2 - O(1)
+assert next(it) == 1  # O(1)
+assert next(it) == 2  # O(1)
+assert next(it) == 3  # O(1)
 
 try:
-    val4 = next(gen)  # Raises StopIteration
+    next(it)
 except StopIteration:
-    print("Done")
+    pass
+else:
+    raise AssertionError("expected StopIteration")
 ```
 
-## Performance Considerations
+### Using a Default Value
 
-### next() vs Indexing
+With a second argument, an exhausted iterator returns the default instead of raising.
 
 ```python
-# For lists, direct indexing is simpler
-lst = [1, 2, 3, 4, 5]
+it = iter([1, 2, 3])
+assert [next(it), next(it), next(it)] == [1, 2, 3]
 
-# Using next() - O(1) per call
-it = iter(lst)
-next(it)  # O(1)
-next(it)  # O(1)
-
-# Direct indexing - O(1)
-lst[0]  # O(1)
-lst[1]  # O(1)
-
-# Prefer indexing for lists; next() for iterators
+assert next(it, "END") == "END"  # O(1) - no StopIteration
+assert next(it, None) is None
 ```
 
-### Generator Memory
+### next() Needs an Iterator
+
+A list or a `range` is iterable but not an iterator, so `next()` rejects it.
 
 ```python
-# Generator with next() - O(1) memory
-def infinite_counter():
+try:
+    next([1, 2, 3])
+except TypeError as error:
+    assert "is not an iterator" in str(error)
+else:
+    raise AssertionError("expected TypeError")
+
+assert next(iter(range(3))) == 0  # O(1)
+```
+
+### Mixing next() and a for Loop
+
+A `for` loop over an iterator continues from where `next()` left it, so `next()` can consume a
+header before the loop handles the rest.
+
+```python
+it = iter(["name,qty", "apple,3", "pear,5"])
+header = next(it)  # O(1)
+
+rows = [line.split(",") for line in it]  # O(n) - the remaining items
+assert header == "name,qty"
+assert rows == [["apple", "3"], ["pear", "5"]]
+```
+
+## Generators
+
+### next() Runs the Body to the Next yield
+
+A generator computes nothing until `next()` asks for an item, and each call runs only the code
+between one `yield` and the next.
+
+```python
+steps = []
+
+def count_up(limit):
     i = 0
-    while True:
+    while i < limit:
+        steps.append(i)
         yield i
         i += 1
 
-gen = infinite_counter()
-val1 = next(gen)  # O(1) memory
-val2 = next(gen)  # O(1) memory
-val3 = next(gen)  # O(1) memory
+gen = count_up(1_000_000)
+assert steps == []  # Creating the generator runs no code
 
-# vs. list - O(n) memory
-lst = list(range(1000000))  # O(n) memory!
+assert next(gen) == 0  # Runs up to the first yield
+assert next(gen) == 1
+assert steps == [0, 1]  # Two items produced, not a million
 ```
 
-## Version Notes
+### Finding the First Match
 
-- **Python 2.x**: `next()` function available; `iterator.next()` method also works
-- **Python 3.x**: `next()` function standard; `iterator.next()` removed
-- **All versions**: Iterator protocol with `__next__()` method
+`next()` on a generator expression stops at the first item that passes the test, so the rest of the
+input is never examined.
 
-## Related Functions
+```python
+checked = []
 
-- **[iter()](iter.md)** - Create iterator from iterable
-- **for loop** - Iterate using `next()` internally
-- **[zip()](zip.md)** - Combine multiple iterators
-- **[enumerate()](enumerate.md)** - Iterator with index
+def is_even(x):
+    checked.append(x)
+    return x % 2 == 0
 
-## Best Practices
+values = [1, 3, 4, 5, 6, 8]
+first_even = next((x for x in values if is_even(x)), None)  # O(k) - stops at 4
+
+assert first_even == 4
+assert checked == [1, 3, 4]
+assert next((x for x in [1, 3] if is_even(x)), None) is None  # No match: the default
+```
+
+## Built-in Iterators
+
+### filter() and map()
+
+One `next()` on a `filter` iterator examines items until one passes, so it is O(k). One `next()` on
+a `map` iterator takes one item from each input and makes one call.
+
+```python
+calls = []
+
+def is_big(x):
+    calls.append(x)
+    return x > 10
+
+big = filter(is_big, [1, 2, 3, 50, 4, 60])
+assert next(big) == 50  # O(k) - examines 1, 2, 3 and 50
+assert calls == [1, 2, 3, 50]
+
+sums = map(lambda a, b, c: a + b + c, [1, 2], [10, 20], [100, 200])
+assert next(sums) == 111  # O(m) - one item from each of the 3 inputs
+```
+
+### Dict and Set Iterators After Removal
+
+Deleting entries one at a time does not shrink a `dict` or `set` table, so `next()` on a fresh iterator scans the
+deleted slots before it reaches a surviving entry. Rebuilding the container makes it compact again.
+
+```python
+d = {i: i for i in range(10_000)}
+for i in range(9_999):
+    del d[i]
+
+assert next(iter(d)) == 9_999  # Scans the deleted slots first
+d = dict(d)  # One scan of the old table; the new one is sized for what is left
+assert next(iter(d)) == 9_999  # O(1)
+```
+
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use `for` loops for normal iteration
-- Use `next()` with default to avoid exceptions
-- Use `next()` for special iterator control
-- Use generator functions with `next()` for lazy evaluation
+- Use `next(iterator, default)` to take one item without handling `StopIteration`
+- Use `next()` on a generator expression to find the first match without examining the rest
+- Use `next()` to consume a header, then a `for` loop for the rest of the same iterator
 
 ❌ **Avoid**:
 
-- Calling `next()` without handling `StopIteration`
-- Using `next()` when `for` loop is clearer
-- Assuming `next()` is faster than for loops (it's not)
-- Calling `next()` on non-iterators (raises TypeError)
+- Calling `next()` on a list or `range`; it raises `TypeError` until you call `iter()`
+- Building a list to take its first element when a generator and `next()` would stop early
+- Taking items repeatedly from a `dict` or `set` that lost most of its entries without rebuilding it
+
+## Related Functions
+
+- **[iter()](iter.md)** - Get an iterator to call `next()` on, including `iter(callable, sentinel)`
+- **[anext()](anext.md)** - The asynchronous counterpart, for async iterators
+- **[filter()](filter.md)** - Iterator whose `next()` skips items that fail a predicate
+- **[map()](map.md)** - Iterator whose `next()` calls a function on one item from each input
