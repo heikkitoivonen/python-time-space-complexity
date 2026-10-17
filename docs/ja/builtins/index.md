@@ -1,5 +1,5 @@
 ---
-source_sha: a90cba64552a8a0d019989c19c6a56d48f7d352ffea630d0dc0cb57628916433
+source_sha: 957fa9d2145f345a4c8470e71bad85481332e01c453329fde9ba44b1e73ce542
 translated: machine
 ---
 
@@ -100,7 +100,7 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 
 | 関数 | 時間 | 空間 | 備考 |
 |----------|------|-------|-------|
-| [`type()`](type_func.md) | O(1) | O(1) | クラスを生成する 3 引数形式では O(n) |
+| [`type()`](type_func.md) | O(1) | O(1) | クラスを生成する 3 引数形式では O(n + h)。n = 名前空間のエントリ数、h = 新しい MRO のクラス数。基底クラスが複数あると C3 マージが加わる |
 | [`isinstance()`](isinstance.md) | O(d) | O(1) | d は MRO の長さ、型が完全一致なら O(1) |
 | [`issubclass()`](issubclass.md) | O(d) | O(1) | d は第 1 引数の MRO の長さ、先頭近くで一致すればすぐに返る |
 | [`callable()`](callable.md) | O(1) | O(1) | `__call__` の有無を調べる |

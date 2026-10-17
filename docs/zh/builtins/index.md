@@ -1,5 +1,5 @@
 ---
-source_sha: a90cba64552a8a0d019989c19c6a56d48f7d352ffea630d0dc0cb57628916433
+source_sha: 957fa9d2145f345a4c8470e71bad85481332e01c453329fde9ba44b1e73ce542
 translated: machine
 ---
 
@@ -101,7 +101,7 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 
 | 函数 | 时间 | 空间 | 备注 |
 |----------|------|-------|-------|
-| [`type()`](type_func.md) | O(1) | O(1) | 三参数的建类形式为 O(n) |
+| [`type()`](type_func.md) | O(1) | O(1) | 三参数的建类形式为 O(n + h)，n = 命名空间条目数，h = 新 MRO 中的类数；多个基类时还要加上 C3 合并 |
 | [`isinstance()`](isinstance.md) | O(d) | O(1) | d 为 MRO 长度；类型完全匹配时为 O(1) |
 | [`issubclass()`](issubclass.md) | O(d) | O(1) | d 为第一个参数的 MRO 长度；在开头附近匹配时立即返回 |
 | [`callable()`](callable.md) | O(1) | O(1) | 检查是否有 `__call__` |

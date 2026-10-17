@@ -99,7 +99,7 @@ under Notes is what you pay to consume it.
 
 | Function | Time | Space | Notes |
 |----------|------|-------|-------|
-| [`type()`](type_func.md) | O(1) | O(1) | O(n) in the three-argument class-creating form |
+| [`type()`](type_func.md) | O(1) | O(1) | O(n + h) in the three-argument class-creating form, n = namespace entries, h = classes in the new MRO; several bases add the C3 merge |
 | [`isinstance()`](isinstance.md) | O(d) | O(1) | d = MRO length; O(1) on an exact type match |
 | [`issubclass()`](issubclass.md) | O(d) | O(1) | d = MRO length of the first argument; a match near the front returns early |
 | [`callable()`](callable.md) | O(1) | O(1) | Checks for `__call__` |

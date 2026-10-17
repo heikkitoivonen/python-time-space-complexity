@@ -1,5 +1,5 @@
 ---
-source_sha: a90cba64552a8a0d019989c19c6a56d48f7d352ffea630d0dc0cb57628916433
+source_sha: 957fa9d2145f345a4c8470e71bad85481332e01c453329fde9ba44b1e73ce542
 translated: machine
 ---
 
@@ -104,7 +104,7 @@ mainittu kustannus on se, minkä maksat iteraattorin läpikäynnistä.
 
 | Funktio | Aika | Tila | Huomiot |
 |----------|------|-------|-------|
-| [`type()`](type_func.md) | O(1) | O(1) | O(n) kolmen argumentin luokan luovassa muodossa |
+| [`type()`](type_func.md) | O(1) | O(1) | O(n + h) kolmen argumentin luokan luovassa muodossa, n = nimiavaruuden merkinnät, h = uuden MRO:n luokat; useat kantaluokat lisäävät C3-yhdistämisen |
 | [`isinstance()`](isinstance.md) | O(d) | O(1) | d = MRO:n pituus; O(1), kun tyyppi täsmää tarkalleen |
 | [`issubclass()`](issubclass.md) | O(d) | O(1) | d = ensimmäisen argumentin MRO:n pituus; osuma MRO:n alussa palauttaa tuloksen heti |
 | [`callable()`](callable.md) | O(1) | O(1) | Tarkistaa `__call__`-metodin |
