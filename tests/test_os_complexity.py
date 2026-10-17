@@ -1,4 +1,4 @@
-"""Tests to verify documented behaviour of the os module.
+"""Tests for docs/stdlib/os.md.
 
 Almost everything here is counted or observed rather than timed. Where a
 documented cost is a syscall count, the syscall has to be reachable from

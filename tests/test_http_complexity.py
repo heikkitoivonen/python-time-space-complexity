@@ -1,4 +1,4 @@
-"""Tests to verify documented behaviour of the http package.
+"""Tests for docs/stdlib/http.md.
 
 docs/stdlib/http.md covers four modules: the `http` enumerations, `http.client`,
 `http.server`, `http.cookies` and `http.cookiejar`. Round trips are external to

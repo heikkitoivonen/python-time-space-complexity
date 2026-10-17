@@ -1,4 +1,4 @@
-"""Tests to verify documented behaviour of the glob module.
+"""Tests for docs/stdlib/glob.md.
 
 docs/stdlib/glob.md turns on one claim: the cost is the entries examined, not
 the matches returned. Flat-directory and recursive memory are measured separately.

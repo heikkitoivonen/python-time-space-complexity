@@ -84,7 +84,7 @@ exec("x = 5")
 exec("x = sum(range(1000))")  # O(1000) - sum operation
 
 # O(n²) - if code itself is O(n²)
-exec("result = sum(range(1000)) for _ in range(1000))")  # O(n²)
+exec("result = sum(sum(range(1000)) for _ in range(1000))")  # O(n²)
 ```
 
 ### With Custom Scope
@@ -108,6 +108,7 @@ exec("z = var0 + var1", big_scope)  # O(n + 1000)
 
 ```python
 # O(n * k) - parses code k times
+x = 0
 for i in range(1000):
     exec("x = x + 1")  # Re-parses each time
 

@@ -295,6 +295,7 @@ print(False == 0)  # True
 
 # O(1) - use in arithmetic
 count = 5
+valid = True
 if valid:
     count += True  # count += 1
 
@@ -445,6 +446,14 @@ result = a and b or c  # True (short-circuit evaluation)
 ### Short-Circuit Evaluation
 
 ```python
+def expensive_function():
+    raise AssertionError("never called")
+
+user_exists, is_admin = False, True
+
+def grant_access():
+    print("granted")
+
 # O(1) - AND short-circuits on False
 result = False and expensive_function()  # Function not called!
 

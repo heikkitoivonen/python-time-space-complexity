@@ -28,17 +28,33 @@ def python_blocks(page: pathlib.Path) -> list[tuple[int, str]]:
     return found
 
 
-def run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
-    """Run one block as a script in its own interpreter and working directory."""
+def run_block(
+    source: str, cwd: pathlib.Path, timeout: float = 120
+) -> subprocess.CompletedProcess[str]:
+    """Run one block as a script in its own interpreter and working directory.
+
+    A block still running after `timeout` seconds is killed and reported as a
+    failure, so a hang is attributed to its page and line like any other.
+    """
     script = cwd / "block.py"
     script.write_text(source, encoding="utf-8")
-    return subprocess.run(
-        [sys.executable, str(script)],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
+    command = [sys.executable, str(script)]
+    try:
+        return subprocess.run(
+            command,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            stdin=subprocess.DEVNULL,
+        )
+    except subprocess.TimeoutExpired as expired:
+        partial = expired.stderr or ""
+        if isinstance(partial, bytes):
+            partial = partial.decode(errors="replace")
+        return subprocess.CompletedProcess(
+            command, -1, "", f"{partial}timed out after {timeout} seconds"
+        )
 
 
 def failing_blocks(page: pathlib.Path, tmp_path: pathlib.Path) -> list[str]:

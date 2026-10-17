@@ -1,4 +1,4 @@
-"""Observe shutil allocation and traversal dimensions.
+"""Tests for docs/stdlib/shutil.md: allocation and traversal dimensions.
 
 Tree tests vary width and depth independently and count retained ancestor entries.
 Archive tests observe member indexes; buffer, PATH, and extended-attribute tests

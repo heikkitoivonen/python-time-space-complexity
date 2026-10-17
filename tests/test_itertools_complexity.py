@@ -1,4 +1,4 @@
-"""Tests to verify documented time and space complexity of itertools.
+"""Tests for docs/stdlib/itertools.md.
 
 A review of docs/stdlib/itertools.md, which had no test coverage at all. The
 page was wrong in four places, and every one of them is pinned below:
@@ -499,9 +499,9 @@ class TestDocumentedExamplesRun:
                 body.append(line)
         return blocks
 
-    def test_the_page_has_examples_to_check(self) -> None:
+    def test_the_page_has_the_expected_blocks(self) -> None:
         """So the runner below cannot silently test nothing."""
-        assert len(self._blocks()) >= 8
+        assert len(self._blocks()) == 8
 
     def test_every_example_executes(self) -> None:
         failures: list[str] = []

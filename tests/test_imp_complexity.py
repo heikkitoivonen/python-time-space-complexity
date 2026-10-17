@@ -571,6 +571,10 @@ def test_builtin_and_frozen_tables(imp: Any, modules: Callable[[str], None]) -> 
     assert isinstance(hello, types.ModuleType) and hello.initialized is True
 
 
+def test_the_page_has_the_expected_blocks() -> None:
+    assert len(re.findall(r"```python\n(.*?)```", PAGE.read_text(), re.DOTALL)) == 2
+
+
 @pytest.mark.parametrize("index", [0, 1])
 def test_examples(tmp_path: Path, index: int) -> None:
     text = PAGE.read_text()

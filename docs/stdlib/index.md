@@ -35,7 +35,7 @@ d.appendleft(0)  # O(1)
 
 # defaultdict: Auto-default values
 d = defaultdict(list)
-d[key].append(value)  # Key created if missing
+d["fruit"].append("apple")  # Key created if missing
 
 # Counter: Count items
 c = Counter(['a', 'a', 'b'])

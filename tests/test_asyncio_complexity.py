@@ -1,4 +1,4 @@
-"""Tests to verify documented behaviour of the asyncio module.
+"""Tests for docs/stdlib/asyncio.md.
 
 docs/stdlib/asyncio.md prices the scheduling asyncio does around a coroutine,
 never the coroutine or the I/O it waits on. Nothing here opens a socket or

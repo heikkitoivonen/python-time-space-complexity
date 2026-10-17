@@ -356,6 +356,18 @@ so far shipped examples that raised on the first line - one of them a
 `NameError` introduced while adding annotations to it. Run a page's code
 blocks, not just its numbers.
 
+Every English page with a fenced `python` block needs a test module that names
+it, as `docs/<path>.md`, in the opening paragraph of its docstring and defines
+`test_the_page_has_the_expected_blocks`, pinning the block count.
+`tests/test_documented_examples_coverage.py` fails a page without one; it does
+not check that the module runs the blocks. `tests/page_examples.py` finds the
+blocks, dedented, and runs each in its own interpreter and temporary working
+directory, with stdin on the null device and a 120-second timeout. Run every
+block as printed where you can. Where you cannot - a block that needs a server,
+a file the reader supplies, another platform or runtime, or a billion
+iterations - say why in the docstring and supply the file, compile the block,
+or scale it down and assert the substitution changed it.
+
 Things worth knowing before you rely on a test:
 
 - A test pins what it asserts, not what the prose says. Its *name* is not an

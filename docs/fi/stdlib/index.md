@@ -1,5 +1,5 @@
 ---
-source_sha: d24b620768bc53a40c6d0d39a6858400af74f38f08b069d06c242fea93ad2429
+source_sha: b0a041ddd611073e2f2a4bf3dea240fe416d9dbefa56858442cdf3c5b094bd19
 translated: machine
 ---
 
@@ -40,7 +40,7 @@ d.appendleft(0)  # O(1)
 
 # defaultdict: Auto-default values
 d = defaultdict(list)
-d[key].append(value)  # Key created if missing
+d["fruit"].append("apple")  # Key created if missing
 
 # Counter: Count items
 c = Counter(['a', 'a', 'b'])

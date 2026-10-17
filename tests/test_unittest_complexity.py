@@ -1,4 +1,4 @@
-"""Tests to verify documented behaviour of the unittest package.
+"""Tests for docs/stdlib/unittest.md.
 
 docs/stdlib/unittest.md prices the framework's own work: finding tests,
 ordering them, running fixtures, comparing two values, recording an outcome and

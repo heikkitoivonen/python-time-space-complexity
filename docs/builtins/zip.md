@@ -215,7 +215,7 @@ list2 = ['a', 'b', 'c']
 
 # ✅ zip - memory efficient (iterator)
 for a, b in zip(list1, list2):
-    process(a, b)
+    print(a, b)
 
 # ❌ List - uses extra memory
 result = list(zip(list1, list2))  # O(n) space
@@ -229,6 +229,12 @@ result = [(a, b) for a, b in zip(list1, list2)]  # O(n) space
 ### Iterator Efficiency
 
 ```python
+iter1 = range(1000)
+iter2 = range(1000, 2000)
+
+def condition(a, b):
+    return a + b > 1010
+
 # ✅ Lazy - doesn't create intermediate lists
 for a, b in zip(iter1, iter2):
     if condition(a, b):
