@@ -37,8 +37,8 @@ Measurement scope:
   last live entry, so survivors in the lowest slots cost far less (32x
   against 1,134x on 3.15.0 with a 3-element `other`). Spread hashes leave the
   last live entry near the end of the table.
-* `-=`, `difference_update()`, `&=` and `intersection_update()` doing the
-  same mass removal are asserted to leave a set under 1/100 of the full size,
+* `&=` and `intersection_update()` doing the same mass removal are
+  asserted to leave a set under 1/100 of the full size,
   and so is `copy()` of the sparse set. So are `&=` and
   `intersection_update()` on the sparse set with an `other` holding all 10
   survivors, which removes nothing. Insertions, each removed again so the
@@ -65,6 +65,33 @@ Measurement scope:
 * The worst case is a counting `__eq__` on elements that share one hash:
   `a & b` over two disjoint sets of k such elements makes at least k squared
   comparisons for k = 40 and 80, and doubling k more than triples them.
+* set.md, `pop()`: on a set whose 10 survivors of 200,000 are its highest
+  ints, one call must cost more than 50x a call on a fresh set of the same
+  10 (locally thousands). Draining 10,000 / 100,000 / 1,000,000 ints with
+  `pop()` must cost under 30x per 10x step, where a scan from the start of
+  the table on every call would cost 100x.
+* set.md, `clear()` on the same high-survivor sparse set must cost more
+  than 50x the fresh set.
+* set.md, comparisons and lookups count `__eq__` on equal elements that are
+  distinct objects: `==` and `!=` between sets of 100 and 101 compare none;
+  `==` between two of 1,000 compares 1,000; `<=`, `<` and `issubset()` from
+  10 elements into 1,000 compare 10 each; `issubset()` and `<=` of 1,000
+  into 10 compare none; `>=` and `issuperset()` compare the 10 of the right
+  operand; `&` between 10 and 1,000 compares 10 in either order.
+* set.md, a counting iterator: `issuperset()` takes 1 item when the first is
+  missing from `s`, and `isdisjoint()` 1 when the first is in `s`. A set
+  subclass counting its `__iter__` is iterated in full (1,000 elements) by
+  `isdisjoint()` and not at all by `&` or `intersection()`.
+* set.md, space of in-place updates: `update()` with 100,000 ints must leave
+  a set over 50x the size of one updated with 1,000. With every element of
+  `other` already in `s`, `symmetric_difference_update()` with a list of
+  100,000 ints traces a peak over 1 MB, the copy of `other`, and with a set
+  under 64 KiB.
+* set.md, a set as the element to find: `in`, `discard()` and `remove()`
+  with a 100,000-element set key, against a set holding no equal element so
+  that only hashing is timed, must cost more than 100x a 10-element key.
+  `key in s` with the 100,000-element key traces a peak under 4 KiB from
+  3.14 and over 1.6 MB before; run locally on 3.11, 3.13, 3.14 and 3.15.
 * set_func.md: elements with a counting `__hash__` are hashed exactly once
   per item from a list of 1,000 holding 100 distinct values, and not at all
   from a set, a frozenset, a subclass instance of either, a dict or (3.15+)
@@ -88,15 +115,21 @@ Measurement scope:
 
 Not settled here:
 
-* `symmetric_difference_update()` and `update()` with a non-set operand are
-  not measured. The O(m) space of `symmetric_difference_update()` and of
-  `issubset()` with a non-set operand, and the O(n) space of
-  `difference_update()`, are read from Objects/setobject.c: the first builds
-  a set from the operand, `issubset()` builds one on 3.11 and the
-  intersection on 3.12+, and `difference_update()` builds the intersection
-  when `other` is over 8x larger and may rebuild its own table.
+* The time of `symmetric_difference_update()` and `update()` is not
+  measured, with a set or a non-set operand. The O(m) space of `issubset()`
+  with a non-set operand and the O(n) space of `difference_update()` are
+  read from Objects/setobject.c: `issubset()` builds a set from the operand
+  on 3.11 and the intersection on 3.12+, and `difference_update()` builds
+  the intersection when `other` is over 8x larger and may rebuild its own
+  table. The space rows marked amortized leave out the occasional resize,
+  which allocates a table for all of `s`.
+* Whether `-=` and `difference_update()` rebuild a sparse table depends on
+  how many removed slots it holds; the page makes no claim about it.
 * The point at which a sparse set is rebuilt depends on its fill; only that
   insertions eventually rebuild it is asserted.
+* set.md's sparse-table and `pop()` measurements use int elements only;
+  the counting tests use one element class. Element type and hash cost were
+  not varied.
 """
 
 from __future__ import annotations
@@ -111,6 +144,8 @@ import textwrap
 import time
 import tracemalloc
 from collections.abc import Callable, Iterator
+from functools import partial
+from itertools import pairwise
 from typing import Any
 
 import pytest
@@ -231,15 +266,11 @@ class TestRemovingDoesNotShrinkTheTable:
         fresh_ns = best_ns(lambda: op(fresh), inner=10_000)
         assert sparse_ns < fresh_ns * 5, f"{name}: {fresh_ns:.0f}ns vs {sparse_ns:.0f}ns"
 
-    @pytest.mark.parametrize("name", ["isub", "difference_update", "iand", "intersection_update"])
+    @pytest.mark.parametrize("name", ["iand", "intersection_update"])
     def test_bulk_removal_leaves_a_compact_table(self, name: str) -> None:
         full = sys.getsizeof(set(range(PEAK)))
         s = set(range(PEAK))
-        if name == "isub":
-            s -= set(range(KEPT, PEAK))
-        elif name == "difference_update":
-            s.difference_update(range(KEPT, PEAK))
-        elif name == "iand":
+        if name == "iand":
             s &= set(range(KEPT))
         else:
             s.intersection_update(range(KEPT))
@@ -468,6 +499,235 @@ def test_collisions_make_a_whole_set_operation_quadratic() -> None:
     at_40, at_80 = comparisons(40), comparisons(80)
     assert at_40 >= 40 * 40 and at_80 >= 80 * 80
     assert at_80 > at_40 * 3, "doubling k must roughly quadruple the comparisons"
+
+
+# ---------------------------------------------------------------------------
+# set.md: pop, comparisons, early exits, in-place growth and set-valued keys.
+# ---------------------------------------------------------------------------
+
+
+def high_sparse_set() -> set[int]:
+    """A set that held PEAK ints and now holds the KEPT highest, which sit in
+    the last slots of the table."""
+    s = set(range(PEAK))
+    for i in range(PEAK - KEPT):
+        s.discard(i)
+    return s
+
+
+class TestPopStartsWhereTheLastStopped:
+    """`s.pop()` is O(1) amortized while draining, but one call after other
+    removals skips every empty slot in front of the next element."""
+
+    @pytest.mark.timing
+    def test_a_pop_after_other_removals_costs_the_former_size(self) -> None:
+        sparse_ns = best_fresh_ns(lambda s: s.pop(), high_sparse_set)
+        fresh_ns = best_fresh_ns(lambda s: s.pop(), lambda: set(range(PEAK - KEPT, PEAK)))
+        assert sparse_ns > fresh_ns * 50, f"{fresh_ns:.0f}ns vs {sparse_ns:.0f}ns"
+
+    @pytest.mark.timing
+    def test_draining_with_pop_is_linear(self) -> None:
+        def drain(s: set[int]) -> None:
+            while s:
+                s.pop()
+
+        sizes = (10_000, 100_000, 1_000_000)
+        times = [best_fresh_ns(drain, partial(set, range(n)), repeats=3) for n in sizes]
+        steps = [later / earlier for earlier, later in pairwise(times)]
+        shown = ", ".join(f"x{step:.1f}" for step in steps)
+        assert all(step < 30 for step in steps), f"each 10x step must cost under 30x: {shown}"
+
+
+@pytest.mark.timing
+def test_clear_on_a_sparse_table_costs_the_former_size() -> None:
+    """`clear()` releases elements up to the last live slot, so the survivors
+    are the highest ints."""
+    sparse_ns = best_fresh_ns(lambda s: s.clear(), high_sparse_set)
+    fresh_ns = best_fresh_ns(lambda s: s.clear(), lambda: set(range(PEAK - KEPT, PEAK)))
+    assert sparse_ns > fresh_ns * 50, f"{fresh_ns:.0f}ns vs {sparse_ns:.0f}ns"
+
+
+class Counted:
+    """An element whose equality checks are counted; equal values are distinct objects."""
+
+    comparisons = 0
+
+    def __init__(self, value: int) -> None:
+        self.value = value
+
+    def __hash__(self) -> int:
+        return hash(self.value)
+
+    def __eq__(self, other: object) -> bool:
+        type(self).comparisons += 1
+        return isinstance(other, Counted) and self.value == other.value
+
+
+def counted(n: int) -> set[Counted]:
+    return {Counted(i) for i in range(n)}
+
+
+class TestComparisonsAndLookupsCountElements:
+    """Each lookup of an element in the other set compares it once with its
+    equal twin, so the comparison count is the number of elements looked up."""
+
+    def test_different_lengths_compare_nothing(self) -> None:
+        small, large = counted(100), counted(101)
+        Counted.comparisons = 0
+        assert small != large and not small == large
+        assert Counted.comparisons == 0
+
+    def test_equal_lengths_compare_every_element(self) -> None:
+        a, b = counted(1_000), counted(1_000)
+        Counted.comparisons = 0
+        assert a == b
+        assert Counted.comparisons == 1_000
+
+    def test_subset_looks_up_the_left_operand(self) -> None:
+        small, large = counted(10), counted(1_000)
+        Counted.comparisons = 0
+        assert small <= large and small < large and small.issubset(large)
+        assert Counted.comparisons == 30
+
+    def test_a_shorter_other_is_not_a_superset(self) -> None:
+        large, small = counted(1_000), counted(10)
+        Counted.comparisons = 0
+        assert not large.issubset(small) and not large <= small
+        assert Counted.comparisons == 0
+
+    def test_superset_looks_up_the_right_operand(self) -> None:
+        large, small = counted(1_000), counted(10)
+        Counted.comparisons = 0
+        assert large >= small and large.issuperset(small)
+        assert Counted.comparisons == 20
+
+    @pytest.mark.parametrize("order", ["small_first", "large_first"])
+    def test_intersection_looks_up_the_smaller_set(self, order: str) -> None:
+        small, large = counted(10), counted(1_000)
+        Counted.comparisons = 0
+        result = small & large if order == "small_first" else large & small
+        assert len(result) == 10
+        assert Counted.comparisons == 10
+
+
+class TestEarlyExits:
+    def test_issuperset_stops_at_the_first_missing_element(self) -> None:
+        s = set(range(100))
+        items = CountingIterator(1_000)
+        assert not s.issuperset(items)
+        assert items.taken == 1
+
+    def test_isdisjoint_stops_at_the_first_common_element(self) -> None:
+        s = {1_000_000}
+        items = CountingIterator(1_000)
+        assert not s.isdisjoint(items)
+        assert items.taken == 1
+
+
+class IterationCounted(set[int]):
+    """A set subclass that counts the elements its `__iter__` yields."""
+
+    yielded = 0
+
+    def __iter__(self) -> Iterator[int]:
+        for item in set.__iter__(self):
+            type(self).yielded += 1
+            yield item
+
+
+class TestASetSubclassOperand:
+    def test_isdisjoint_iterates_a_subclass(self) -> None:
+        other = IterationCounted(range(1_000))
+        IterationCounted.yielded = 0
+        assert {-1}.isdisjoint(other)
+        assert IterationCounted.yielded == 1_000
+
+    def test_intersection_reads_a_subclass_table(self) -> None:
+        other = IterationCounted(range(1_000))
+        IterationCounted.yielded = 0
+        assert not {-1} & other and not {-1}.intersection(other)
+        assert IterationCounted.yielded == 0
+
+
+class TestInPlaceUpdatesGrowTheSet:
+    """`update()` and `symmetric_difference_update()` take O(m) space."""
+
+    def test_update_grows_with_the_other_operand(self) -> None:
+        def size_after(m: int) -> int:
+            s: set[int] = set()
+            s.update(range(m))
+            return sys.getsizeof(s)
+
+        small, large = size_after(1_000), size_after(100_000)
+        assert large > small * 50, f"{small} vs {large} bytes"
+
+    @pytest.mark.parametrize("kind", ["list", "set"])
+    def test_a_non_set_operand_is_copied_first(self, kind: str) -> None:
+        """Every element of `other` is already in `s`, so `s` only loses
+        elements; the peak is the copy of `other`, or nothing for a set."""
+        elements = list(range(2_000, 102_000))
+        other: list[int] | set[int] = elements if kind == "list" else set(elements)
+        s = set(elements)
+        tracemalloc.start()
+        try:
+            s.symmetric_difference_update(other)
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        assert not s
+        if kind == "list":
+            assert peak > 1_000_000, f"traced peak {peak} bytes"
+        else:
+            assert peak < 64 * 1024, f"traced peak {peak} bytes"
+
+
+class TestASetAsTheElementToFind:
+    """A set key is hashed as a frozenset: O(k) time for its k elements, and
+    O(k) space before 3.14, which copies it into a temporary frozenset."""
+
+    K_SMALL = 10
+    K_LARGE = 100_000
+
+    @pytest.mark.timing
+    @pytest.mark.parametrize("name", ["in", "discard", "remove"])
+    def test_the_key_is_hashed_on_every_call(self, name: str) -> None:
+        def run(k: int) -> float:
+            key = set(range(2_000, 2_000 + k))
+            # No equal element, so the cost is hashing the key, not comparing it.
+            s: set[Any] = {frozenset({-1})}
+
+            def call() -> None:
+                if name == "in":
+                    assert key not in s
+                elif name == "discard":
+                    s.discard(key)
+                else:
+                    try:
+                        s.remove(key)
+                    except KeyError:
+                        pass
+                    else:
+                        raise AssertionError("remove() of an absent key raises")
+
+            return best_ns(call, inner=10)
+
+        small_ns, large_ns = run(self.K_SMALL), run(self.K_LARGE)
+        assert large_ns > small_ns * 100, f"{name}: {small_ns:.0f}ns vs {large_ns:.0f}ns"
+
+    def test_the_space_depends_on_the_version(self) -> None:
+        key = set(range(2_000, 2_000 + self.K_LARGE))
+        s = {frozenset(key)}
+        tracemalloc.start()
+        try:
+            found = key in s
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        assert found
+        if sys.version_info >= (3, 14):
+            assert peak < 4 * 1024, f"traced peak {peak} bytes"
+        else:
+            assert peak > self.K_LARGE * 16, f"traced peak {peak} bytes"
 
 
 def _blocks(page: str) -> list[tuple[int, str]]:
