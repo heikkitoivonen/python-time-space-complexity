@@ -15,7 +15,11 @@ Measurement scope:
 
 * `next()` on a list, tuple, str, bytes and range iterator: one `iter()` plus
   `next()` costs under x5 from a 1,000-item container to a 1,000,000-item
-  one, where a cost linear in the container predicts x1,000.
+  one, where a cost linear in the container predicts x1,000. Draining the
+  same five kinds' iterators with `deque(it, maxlen=0)`, which calls the
+  `__next__` that next() calls, from 10,000 to 1,000,000 items, a hundredfold
+  step, costs between x20 and x400; linear predicts x100, and a per-call cost
+  growing with the position reached predicts x10,000.
 * a dict or a set of 1,000,000 keys with all but the last deleted: one next()
   on a fresh iterator costs more than x20 what it costs on the same container
   built from 10,000 keys with all but the last deleted, linear in the former
@@ -39,8 +43,9 @@ Measurement scope:
 Not settled here:
 
 * The cost of a user `__next__`, a generator body, a predicate, function or
-  callable, and of the `==` comparison with a sentinel, is the caller's; the page names it once and the tests hold each at
-  O(1).
+  callable, taking an item from a filter's or a map's input, and the `==`
+  comparison with a sentinel is the caller's; the page names it once and the
+  tests hold each at O(1).
 * next()'s own O(1) is read from builtin_next; it is not separated from the
   iterator's work by measurement.
 * Not varied: element types inside containers (ints and one-character
@@ -57,6 +62,7 @@ import subprocess
 import sys
 import textwrap
 import time
+from collections import deque
 from collections.abc import Callable, Iterator
 from typing import Any
 
@@ -81,7 +87,8 @@ def best_ns(func: Callable[[], Any], repeats: int = 7, inner: int = 1) -> float:
 
 class TestContainerIteratorsAreConstantPerCall:
     """`next(iterator)` is O(1) on list, tuple, str, bytes and range
-    iterators: the cost does not grow with the container."""
+    iterators: the cost grows neither with the container nor with the
+    position reached in it."""
 
     @staticmethod
     def _make(kind: str, size: int) -> Any:
@@ -110,11 +117,27 @@ class TestContainerIteratorsAreConstantPerCall:
             f"1,000 ({small_ns:.0f}ns to {large_ns:.0f}ns); a linear cost predicts x1,000"
         )
 
+    @pytest.mark.timing
+    @pytest.mark.parametrize("kind", ["list", "tuple", "str", "bytes", "range"])
+    def test_a_full_pass_is_linear(self, kind: str) -> None:
+        small = self._make(kind, 10_000)
+        large = self._make(kind, 1_000_000)
+
+        small_ns = best_ns(lambda: deque(iter(small), maxlen=0), inner=3)
+        large_ns = best_ns(lambda: deque(iter(large), maxlen=0), repeats=5)
+
+        ratio = large_ns / small_ns
+        assert 20 < ratio < 400, (
+            f"draining a {kind} of 1,000,000 cost x{ratio:.1f} draining 10,000 "
+            f"({small_ns:.0f}ns to {large_ns:.0f}ns); linear predicts x100, and a per-call "
+            "cost growing with the position x10,000"
+        )
+
 
 class TestSparseHashTables:
-    """`next()` on a dict or set iterator is O(1) amortized: deleting entries one
-    at a time does not shrink the table, so the first next() after deleting
-    most of them walks the empty slots, and a rebuild restores O(1)."""
+    """`next()` on a dict or set iterator is O(1) amortized: deleting entries by
+    key does not shrink the table, so the first next() after deleting most
+    of them walks the empty slots, and a rebuild restores O(1)."""
 
     @staticmethod
     def _sparse(kind: str, size: int) -> Any:
