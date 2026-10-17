@@ -65,6 +65,24 @@ Measurement scope:
 * The worst case is a counting `__eq__` on elements that share one hash:
   `a & b` over two disjoint sets of k such elements makes at least k squared
   comparisons for k = 40 and 80, and doubling k more than triples them.
+* set_func.md: elements with a counting `__hash__` are hashed exactly once
+  per item from a list of 1,000 holding 100 distinct values, and not at all
+  from a set, a frozenset, a subclass instance of either, a dict or (3.15+)
+  a frozendict of 1,000 distinct keys. A dict subclass and a `keys()` view
+  are asserted to hash all 1,000.
+* set_func.md: `set(s)` is asserted to return a new set holding the same
+  element objects, for a set and for a frozenset. A set built from 1,000
+  equal items is no larger than one built from a single item, and
+  `set(itertools.repeat(x, 10**6))` is asserted to trace a peak under
+  64 KiB, where a copied list would need about 8 MB. With every hash equal,
+  40 and 80 elements must cost at least k(k-1)/2 `__eq__` calls, and
+  doubling k must more than triple them.
+* set_func.md: `set(d)` of a dict of 200,000 keys with all but 10 deleted
+  must cost more than 50x `set()` of a fresh 10-key dict; `set(s)` of the
+  sparse set is timed with the walking operations above. Both results are
+  asserted under 1/100 of the sparse source's size. Only int and
+  counted-object elements were used; element type and hash cost were not
+  varied.
 * Every fenced Python block on both pages runs in its own subprocess, and a
   mutated assertion in one of them is asserted to fail.
 
@@ -83,19 +101,22 @@ Not settled here:
 
 from __future__ import annotations
 
+import builtins
+import itertools
 import pathlib
 import re
 import subprocess
 import sys
 import textwrap
 import time
+import tracemalloc
 from collections.abc import Callable, Iterator
 from typing import Any
 
 import pytest
 
 DOCS = pathlib.Path(__file__).parent.parent / "docs" / "builtins"
-PAGES = {"set.md": 6, "set_func.md": 21}
+PAGES = {"set.md": 6, "set_func.md": 5}
 
 PEAK = 200_000
 KEPT = 10
@@ -503,3 +524,151 @@ class TestDocumentedExamples:
 
         assert mutated != source, f"the mutation matched nothing in set.md:{line}"
         assert _run_block(mutated, tmp_path).returncode != 0
+
+
+# ---------------------------------------------------------------------------
+# docs/builtins/set_func.md
+# ---------------------------------------------------------------------------
+
+FROZENDICT: Any = getattr(builtins, "frozendict", None)
+
+
+class CountedKey:
+    """An element that counts its `__hash__` and `__eq__` calls."""
+
+    hashes = 0
+    comparisons = 0
+
+    def __init__(self, value: int, hash_value: int | None = None) -> None:
+        self.value = value
+        self.hash_value = value if hash_value is None else hash_value
+
+    def __hash__(self) -> int:
+        type(self).hashes += 1
+        return self.hash_value
+
+    def __eq__(self, other: object) -> bool:
+        type(self).comparisons += 1
+        return isinstance(other, CountedKey) and self.value == other.value
+
+
+class SubSet(set[Any]):
+    pass
+
+
+class SubFrozenset(frozenset[Any]):
+    pass
+
+
+class SubDict(dict[Any, Any]):
+    pass
+
+
+class TestSetFuncHashesEachItemOnce:
+    """`set(iterable)` hashes each item once; a set, frozenset, subclass of
+    either, dict or frozendict has its stored hashes reused, and a dict
+    subclass or dict view is an ordinary iterable."""
+
+    def test_an_iterable_is_hashed_once_per_item(self) -> None:
+        distinct = [CountedKey(i) for i in range(100)]
+        items = distinct * 10
+        CountedKey.hashes = 0
+        assert len(set(items)) == 100
+        assert CountedKey.hashes == len(items)
+
+    @pytest.mark.parametrize(
+        "kind", ["set", "frozenset", "set subclass", "frozenset subclass", "dict", "frozendict"]
+    )
+    def test_stored_hashes_are_reused(self, kind: str) -> None:
+        if kind == "frozendict" and FROZENDICT is None:
+            pytest.skip("version: frozendict was added in 3.15")
+        builders: dict[str, Callable[[list[CountedKey]], Any]] = {
+            "set": set,
+            "frozenset": frozenset,
+            "set subclass": SubSet,
+            "frozenset subclass": SubFrozenset,
+            "dict": dict.fromkeys,
+            "frozendict": lambda keys: FROZENDICT(dict.fromkeys(keys)),
+        }
+        source = builders[kind]([CountedKey(i) for i in range(1_000)])
+        CountedKey.hashes = 0
+        assert len(set(source)) == 1_000
+        assert CountedKey.hashes == 0
+
+    @pytest.mark.parametrize("kind", ["dict subclass", "keys view"])
+    def test_other_iterables_are_hashed_again(self, kind: str) -> None:
+        keys = [CountedKey(i) for i in range(1_000)]
+        source = SubDict.fromkeys(keys) if kind == "dict subclass" else dict.fromkeys(keys).keys()
+        CountedKey.hashes = 0
+        assert len(set(source)) == 1_000
+        assert CountedKey.hashes == 1_000
+
+    def test_collisions_make_building_quadratic(self) -> None:
+        def comparisons(k: int) -> int:
+            keys = [CountedKey(i, hash_value=7) for i in range(k)]
+            CountedKey.comparisons = 0
+            assert len(set(keys)) == k
+            return CountedKey.comparisons
+
+        at_40, at_80 = comparisons(40), comparisons(80)
+        assert at_40 >= 40 * 39 // 2 and at_80 >= 80 * 79 // 2
+        assert at_80 > at_40 * 3, "doubling k must roughly quadruple the comparisons"
+
+
+class TestSetFuncAlwaysCopies:
+    """`set(s)` is a new, shallow copy, even of a set or a frozenset."""
+
+    @pytest.mark.parametrize("kind", [set, frozenset])
+    def test_the_result_is_a_new_set_of_the_same_elements(self, kind: type) -> None:
+        elements = [(i, i) for i in range(100)]
+        source = kind(elements)
+        copied = set(source)
+        assert copied == source and copied is not source and type(copied) is set
+        by_value = {element: element for element in source}
+        assert all(element is by_value[element] for element in copied)
+
+
+class TestSetFuncSpace:
+    """Space is O(u) in the distinct elements, and the iterable is consumed
+    item by item rather than copied first."""
+
+    def test_duplicates_take_no_space(self) -> None:
+        assert sys.getsizeof(set([2_000] * 1_000)) <= sys.getsizeof({2_000})
+
+    def test_the_iterable_is_not_copied(self) -> None:
+        item = object()
+        tracemalloc.start()
+        try:
+            result = set(itertools.repeat(item, 1_000_000))
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        assert result == {item}
+        assert peak < 64 * 1024, f"traced peak {peak} bytes"
+
+
+def sparse_dict() -> dict[int, None]:
+    """A dict that held PEAK keys and now holds KEPT."""
+    d = dict.fromkeys(range(PEAK))
+    for i in range(KEPT, PEAK):
+        del d[i]
+    return d
+
+
+class TestSetFuncFromASparseSource:
+    """A source that had most of its elements removed costs its former size,
+    and the set built from it is compact."""
+
+    @pytest.mark.timing
+    def test_a_sparse_dict_costs_its_former_size(self) -> None:
+        sparse, fresh = sparse_dict(), dict.fromkeys(range(KEPT))
+        sparse_ns = best_ns(lambda: set(sparse))
+        fresh_ns = best_ns(lambda: set(fresh))
+        assert sparse_ns > fresh_ns * 50, f"{fresh_ns:.0f}ns vs {sparse_ns:.0f}ns"
+
+    @pytest.mark.parametrize("kind", ["set", "dict"])
+    def test_the_result_is_compact(self, kind: str) -> None:
+        source: Any = sparse_set() if kind == "set" else sparse_dict()
+        result = set(source)
+        assert result == set(range(KEPT))
+        assert sys.getsizeof(result) * 100 < sys.getsizeof(source)
