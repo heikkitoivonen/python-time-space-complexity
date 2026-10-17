@@ -1,5 +1,5 @@
 ---
-source_sha: 27d7b49873dd1e3f2dce6e588bbfb248a178e5e45840254699ee9fc177f994e8
+source_sha: fb76ee69cf68c702e72aa4441f3bdaaedba80ad682a3e3988c5de4b252f36f31
 translated: machine
 ---
 
@@ -61,7 +61,7 @@ mainittu kustannus on se, minkä maksat iteraattorin läpikäynnistä.
 | [`anext()`](anext.md) | O(1) | O(1) | Odottaminen maksaa sen, minkä asynkroninen generaattori maksaa |
 | [`enumerate()`](enumerate.md) | O(1) | O(1) | O(n) läpikäyntiin; tuottaa `(indeksi, alkio)` -monikoita |
 | [`zip()`](zip.md) | O(1) | O(1) | O(n) läpikäyntiin; pysähtyy lyhimpään iteroitavaan |
-| [`map()`](map.md) | O(1) | O(1) | O(n*k) läpikäyntiin, k = funktion aika |
+| [`map()`](map.md) | O(m) | O(m) | m = syötteenä annettujen iteroitavien määrä; n tuloksen läpikäynti maksaa O(n·m) sekä n funktiokutsua |
 | [`filter()`](filter.md) | O(1) | O(1) | O(n*k) läpikäyntiin, k = predikaatin aika |
 | [`reversed()`](reversed.md) | O(1) | O(1) | O(n) läpikäyntiin; vaatii `__reversed__` tai `__getitem__` |
 

@@ -1,5 +1,5 @@
 ---
-source_sha: 27d7b49873dd1e3f2dce6e588bbfb248a178e5e45840254699ee9fc177f994e8
+source_sha: fb76ee69cf68c702e72aa4441f3bdaaedba80ad682a3e3988c5de4b252f36f31
 translated: machine
 ---
 
@@ -57,7 +57,7 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 | [`anext()`](anext.md) | O(1) | O(1) | await のコストは非同期ジェネレータのコストと同じ |
 | [`enumerate()`](enumerate.md) | O(1) | O(1) | 消費に O(n)、`(index, item)` のタプルを生成 |
 | [`zip()`](zip.md) | O(1) | O(1) | 消費に O(n)、もっとも短いイテラブルで止まる |
-| [`map()`](map.md) | O(1) | O(1) | 消費に O(n*k)、k は関数の実行時間 |
+| [`map()`](map.md) | O(m) | O(m) | m は入力イテラブルの数、n 個の結果の消費に O(n·m) と n 回の関数呼び出し |
 | [`filter()`](filter.md) | O(1) | O(1) | 消費に O(n*k)、k は述語の実行時間 |
 | [`reversed()`](reversed.md) | O(1) | O(1) | 消費に O(n)、`__reversed__` か `__getitem__` が必要 |
 

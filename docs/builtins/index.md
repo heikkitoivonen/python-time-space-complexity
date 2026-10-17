@@ -56,7 +56,7 @@ under Notes is what you pay to consume it.
 | [`anext()`](anext.md) | O(1) | O(1) | Awaiting costs what the async generator costs |
 | [`enumerate()`](enumerate.md) | O(1) | O(1) | O(n) to consume; yields `(index, item)` tuples |
 | [`zip()`](zip.md) | O(1) | O(1) | O(n) to consume; stops at the shortest iterable |
-| [`map()`](map.md) | O(1) | O(1) | O(n*k) to consume, k = function time |
+| [`map()`](map.md) | O(m) | O(m) | m = input iterables; consuming n results costs O(n·m) plus n function calls |
 | [`filter()`](filter.md) | O(1) | O(1) | O(n*k) to consume, k = predicate time |
 | [`reversed()`](reversed.md) | O(1) | O(1) | O(n) to consume; needs `__reversed__` or `__getitem__` |
 

@@ -1,5 +1,5 @@
 ---
-source_sha: 27d7b49873dd1e3f2dce6e588bbfb248a178e5e45840254699ee9fc177f994e8
+source_sha: fb76ee69cf68c702e72aa4441f3bdaaedba80ad682a3e3988c5de4b252f36f31
 translated: machine
 ---
 
@@ -58,7 +58,7 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 | [`anext()`](anext.md) | O(1) | O(1) | await 的开销即异步生成器本身的开销 |
 | [`enumerate()`](enumerate.md) | O(1) | O(1) | 消耗为 O(n)；产出 `(索引, 元素)` 元组 |
 | [`zip()`](zip.md) | O(1) | O(1) | 消耗为 O(n)；在最短的可迭代对象处停止 |
-| [`map()`](map.md) | O(1) | O(1) | 消耗为 O(n*k)，k 为函数耗时 |
+| [`map()`](map.md) | O(m) | O(m) | m 为输入可迭代对象的数量；消耗 n 个结果需要 O(n·m) 加 n 次函数调用 |
 | [`filter()`](filter.md) | O(1) | O(1) | 消耗为 O(n*k)，k 为谓词耗时 |
 | [`reversed()`](reversed.md) | O(1) | O(1) | 消耗为 O(n)；需要 `__reversed__` 或 `__getitem__` |
 
