@@ -363,7 +363,7 @@ Python 3.15     ← Lazy imports, frozendict, UTF-8 by default
 ### GitHub Pages Setup
 1. Push to GitHub
 2. Go to **Settings** → **Pages**
-3. Select **Deploy from a branch** → **gh-pages**
+3. Under **Build and deployment**, set **Source** to **GitHub Actions**
 4. GitHub Actions automatically deploys on push
 
 ### Custom Domain (Optional)
@@ -389,8 +389,9 @@ rm -rf .venv/ && uv sync
 
 ### GitHub Pages Not Updating
 1. Check GitHub Actions tab for errors
-2. Verify gh-pages branch exists
-3. Wait ~1-2 minutes for deployment
+2. Verify **Settings** → **Pages** → **Source** is **GitHub Actions**
+3. Wait ~10-15 minutes, sometimes longer, after a push to `main`: the deploy job
+   runs only once the checks and tests pass
 
 ---
 

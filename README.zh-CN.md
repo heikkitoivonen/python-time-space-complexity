@@ -1,4 +1,4 @@
-<!-- source_sha: 086995ffd6369191cf4f532cfdde286f955d5ed4c10e0ad8670fd2f30fdb2d60 -->
+<!-- source_sha: b30e329a2515f93e7b5da53ece32352497df5d469fe4dc273e84bd1c58bf6db8 -->
 <!-- translated: machine -->
 
 [English](README.md) | **简体中文**
@@ -357,7 +357,7 @@ Python 3.15     ← Lazy imports, frozendict, UTF-8 by default
 ### GitHub Pages 设置
 1. 推送到 GitHub
 2. 前往 **Settings** → **Pages**
-3. 选择 **Deploy from a branch** → **gh-pages**
+3. 在 **Build and deployment** 下，将 **Source** 设为 **GitHub Actions**
 4. GitHub Actions 会在推送时自动部署
 
 ### 自定义域名（可选）
@@ -383,8 +383,8 @@ rm -rf .venv/ && uv sync
 
 ### GitHub Pages 未更新
 1. 检查 GitHub Actions 选项卡中的错误
-2. 确认 gh-pages 分支存在
-3. 等待约 1-2 分钟完成部署
+2. 确认 **Settings** → **Pages** → **Source** 为 **GitHub Actions**
+3. 推送到 `main` 后等待约 10-15 分钟，有时更久：部署任务要等检查和测试通过后才运行
 
 ---
 
