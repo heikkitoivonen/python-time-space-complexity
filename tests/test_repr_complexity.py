@@ -23,10 +23,13 @@ Measurement scope:
   per dict key and value, and again on a second call.
 * A dict and a set of 200,000 ints with all but 10 removed must cost more than
   50x a fresh 10-item one to render.
-* A 100,000-character string wrapped in 400 nested lists must cost more than
-  6x the same string in one list (one copy per level predicts about 400 copies
-  of the text, measured 16x-18x on 3.12 and 3.15), while `L` grows by only 798
-  characters. A chain of 50 lists renders as 51 brackets each side.
+* An object returning a prepared 1,000,000-character repr is wrapped in 1,
+  20 and 400 nested lists. Each 20x depth step must cost more than 6x, while
+  `L` grows by only 798 characters overall. Returning the same string by
+  identity keeps leaf rendering constant; repeated copying predicts about
+  20x per step, while work proportional only to `L` predicts about 1x.
+  The payload length and ASCII character width are fixed. A chain of 50
+  lists renders as 51 brackets each side.
 * A list and a dict that contain themselves render `[...]` and `{...}`, and a
   tuple reached again through a list renders `(...)`.
 * The default `object.__repr__` is matched against `<module.Name object at
@@ -225,18 +228,30 @@ def _wrap(item: Any, depth: int) -> list[Any]:
 class TestNestedTextIsCopiedOncePerLevel:
     """Containers nested h levels deep | O(L·h) at most | Each level copies its text.
 
-    The same long string at depth 1 and at depth 400 leaves `L` almost
-    unchanged, so a bound in `L` alone predicts equal cost.
+    Prepared text at depths 1, 20 and 400 leaves `L` almost unchanged, so a
+    bound in `L` alone predicts equal cost. The leaf returns its text without
+    scanning or escaping it, isolating the containers' copying cost.
     """
 
     @pytest.mark.timing
     def test_depth_multiplies_the_cost_of_the_same_text(self) -> None:
-        text = "a" * 100_000
-        shallow, deep = _wrap(text, 1), _wrap(text, 400)
-        assert len(repr(deep)) - len(repr(shallow)) == 798
-        shallow_ns = best_ns(lambda: repr(shallow), inner=3)
-        deep_ns = best_ns(lambda: repr(deep), inner=3)
-        assert deep_ns > shallow_ns * 6, f"depth 1 {shallow_ns:.0f}ns, 400 {deep_ns:.0f}ns"
+        text = "a" * 1_000_000
+
+        class PreparedRepr:
+            def __repr__(self) -> str:
+                return text
+
+        leaf = PreparedRepr()
+        assert repr(leaf) is text
+        depths = (1, 20, 400)
+        times = []
+        for depth in depths:
+            nested = _wrap(leaf, depth)
+            assert repr(nested) == "[" * depth + text + "]" * depth
+            times.append(best_ns(lambda nested=nested: repr(nested), inner=3))
+
+        for smaller, larger in itertools.pairwise(times):
+            assert larger > smaller * 6, f"depths {depths}: {times} ns"
 
     def test_a_chain_renders_its_brackets(self) -> None:
         assert repr(_wrap([], 50)) == "[" * 51 + "]" * 51
