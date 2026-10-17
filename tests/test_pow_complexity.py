@@ -1,62 +1,80 @@
 """Tests for docs/builtins/pow.md.
 
-Integer powers with abs(x) >= 2 and y > 0 have result width r = Θ(b * y).
-Bases 0 and ±1 keep bounded results while still scanning the exponent.
-Result sizes and traced allocation cover these cases independently of timing.
+Integer powers with abs(x) >= 2 and y > 0 have result width r = Θ(b * y), so
+result size and traced allocation settle their space rows without a stopwatch;
+time needs one, framed for the widest gap measured. Modular powers are settled
+the same way, one size variable at a time: base width, positive and negative
+exponent width, and modulus width, each varied with the others held fixed.
 
-Modular powers include base preprocessing, O(m)-bit arithmetic, and, for a
-negative exponent, an O(e)-space exponent copy. Independent probes vary base
-width, positive and negative exponent width, and modulus width. Inputs are
-constructed before tracing. Peak allocation establishes growth, not an exact
-bound on the bit width of each intermediate product.
+The grade-school upper bounds follow long_pow, long_invmod and l_mod in
+Objects/longobject.c. long_pow does the same work in the v3.11.14, v3.12.12,
+v3.13.11, v3.14.2 and v3.15.0rc3 tags, so no version is treated apart. Initial
+division of a b-bit base by an m-bit modulus costs O(b*m); the remaining
+inversion costs O(m²), and O(e) modular steps cost O(e*m²). The measurements
+below cover each size dimension; they do not prove those asymptotic bounds.
 
-The grade-school upper bounds follow long_pow, long_invmod, and division in
-CPython's Objects/longobject.c (released 3.11–3.14 branches). Initial division
-of a b-bit base by an m-bit modulus costs O(b*m); the remaining inversion
-costs O(m²), and O(e) modular steps cost O(e*m²). Allocation probes and finite
-timings cover the size dimensions, not a proof of these asymptotic bounds.
-Source: https://github.com/python/cpython/blob/v3.14.7/Objects/longobject.c#L4584
+Measurement scope:
 
-The rest need elapsed time, each framed to leave the widest gap measured:
+* integer powers: result width 64,000 and 256,000 bits for a 64-bit base at
+  y = 1,000 and 4,000; widths for bases ±2 and ±3 lie between (b - 1) * y + 1
+  and b * y for odd and even y; sys.getsizeof grows x4 for x4 in y, and is the
+  same for x4 in the base's width at a quarter of the exponent.
+* integer power time: x4 in y costs between x5 and x30 (log predicts x1, linear
+  x4, grade-school squaring x16); x8 in the base's bits at fixed y costs over
+  x8, where a bound in y alone predicts x1.
+* bases 0, 1 and -1: the traced peak does not grow from a 101-bit exponent to a
+  10,001-bit one, while time grows between x10 and x300, so the exponent is
+  scanned.
+* converting an int to a float, for y < 0 or a float operand: rejecting
+  2**10_000_000 costs between x20 and x1,000 the time of 2**100_000, as the
+  base of pow(x, -1), as the negative exponent of pow(2, y), and as either
+  operand of a power with the float 2.0; linear predicts x100 and constant x1.
+  A power of two is the worst case; most ints stop the scan after a few
+  digits, which tests/test_float_func_complexity.py measures. The traced peak
+  of pow(x, -1) does not grow from an 11-bit base to a 1,001-bit one.
+* float powers: pow(1.0000001, 3.7) and pow(1.7e308, 0.99) cost within x5 of
+  each other, and a negative base with a fractional exponent gives a
+  complex.
+* modular powers: a base of 10,001 then 1,000,001 bits against a 128-bit
+  modulus raises the traced peak x30 to x200 and the time x10 to x300; with a
+  reduced base and a 1,024-bit modulus the peak stays under 4m bytes and under
+  x2 for x10 in y, while the two-step form's peak grows x5 to x20; x2 in the
+  exponent's bits costs x1.3 to x3.5, and x4 in the modulus' bits over x6.
+* modular inverse: negative exponents of 10,001 and 1,000,001 bits raise the
+  peak x30 to x200 against modulus 1009, while positive exponents of the same
+  widths leave it flat.
+* reducing during or after: at 42**65537 mod 10**9+7 the intermediate is
+  353,397 bits against a 30-bit modulus; the two-step form peaks over x100 the
+  three-argument one and costs over x50 in time.
+* powers of two: pow(2, 10**6) == 1 << 10**6; the shift costs under x30 for x10
+  in n and pow() over x100 the shift; a dense 64-bit base costs over x3 a power
+  of two at about the same result width, which is why the growth tests use one.
+* pow(x, 1) returns a new object, whose traced peak grows over x50 from a
+  1,001-bit base to a 100,001-bit one.
+* `x ** y`: equal results for int and float operands; `2 ** 8` compiles with
+  no BINARY_OP, `2 ** 1000` keeps one, and `pow(2, 8)` stays a call.
+* delegation: Decimal, Fraction and complex results; a recording int subclass's
+  `__pow__` receives the modulus. `__rpow__` dispatch is not exercised.
+* every value and exception the page's blocks state, every block run in its own
+  subprocess, and a flipped assertion in one shown to fail.
 
-* an integer power is superlinear in `y` (x9.1 for x4, where a log bound
-  predicts x1 and a linear one x4, and grade-school squaring x16);
-* the base's width is a size variable of its own (x22 for x8 in the base's bits
-  at a fixed `y`, against x1 if `y` governed the cost alone);
-* modular exponentiation is linear in the exponent's bits (x2.0 for x2);
-* and superlinear in the modulus' bits (x13.4 for x4, against x4 if linear);
-* reducing afterwards costs x19,000 at RSA scale, and nothing at 2**10;
-* `1 << n` beats `pow(2, n)` by x2,500 at n = 1e6;
-* and a dense base costs x12 more than a power of two at the same result
-  width, which is why the growth tests above use a 64-bit base rather than 2;
-* converting an int to a float for `y < 0` or a float operand is linear at
-  worst: rejecting 2**10_000_000 costs between x20 and x1,000 the time of
-  2**100_000 as the base of `pow(x, -1)`, as the negative exponent of
-  `pow(2, y)` (negated before timing), and as either operand of a power with
-  the float 2.0 (x100 if linear, x1 if constant; measured
-  about x90). A power of two is the worst case; most ints stop the scan
-  after a few digits, which tests/test_float_func_complexity.py measures.
+Not settled here:
 
-That last one is also the caveat on the table's `O(r²)`: it is an upper bound,
-as the page's Performance Notes say, and a power-of-two base sits far below it -
-`pow(2, n)` measures about n^1.15 in the result width where a 64-bit base
-measures n^1.59.
-
-Measured on one aarch64 machine under CPython 3.14; the thresholds sit far from
-both the asserted and the excluded shape so a slower or differently-tuned CI
-runner still separates them.
-
-One dimension is deliberately not varied: operand types other than `int` and
-`float` are checked for delegation only. What `Decimal.__pow__` or a NumPy
-scalar costs belongs to those types' pages.
-
-One claim cannot be settled by running code here: the page dates the modular
-inverse and the keyword arguments to Python 3.8, and the integer-to-string limit
-to 3.11 and 3.10.7. This project supports 3.11 and newer, so every supported
-interpreter already has all three. The tests below assert that
-the features are present, not the release that introduced them.
+* The release that introduced the modular inverse and the keyword arguments
+  (3.8) and the integer-to-string limit (3.11 and 3.10.7): every supported
+  interpreter has all three, so the tests assert the features, not the
+  release.
+* The O(r²) row is an upper bound: pow(2, n) measures about n^1.15 in the result
+  width where a 64-bit base measures n^1.59, so a power-of-two base sits far
+  below it, and Karatsuba multiplication keeps any wide base below it.
+* Not varied: operand types other than int and float are checked for
+  delegation only, and the base shape in the modular probes (2**k + 1) and the
+  modulus width in the base-width probes (128 bits) stay fixed.
 """
 
+from __future__ import annotations
+
+import dis
 import pathlib
 import re
 import subprocess
@@ -101,8 +119,9 @@ def traced_peak(func: Callable[[], Any]) -> int:
 
 
 class TestIntegerPowerWidth:
-    """The `Integer base, y >= 0` row: O(r²) time and Θ(r) space for a result
-    of r = Θ(b * y) bits when abs(x) >= 2 and y > 0."""
+    """The `pow(x, y)`, integers, `abs(x) >= 2`, `y > 0` row: O(r²) time and
+    Θ(r) space for a result of r = Θ(b * y) bits, and the row for bases 0, 1
+    and -1."""
 
     def test_result_width_is_linear_in_the_exponent(self) -> None:
         assert pow(WORD, 1_000).bit_length() == pytest.approx(64_000, rel=0.01)
@@ -220,7 +239,7 @@ def reject_ratio(power: Callable[[int], Any], sign: int = 1) -> float:
 
 
 class TestNegativeIntegerExponent:
-    """The `Integer base, y < 0` row: via float, O(b + e) at worst, and
+    """The `pow(x, y)`, integers, `y < 0` row: via float, O(b + e) at worst, and
     OverflowError once the base leaves float range."""
 
     @pytest.mark.timing
@@ -236,28 +255,34 @@ class TestNegativeIntegerExponent:
         assert 20 < ratio < 1_000, f"100x the exponent bits cost x{ratio:.1f}; linear is x100"
 
     def test_returns_a_float(self) -> None:
-        assert pow(2, -1) == 0.25 * 2
+        assert pow(2, -1) == 0.5
         assert isinstance(pow(2, -1), float)
         assert pow(2, -2) == 0.25
 
-    def test_a_base_wider_than_a_float_overflows(self) -> None:
-        with pytest.raises(OverflowError):
+    def test_a_base_wider_than_a_float_overflows_with_the_stated_message(self) -> None:
+        with pytest.raises(OverflowError, match="too large to convert to float"):
             pow(10**1000, -1)
 
-    def test_the_float_path_allocates_nothing_wide(self) -> None:
-        """O(1) space: the result is one float however large the exponent."""
-        assert sys.getsizeof(pow(2, -1)) == sys.getsizeof(pow(2, -1_000_000))
+    def test_the_float_path_allocates_nothing_that_grows_with_the_base(self) -> None:
+        """O(1) space: a 1,001-bit base peaks no higher than an 11-bit one."""
+        bases = [(1 << 10) + 1, (1 << 1_000) + 1]
+        for base in bases:
+            assert isinstance(pow(base, -1), float)
+        peaks = [traced_peak(lambda x=x: pow(x, -1)) for x in bases]
+
+        assert peaks[1] <= peaks[0] + 512, f"float-path peaks grew with the base: {peaks}"
 
 
 class TestFloatPower:
-    """The `Float base or exponent` row: one libm call, O(1) either way; an int
+    """The `pow(x, y)`, float base or exponent row: fixed-precision arithmetic,
+    O(1) either way; an int
     on the other side is converted first, O(b) or O(e) at worst."""
 
     def test_stated_values(self) -> None:
         assert pow(2.0, 3) == 8.0
         assert pow(2.5, 2) == 6.25
         assert pow(2.0, 0.5) == 1.4142135623730951
-        assert pow(1.7e308, 0.99) == 1.4065152073912217e305
+        assert pow(1.7e308, 0.99) == pytest.approx(1.4065152073912217e305)
 
     def test_a_negative_base_with_a_fractional_exponent_is_complex(self) -> None:
         result = pow(-8, 1 / 3)
@@ -361,14 +386,15 @@ class TestModularExponentiation:
         """The result width is at most m; this does not measure workspace."""
         assert pow(3, 10**6, self.MODULUS).bit_length() <= self.MODULUS.bit_length()
 
-    def test_a_negative_modulus_gives_a_negative_result(self) -> None:
+    def test_a_negative_modulus_gives_its_sign_or_zero(self) -> None:
         assert pow(2, 10, -1000) == -976
+        assert pow(2, 3, -8) == 0
 
     def test_a_zero_modulus_is_rejected(self) -> None:
         with pytest.raises(ValueError, match="cannot be 0"):
             pow(2, 10, 0)
 
-    def test_all_three_arguments_must_be_integers(self) -> None:
+    def test_a_float_operand_with_a_modulus_is_rejected(self) -> None:
         with pytest.raises(TypeError, match="all arguments are integers"):
             # The type checker rejects these too; the page documents the
             # runtime behaviour, so the calls have to reach the interpreter.
@@ -439,16 +465,16 @@ class TestModularInverse:
 
 
 class TestThreeArgumentFormVersusReducingAfterwards:
-    """The page's central recommendation: the two forms cost the same while
-    `b * y` is small and diverge as soon as it is not.
+    """The Reducing During or After section: the three-argument form wins once
+    the full power is much wider than the modulus.
 
     The divergence is a width, so both halves are observable. Only the final
     timing uses a stopwatch, and there the gap is four orders of magnitude."""
 
     MESSAGE, EXPONENT, MODULUS = 42, 65537, 10**9 + 7
 
-    def test_a_small_power_leaves_nothing_to_save(self) -> None:
-        """The page's 11-bit intermediate against a 10-bit modulus."""
+    def test_a_small_power_is_barely_wider_than_the_modulus(self) -> None:
+        """The page's 11-bit power against a 10-bit modulus: widths only."""
         assert (2**10).bit_length() == 11
         assert (1000).bit_length() == 10
         assert pow(2, 10, 1000) == (2**10) % 1000 == 24
@@ -494,8 +520,8 @@ class TestExactPowersOfTwo:
         assert pow(2, self.N) == 1 << self.N
 
     @pytest.mark.timing
-    def test_two_is_the_cheapest_base_at_a_fixed_result_width(self) -> None:
-        """Both calls build a 1,000,000-bit result; the power of two measured
+    def test_a_power_of_two_base_costs_less_than_a_dense_one(self) -> None:
+        """Both calls build a result of about 1,000,000 bits; the power of two measured
         x12 cheaper, which is why the timing tests above use a 64-bit base."""
         power_of_two = best_time(lambda: pow(2, 1_000_000))
         dense = best_time(lambda: pow(WORD, 1_000_000 // 64))
@@ -506,19 +532,21 @@ class TestExactPowersOfTwo:
         )
 
     @pytest.mark.timing
-    def test_the_shift_is_linear_in_the_result_width(self) -> None:
-        """x10 in n measured x5.1, so not the squaring loop's growth."""
+    def test_the_shift_is_far_from_quadratic(self) -> None:
+        """x10 in n costs under x30, where quadratic predicts x100. Fixed
+        overhead keeps one step from separating linear from slightly
+        superlinear; the next test separates the shift from pow(2, n)."""
         small = best_time(lambda: 1 << 100_000)
         large = best_time(lambda: 1 << 1_000_000)
         ratio = large / small
 
         assert ratio < 30.0, (
-            f"x10 in n cost x{ratio:.2f}, which is not linear ({small:.2e}s then {large:.2e}s)"
+            f"x10 in n cost x{ratio:.2f}, near quadratic ({small:.2e}s then {large:.2e}s)"
         )
 
     @pytest.mark.timing
     def test_the_shift_beats_the_squaring_loop(self) -> None:
-        """Measured x2,463 at n = 1e6, and base 2 is pow()'s best case."""
+        """Measured x2,463 at n = 1e6, with a power-of-two base for pow()."""
         shift = best_time(lambda: 1 << self.N)
         squaring = best_time(lambda: pow(2, self.N))
         ratio = squaring / shift
@@ -529,25 +557,32 @@ class TestExactPowersOfTwo:
 
 
 class TestThePowerOperator:
-    """The Performance Notes: `pow(x, y)` and `x ** y` are one operation, and
-    `**` on literals is folded before it ever runs."""
+    """The `x ** y` row: one operation with `pow(x, y)`, and a literal power is
+    folded at compile time only when its result is small."""
 
     def test_the_two_spellings_agree(self) -> None:
         assert pow(2, 10) == 2**10
         assert pow(2.5, 2) == 2.5**2
         assert pow(WORD, 50) == WORD**50
 
-    def test_a_literal_power_is_folded_at_compile_time(self) -> None:
-        folded = compile("2 ** 8", "<doc>", "eval")
-        called = compile("pow(2, 8)", "<doc>", "eval")
+    @staticmethod
+    def _opnames(source: str) -> set[str]:
+        return {op.opname for op in dis.get_instructions(compile(source, "<doc>", "eval"))}
 
-        assert 256 in folded.co_consts, "the peephole optimizer stopped folding"
-        assert 256 not in called.co_consts, "pow() should still be a call"
+    def test_a_small_literal_power_is_folded_at_compile_time(self) -> None:
+        assert "BINARY_OP" not in self._opnames("2 ** 8")
+        assert "BINARY_OP" in self._opnames("2 + x"), "the probe must see a run-time BINARY_OP"
+
+    def test_a_wide_literal_power_is_computed_at_run_time(self) -> None:
+        assert "BINARY_OP" in self._opnames("2 ** 1000")
+
+    def test_pow_with_literals_is_still_a_call(self) -> None:
+        assert any(name.startswith("CALL") for name in self._opnames("pow(2, 8)"))
 
 
 class TestDelegationToOtherTypes:
-    """The `Any other type` row: pow() is `type(x).__pow__`, so the cost
-    belongs to the operand."""
+    """The `pow(x, y)`, any other type row: the operand types' `__pow__` and
+    `__rpow__` carry the cost; only `__pow__` is checked here."""
 
     def test_decimal_fraction_and_complex(self) -> None:
         assert pow(Decimal("2"), 3) == Decimal(8)
@@ -594,6 +629,17 @@ class TestEdgeCaseResults:
         assert pow(7, 1) == 7
         assert pow(2.5, 1) == 2.5
 
+    def test_an_exponent_of_one_builds_a_new_integer(self) -> None:
+        """O(b) for a wide base: a new object, whose peak tracks the base."""
+        bases = [(1 << 1_000) + 1, (1 << 100_000) + 1]
+        for base in bases:
+            result = pow(base, 1)
+            assert result == base
+            assert result is not base
+        peaks = [traced_peak(lambda x=x: pow(x, 1)) for x in bases]
+
+        assert peaks[1] / peaks[0] > 50, f"pow(x, 1) peaks did not track the base: {peaks}"
+
     def test_a_zero_base(self) -> None:
         assert pow(0, 5) == 0
 
@@ -602,15 +648,19 @@ class TestEdgeCaseResults:
 
 
 class TestIntegerStringLimit:
-    """The Best Practices line about str() on a wide result, and the second
+    """The Performance Best Practices line about str() on a wide result, and the second
     Version Notes entry. Present on every supported interpreter, so what is
     asserted is the behaviour, not the release."""
 
     def test_a_wide_result_refuses_to_stringify(self) -> None:
         wide = pow(2, 1_000_000)
-
-        with pytest.raises(ValueError, match="Exceeds the limit"):
-            str(wide)
+        original = sys.get_int_max_str_digits()
+        try:
+            sys.set_int_max_str_digits(4_300)
+            with pytest.raises(ValueError, match="Exceeds the limit"):
+                str(wide)
+        finally:
+            sys.set_int_max_str_digits(original)
 
     def test_raising_the_limit_lets_it_through(self) -> None:
         wide = pow(2, 1_000_000)
@@ -624,7 +674,7 @@ class TestIntegerStringLimit:
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "builtins" / "pow.md"
 
-EXPECTED_BLOCKS = 7
+EXPECTED_BLOCKS = 8
 
 
 def _blocks() -> list[tuple[int, str]]:
@@ -659,44 +709,28 @@ def _run(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[str]:
 
 
 class TestDocumentedExamples:
-    """Every block runs, under the interpreter running the tests."""
+    """Each block runs in its own subprocess and asserts its own results."""
 
     def test_the_page_has_the_expected_blocks(self) -> None:
-        blocks = _blocks()
-
-        assert len(blocks) == EXPECTED_BLOCKS, (
-            f"expected {EXPECTED_BLOCKS} python blocks, found {len(blocks)}"
-        )
+        assert len(_blocks()) == EXPECTED_BLOCKS
 
     def test_every_block_runs(self, tmp_path: pathlib.Path) -> None:
         failures: list[str] = []
-
+        ran = 0
         for line, source in _blocks():
-            result = _run(source, tmp_path)
+            ran += 1
+            workdir = tmp_path / f"block{line}"
+            workdir.mkdir()
+            result = _run(source, workdir)
             if result.returncode != 0:
-                failures.append(f"{PAGE.name}:{line} raised: {result.stderr.strip()}")
+                failures.append(f"{PAGE.name}:{line}\n{result.stderr.strip()}")
 
-        assert not failures, "\n".join(failures)
+        assert ran == EXPECTED_BLOCKS
+        assert not failures, "\n\n".join(failures)
 
-    def test_every_block_binds_the_names_it_uses(self, tmp_path: pathlib.Path) -> None:
-        """A block that leans on a name from its prose rather than binding it
-        compiles and then dies at run time, so NameError gets its own check."""
-        failures: list[str] = []
+    def test_the_runner_notices_a_broken_assertion(self, tmp_path: pathlib.Path) -> None:
+        line, source = next((n, s) for n, s in _blocks() if "pow(3, -1, 1000) == 667" in s)
+        mutated = source.replace("pow(3, -1, 1000) == 667", "pow(3, -1, 1000) == 668", 1)
 
-        for line, source in _blocks():
-            result = _run(source, tmp_path)
-            if "NameError" in result.stderr:
-                failures.append(f"{PAGE.name}:{line}: {result.stderr.strip()}")
-
-        assert not failures, "\n".join(failures)
-
-    def test_the_runner_catches_a_broken_block(self, tmp_path: pathlib.Path) -> None:
-        """A runner that cannot fail proves nothing about the blocks it ran."""
-        original = _blocks()[0][1]
-        broken = original.replace("pow(2, 3)", "pow(undefined_base, 3)", 1)
-        assert broken != original, "the mutation did not rewrite the call"
-
-        result = _run(broken, tmp_path)
-
-        assert result.returncode != 0
-        assert "NameError" in result.stderr
+        assert mutated != source, f"the mutation matched nothing in {PAGE.name}:{line}"
+        assert _run(mutated, tmp_path).returncode != 0
