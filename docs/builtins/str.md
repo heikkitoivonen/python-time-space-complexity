@@ -55,7 +55,7 @@ The `str` type is an immutable sequence of Unicode characters. Python strings ha
 | **Predicates** ||||
 | `isalnum()` | O(n) | O(1) | Check alphanumeric |
 | `isalpha()` | O(n) | O(1) | Check alphabetic |
-| `isascii()` | O(n) | O(1) | Check ASCII (Python 3.7+) |
+| `isascii()` | O(1) | O(1) | Reads a flag the `str` keeps |
 | `isdecimal()` | O(n) | O(1) | Check decimal chars |
 | `isdigit()` | O(n) | O(1) | Check digit chars |
 | `isidentifier()` | O(n) | O(1) | Check valid identifier |

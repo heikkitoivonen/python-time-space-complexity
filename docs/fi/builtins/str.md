@@ -1,5 +1,5 @@
 ---
-source_sha: 7b1172f01365212c7ebefaf415399dc1e6483614c58b56dadaf3dbd4bcec00d3
+source_sha: d2090773accbb6c0f6a9adc4dfe4aa13c3dbaabf29bc0a12a2c8a64e81eceaf6
 translated: machine
 ---
 
@@ -60,7 +60,7 @@ Tyyppi `str` on muuttumaton Unicode-merkkien jono. Pythonin merkkijonoja on opti
 | **Predikaatit** ||||
 | `isalnum()` | O(n) | O(1) | Tarkistaa aakkosnumeerisuuden |
 | `isalpha()` | O(n) | O(1) | Tarkistaa aakkosellisuuden |
-| `isascii()` | O(n) | O(1) | Tarkistaa ASCII-merkit (Python 3.7+) |
+| `isascii()` | O(1) | O(1) | Lukee lipun, jonka `str` pitää tallessa |
 | `isdecimal()` | O(n) | O(1) | Tarkistaa desimaalimerkit |
 | `isdigit()` | O(n) | O(1) | Tarkistaa numeromerkit |
 | `isidentifier()` | O(n) | O(1) | Tarkistaa kelvollisen tunnisteen |

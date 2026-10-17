@@ -1,5 +1,5 @@
 ---
-source_sha: 7b1172f01365212c7ebefaf415399dc1e6483614c58b56dadaf3dbd4bcec00d3
+source_sha: d2090773accbb6c0f6a9adc4dfe4aa13c3dbaabf29bc0a12a2c8a64e81eceaf6
 translated: machine
 ---
 
@@ -60,7 +60,7 @@ translated: machine
 | **判定方法** ||||
 | `isalnum()` | O(n) | O(1) | 检查是否为字母或数字 |
 | `isalpha()` | O(n) | O(1) | 检查是否为字母 |
-| `isascii()` | O(n) | O(1) | 检查是否为 ASCII（Python 3.7+） |
+| `isascii()` | O(1) | O(1) | 读取 `str` 保存的一个标志 |
 | `isdecimal()` | O(n) | O(1) | 检查是否为十进制数字字符 |
 | `isdigit()` | O(n) | O(1) | 检查是否为数字字符 |
 | `isidentifier()` | O(n) | O(1) | 检查是否为合法标识符 |

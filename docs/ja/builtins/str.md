@@ -1,5 +1,5 @@
 ---
-source_sha: 7b1172f01365212c7ebefaf415399dc1e6483614c58b56dadaf3dbd4bcec00d3
+source_sha: d2090773accbb6c0f6a9adc4dfe4aa13c3dbaabf29bc0a12a2c8a64e81eceaf6
 translated: machine
 ---
 
@@ -60,7 +60,7 @@ translated: machine
 | **述語** ||||
 | `isalnum()` | O(n) | O(1) | 英数字かどうかを調べる |
 | `isalpha()` | O(n) | O(1) | 英字かどうかを調べる |
-| `isascii()` | O(n) | O(1) | ASCII かどうかを調べる（Python 3.7+） |
+| `isascii()` | O(1) | O(1) | `str` が保持するフラグを読みます |
 | `isdecimal()` | O(n) | O(1) | 十進数字かどうかを調べる |
 | `isdigit()` | O(n) | O(1) | 数字かどうかを調べる |
 | `isidentifier()` | O(n) | O(1) | 妥当な識別子かどうかを調べる |
