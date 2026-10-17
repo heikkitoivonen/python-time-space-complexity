@@ -12,7 +12,8 @@ Nearly everything is settled by observation: identity, call counters on the
 genericpath looks up at call time, and a str subclass that records what
 `replace()` is called on. Timing tests settle the O(L) rows, `normpath()` in
 both implementations and in the fallback functions that call it, the
-`normpath()` that `realpath()` starts with, and `join()` of bytes.
+`normpath()` that `realpath()` starts with. A line trace observes the bytes
+prefixes built by `join()` without replacing its arguments or operations.
 
 Measurement scope:
 
@@ -48,13 +49,15 @@ Measurement scope:
   the steps turn superlinear, for `posixpath.join` as much as for
   `ntpath.join`. Paths that long are past what Windows opens (32,767
   characters), and are not in the test.
-* `join()` of bytes: 8,000, 32,000 and 128,000 one-character arguments
-  cost over 8x on the second 4x step and over 48x across both (x8.3 to x11
-  then x17 to x20 on 3.14), where str arguments at the same sizes cost under
-  8x per step (x2.3 to x4.7). Bytes
-  has no in-place concatenation, so `result_path = result_path + p_path`
-  copies the result so far per argument; the str form of that statement
-  grows in place. Argument length was not varied. The other functions
+* `join()` of bytes: for 100, 1,000 and 10,000 one-character arguments, a
+  line trace sums the lengths of newly created `result_path` objects. Each
+  10x step produces between 50x and 150x as many bytes in these intermediate
+  prefixes, separating quadratic copying (100x) from linear copying (10x).
+  The arguments and prefixes are exact bytes objects. The trace retains
+  only the preceding prefix to compare identity; it does not time execution
+  or measure peak memory. Bytes has no in-place concatenation, so
+  `result_path = result_path + p_path` copies the result so far per argument.
+  Argument length was not varied. The other functions
   build a result by slicing, `str.join`, or one `join()` per step that
   their row already prices, not by repeated concatenation, which is read
   from Lib/ntpath.py.
@@ -673,23 +676,38 @@ class TestJoiningBytes:
         assert ntpath.join(b"C:\\", b"a", b"b") == b"C:\\a\\b"
         assert ntpath.join(b"C:\\a", b"D:\\b") == b"D:\\b"
 
-    @pytest.mark.timing
-    def test_bytes_arguments_cost_quadratically_in_their_number(self) -> None:
-        """8,000, 32,000 and 128,000 one-character arguments: each 4x step
-        predicts 4x if linear and 16x if quadratic."""
+    def test_bytes_arguments_copy_quadratically_in_their_number(self) -> None:
+        """Count materialized prefix bytes in the actual join frame. Keeping
+        the preceding object alive makes identity independent of address reuse;
+        no bytes operation is substituted or dispatched to a subclass."""
+        totals = []
+        for size in (100, 1_000, 10_000):
+            previous: bytes | None = None
+            copied = 0
 
-        def steps(root: Any, part: Any) -> list[float]:
-            durations = [
-                best_ns(functools.partial(ntpath.join, root, *([part] * n)), repeats=3)
-                for n in (8_000, 32_000, 128_000)
-            ]
-            return [durations[1] / durations[0], durations[2] / durations[1]]
+            def trace(frame: types.FrameType, event: str, arg: Any) -> Any:
+                nonlocal previous, copied
+                if frame.f_code is not ntpath.join.__code__:
+                    return None
+                prefix = frame.f_locals.get("result_path")
+                if type(prefix) is bytes and prefix is not previous:
+                    copied += len(prefix)
+                    previous = prefix
+                return trace
 
-        as_str, as_bytes = steps("C:\\", "a"), steps(b"C:\\", b"a")
+            original_trace = sys.gettrace()
+            try:
+                sys.settrace(trace)
+                result = ntpath.join(b"C:\\", *([b"a"] * size))
+            finally:
+                sys.settrace(original_trace)
 
-        assert all(step < 8 for step in as_str), f"str: x{as_str}"
-        assert as_bytes[1] > 8, f"bytes: x{as_bytes}"
-        assert as_bytes[0] * as_bytes[1] > 48, f"bytes: x{as_bytes}"
+            assert result == b"C:\\" + b"\\".join([b"a"] * size)
+            assert copied > len(result), f"no repeated prefix copying observed: {copied}"
+            totals.append(copied)
+
+        ratios = [later / earlier for earlier, later in zip(totals, totals[1:], strict=False)]
+        assert all(50 < ratio < 150 for ratio in ratios), f"prefix bytes {totals}: x{ratios}"
 
 
 class TestAbspath:

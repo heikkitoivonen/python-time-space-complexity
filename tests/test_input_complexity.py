@@ -24,7 +24,9 @@ Measurement scope:
   and 1,000,000 characters, fastest of five, rises by more than 20x over the
   whole range and by under 40x per 10x step. The same holds for a prompt of
   100,000, 1,000,000 and 10,000,000 characters written to an `io.StringIO`
-  stdout with a one-character line.
+  stdout with a one-character line. The output buffer is preallocated and
+  overwritten, so the write copies characters rather than letting an empty
+  StringIO retain a reference to the prompt.
 * The traced peak of one `input()` over a 1,000,000-character ASCII line from
   a `readline()` that returns a prebuilt string lies between 0.5 and 3 bytes
   per character.
@@ -264,11 +266,13 @@ class TestTheCostIsLinear:
         for size in PROMPT_SIZES:
             prompt = "p" * size
 
-            def setup() -> None:
+            def setup(prompt: str = prompt) -> None:
                 sys.stdin = io.StringIO("x\n")
-                sys.stdout = io.StringIO()
+                sys.stdout = io.StringIO("\0" * len(prompt))
 
             times.append(fastest_ns(lambda prompt=prompt: input(prompt), setup))
+            assert isinstance(sys.stdout, io.StringIO)
+            assert sys.stdout.getvalue() == prompt
 
         self.check(times)
 
@@ -312,8 +316,8 @@ if sys.argv[1] == "readline":
     import readline
     lengths.append(readline.get_current_history_length())
 lines = []
-for _ in range(2):
-    lines.append(input("P> "))
+for index in range(2):
+    lines.append(input(f"P{index}> "))
     if sys.argv[1] == "readline":
         lengths.append(readline.get_current_history_length())
 report = repr(lines)
@@ -322,6 +326,22 @@ if sys.argv[1] == "readline":
     report += f" {growth} {readline.get_history_item(lengths[-1])!r}"
 sys.stderr.write(f"RESULT {report}\n")
 """
+
+
+def wait_for_prompt(controller: int, prompt: bytes, shown: bytes) -> bytes:
+    """Read terminal output until this input call's prompt arrives."""
+    deadline = time.monotonic() + 30
+    while prompt not in shown and time.monotonic() < deadline:
+        if select.select([controller], [], [], 0.2)[0]:
+            try:
+                chunk = os.read(controller, 4096)
+            except OSError:
+                break
+            if not chunk:
+                break
+            shown += chunk
+    assert prompt in shown, f"missing {prompt!r}; terminal output: {shown!r}"
+    return shown
 
 
 @pytest.mark.skipif(
@@ -335,32 +355,40 @@ class TestOnATerminal:
     the line is appended to the history unless it repeats the newest entry."""
 
     @staticmethod
-    def run(tmp_path: pathlib.Path, mode: str) -> tuple[str, str]:
+    def run(tmp_path: pathlib.Path, mode: str, source: str = TERMINAL_CHILD) -> tuple[str, str]:
         """Type the same line twice at the child's two prompts; return what
         the terminal showed and what arrived on stderr."""
+        import termios
+
         script = tmp_path / "child.py"
-        script.write_text(TERMINAL_CHILD, encoding="utf-8")
+        script.write_text(source, encoding="utf-8")
         controller, terminal = os.openpty()
+        termios.tcsetwinsize(terminal, (24, 80))
         process = subprocess.Popen(
             [sys.executable, str(script), mode],
             stdin=terminal,
             stdout=terminal,
             stderr=subprocess.PIPE,
             close_fds=True,
-            env={**os.environ, "TERM": "xterm"},
+            env={
+                **os.environ,
+                "TERM": "xterm",
+                "INPUTRC": os.devnull,
+                "EDITRC": os.devnull,
+            },
         )
         os.close(terminal)
         shown = b""
+
         try:
             if mode == "plain":
                 # The prompts go to stderr; the terminal queues both lines until read.
                 os.write(controller, b"hi \rhi \r")
             else:
-                for prompts in (1, 2):
-                    deadline = time.monotonic() + 30
-                    while shown.count(b"P> ") < prompts and time.monotonic() < deadline:
-                        if select.select([controller], [], [], 0.2)[0]:
-                            shown += os.read(controller, 4096)
+                for index in range(2):
+                    # A line editor can redraw a prompt. Only the next input()
+                    # call's distinct prompt means it is ready for another line.
+                    shown = wait_for_prompt(controller, f"P{index}> ".encode(), shown)
                     os.write(controller, b"hi \r")
             _, errors = process.communicate(timeout=60)
             while select.select([controller], [], [], 0.2)[0]:
@@ -382,15 +410,30 @@ class TestOnATerminal:
         shown, errors = self.run(tmp_path, "plain")
 
         assert "RESULT ['hi ', 'hi ']" in errors, errors
-        assert errors.count("P> ") == 2, errors
-        assert "P> " not in shown, shown
+        for prompt in ("P0> ", "P1> "):
+            assert errors.count(prompt) == 1, errors
+            assert prompt not in shown, shown
 
     def test_with_readline(self, tmp_path: pathlib.Path) -> None:
         shown, errors = self.run(tmp_path, "readline")
 
         assert "RESULT ['hi ', 'hi '] [1, 1] 'hi '" in errors, errors
-        assert "P> " not in errors.split("RESULT")[0], errors
-        assert "P> " in shown, shown
+        for prompt in ("P0> ", "P1> "):
+            assert prompt not in errors.split("RESULT")[0], errors
+            assert prompt in shown, shown
+
+    def test_a_redrawn_prompt_does_not_advance_the_driver(self, tmp_path: pathlib.Path) -> None:
+        source = TERMINAL_CHILD.replace(
+            '    lines.append(input(f"P{index}> "))',
+            '    lines.append(input(f"P{index}> "))\n    print(f"P{index}> ", end="", flush=True)',
+        )
+        assert source != TERMINAL_CHILD
+
+        shown, errors = self.run(tmp_path, "readline", source)
+
+        assert "RESULT ['hi ', 'hi '] [1, 1] 'hi '" in errors, errors
+        assert shown.count("P0> ") >= 2, shown
+        assert shown.count("P1> ") >= 2, shown
 
 
 def _blocks() -> list[tuple[int, str]]:
