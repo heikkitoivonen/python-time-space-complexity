@@ -1,226 +1,208 @@
 # print() Function Complexity
 
-The `print()` function outputs text to standard output.
+The `print()` function converts each argument with `str()` and writes the results to a file,
+`sys.stdout` by default, with a separator between them and `end` after the last. It never joins the
+output into one string: each piece goes to the file's `write()` method as soon as it is converted.
 
-## Complexity Analysis
+`n` is the characters written and `k` is the arguments. `m` is the length of the longest argument
+after conversion. Converting an argument costs what its `__str__` does: an exact `str` is passed on
+as it is, and a container's text is built from its items. The bounds exclude passing the k arguments
+into the call. A call of `file.write(s)` is priced at O(len(s)), as it is for a text file or
+`io.StringIO`; when the text reaches the operating system depends on the file's buffering, not on
+`print()`.
 
-| Case | Time | Space | Notes |
-|------|------|-------|-------|
-| Print single argument | O(n)* | O(n) | n = string length; * I/O dominates |
-| Print multiple arguments | O(n + m) | O(n + m) | n = total string length |
-| Print with formatting | O(n) | O(n) | String conversion cost |
-| Print to file | O(n) | O(n) | Same as stdout |
+## Complexity Reference
 
-## Basic Usage
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `print(*objects)` | O(n + k) | O(m) | One `str()` and one `write()` per argument, one `write()` per separator and one for `end`: 2k calls for k ≥ 1 arguments. Each converted argument is released before the next is converted |
+| `print(s)` with an exact `str` | O(len(s)) | O(1) | `s` itself is passed to `write()`, without a copy; a `str` subclass is converted to a new `str` |
+| `print()` | O(1) | O(1) | Writes only `end` |
+| `print(*objects, sep=s, end=e)` | O(n + k) | O(m) | `sep` and `end` must be `str` or `None`; anything else raises `TypeError` before anything is written |
+| `print(*objects, file=f)` | O(n + k) | O(m) | `f` needs only a `write()` method; `file=None` means `sys.stdout` |
+| `print(*objects, flush=True)` | O(n + k) | O(m) | Plus one call of `f.flush()` after `end` is written |
+| `print(*objects)` while `sys.stdout` is `None` | O(1) | O(1) | Returns without converting or writing anything |
 
-### Single Argument
+## Writing Output
+
+### One write() per Piece
+
+`print()` hands each converted argument, each separator and the final `end` to `write()` in turn,
+so a file object sees 2k calls for k ≥ 1 arguments.
 
 ```python
-# O(n) - where n is string length
-print("hello")              # Output: hello
-print(42)                   # Output: 42
-print([1, 2, 3])           # Output: [1, 2, 3]
+class Recorder:
+    def __init__(self):
+        self.calls = []
+
+    def write(self, text):
+        self.calls.append(text)
+        return len(text)
+
+out = Recorder()
+print("x =", 42, [1, 2], file=out)  # O(n + k) - 3 arguments, 6 writes
+
+assert out.calls == ["x =", " ", "42", " ", "[1, 2]", "\n"]
 ```
 
-### Multiple Arguments
+### Separators and End
+
+`sep` goes between arguments and `end` after the last; both must be strings or `None`.
 
 ```python
-# O(n + m) - total string length of all arguments
-print("Hello", "World")     # Output: Hello World
-print("x =", 42)           # Output: x = 42
-print(1, 2, 3, 4, 5)       # Output: 1 2 3 4 5
+import io
+
+buffer = io.StringIO()
+print("a", "b", "c", sep=", ", file=buffer)
+print("no newline", end="", file=buffer)
+print("x", "y", sep="-", end="!\n", file=buffer)
+assert buffer.getvalue() == "a, b, c\nno newlinex-y!\n"
+
+try:
+    print("a", "b", sep=0, file=buffer)
+except TypeError as error:
+    assert "sep must be None or a string" in str(error)
+else:
+    raise AssertionError("expected TypeError")
+assert buffer.getvalue() == "a, b, c\nno newlinex-y!\n"  # Nothing was written
 ```
 
-### Custom Separators and Terminators
+### Strings Are Not Copied
+
+An exact `str` argument goes to `write()` unchanged, and other arguments are converted one at a time, so
+the extra memory `print()` needs is the longest converted argument, not the whole output.
 
 ```python
-# O(n) - separator/end parameters affect output only
-print("a", "b", "c", sep=", ")  # Output: a, b, c
-print("no newline", end="")     # No trailing newline
-print("x", "y", sep="-", end="!\n")  # Output: x-y!
+class Recorder:
+    def __init__(self):
+        self.calls = []
+
+    def write(self, text):
+        self.calls.append(text)
+        return len(text)
+
+text = "x" * 100_000
+out = Recorder()
+print(text, file=out)  # O(1) extra space
+
+assert out.calls[0] is text
 ```
 
-## Complexity Details
+## Buffering and Flushing
 
-### String Conversion
-
-Each argument must be converted to string (if not already):
+`print()` only calls `write()`. A regular file opened for writing is block-buffered, so short output
+stays in Python's buffer until the buffer fills, the file is flushed or closed. `flush=True` adds
+one `flush()` call, which pushes the buffered text to the operating system.
 
 ```python
-# O(1) - string argument, just write
-print("hello")
+import os
+import tempfile
 
-# O(1) - integer to string conversion
-print(42)
+with tempfile.TemporaryDirectory() as directory:
+    path = os.path.join(directory, "out.txt")
+    with open(path, "w", newline="") as f:
+        print("first", file=f)
+        assert os.path.getsize(path) == 0  # Still buffered
 
-# O(n) - list conversion, where n = number of elements
-items = [1, 2, 3, 4, 5]
-print(items)  # O(n) - builds string representation
-
-# O(n) - dictionary conversion
-data = {"a": 1, "b": 2}
-print(data)   # O(n) - string representation
+        print("second", file=f, flush=True)  # One extra flush() call
+        assert os.path.getsize(path) == len("first\nsecond\n")
 ```
 
-### Multiple Arguments
+## Printing Many Lines
+
+Printing line by line makes two `write()` calls per line and holds one line at a time. Joining
+first makes two calls in all, but builds the whole output as one string before writing it.
 
 ```python
-# O(n + m) - time to convert and write both
-print("Count:", 42)  # O(2) approximately
+class Recorder:
+    def __init__(self):
+        self.calls = []
 
-# O(k * n) - k arguments, each of size ~n
-args = [str(i) for i in range(100)]
-print(*args)  # O(100) - 100 conversions + writes
-```
+    def write(self, text):
+        self.calls.append(text)
+        return len(text)
 
-## Performance Patterns
+lines = [f"Item {i}" for i in range(1_000)]
 
-### Repeated Printing
+per_line = Recorder()
+for line in lines:
+    print(line, file=per_line)  # 2 writes per line, O(1) extra space
 
-```python
-# O(n * k) - n = string length, k = iterations
-for i in range(1000):
-    print(f"Iteration {i}")  # O(1000) total
+joined = Recorder()
+print("\n".join(lines), file=joined)  # 2 writes, O(n) extra space for the joined string
 
-# Accumulate then print once - better if massive
-lines = []
-for i in range(1000):
-    lines.append(f"Iteration {i}")
-print("\n".join(lines))  # O(n) single write
-```
-
-### Writing Many Values
-
-```python
-# O(n) - each item is O(1) conversion + write
-values = list(range(10))
-for val in values:
-    print(val)  # O(10) total - constant per item
-
-# More efficient - collect then print
-print(*values)  # O(n) - single operation
-```
-
-### Formatted Output
-
-```python
-# O(n) - string formatting cost
-print(f"Value: {42}")      # O(1) - simple format
-print(f"Value: {large_list}")  # O(n) - depends on list size
-
-# String format method
-print("Value: {}".format(value))  # O(n) - conversion cost
-print("Value: %s" % value)        # O(n) - conversion cost
-```
-
-## I/O Considerations
-
-### Writing to Files
-
-```python
-# O(n) - same complexity as stdout
-output_file = open("output.txt", "w")
-
-# Time = string conversion + I/O write time
-print("Line 1", file=output_file)
-print("Line 2", file=output_file)
-
-output_file.close()
-
-# Batch writing - more efficient
-with open("output.txt", "w") as f:
-    for i in range(1000):
-        print(f"Line {i}", file=f)  # O(n) total
-```
-
-## Comparison with Alternatives
-
-### String Concatenation vs Print
-
-```python
-# Inefficient - builds intermediate strings
-output = ""
-for i in range(1000):
-    output += f"Item {i}\n"  # O(n^2) - string concatenation
-print(output)
-
-# Better - collect then print
-items = []
-for i in range(1000):
-    items.append(f"Item {i}")
-print("\n".join(items))  # O(n) - single join + print
-
-# Best - print directly
-for i in range(1000):
-    print(f"Item {i}")  # O(n) - direct output
-```
-
-### sys.stdout.write() vs print()
-
-```python
-import sys
-
-# print() adds overhead for argument handling
-print("hello world")  # Slightly slower
-
-# Direct write - O(n) same complexity, less overhead
-sys.stdout.write("hello world\n")  # O(n), minimal overhead
-
-# For many small writes, print() convenience vs write() speed
-# Difference is negligible in practice
+assert len(per_line.calls) == 2_000
+assert len(joined.calls) == 2
+assert "".join(per_line.calls) == "".join(joined.calls)
 ```
 
 ## Edge Cases
 
-### Empty Print
+### No Standard Output
+
+When `sys.stdout` is `None`, as under `pythonw` on Windows, `print()` returns at once: the arguments
+are not even converted.
 
 ```python
-# O(1) - just writes newline
-print()  # Output: \n
+import sys
+
+class Loud:
+    def __str__(self):
+        raise AssertionError("converted")
+
+saved = sys.stdout
+sys.stdout = None
+try:
+    print(Loud())  # O(1) - nothing is converted or written
+finally:
+    sys.stdout = saved
 ```
 
-### None and Special Values
+### Containers and Large Integers
+
+A container's text is built from its items, and a self-referencing list prints `[...]` for the
+cycle instead of recursing. Under the default limit of 4,300 decimal digits, an `int` with more
+digits is refused.
 
 ```python
-# O(1) - conversion to string "None"
-print(None)  # Output: None
+import io
 
-# O(1) - boolean conversion
-print(True)  # Output: True
-print(False)  # Output: False
+buffer = io.StringIO()
+cycle = []
+cycle.append(cycle)
+print(cycle, file=buffer)
+assert buffer.getvalue() == "[[...]]\n"
+
+try:
+    print(10 ** 5_000, file=buffer)
+except ValueError as error:
+    assert "integer string conversion" in str(error)
+else:
+    raise AssertionError("expected ValueError")
 ```
 
-### Circular References
-
-```python
-# O(n) - detects circular references gracefully
-lst = []
-lst.append(lst)
-print(lst)  # Output: [[...]] - handles circular refs
-```
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Collect strings then print once for massive output
+- Print large output line by line or in chunks; `print()` never holds more than one converted
+  argument
+- Pass `flush=True` when output must appear at once, such as progress on a file or pipe
+- Pass `file=` to write to any object with a `write()` method, such as `io.StringIO`
 
 ❌ **Avoid**:
 
-- Building large strings with `+=` before printing (O(n²))
-- Calling `flush=True` unless you need immediate output
-- Printing inside tight loops without buffering considerations
-- Complex string formatting when simple concatenation suffices
+- Joining everything into one string just to print it; it saves `write()` calls but holds the
+  whole output in memory
+- `flush=True` on every line of bulk output to a file; it hands each line to the operating system
+  separately instead of a buffer at a time
+- Printing an `int` over the digit limit, 4,300 digits by default; it raises `ValueError` unless
+  the limit is raised
 
 ## Related Functions
 
-- **[str()](str.md)** - Convert object to string
-- **[format()](format.md)** - Format strings
-- **[input()](input.md)** - Read from input
-- **[open()](open.md)** - File I/O operations
-
-## Version Notes
-
-- **Python 2.x**: `print` is a statement, not a function
-- **Python 3.x**: `print()` is a function with keyword arguments
-- **All versions**: I/O complexity dominated by actual write time, not computation
+- **[str()](str.md)** - The conversion `print()` applies to each argument
+- **[repr()](repr.md)** - What containers use for their items' text
+- **[int()](int.md)** - The digit limit on decimal conversion
+- **[open()](open.md)** - Files to pass as `file=`, and their buffering
+- **[input()](input.md)** - Read a line from standard input
