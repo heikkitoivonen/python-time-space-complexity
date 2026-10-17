@@ -1,503 +1,322 @@
 # NotImplemented Constant Complexity
 
-The `NotImplemented` constant is a singleton used to indicate that an operation is not implemented for the given operands. It's distinct from `NotImplementedError` exception.
+`NotImplemented` is a singleton that a binary or comparison special method returns to decline an
+operand it does not handle. The interpreter then gives the other operand its turn, and only if
+every method declines does it raise `TypeError` or, for `==` and `!=`, fall back to identity. It is
+not the `NotImplementedError` exception. Besides operator dispatch, only a few hooks, such as
+`__length_hint__` and an ABC's `__subclasshook__`, read it as declining.
 
-## Complexity Analysis
+Reading and testing the constant is O(1). The cost of an operator that meets it is counted in
+special-method calls: at most two for a binary operator or a comparison, and three for an in-place
+operator. Each method costs what its own body does; the bounds below are the work dispatch adds.
+
+## Complexity Reference
+
+### NotImplemented
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| Comparison | O(1) | O(1) | Identity check with `is` |
-| Type check | O(1) | O(1) | `type(NotImplemented)` |
-| Return from method | O(1) | O(1) | Signal operation not supported |
-| Assignment | O(1) | O(1) | Single object |
+| `NotImplemented` | O(1) | O(1) | A builtin name bound to one object |
+| `result is NotImplemented` | O(1) | O(1) | The way to test for it |
+| `type(NotImplemented)()` | O(1) | O(1) | Returns the same singleton; the type is `types.NotImplementedType` |
+| `bool(NotImplemented)` | O(1) | O(1) | Python 3.14+: raises `TypeError`; 3.11-3.13: `True` with a `DeprecationWarning` |
 
-## Basic Usage
+### Operator Dispatch
 
-### Comparison Operations
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `a + b` and the other binary operators | O(1) | O(1) | Plus up to two calls: `a.__add__(b)`, then `b.__radd__(a)` if it declined and `type(b)` differs from `type(a)`; `TypeError` if both decline |
+| `a + b` where `type(b)` subclasses `type(a)` and overrides `__radd__` | O(1) | O(1) | Plus up to two calls, `b.__radd__(a)` first |
+| `a += b` and the other in-place operators | O(1) | O(1) | Plus up to three calls: `__iadd__`, then `__add__` and `__radd__` as for `a + b` |
+| `a == b` | O(1) | O(1) | Plus up to two calls: `a.__eq__(b)`, then `b.__eq__(a)`, even for one type, and `b`'s first when `type(b)` is a strict subclass of `type(a)`; if both decline, the answer is `a is b` |
+| `a != b` | O(1) | O(1) | The same through `__ne__`, whose default inverts `__eq__`'s answer and passes `NotImplemented` on; if both decline, the answer is `a is not b` |
+| `a < b`, `a <= b`, `a > b`, `a >= b` | O(1) | O(1) | Plus up to two calls: `a.__lt__(b)`, then the reflected `b.__gt__(a)`, which goes first when `type(b)` is a strict subclass of `type(a)`; `TypeError` if both decline |
 
-```python
-# O(1) - return NotImplemented for unsupported operations
-class MyClass:
-    def __eq__(self, other):
-        if isinstance(other, MyClass):
-            return self.value == other.value
-        # O(1) - signal "don't know how to compare"
-        return NotImplemented
+## Returning NotImplemented from Operators
 
-# O(1) - Python tries reflected operation
-obj1 = MyClass()
-obj2 = "string"
+### Binary Operators and Their Reflection
 
-# obj1 == obj2:
-# 1. Calls obj1.__eq__(obj2) -> NotImplemented
-# 2. Tries obj2.__eq__(obj1) -> might handle it
-# 3. Falls back to identity comparison
-result = obj1 == obj2  # False via fallback
-```
-
-### Arithmetic Operations
+Returning `NotImplemented` hands the operation to the right operand's reflected method. Two
+operands of the same type get no second chance, so declining one of them raises `TypeError`.
 
 ```python
-# O(1) - NotImplemented for unsupported types
+calls = []
+
 class Vector:
     def __init__(self, x, y):
-        self.x = x
-        self.y = y
-    
+        self.x, self.y = x, y
+
     def __add__(self, other):
-        if isinstance(other, Vector):
-            return Vector(self.x + other.x, self.y + other.y)
-        # O(1) - unsupported operand type
-        return NotImplemented
+        calls.append("Vector.__add__")
+        if not isinstance(other, Vector):
+            return NotImplemented  # O(1) - let the other operand try
+        return Vector(self.x + other.x, self.y + other.y)
 
-# O(1) - uses NotImplemented
-v1 = Vector(1, 2)
-v2 = Vector(3, 4)
+class Offset:
+    def __radd__(self, other):
+        calls.append("Offset.__radd__")
+        return Vector(other.x + 1, other.y + 1)
 
-result = v1 + v2  # Works - Vector(4, 6)
+v = Vector(1, 2) + Vector(3, 4)
+assert (v.x, v.y) == (4, 6)
 
-# v1 + "string":
-# 1. v1.__add__("string") -> NotImplemented
-# 2. "string".__radd__(v1) -> TypeError
-# 3. TypeError: unsupported operand type(s)
-```
+calls.clear()
+moved = Vector(1, 2) + Offset()  # Two calls: __add__ declines, __radd__ answers
+assert (moved.x, moved.y) == (2, 3)
+assert calls == ["Vector.__add__", "Offset.__radd__"]
 
-### Reflected Operations
-
-```python
-# O(1) - NotImplemented enables fallback
-class Number:
-    def __init__(self, value):
-        self.value = value
-    
-    def __mul__(self, other):
-        if isinstance(other, Number):
-            return Number(self.value * other.value)
-        return NotImplemented  # O(1)
-    
-    def __rmul__(self, other):
-        # Reflected operation (other * self)
-        if isinstance(other, int):
-            return Number(other * self.value)
-        return NotImplemented  # O(1)
-
-# O(1) - normal operation
-n1 = Number(5)
-n2 = Number(3)
-result = n1 * n2  # Number(15)
-
-# O(1) - reflected operation
-result = 10 * n1  # Number(50)
-# 1. int.__mul__(Number) -> NotImplemented
-# 2. Number.__rmul__(10) -> handles it
-```
-
-## Complexity Details
-
-### Singleton Pattern
-
-```python
-# O(1) - NotImplemented is a singleton
-not_impl1 = NotImplemented
-not_impl2 = NotImplemented
-
-# Both refer to same object
-print(not_impl1 is not_impl2)  # True - O(1)
-print(id(not_impl1) == id(not_impl2))  # True - O(1)
-
-# Type
-type(NotImplemented)  # <class 'NotImplementedType'> - O(1)
-```
-
-### Comparison with NotImplementedError
-
-```python
-# O(1) - NotImplemented is a value, not an error
-value = NotImplemented  # O(1)
-
-# NotImplementedError is an exception
 try:
-    raise NotImplementedError("Not ready")
-except NotImplementedError:
-    print("Feature not implemented")
-
-# Key difference:
-# - NotImplemented: return value from dunder methods
-# - NotImplementedError: exception raised for missing features
+    Vector(1, 2) + "text"  # Both decline
+except TypeError as error:
+    assert "unsupported operand type(s) for +" in str(error)
+else:
+    raise AssertionError("expected TypeError")
 ```
 
-### Operation Resolution
+### Subclasses Go First
+
+When the right operand's type is a subclass of the left's and overrides the reflected method, that
+method is called first, so a subclass can take over an operation its base class would otherwise
+answer.
 
 ```python
-# O(1) - Python's operation resolution order
-class A:
-    def __eq__(self, other):
-        return NotImplemented  # O(1)
+calls = []
 
-class B:
-    def __eq__(self, other):
-        return True
-
-# O(1) - Python tries both directions
-a = A()
-b = B()
-
-# a == b:
-# 1. a.__eq__(b) -> NotImplemented (O(1))
-# 2. b.__eq__(a) -> True (O(1))
-# 3. Result: True
-
-result = a == b  # True
-```
-
-## Performance Patterns
-
-### Avoiding Type Checking Overhead
-
-```python
-# Efficient - return NotImplemented early
-class Matrix:
-    def __add__(self, other):
-        if not isinstance(other, Matrix):  # O(1) type check
-            return NotImplemented  # O(1)
-        
-        # Only execute complex logic for valid types
-        return Matrix(...)  # O(n²) for matrix addition
-
-# vs raising error (slower)
-class BadMatrix:
-    def __add__(self, other):
-        if not isinstance(other, BadMatrix):
-            raise TypeError("...")  # Exception overhead
-        return BadMatrix(...)
-
-# NotImplemented is faster: no exception overhead
-```
-
-### Type Coercion Pattern
-
-```python
-# O(1) - enable type coercion through NotImplemented
-class Currency:
-    def __init__(self, amount, currency):
-        self.amount = amount
-        self.currency = currency
-    
-    def __add__(self, other):
-        if isinstance(other, Currency):
-            if self.currency == other.currency:
-                return Currency(self.amount + other.amount, 
-                              self.currency)
-        # O(1) - Python will try other.__radd__(self)
-        return NotImplemented
-
-class USD(Currency):
+class Money:
     def __init__(self, amount):
-        super().__init__(amount, "USD")
-    
+        self.amount = amount
+
+    def __add__(self, other):
+        calls.append("Money.__add__")
+        return Money(self.amount + other.amount)
+
     def __radd__(self, other):
-        if isinstance(other, (int, float)):
-            return USD(other + self.amount)
         return NotImplemented
 
-# O(1) - enables flexible operations
-usd = USD(100)
-result = 50 + usd  # USD(150)
-# 1. int.__add__(USD) -> NotImplemented
-# 2. USD.__radd__(50) -> USD(150)
+class Euros(Money):
+    def __radd__(self, other):
+        calls.append("Euros.__radd__")
+        return Euros(self.amount + other.amount)
+
+total = Money(5) + Euros(10)
+assert type(total) is Euros
+assert calls == ["Euros.__radd__"]  # Money.__add__ was never called
 ```
 
-## Common Use Cases
+### In-Place Operators Fall Back to Binary Ones
 
-### Rich Comparison Methods
+An `__iadd__` that returns `NotImplemented` falls back to `__add__` and then the other operand's
+`__radd__`, so `a += b` makes up to three calls.
 
 ```python
-# O(n) - implement comparisons properly
-class Point:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-    
+calls = []
+
+class Counter:
+    def __init__(self, n):
+        self.n = n
+
+    def __iadd__(self, other):
+        calls.append("__iadd__")
+        return NotImplemented  # Decline to update in place
+
+    def __add__(self, other):
+        calls.append("__add__")
+        if not isinstance(other, int):
+            return NotImplemented
+        return Counter(self.n + other)
+
+c = Counter(1)
+original = c
+c += 2  # __iadd__ declines, __add__ builds a new object
+assert c.n == 3 and c is not original
+assert calls == ["__iadd__", "__add__"]
+```
+
+## Comparisons
+
+### Equality Falls Back to Identity
+
+When both `__eq__` methods decline, `==` compares identity rather than raising. The reflected
+`__eq__` is tried even when both operands have the same type.
+
+```python
+calls = []
+
+class Opaque:
     def __eq__(self, other):
-        if not isinstance(other, Point):  # O(1)
-            return NotImplemented  # O(1)
-        return self.x == other.x and self.y == other.y  # O(1)
-    
+        calls.append("__eq__")
+        return NotImplemented
+
+    __hash__ = object.__hash__
+
+a, b = Opaque(), Opaque()
+assert (a == b) is False  # a is b
+assert (a == a) is True
+assert (a != b) is True   # a is not b
+calls.clear()
+a == b
+assert calls == ["__eq__", "__eq__"]  # a.__eq__(b), then b.__eq__(a)
+```
+
+### Ordering Raises TypeError
+
+The ordering operators have no identity fallback. `a < b` tries `a.__lt__(b)` and the reflected
+`b.__gt__(a)`, the reflected one first when `b`'s type is a subclass of `a`'s, and raises when both
+decline.
+
+```python
+from functools import total_ordering
+
+@total_ordering
+class Version:
+    def __init__(self, major, minor):
+        self.key = (major, minor)
+
+    def __eq__(self, other):
+        if not isinstance(other, Version):
+            return NotImplemented
+        return self.key == other.key
+
     def __lt__(self, other):
-        if not isinstance(other, Point):  # O(1)
-            return NotImplemented  # O(1)
-        return (self.x, self.y) < (other.x, other.y)  # O(1)
-    
-    def __le__(self, other):
-        return self == other or self < other  # O(1)
+        if not isinstance(other, Version):
+            return NotImplemented  # O(1) - checked before any comparison work
+        return self.key < other.key
 
-# O(1) - use comparisons
-p1 = Point(1, 2)
-p2 = Point(3, 4)
-p3 = "not a point"
+assert Version(3, 11) < Version(3, 14)
+assert Version(3, 14) >= Version(3, 11)  # Filled in by total_ordering
+assert Version(3, 14) != "3.14"          # Equality falls back to identity
 
-result = p1 == p2  # False
-result = p1 < p2   # True
-result = p1 == p3  # False (via NotImplemented)
-```
-
-### Container Emulation
-
-```python
-# O(n) - implement container protocol
-class CustomList:
-    def __init__(self, items):
-        self.items = items
-    
-    def __getitem__(self, index):
-        if isinstance(index, int):  # O(1)
-            return self.items[index]  # O(1)
-        if isinstance(index, slice):  # O(1)
-            return CustomList(self.items[index])  # O(k) for slice
-        # O(1) - unsupported index type
-        return NotImplemented
-    
-    def __setitem__(self, index, value):
-        if not isinstance(index, int):  # O(1)
-            return NotImplemented  # O(1)
-        self.items[index] = value  # O(1)
-
-# O(1) - use container
-cl = CustomList([1, 2, 3, 4])
-print(cl[0])      # 1
-print(cl[1:3])    # CustomList([2, 3])
-# cl["key"] would trigger NotImplemented
-```
-
-### Operator Overloading
-
-```python
-# O(1) - proper operator overloading
-class Quantity:
-    def __init__(self, value, unit):
-        self.value = value
-        self.unit = unit
-    
-    def __mul__(self, scalar):
-        if isinstance(scalar, (int, float)):  # O(1)
-            return Quantity(self.value * scalar, self.unit)
-        return NotImplemented  # O(1)
-    
-    def __rmul__(self, scalar):
-        return self.__mul__(scalar)  # O(1)
-    
-    def __truediv__(self, scalar):
-        if isinstance(scalar, (int, float)):  # O(1)
-            return Quantity(self.value / scalar, self.unit)
-        return NotImplemented  # O(1)
-
-# O(1) - use operators
-qty = Quantity(10, "meters")
-result = qty * 2      # Quantity(20, "meters")
-result = 3 * qty      # Quantity(30, "meters")
-result = qty / 2      # Quantity(5.0, "meters")
-```
-
-## Advanced Usage
-
-### Custom Protocol Implementation
-
-```python
-# O(1) - implement custom protocols with NotImplemented
-class HashableContainer:
-    def __hash__(self):
-        if self._is_mutable():  # O(1)
-            return NotImplemented  # Signal: not hashable
-        return hash(tuple(self.items))  # O(n)
-
-class MutableContainer:
-    def __hash__(self):
-        return NotImplemented  # O(1) - containers are unhashable
-
-# O(1) - Python respects NotImplemented
-hashable = HashableContainer()
 try:
-    my_set = {hashable}  # Works if __hash__ doesn't return NotImplemented
-except TypeError:
-    print("Object not hashable")
+    Version(3, 14) < "3.14"
+except TypeError as error:
+    assert "'<' not supported" in str(error)
+else:
+    raise AssertionError("expected TypeError")
 ```
 
-### Context Manager Protocol
+## Checking for NotImplemented
+
+### Test It with is
+
+Use `is NotImplemented`. Its truth value is an error from Python 3.14 and deprecated before that,
+so `if result:` cannot stand in for the check.
 
 ```python
-# O(1) - NotImplemented in context managers
-class OptionalContext:
-    def __enter__(self):
-        return self
-    
-    def __exit__(self, *args):
-        return NotImplemented  # O(1) - don't suppress exceptions
+import sys
+import warnings
 
-class SuppressingContext:
-    def __enter__(self):
-        return self
-    
-    def __exit__(self, *args):
-        return True  # Suppress exceptions
+result = (1).__add__("text")  # Calling the method directly returns the marker
+assert result is NotImplemented  # O(1)
 
-# O(1) - context manager behavior
-with OptionalContext():
-    raise ValueError("test")  # Exception propagates
-
-with SuppressingContext():
-    raise ValueError("test")  # Exception suppressed
+if sys.version_info >= (3, 14):
+    try:
+        bool(NotImplemented)
+    except TypeError as error:
+        assert "boolean context" in str(error)
+    else:
+        raise AssertionError("expected TypeError")
+else:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        assert bool(NotImplemented) is True
+    assert caught[0].category is DeprecationWarning
 ```
 
-## Practical Examples
+### Other Special Methods
 
-### Flexible Type System
+A few hooks besides the operators read `NotImplemented` as declining: `operator.length_hint()` falls
+back to its default when `__length_hint__` returns it, and `issubclass()` runs its normal check when
+an ABC's `__subclasshook__` returns it. Elsewhere it is an ordinary object. Returned from
+`__getitem__` it is the item; returned from `__hash__` it raises `TypeError`, because a hash must be
+an integer. To make instances unhashable, set `__hash__ = None`.
 
 ```python
-# O(1) - build flexible operations
-class Temperature:
-    def __init__(self, kelvin):
-        self.kelvin = kelvin
-    
-    def __eq__(self, other):
-        if isinstance(other, Temperature):  # O(1)
-            return self.kelvin == other.kelvin
-        elif isinstance(other, (int, float)):  # O(1)
-            return self.kelvin == other
-        return NotImplemented  # O(1)
-    
+import operator
+
+class NoHint:
+    def __length_hint__(self):
+        return NotImplemented  # Decline to estimate
+
+assert operator.length_hint(NoHint(), 10) == 10  # The default is used
+
+class Lookup:
+    def __getitem__(self, key):
+        return NotImplemented
+
+assert Lookup()["anything"] is NotImplemented  # Returned as the value
+
+class BadHash:
+    def __hash__(self):
+        return NotImplemented
+
+try:
+    hash(BadHash())
+except TypeError as error:
+    assert "should return an integer" in str(error)
+else:
+    raise AssertionError("expected TypeError")
+
+class Unhashable:
+    __hash__ = None
+
+try:
+    {Unhashable()}
+except TypeError as error:
+    assert "unhashable type" in str(error)
+else:
+    raise AssertionError("expected TypeError")
+```
+
+### NotImplemented Is Not NotImplementedError
+
+`NotImplementedError` is an exception for a method a subclass must still provide. Raising it from
+an operator method stops dispatch, so the other operand never gets its turn.
+
+```python
+class Strict:
     def __add__(self, other):
-        if isinstance(other, (int, float)):  # O(1)
-            return Temperature(self.kelvin + other)
-        return NotImplemented  # O(1)
-    
+        raise NotImplementedError("only Strict + Strict")
+
+class Accepting:
     def __radd__(self, other):
-        return self.__add__(other)  # O(1)
+        return "handled"
 
-# O(1) - flexible operations
-temp = Temperature(300)
-result = temp == 300      # True
-result = temp + 10        # Temperature(310)
-result = 10 + temp        # Temperature(310)
-```
-
-### Numeric Hierarchy
-
-```python
-# O(1) - proper numeric operations
-class Fraction:
-    def __init__(self, num, denom):
-        self.num = num
-        self.denom = denom
-    
-    def __add__(self, other):
-        if isinstance(other, Fraction):  # O(1)
-            # Add fractions
-            return Fraction(
-                self.num * other.denom + other.num * self.denom,
-                self.denom * other.denom
-            )
-        elif isinstance(other, int):  # O(1)
-            return self + Fraction(other, 1)
-        return NotImplemented  # O(1)
-    
-    def __radd__(self, other):
-        return self.__add__(other)  # O(1)
-
-# O(1) - numeric operations
-frac = Fraction(1, 2)
-result = frac + Fraction(1, 3)  # Fraction(5, 6)
-result = frac + 2               # Fraction(5, 2)
-result = 2 + frac               # Fraction(5, 2)
-```
-
-## Edge Cases
-
-### Truthiness of NotImplemented
-
-```python
-# O(1) - NotImplemented is truthy
-if NotImplemented:  # O(1)
-    print("NotImplemented is truthy!")  # This prints
-
-# Don't use in boolean context!
-# Always check with 'is'
-if result is NotImplemented:  # O(1) - correct
-    print("Not implemented")
-```
-
-### NotImplemented in Comparisons
-
-```python
-# O(1) - NotImplemented changes behavior
-class A:
-    def __eq__(self, other):
-        return NotImplemented  # O(1)
-
-class B:
+try:
+    Strict() + Accepting()  # Accepting.__radd__ is never reached
+except NotImplementedError:
     pass
+else:
+    raise AssertionError("expected NotImplementedError")
 
-a = A()
-b = B()
-
-# a == b uses NotImplemented fallback
-# Since B doesn't define __eq__, falls back to identity
-result = a == b  # False - identity comparison
+assert NotImplemented is not NotImplementedError
+assert issubclass(NotImplementedError, RuntimeError)
 ```
 
-## Performance Considerations
-
-### Avoid Exception Overhead
-
-```python
-# Efficient - return NotImplemented
-class Efficient:
-    def __add__(self, other):
-        if not isinstance(other, Efficient):  # O(1)
-            return NotImplemented  # O(1)
-        return Efficient(...)
-
-# Inefficient - raise exception
-class Inefficient:
-    def __add__(self, other):
-        try:
-            # Might work with any type...
-            return Efficient(...)
-        except (TypeError, AttributeError):
-            # Very slow - exception overhead!
-            raise TypeError(...)
-
-# NotImplemented is ~100x faster than exception handling
-```
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Return NotImplemented from dunder methods for unsupported types
-- Check with `is NotImplemented` (not equality)
-- Use for operator overloading
-- Enable Python's operation resolution
-- Keep method implementation simple
-- Document supported types
+- Return `NotImplemented` from a binary or comparison method for an operand type it does not
+  handle, before doing any work, so dispatch moves on after one cheap check
+- Test a direct call's result with `is NotImplemented`
+- Set `__hash__ = None` to make a class unhashable
 
 ❌ **Avoid**:
 
-- Raising NotImplementedError in dunder methods (use NotImplemented)
-- Using `== NotImplemented` (use `is NotImplemented`)
-- Returning NotImplemented from regular methods
-- Assuming NotImplemented is falsy (it's truthy!)
-- Complex logic before returning NotImplemented
-- Confusing with NotImplementedError exception
-
-## Related Constants
-
-- **[NotImplementedError](https://docs.python.org/3/library/exceptions.html#NotImplementedError)** - Exception for unimplemented features
-- **[None](none.md)** - Null value
-- **[True](true.md)** - Boolean true
-- **[False](false.md)** - Boolean false
+- Raising `TypeError` or `NotImplementedError` from an operator method for an unknown operand: the
+  other operand's reflected method is never called
+- Using `NotImplemented` in a boolean context: `TypeError` from Python 3.14
+- Returning `NotImplemented` from `__getitem__`, `__hash__`, `__exit__` or another method whose
+  caller does not document it; there it is not read as declining
 
 ## Version Notes
 
-- **Python 2.x**: NotImplemented available, same behavior
-- **Python 3.x**: Same behavior, optimized
-- **All versions**: Singleton for operation resolution
+- **Python 3.14+**: `bool(NotImplemented)` raises `TypeError`; on 3.11-3.13 it returns `True` and
+  emits a `DeprecationWarning`. An `__exit__` returning `NotImplemented` while an exception is
+  propagating therefore raises on 3.14+ and suppresses the exception on 3.11-3.13.
+
+## Related Constants
+
+- **[NotImplementedError](exceptions.md)** - The exception for a method that is not written yet
+- **[None](none.md)** - The other built-in singleton most often tested with `is`
+- **[Ellipsis](ellipsis.md)** - Another built-in singleton constant
