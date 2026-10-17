@@ -1,5 +1,5 @@
 ---
-source_sha: 28a5b6a6cd7958ab44a3f1fc6b2347fcc87987c10b262f6490bdff3794411b8b
+source_sha: 89d3af592bd5abc5e4c13bbffcd6e5cbae1cf80f4783806b0af50d3ea4667b99
 translated: machine
 ---
 
@@ -146,7 +146,7 @@ Python 无需导入即可使用的一切：内置类型、内置函数、常量�
 | [`exec()`](exec.md) | O(n + m) | O(n + m) | n 为源码长度，m 为执行开销 |
 | [`compile()`](compile.md) | O(n) | O(n) | 解析加上字节码生成 |
 | [`globals()`](globals.md) | O(1) | O(1) | 返回已存在的模块字典 |
-| [`locals()`](locals_func.md) | O(1) | O(1) | 在优化过的函数作用域中为 O(m) |
+| [`locals()`](locals_func.md) | O(1) | O(1) | 在函数中，m = 其帧中的名称数：时间自 Python 3.13 起为 O(m²)，之前为 O(m)；空间为 O(m) |
 
 ### 输入、输出与调试
 

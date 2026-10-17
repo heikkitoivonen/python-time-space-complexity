@@ -1,287 +1,140 @@
-# locals() Function
+# locals() Function Complexity
 
-The `locals()` function returns a dictionary containing the current local symbol table.
+The `locals()` function returns the current local namespace. At module or class scope, and in
+code run by `exec()` or `eval()`, it returns the namespace mapping itself. Inside a function it
+returns a snapshot dict of the function's variables, built on every call.
+
+`m` is the names a function's frame holds: its parameters and local variables, plus the cell and
+free variables it shares with nested functions, bound or not. Lookups in the returned dict are
+average-case O(1), treating name hashing as O(1).
 
 ## Complexity Reference
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `locals()` | O(1) or O(n) | O(1) or O(n) | Module/class scope is O(1); optimized function scopes materialize locals mapping |
-| Access variable | O(1) avg | O(1) | Dict key lookup; O(n) worst case with collisions |
+| `locals()` at module or class scope | O(1) | O(1) | The namespace itself, or the locals mapping passed to `exec()`; writes reach it |
+| `locals()` in a function | O(m²) from Python 3.13, O(m) before | O(m) | A snapshot of the bound names, free variables included; writes do not reach the function |
+| Looking up a name in the result | O(1) avg | O(1) | Dict lookup, where the namespace is a dict |
 
-## Basic Usage
+## Function Scope
 
-### Get Local Variables - Time: O(n)
+Each call copies the frame's bound variables into a dict, so the cost is paid again on every
+call: quadratic in `m` from Python 3.13, linear before.
 
-```python
-def example():
-    x = 10
-    y = 20
-    z = x + y
-    
-    # Get all local variables - O(n)
-    local_vars = locals()
-    
-    print(local_vars)
-    # Output: {'x': 10, 'y': 20, 'z': 30}
-    
-    print(local_vars['x'])  # 10
-    print(local_vars['y'])  # 20
-
-example()
-```
-
-### Function Scope
+### A Snapshot of the Bound Names
 
 ```python
 def outer():
-    x = "outer"
-    
+    x = 'outer'
+
     def inner():
-        y = "inner"
-        
-        # locals() returns inner's variables - O(n)
-        print(locals())  # {'y': 'inner'}
-        
-        # Note: x is not in locals(), it's in enclosing scope
-        print(x)  # Can still access outer's x
-    
-    inner()
-    
-    # locals() returns outer's variables - O(n)
-    print(locals())  # {'x': 'outer', 'inner': <function>}
+        y = 'inner'
+        snapshot = locals()  # O(m²) from Python 3.13, O(m) before
+        assert x == 'outer'  # inner reads x, so x is one of its free variables
+        return snapshot
 
-outer()
+    return inner(), locals()
+
+inner_names, outer_names = outer()
+assert inner_names == {'y': 'inner', 'x': 'outer'}  # snapshot is bound after the call
+assert set(outer_names) == {'x', 'inner'}
 ```
 
-### Module Level
-
-```python
-# At module level, locals() == globals()
-x = 10
-y = 20
-
-# Get module-level locals - O(1)
-local_vars = locals()
-print('x' in local_vars)  # True
-print('y' in local_vars)  # True
-```
-
-## Comparing locals() and globals()
-
-### Scope Differences - Time: O(n)
-
-```python
-global_var = "global"
-
-def example():
-    local_var = "local"
-    
-    # locals() - current function scope - O(n)
-    local_dict = locals()
-    print(local_dict)
-    # {'local_var': 'local'}
-    
-    # globals() - global scope - O(1)
-    global_dict = globals()
-    print('global_var' in global_dict)  # True
-    print('local_var' in global_dict)   # False
-
-example()
-```
-
-### Inspecting Variables
-
-```python
-def analyze():
-    a = 1
-    b = 2
-    c = 3
-    
-    # Get local variables - O(n)
-    local_vars = locals()
-    
-    # Iterate through locals - O(n)
-    for name, value in local_vars.items():
-        print(f"{name} = {value}")
-    # Output:
-    # a = 1
-    # b = 2
-    # c = 3
-
-analyze()
-```
-
-## Practical Examples
-
-### Dynamic Variable Access
-
-```python
-def get_var(var_name):
-    """Get local variable by name."""
-    x = 10
-    y = 20
-    z = 30
-    
-    # Get locals and access by name - O(n) to get, O(1) to access
-    local_dict = locals()
-    
-    if var_name in local_dict:
-        return local_dict[var_name]
-    else:
-        return None
-
-print(get_var('x'))  # 10
-print(get_var('unknown'))  # None
-```
-
-### Debugging/Inspection
-
-```python
-def debug_function(a, b, c):
-    result = a + b + c
-    multiplied = result * 2
-    
-    # Inspect all local variables - O(n)
-    locals_dict = locals()
-    
-    print("=== Local Variables ===")
-    for name, value in sorted(locals_dict.items()):
-        print(f"  {name}: {value} ({type(value).__name__})")
-    
-    return multiplied
-
-debug_function(1, 2, 3)
-# Output:
-# === Local Variables ===
-#   a: 1 (int)
-#   b: 2 (int)
-#   c: 3 (int)
-#   locals_dict: {...}
-#   multiplied: 12 (int)
-#   result: 6 (int)
-```
-
-### Variable Existence Check
-
-```python
-def check_variable(var_name):
-    """Check if variable exists in current scope."""
-    x = "exists"
-    
-    # Check using locals() - O(n) to get, O(1) for membership
-    if var_name in locals():
-        print(f"{var_name} exists with value: {locals()[var_name]}")
-    else:
-        print(f"{var_name} does not exist")
-
-check_variable('x')  # x exists with value: exists
-check_variable('y')  # y does not exist
-```
-
-## Comparison with globals()
-
-```python
-global_x = "global"
-
-def func():
-    local_x = "local"
-    
-    # locals() in function - O(n)
-    local_dict = locals()
-    
-    # globals() in function - O(1)
-    global_dict = globals()
-    
-    # Get specific values - O(1) each
-    local_val = local_dict.get('local_x')    # "local"
-    global_val = global_dict.get('global_x') # "global"
-    
-    return local_val, global_val
-
-print(func())  # ('local', 'global')
-
-# At module level, locals() == globals()
-print(locals() == globals())  # True
-```
-
-## Important Notes
-
-### Modifications
+### Writes Do Not Reach the Function
 
 ```python
 def modify_attempt():
     x = 10
-    
-    # Get locals - O(n)
-    local_dict = locals()
-    
-    # Modify the dictionary - O(1)
-    local_dict['x'] = 20
-    
-    # Note: modifying locals() dict does NOT change x!
-    print(x)  # Still 10, not 20
-    
-    # This is different in class body where locals() modifications ARE applied
+    snapshot = locals()
+    snapshot['x'] = 20  # O(1) - changes the dict, not the variable
+    return x, snapshot['x']
 
-modify_attempt()
+assert modify_attempt() == (10, 20)
 ```
 
-### Class Definition
+### Two Calls in One Frame
+
+From Python 3.13 each call returns a new, independent dict. Before 3.13 every call refreshes and
+returns the frame's one dict, so an earlier result changes under you.
 
 ```python
-# In class definition, locals() dict modifications ARE applied
-class MyClass:
-    x = 10
-    local_dict = locals()  # Get locals - O(n)
-    local_dict['y'] = 20   # Modify dictionary - O(1)
-    
-    print(x)  # 10
-    print(y)  # 20 - THIS WORKS because we're defining the class
-    # So y becomes a class attribute
+import sys
 
-print(MyClass.x)  # 10
-print(MyClass.y)  # 20
+def two_snapshots():
+    value = 1
+    first = locals()
+    value = 2
+    second = locals()
+    return first, second
+
+first, second = two_snapshots()
+if sys.version_info >= (3, 13):
+    assert first is not second and first['value'] == 1
+else:
+    assert first is second and first['value'] == 2
+assert second['value'] == 2
 ```
 
-## Performance Considerations
+## Module and Class Scope
 
 ```python
-def heavy_function(a, b, c, d, e, f, g, h):
-    """Function with many local variables."""
-    
-    # Getting locals() is O(n) where n = number of locals
-    # For 8 parameters, this is minimal overhead
-    local_dict = locals()
-    
-    # Access is O(1)
-    return local_dict.get('a', 0)
+x = 10
+assert locals() is globals()  # O(1) - the module namespace itself
 
-# Don't use locals() in tight loops for performance
-# It creates a copy of the local symbol table each time
+class Config:
+    locals()['timeout'] = 30  # O(1) - the class namespace being built
 
-# ✅ Better for performance:
-def fast_access(a, b, c):
-    return a + b + c  # Direct access, no locals() call
+assert Config.timeout == 30
 
-# ❌ Slower:
-def slow_access(a, b, c):
-    return locals()['a'] + locals()['b'] + locals()['c']  # Creates dict 3 times!
+namespace = {}
+exec("locals()['added'] = 1", {}, namespace)  # O(1) - the mapping passed in
+assert namespace == {'added': 1}
 ```
 
-## Related Functions
+## Calling locals() Repeatedly
 
-- [globals() Function](globals.md) - Get global symbol table
-- [dir() Function](dir.md) - List accessible names
-- [vars() Function](vars.md) - Get __dict__ of object
+The snapshot is rebuilt on every call, so take it once and look names up in the result.
 
-## Best Practices
+```python
+def connection_string(host, port, user):
+    names = locals()  # O(m²) from Python 3.13, O(m) before - once
+    return '{user}@{host}:{port}'.format(**names)  # O(1) per lookup
+
+assert connection_string('db', 5432, 'admin') == 'admin@db:5432'
+
+def slow_sum(a, b, c):
+    return locals()['a'] + locals()['b'] + locals()['c']  # three snapshots
+
+def fast_sum(a, b, c):
+    return a + b + c  # direct access, no snapshot
+
+assert slow_sum(1, 2, 3) == fast_sum(1, 2, 3) == 6
+```
+
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use locals() for debugging/introspection
-- Use it for variable existence checks
+- Call `locals()` once and reuse the dict when you need several names from it
+- Keep `locals()` for debugging and introspection, where the snapshot is built once
+- Read variables by name in code, and keep values looked up by string key in a dict of your own
 
 ❌ **Avoid**:
 
-- Use in tight loops for performance
+- Calling `locals()` in a loop or once per name; each call rebuilds the snapshot
+- Writing to `locals()` in a function to create or change variables; the function never sees it
+- Holding a function's `locals()` result across later calls in the same frame before Python 3.13;
+  each call refreshes the same dict
+
+## Version Notes
+
+- **Python 3.13+**: PEP 667: in a function, `locals()` returns a fresh, independent snapshot on
+  every call, built in O(m²). Earlier versions refresh and return the frame's one dict in O(m), so
+  two calls in the same frame return the same object and the earlier result shows later values
+- **All Python 3**: At module and class scope, `locals()` is the namespace itself
+
+## Related Functions
+
+- **[globals()](globals.md)** - The module namespace, always O(1); also covers `frame.f_locals`
+- **[vars()](vars.md)** - With no argument it is `locals()`; with one, the object's `__dict__`
+- **[dir()](dir.md)** - Sorted list of the names in scope

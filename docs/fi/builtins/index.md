@@ -1,5 +1,5 @@
 ---
-source_sha: 28a5b6a6cd7958ab44a3f1fc6b2347fcc87987c10b262f6490bdff3794411b8b
+source_sha: 89d3af592bd5abc5e4c13bbffcd6e5cbae1cf80f4783806b0af50d3ea4667b99
 translated: machine
 ---
 
@@ -149,7 +149,7 @@ mainittu kustannus on se, minkä maksat iteraattorin läpikäynnistä.
 | [`exec()`](exec.md) | O(n + m) | O(n + m) | n = lähdekoodin pituus, m = suorituksen kustannus |
 | [`compile()`](compile.md) | O(n) | O(n) | Jäsennys sekä tavukoodin generointi |
 | [`globals()`](globals.md) | O(1) | O(1) | Palauttaa olemassa olevan moduulin sanakirjan |
-| [`locals()`](locals_func.md) | O(1) | O(1) | O(m) optimoiduissa funktioiden näkyvyysalueissa |
+| [`locals()`](locals_func.md) | O(1) | O(1) | Funktiossa, m = sen kehyksen nimet: aika O(m²) Python 3.13:sta alkaen, aiemmin O(m); tila O(m) |
 
 ### Syöte, tuloste ja virheenjäljitys
 

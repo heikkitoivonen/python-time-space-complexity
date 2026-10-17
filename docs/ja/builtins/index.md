@@ -1,5 +1,5 @@
 ---
-source_sha: 28a5b6a6cd7958ab44a3f1fc6b2347fcc87987c10b262f6490bdff3794411b8b
+source_sha: 89d3af592bd5abc5e4c13bbffcd6e5cbae1cf80f4783806b0af50d3ea4667b99
 translated: machine
 ---
 
@@ -145,7 +145,7 @@ import なしで Python が提供するもの、すなわち組み込み型、�
 | [`exec()`](exec.md) | O(n + m) | O(n + m) | n はソースの長さ、m は実行のコスト |
 | [`compile()`](compile.md) | O(n) | O(n) | 構文解析とバイトコード生成 |
 | [`globals()`](globals.md) | O(1) | O(1) | 既存のモジュール辞書を返す |
-| [`locals()`](locals_func.md) | O(1) | O(1) | 最適化された関数スコープでは O(m) |
+| [`locals()`](locals_func.md) | O(1) | O(1) | 関数内では m = そのフレームの名前の数: 時間は Python 3.13 以降 O(m²)、それ以前は O(m)、空間は O(m) |
 
 ### 入出力とデバッグ
 

@@ -144,7 +144,7 @@ under Notes is what you pay to consume it.
 | [`exec()`](exec.md) | O(n + m) | O(n + m) | n = source length, m = execution cost |
 | [`compile()`](compile.md) | O(n) | O(n) | Parsing plus bytecode generation |
 | [`globals()`](globals.md) | O(1) | O(1) | Returns the existing module dict |
-| [`locals()`](locals_func.md) | O(1) | O(1) | O(m) in optimized function scopes |
+| [`locals()`](locals_func.md) | O(1) | O(1) | In a function, m = names in its frame: O(m²) time from Python 3.13, O(m) before; O(m) space |
 
 ### Input, Output & Debugging
 
