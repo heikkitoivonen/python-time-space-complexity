@@ -202,26 +202,16 @@ class TestCachedHashDoesNotMakeCollisionsFree:
         assert two not in table
         assert _SameHash.comparisons > 0, "a colliding lookup must compare elements"
 
-    def test_hash_is_still_cached(self) -> None:
-        _SameHash.hashes = 0
-        frozen = frozenset([_SameHash(1)])
-        hash(frozen)
-        after_first = _SameHash.hashes
-        hash(frozen)
-        assert _SameHash.hashes == after_first, "the second hash() must not rehash"
-
 
 class _SameHash:
     """An element whose hash collides with every other instance."""
 
     comparisons = 0
-    hashes = 0
 
     def __init__(self, value: int) -> None:
         self.value = value
 
     def __hash__(self) -> int:
-        type(self).hashes += 1
         return 42
 
     def __eq__(self, other: object) -> bool:

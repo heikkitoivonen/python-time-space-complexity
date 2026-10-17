@@ -15,7 +15,30 @@ Measurement scope:
   timed in tests/test_set_complexity.py.
 * That `intersection()` and `difference()` take all of a non-set operand is
   asserted for frozensets in tests/test_set_complexity.py, beside the same
-  test for sets; the cached hash is in tests/test_complexity_caveats.py.
+  test for sets; that two frozensets with colliding hashes still compare
+  elements is in tests/test_complexity_caveats.py.
+* frozenset.md: `hash()` of a fresh 200,000-element frozenset is asserted
+  over 100x the cost of a second `hash()` on the same object, fastest of
+  five fresh objects against fastest of five repeats; an equal frozenset
+  built separately is asserted to pay the same first-call cost. Element
+  `__hash__` is never called by `hash(fs)`: it reuses the hashes stored in
+  the table, so the cache is only observable by time.
+* frozenset.md: with elements whose `__eq__` counts calls and equal elements
+  as distinct objects, a dict lookup by an equal but distinct frozenset of
+  100 elements is asserted to compare all 100, and a lookup by the stored
+  object to compare none. `==` between frozensets of different lengths
+  compares none; `fs <= other` compares the n elements of `fs` against a
+  1,000-element `other`, and `fs >= other` the m elements of `other`.
+* frozenset.md: union, intersection, difference and symmetric difference,
+  as operators and as methods, are asserted to return a new object, a
+  frozenset when a frozenset is on the left and a set when a set is.
+* frozenset.md: `frozenset(range(65_536)).difference(range(65_535))` keeps
+  one element and is asserted over 1,000x the size of a one-element
+  frozenset, the table the copy started with; the same difference with a
+  set operand is asserted compact. Retention depends on where the removals
+  leave the table against its resize threshold: from 65,535 elements the
+  same removal compacts, which is why the page says "can keep". The cost of walking such a table is timed
+  for sets in tests/test_set_complexity.py.
 * Every fenced Python block on both pages runs in its own subprocess, and a
   mutated assertion in one of them is asserted to fail.
 """
@@ -27,6 +50,9 @@ import re
 import subprocess
 import sys
 import textwrap
+import time
+from collections.abc import Callable
+from typing import Any, ClassVar
 
 import pytest
 
@@ -50,7 +76,7 @@ class TestReturnsItself:
     def test_a_subclass_instance_is_copied(self) -> None:
         sub = SubFrozenset(range(1_000))
         for copied in (sub.copy(), frozenset(sub)):
-            assert copied is not sub and copied == sub
+            assert copied is not sub and copied == sub and type(copied) is frozenset
 
     def test_set_of_it_is_a_new_set(self) -> None:
         fs = frozenset(range(10))
@@ -64,6 +90,145 @@ def test_building_from_a_sparse_set_is_compact() -> None:
     frozen = frozenset(s)
     assert frozen == s
     assert sys.getsizeof(frozen) * 100 < sys.getsizeof(s)
+
+
+# frozenset.md
+
+
+def _fastest_ns(func: Callable[[], object], repeats: int = 5) -> int:
+    best = None
+    for _ in range(repeats):
+        start = time.perf_counter_ns()
+        func()
+        elapsed = time.perf_counter_ns() - start
+        best = elapsed if best is None else min(best, elapsed)
+    assert best is not None
+    return best
+
+
+class _Counted:
+    """An element whose equality checks are counted; equal values are distinct objects."""
+
+    comparisons = 0
+
+    def __init__(self, value: int) -> None:
+        self.value = value
+
+    def __hash__(self) -> int:
+        return hash(self.value)
+
+    def __eq__(self, other: object) -> bool:
+        type(self).comparisons += 1
+        return isinstance(other, _Counted) and self.value == other.value
+
+
+def _counted(n: int, start: int = 0) -> frozenset[_Counted]:
+    return frozenset(_Counted(i) for i in range(start, start + n))
+
+
+class TestHashIsCachedPerObject:
+    """`hash(fs)` is O(n) on the first call and O(1) after, per object."""
+
+    SIZE = 200_000
+
+    @pytest.mark.timing
+    def test_a_second_hash_reads_the_cache(self) -> None:
+        items = list(range(2_000, 2_000 + self.SIZE))
+        fresh = iter([frozenset(items) for _ in range(5)])
+        first_ns = _fastest_ns(lambda: hash(next(fresh)))
+        hashed = frozenset(items)
+        hash(hashed)
+        cached_ns = _fastest_ns(lambda: hash(hashed))
+        assert first_ns > cached_ns * 100, f"first {first_ns}ns, cached {cached_ns}ns"
+
+    @pytest.mark.timing
+    def test_an_equal_frozenset_computes_its_own(self) -> None:
+        items = list(range(2_000, 2_000 + self.SIZE))
+        hashed = frozenset(items)
+        hash(hashed)
+        twins = iter([frozenset(items) for _ in range(5)])
+        twin_ns = _fastest_ns(lambda: hash(next(twins)))
+        cached_ns = _fastest_ns(lambda: hash(hashed))
+        assert twin_ns > cached_ns * 100, f"twin {twin_ns}ns, cached {cached_ns}ns"
+
+
+class TestComparisonsCountElements:
+    """Lookups and comparisons compare elements unless identity or length settles them."""
+
+    def test_an_equal_key_compares_every_element(self) -> None:
+        fs, twin = _counted(100), _counted(100)
+        table = {fs: "found"}
+        _Counted.comparisons = 0
+        assert table[twin] == "found"
+        assert _Counted.comparisons == 100
+
+    def test_the_same_key_compares_nothing(self) -> None:
+        fs = _counted(100)
+        table = {fs: "found"}
+        _Counted.comparisons = 0
+        assert table[fs] == "found"
+        assert _Counted.comparisons == 0
+
+    def test_different_lengths_are_unequal_without_comparing(self) -> None:
+        small, large = _counted(100), _counted(101)
+        _Counted.comparisons = 0
+        assert small != large and not small == large
+        assert _Counted.comparisons == 0
+
+    def test_subset_looks_up_the_left_operand(self) -> None:
+        fs, other = _counted(10), _counted(1_000)
+        _Counted.comparisons = 0
+        assert fs <= other and fs < other
+        assert _Counted.comparisons == 20
+
+    def test_superset_looks_up_the_right_operand(self) -> None:
+        fs, other = _counted(1_000), _counted(10)
+        _Counted.comparisons = 0
+        assert fs >= other and fs > other
+        assert _Counted.comparisons == 20
+
+
+class TestOperationsReturnNewObjects:
+    """Each operation returns a new object, of the type of the set on its left."""
+
+    OPERATIONS: ClassVar[list[Callable[[Any, Any], Any]]] = [
+        lambda a, b: a | b,
+        lambda a, b: a & b,
+        lambda a, b: a - b,
+        lambda a, b: a ^ b,
+        lambda a, b: a.union(b),
+        lambda a, b: a.intersection(b),
+        lambda a, b: a.difference(b),
+        lambda a, b: a.symmetric_difference(b),
+    ]
+
+    @pytest.mark.parametrize("operation", OPERATIONS)
+    def test_a_frozenset_on_the_left_gives_a_new_frozenset(
+        self, operation: Callable[[Any, Any], Any]
+    ) -> None:
+        fs = frozenset(range(10))
+        for other in (frozenset(), fs, {1, 2}):
+            result = operation(fs, other)
+            assert type(result) is frozenset and result is not fs
+
+    @pytest.mark.parametrize("operation", OPERATIONS)
+    def test_a_set_on_the_left_gives_a_set(self, operation: Callable[[Any, Any], Any]) -> None:
+        left = {1, 2}
+        result = operation(left, frozenset(range(10)))
+        assert type(result) is set and result is not left
+
+
+class TestDifferenceCanLeaveASparseTable:
+    """`difference()` with a non-set iterable copies the table and removes from the copy."""
+
+    def test_removing_most_elements_keeps_the_table(self) -> None:
+        sparse = frozenset(range(65_536)).difference(range(65_535))
+        assert sparse == {65_535}
+        assert sys.getsizeof(sparse) > sys.getsizeof(frozenset([65_535])) * 1_000
+
+    def test_a_set_operand_gives_a_compact_result(self) -> None:
+        compact = frozenset(range(65_536)).difference(set(range(65_535)))
+        assert sys.getsizeof(compact) == sys.getsizeof(frozenset([65_535]))
 
 
 def _blocks(page: str) -> list[tuple[int, str]]:

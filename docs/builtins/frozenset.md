@@ -1,46 +1,66 @@
 # Frozenset Operations Complexity
 
-The `frozenset` type is an immutable set that can be hashed and used as a dictionary key or set member.
+The `frozenset` type is an immutable set. It uses the same hash table as [`set`](set.md), so
+lookups and set algebra cost the same; what immutability adds is a hash, cached on the object
+after the first `hash()`, and copies that cost nothing because they return the original object.
 
 `n` is the number of elements in the frozenset and `m` is the number of elements in the other
-operand or in the iterable it is built from. Element hashing and comparison are treated as O(1).
+operand, or the items an iterable yields. Element hashing and comparison are treated as O(1).
 
 ## Complexity Reference
 
+### frozenset
+
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `frozenset(iterable)` | O(m) | O(n) | Create from iterable |
-| `len()` | O(1) | O(1) | Direct count |
-| `in` (membership) | O(1) avg, O(n) worst | O(1) | Hash lookup; worst case with hash collisions |
-| `union(\|)` | O(n+m) | O(n+m) | Combine sets |
-| `intersection(&)` | O(min(n,m)); O(m) if `other` is not a set | O(min(n,m)) | Common elements |
-| `difference(-)` | O(n); O(n+m) if `other` is not a set | O(n) | Elements in first |
-| `symmetric_difference(^)` | O(n+m) | O(n+m) | Exclusive elements |
-| `issubset()` | O(n); O(n+m) if `other` is not a set | O(1); O(m) if `other` is not a set | Check containment |
-| `issuperset()` | O(m) | O(1) | Check containment |
-| `isdisjoint()` | O(min(n,m)); O(m) if `other` is not a set | O(1) | Check overlap |
-| `copy()` | O(1) | O(1) | Returns same object (immutable); an instance of a subclass is copied in O(n) |
-| `hash()` | O(n) first call, O(1) cached | O(1) | Hash value computed once, then cached |
-| `frozenset(set)` | O(n) | O(n) | Convert from set |
-| `frozenset(fs)` | O(1) | O(1) | Returns `fs` itself when it is an exact frozenset |
+| `frozenset(iterable)` | O(m) | O(n) | Duplicates are dropped while building; see [`frozenset()`](frozenset_func.md) |
+| `frozenset(fs)` | O(1) | O(1) | Returns `fs` itself when it is an exact frozenset; an instance of a subclass is copied in O(n) |
+| `len(fs)` | O(1) | O(1) | The count is stored |
+| `x in fs` | O(1) avg, O(n) worst | O(1) | Hash lookup; worst case with hash collisions |
+| Iterating a `frozenset` | O(n) | O(1) | Arbitrary order |
+| `fs.copy()` | O(1) | O(1) | Returns `fs` itself; an instance of a subclass is copied in O(n) |
+| `hash(fs)` | O(n) first call, then O(1) | O(1) | Cached on the object; an equal frozenset computes its own |
+| `fs == other`, `fs != other` | O(n) | O(1) | O(1) when the lengths differ |
+| `fs <= other`, `fs < other` | O(n) | O(1) | Same as `issubset()` with a set |
+| `fs >= other`, `fs > other` | O(m) | O(1) | Same as `issuperset()` |
 
-The operators accept only sets and frozensets; the methods also take any iterable. In the worst
-case, when every element hashes to the same value, the O(1) operations take O(n), and operations
-that look up every element of one set in another degrade accordingly.
+### Set Operations
 
-## Implementation Details
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `fs.union(other)`, `fs \| other` | O(n+m) | O(n+m) | Combine sets |
+| `fs.intersection(other)`, `fs & other` | O(min(n,m)); O(m) if `other` is not a set | O(min(n,m)) | Common elements |
+| `fs.difference(other)`, `fs - other` | O(n); O(n+m) if `other` is not a set | O(n) | Elements in `fs` only |
+| `fs.symmetric_difference(other)`, `fs ^ other` | O(n+m) | O(n+m) | Elements in exactly one |
+| `fs.issubset(other)` | O(n); O(n+m) if `other` is not a set | O(1); O(m) if `other` is not a set | Check containment |
+| `fs.issuperset(other)` | O(m) | O(1) | Check containment |
+| `fs.isdisjoint(other)` | O(min(n,m)); O(m) if `other` is not a set | O(1) | Stops at the first common element |
 
-### Hashability
+The operators accept only sets and frozensets; the methods also take any iterable. Union,
+intersection, difference and symmetric difference return a new object: `fs | s` is a frozenset and
+`s | fs` a set. In the worst case, when every element hashes to the same value, the O(1)
+operations take O(n), and operations that look up every element of one set in another degrade
+accordingly.
+
+Operations that walk a table - iteration, the first `hash()`, `|`, `&`, `-`, `^` and comparisons -
+take time proportional to its size, which removing elements does not always shrink. A `set` operand
+that has lost most of its elements, or a frozenset returned by `difference()` with a non-set
+iterable that removed most of the elements, can keep a table of its former size - see
+[Set](set.md).
+
+## Hashing
+
+### Hashable Where a Set Is Not
 
 ```python
-# Frozenset is hashable - can be used as dict key
 fs1 = frozenset([1, 2, 3])  # O(n) to build
 fs2 = frozenset([4, 5, 6])  # O(n) to build
 
-d = {fs1: 'first', fs2: 'second'}  # Works! O(n) first hash, then O(1) avg
-s = {fs1, fs2}                      # Works!
+d = {fs1: 'first', fs2: 'second'}  # O(n) first hash of each, then O(1) avg
+s = {fs1, fs2}
+assert d[frozenset([3, 2, 1])] == 'first'
+assert fs1 in s
 
-# Set is not hashable
 regular_set = {1, 2, 3}
 try:
     d[regular_set] = 'value'
@@ -50,123 +70,119 @@ else:
     raise AssertionError('a set cannot be a dict key')
 ```
 
-### Immutability Benefits
+### The Hash Is Cached per Object
+
+The first `hash()` walks every element; later calls on the same object read the stored value. The
+cache belongs to the object, not to its contents: an equal frozenset built separately pays for its
+own first hash, and finding it in a dict then compares the elements, O(n), to confirm the match.
 
 ```python
-# Frozenset is immutable and hashable
-fs = frozenset([1, 2, 3])
+fs = frozenset(range(1_000))
 
-# Can be dictionary key
-cache = {fs: 'result'}
+h1 = hash(fs)  # O(n) - computed once, then stored on fs
+h2 = hash(fs)  # O(1) - reads the stored value
+assert h1 == h2
 
-# Can be in another set
-nested = {fs, frozenset([4, 5])}
-
-# Hash is stable (doesn't change)
-h1 = hash(fs)    # O(n) - computed once, then cached on the object
-# ... time passes ...
-h2 = hash(fs)    # O(1) - reads the cached value
-assert h1 == h2  # Always true
-# Caching removes the rehash from every later lookup. It does not make a
-# collision free: comparing two equal-hashing frozensets still scans them
+table = {fs: 'found'}
+twin = frozenset(range(1_000))      # equal, but a different object
+assert twin is not fs
+assert table[twin] == 'found'       # O(n): its own first hash, then an element-wise comparison
+assert table[fs] == 'found'         # the same object matches by identity, with no comparison
 ```
 
-## Performance Considerations
+## Copying
 
-### Copy is O(1)
+`copy()` and `frozenset(fs)` hand back the object itself, because an immutable value can be shared.
+A `set` built from it is a real copy.
 
 ```python
-# Frozenset copy returns same object (since immutable)
 fs1 = frozenset([1, 2, 3])
-fs2 = frozenset(fs1)
-print(fs1 is fs2)  # True - same object!
+assert fs1.copy() is fs1      # O(1)
+assert frozenset(fs1) is fs1  # O(1)
 
-# Contrast with set
-s1 = {1, 2, 3}
-s2 = set(s1)
-print(s1 is s2)    # False - different objects
+s = set(fs1)                  # O(n)
+assert s == fs1 and s is not fs1
 ```
 
-### Set Operations
+## Set Operations
 
 ```python
-# Union: O(n+m)
 fs1 = frozenset([1, 2, 3])
 fs2 = frozenset([3, 4, 5])
-fs3 = fs1 | fs2        # O(n+m)
 
-# Intersection: O(min(n,m))
-fs4 = fs1 & fs2        # O(min(n,m))
+assert fs1 | fs2 == {1, 2, 3, 4, 5}  # O(n+m)
+assert fs1 & fs2 == {3}              # O(min(n,m))
+assert fs1 - fs2 == {1, 2}           # O(n)
+assert fs1 ^ fs2 == {1, 2, 4, 5}     # O(n+m)
 
-# Difference: O(n)
-fs5 = fs1 - fs2        # O(n)
-
-# All create new frozensets
+# A frozenset on the left gives a frozenset, a set on the left a set
+assert type(fs1 | {9}) is frozenset
+assert type({9} | fs1) is set
 ```
 
-## Use Cases
+## Common Patterns
 
-### As Dictionary Keys
+### Unordered Pairs as Keys
+
+A frozenset key makes `(a, b)` and `(b, a)` the same key.
 
 ```python
 from collections import Counter
 
-# Count coordinate pairs - frozenset as key
-moves = [(0, 1), (1, 0), (0, 1), (1, 0), (0, 1)]
-move_counts = Counter(tuple(m) for m in moves)  # O(n)
-
-# Or with frozenset for unordered pairs
-edges = frozenset([(0, 1), (2, 3), (0, 1)])  # O(n) - deduplicates while building
-print(len(edges))  # O(1) - 2, duplicate removed
+moves = [(0, 1), (1, 0), (0, 1), (2, 3)]
+edge_counts = Counter(frozenset(m) for m in moves)  # O(len(moves)) - each pair hashes in O(1)
+assert edge_counts[frozenset([0, 1])] == 3
+assert len(edge_counts) == 2
 ```
 
-### In Graph Algorithms
+### Growing a Path Without Mutation
+
+`path | {node}` copies the whole frozenset, so extending a path one node at a time costs O(d) per
+step and O(d²) for a path of depth d. A mutable set with `add()` and `remove()` does the same walk
+in O(1) per step, at the price of undoing each change on the way back.
 
 ```python
-# Store visited states as frozensets
-def dfs(node, visited=None):
-    if visited is None:
-        visited = frozenset()
-    
-    visited = visited | {node}  # O(n+1)
-    # ... process node ...
-    
-    for neighbor in node.neighbors:
-        if neighbor not in visited:  # O(1)
-            dfs(neighbor, visited)
+graph = {'a': ['b', 'c'], 'b': ['c'], 'c': ['a']}
+
+def simple_paths(node, path=frozenset()):
+    path = path | {node}  # O(d) - copies the d nodes already on the path
+    count = 1
+    for neighbor in graph[node]:
+        if neighbor not in path:  # O(1) avg
+            count += simple_paths(neighbor, path)
+    return count
+
+assert simple_paths('a') == 4  # a, a-b, a-b-c, a-c
 ```
 
 ### Function Memoization
+
+`functools.lru_cache` needs hashable arguments, so pass a frozenset where a set would be rejected.
+Each new frozenset pays its own first hash, so reuse one object across calls to keep that O(1).
 
 ```python
 from functools import lru_cache
 
 @lru_cache(maxsize=128)
-def process_items(items):
-    # items must be hashable - use frozenset
+def total(items):
     return sum(items)
 
-# Calling with frozenset
-result = process_items(frozenset([1, 2, 3]))  # O(n) hash on the first call, then cached
+items = frozenset([1, 2, 3])
+assert total(items) == 6  # O(n) hash on the first call
+assert total(items) == 6  # cached hash and cached result
+assert total.cache_info().hits == 1
 ```
 
 ## Memory Considerations
 
+A frozenset has the same layout as a set, so the same elements added the same way take the same
+memory.
+
 ```python
 import sys
 
-# Frozenset overhead
-fs = frozenset([1, 2, 3])
-print(sys.getsizeof(fs))      # ~216+ bytes
-
-# Similar to set
-s = {1, 2, 3}
-print(sys.getsizeof(s))       # ~216+ bytes
-
-# Immutable, so can be shared
-fs1 = frozenset([1, 2, 3])
-fs2 = frozenset(fs1)          # Same object, no copy
-print(fs1 is fs2)             # True
+items = list(range(100))
+assert sys.getsizeof(frozenset(items)) == sys.getsizeof(set(items))
 ```
 
 ## Comparison with Set
@@ -178,15 +194,29 @@ print(fs1 is fs2)             # True
 | Dict key | No | Yes |
 | Copy cost | O(n) | O(1) |
 | Hash cost | - | O(n) first call, O(1) after |
-| Memory | Similar | Similar |
+| Memory | Same | Same |
+
+## Performance Best Practices
+
+✅ **Do**:
+
+- Use a frozenset as a dict key or set member when the key is an unordered group of values
+- Keep and reuse one frozenset object as a key; its hash is cached on that object
+- Call `copy()` or `frozenset(fs)` freely; neither copies anything
+
+❌ **Avoid**:
+
+- Building a frozenset per step to grow a collection: each `|` copies all n elements
+- Rebuilding an equal frozenset for each lookup: it pays O(n) to hash and O(n) to compare
 
 ## Version Notes
 
-- **All Python 3.x**: Core complexity unchanged
-- **Python 3.5+**: Some optimization improvements
+- **All Python 3**: `copy()` and `frozenset(fs)` return `fs` itself, and the hash is cached on the
+  object after the first `hash()`
 
 ## Related Types
 
+- **[frozenset()](frozenset_func.md)** - Building a frozenset from an iterable
 - **[Set](set.md)** - Mutable alternative
-- **[Dict](dict.md)** - For ordered key-value pairs
+- **[Frozendict](frozendict.md)** - Immutable, hashable mapping (Python 3.15+)
 - **[Tuple](tuple.md)** - For ordered hashable sequences
