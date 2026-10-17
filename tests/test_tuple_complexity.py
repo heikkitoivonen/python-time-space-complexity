@@ -4,40 +4,59 @@ A tuple never changes, so the page's distinctive claims are about what
 CPython does *not* do: copying an exact tuple returns it, and from 3.14 a
 computed hash is kept in the tuple. Both are settled by observation - an
 identity check, and a count of the elements' `__hash__` calls - so they need no
-tolerance. `min()` and `max()` are settled by counting comparisons and
-repetition by output length and a timing ratio.
+tolerance. Comparisons, `index()` with bounds, and `min()` and `max()` are
+settled by counting `__eq__` or ordering calls; repetition by output length
+and a timing ratio.
 
 The rows for `len()`, `t[k]`, `in`, `index()`, `count()`, concatenation,
-slicing and `tuple(list)` are covered by `TestTupleComplexity` in
+slicing and `tuple(list)` are timed by `TestTupleComplexity` in
 tests/test_builtin_complexity.py; this file covers the rest of the table and
 the page's examples.
 
 Measurement scope:
 
 * `tuple(t)`, `copy.copy(t)` and `t[:]` return `t` for an exact tuple, and
-  `tuple` has no `copy` attribute. `tuple()` and `copy.copy()` of a tuple
-  subclass instance, and `tuple()` of a list, build a new object.
-* `hash((1, 2))` succeeds and `hash(([],))` raises `TypeError`.
+  `tuple` has no `copy` attribute. `tuple()`, `copy.copy()` and `[:]` of a
+  tuple subclass instance, and `tuple()` of a list, build a new object;
+  `tuple()` of a subclass gives a plain tuple and `copy.copy()` keeps the
+  subclass.
 * `hash(t)` over 100 elements with a counting `__hash__` calls it 100 times on
   the first call. On the second call it calls it 0 times on 3.14 and later and
-  100 times on 3.11 to 3.13, which is the version boundary of the cache.
-* `t * k`: the result has n·k elements, and 100x k at n = 100, or 100x n at
-  k = 10, costs over 20x more.
+  100 times on 3.11 to 3.13, which is the version boundary of the cache. An
+  equal tuple built separately calls it 100 times on its own first hash.
+  `hash()` of 50 counted elements followed by a list raises `TypeError` and
+  calls `__hash__` 50 times on each of two attempts, so a failure caches
+  nothing.
+* `t1 == t2` on 999 and 1,000 counted elements with an equal prefix makes 999
+  `__eq__` calls, where the same lists make none. `<`, `<=`, `>` and `>=`
+  between a 10-element tuple and a 1,000-element one sharing its prefix make
+  exactly 10 `__eq__` calls. Equal 1,000-element tuples make 1,000; tuples
+  differing at index 5 make 6, and `<` between them makes 6 `__eq__` calls
+  and one `__lt__`.
+* `t.index(x, i, j)` on 1,000 counted elements, with `x` absent from
+  `t[100:110]`, makes exactly 10 `__eq__` calls before raising `ValueError`.
+* `t * k`: the result has n·k elements, k of 0 and -1 give `()`, and 100x k
+  at n = 100, or 100x n at k = 10, costs over 20x more. `t1 + t2` of two
+  non-empty tuples is a new object equal to their concatenation.
 * `min()` and `max()` make exactly n - 1 comparisons on 1,000 elements.
   Iteration costs the same per step on a 1,000- and a 1,000,000-element tuple
   (the first 1,000 steps, under 3x apart).
 * `reversed()` over a 1,000,000-element tuple allocates under 1 KB, and its
   first item is the last element.
+* Building a tuple with `t += (x,)` is timed against collecting a list and
+  converting once: from 1,000 to 10,000 items the first must grow more than
+  40x (quadratic predicts 100x) and the second less than 40x (linear predicts
+  10x).
 * Every fenced Python block runs in its own subprocess, and a mutated
   assertion in one of them is asserted to fail.
 
 Not settled here:
 
 * Element hashing and comparison are held at O(1) by the cost model; the
-  hash test uses a constant `__hash__`, and string elements, which cache
+  hash test uses a constant-cost `__hash__`, and string elements, which cache
   their own hash, are not varied.
-* The Version Notes entries for 3.8 and 3.11 describe interpreter-wide
-  speed-ups with no bound attached, and are not tested.
+* `tuple(iterable)` for iterables other than a list is priced on the
+  tuple() page and not measured here.
 """
 
 from __future__ import annotations
@@ -58,7 +77,7 @@ from typing import Any
 import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "builtins" / "tuple.md"
-EXPECTED_BLOCKS = 6
+EXPECTED_BLOCKS = 4
 
 SMALL = 1_000
 LARGE = 1_000_000
@@ -104,6 +123,51 @@ class Counted:
         return self.value
 
 
+class Equal:
+    """An element whose `==` calls are counted; equal values are distinct objects."""
+
+    calls = 0
+
+    __slots__ = ("value",)
+    __hash__ = None  # type: ignore[assignment]
+
+    def __init__(self, value: int) -> None:
+        self.value = value
+
+    def __eq__(self, other: object) -> bool:
+        Equal.calls += 1
+        return isinstance(other, Equal) and self.value == other.value
+
+
+def equals(values: range) -> tuple[Equal, ...]:
+    return tuple(Equal(value) for value in values)
+
+
+class OrderedEqual:
+    """An element whose `==` and `<` calls are counted separately."""
+
+    equalities = 0
+    orderings = 0
+
+    __slots__ = ("value",)
+    __hash__ = None  # type: ignore[assignment]
+
+    def __init__(self, value: int) -> None:
+        self.value = value
+
+    def __eq__(self, other: object) -> bool:
+        OrderedEqual.equalities += 1
+        return isinstance(other, OrderedEqual) and self.value == other.value
+
+    def __lt__(self, other: OrderedEqual) -> bool:
+        OrderedEqual.orderings += 1
+        return self.value < other.value
+
+    @classmethod
+    def wrap(cls, values: tuple[int, ...]) -> tuple[OrderedEqual, ...]:
+        return tuple(cls(value) for value in values)
+
+
 class TestCopyingReturnsTheSameTuple:
     """`tuple(t)`, `copy.copy(t)` | O(1): an exact tuple is returned as is."""
 
@@ -126,6 +190,8 @@ class TestCopyingReturnsTheSameTuple:
 
         assert tuple(pair) is not pair and type(tuple(pair)) is tuple
         assert copy.copy(pair) is not pair and copy.copy(pair) == pair
+        assert type(copy.copy(pair)) is Pair
+        assert pair[:] is not pair and pair[:] == pair
         assert tuple(items) == (1, 2)
 
 
@@ -164,6 +230,96 @@ class TestHashIsCachedFrom314:
             f"{sys.version_info[:2]}, expected {expected}"
         )
 
+    def test_a_failed_hash_caches_nothing(self) -> None:
+        data = (*(Counted(value) for value in range(50)), [])
+
+        for _ in range(2):
+            Counted.hashes = 0
+            with pytest.raises(TypeError):
+                hash(data)
+            assert Counted.hashes == 50
+
+    def test_an_equal_tuple_pays_its_own_first_hash(self) -> None:
+        elements = [Counted(value) for value in range(100)]
+        hashed = tuple(elements)
+        hash(hashed)
+        twin = tuple(elements)
+
+        Counted.hashes = 0
+        twin_hash = hash(twin)
+        assert Counted.hashes == 100
+        assert twin_hash == hash(hashed)
+
+
+class TestComparisonsWalkThePrefix:
+    """`t1 == t2` | O(min(len(t1), len(t2))): unlike a list, a tuple compares its
+    common prefix even when the lengths differ. Ordering stops at the first
+    unequal pair. Counting `__eq__` calls separates the two exactly."""
+
+    def test_unequal_lengths_still_compare_the_prefix(self) -> None:
+        short, long = equals(range(999)), equals(range(1_000))
+
+        Equal.calls = 0
+        assert short != long
+        assert Equal.calls == 999
+
+    def test_a_list_answers_unequal_lengths_without_comparing(self) -> None:
+        short, long = list(equals(range(999))), list(equals(range(1_000)))
+
+        Equal.calls = 0
+        assert short != long
+        assert Equal.calls == 0
+
+    def test_equal_tuples_compare_every_pair(self) -> None:
+        first, second = equals(range(1_000)), equals(range(1_000))
+
+        Equal.calls = 0
+        assert first == second
+        assert Equal.calls == 1_000
+
+    def test_equality_stops_at_the_first_unequal_pair(self) -> None:
+        first = equals(range(1_000))
+        second = equals(range(5)) + equals(range(-1, -996, -1))
+
+        Equal.calls = 0
+        assert first != second
+        assert Equal.calls == 6
+
+    def test_ordering_compares_the_shorter_length(self) -> None:
+        short = equals(range(10))
+        long = equals(range(10)) + equals(range(10, 1_000))
+
+        for compare in (
+            lambda: short < long,
+            lambda: short <= long,
+            lambda: long > short,
+            lambda: long >= short,
+        ):
+            Equal.calls = 0
+            assert compare()
+            assert Equal.calls == 10
+
+    def test_ordering_stops_at_the_first_unequal_pair(self) -> None:
+        first = (*range(5), -1, *range(6, 1_000))
+        second = tuple(range(1_000))
+        ordered = OrderedEqual.wrap(first), OrderedEqual.wrap(second)
+
+        OrderedEqual.equalities = OrderedEqual.orderings = 0
+        assert ordered[0] < ordered[1]
+        assert (OrderedEqual.equalities, OrderedEqual.orderings) == (6, 1)
+
+
+class TestIndexWithBoundsSearchesTheRegion:
+    """`t.index(x, i, j)` | O(j-i): only `t[i:j]` is searched."""
+
+    def test_a_bounded_search_compares_only_the_region(self) -> None:
+        data = equals(range(1_000))
+
+        Equal.calls = 0
+        with pytest.raises(ValueError):
+            data.index(Equal(5), 100, 110)
+        assert Equal.calls == 10
+
 
 class TestReversedIsLazy:
     """`reversed()` | O(1): an iterator over the tuple, not a reversed copy."""
@@ -190,6 +346,16 @@ class TestRepetitionScalesWithBothFactors:
         base = tuple(range(100))
         assert len(base * 1_000) == 100_000
         assert (base * 3)[200:] == base
+
+    def test_a_count_of_zero_or_less_gives_an_empty_tuple(self) -> None:
+        base = tuple(range(100))
+        assert base * 0 == () and base * -1 == ()
+
+    def test_concatenation_builds_a_new_tuple(self) -> None:
+        first, second = tuple(range(3)), tuple(range(3, 6))
+        joined = first + second
+        assert joined == tuple(range(6))
+        assert joined is not first and joined is not second
 
     @pytest.mark.timing
     def test_a_hundred_times_k_costs_far_more(self) -> None:
@@ -247,6 +413,47 @@ class TestIterationAndMinMax:
         assert ratio < 3, f"1,000 steps cost x{ratio:.1f} on 1,000x the length"
 
 
+class TestBuildingByConcatenationIsQuadratic:
+    """`t += (x,)` in a loop copies the tuple every step, O(n²) in total;
+    collecting a list and converting once is O(n). A 10x step separates them:
+    quadratic predicts 100x, linear 10x, and 40x sits between."""
+
+    @staticmethod
+    def concatenating(n: int) -> Callable[[], None]:
+        def build() -> None:
+            result: tuple[int, ...] = ()
+            for i in range(n):
+                result += (i,)
+
+        return build
+
+    @staticmethod
+    def collecting(n: int) -> Callable[[], None]:
+        def build() -> None:
+            items: list[int] = []
+            for i in range(n):
+                items.append(i)
+            tuple(items)
+
+        return build
+
+    @pytest.mark.timing
+    def test_concatenating_grows_quadratically(self) -> None:
+        small_ns = best_ns(self.concatenating(1_000), repeats=5, inner=5)
+        large_ns = best_ns(self.concatenating(10_000), repeats=5, inner=1)
+
+        ratio = large_ns / small_ns
+        assert ratio > 40, f"10x the items cost only x{ratio:.1f}"
+
+    @pytest.mark.timing
+    def test_collecting_grows_linearly(self) -> None:
+        small_ns = best_ns(self.collecting(1_000), repeats=5, inner=50)
+        large_ns = best_ns(self.collecting(10_000), repeats=5, inner=5)
+
+        ratio = large_ns / small_ns
+        assert ratio < 40, f"10x the items cost x{ratio:.1f}"
+
+
 def _blocks() -> list[tuple[int, str]]:
     """Every fenced python block on the page, with its 1-based line number."""
     lines = PAGE.read_text(encoding="utf-8").splitlines()
@@ -279,8 +486,8 @@ def _run_block(source: str, cwd: pathlib.Path) -> subprocess.CompletedProcess[st
 
 
 class TestDocumentedExamples:
-    """Each block runs in its own subprocess. The hash and copy blocks assert
-    their results; the other four are checked only for running cleanly."""
+    """Each block runs in its own subprocess, and every block asserts its
+    results."""
 
     def test_the_page_has_the_expected_blocks(self) -> None:
         assert len(_blocks()) == EXPECTED_BLOCKS
@@ -300,8 +507,8 @@ class TestDocumentedExamples:
         assert not failures, "\n\n".join(failures)
 
     def test_the_runner_notices_a_broken_assertion(self, tmp_path: pathlib.Path) -> None:
-        line, source = next((n, s) for n, s in _blocks() if "assert t1 is t2" in s)
-        mutated = source.replace("assert t1 is t2", "assert t1 is not t2", 1)
+        line, source = next((n, s) for n, s in _blocks() if "assert tuple(t) is t" in s)
+        mutated = source.replace("assert tuple(t) is t", "assert tuple(t) is not t", 1)
 
         assert mutated != source, f"the mutation matched nothing in {PAGE.name}:{line}"
         assert _run_block(mutated, tmp_path).returncode != 0

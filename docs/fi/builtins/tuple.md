@@ -1,160 +1,183 @@
 ---
-source_sha: 94b8516e62742f8991e48fca56d762ca55a09160a862913d1a31bbcba081e372
+source_sha: 0f682082c1e815cf6cb74518bbbdc670c90d687d42c87d1afd5e6f989b5ac7c8
 translated: machine
 ---
 
 # Monikko-operaatioiden vaativuus
 
-Tyyppi `tuple` on muuttumaton, järjestetty jono. Muuttumattomuus mahdollistaa monenlaisia optimointeja CPythonissa.
+Tyyppi `tuple` on muuttumaton, järjestetty jono. CPython tallentaa sen kiinteän kokoisena
+viittausten taulukkona, joten indeksointi on suoraa eikä mitään tarvitse koskaan lisätä, poistaa
+tai muuttaa kooltaan. Koska monikko ei voi muuttua, täsmälleen `tuple`-tyyppisen monikon kopiointi
+palauttaa monikon itsensä.
 
-`n` on monikon pituus, `k` on indeksi tai toistokerroin, `i:j` ovat viipaleen rajat ja `len(t1)`,
-`len(t2)` ovat operandien pituudet. Yhden alkion vertailu tai hajautus lasketaan O(1):ksi.
+`n` on monikon pituus, `k` on numeerisen argumentin arvo (indeksi tai toistokerroin), `i:j` ovat
+viipaleen rajat ja `len(t1)`, `len(t2)` ovat operandien pituudet. Askeleellinen viipale valitsee
+`m` alkiota. Indeksit lasketaan sen jälkeen, kun negatiiviset arvot on normalisoitu. Yhden alkion
+vertailu tai hajautus lasketaan O(1):ksi.
 
 ## Vaativuustaulukko
+
+### tuple
 
 | Operaatio | Aika | Tila | Huomiot |
 |-----------|------|-------|-------|
 | `len(t)` | O(1) | O(1) | Pituus on tallennettu monikkoon, sitä ei lasketa |
 | `t[k]` | O(1) | O(1) | Suora indeksointi |
-| `index(x)` | O(n) | O(1) | Lineaarinen haku |
-| `count(x)` | O(n) | O(1) | Lineaarinen läpikäynti |
+| `t[i:j]` (viipalointi) | O(j-i) | O(j-i) | Askeleen kanssa O(m); täsmälleen `tuple`-tyyppisen monikon `t[:]` palauttaa `t`:n itsensä |
+| `t.index(x)` | O(n) | O(1) | Lineaarinen haku; `t.index(x, i, j)` hakee vain alueelta `t[i:j]`, O(j-i) |
+| `t.count(x)` | O(n) | O(1) | Lineaarinen läpikäynti |
 | `x in t` (jäsenyys) | O(n) | O(1) | Lineaarinen haku |
-| `tuple(t)`, `copy.copy(t)` | O(1) | O(1) | Palauttaa `t`:n itsensä, kun `t` on täsmälleen `tuple`-tyyppinen; monikoilla ei ole `copy()`-metodia |
+| `tuple(t)`, `copy.copy(t)` | O(1) | O(1) | Palauttavat `t`:n itsensä, kun `t` on täsmälleen `tuple`-tyyppinen; monikoilla ei ole `copy()`-metodia |
+| `tuple(iterable)` | O(n) | O(n) | n = iteroitavan tuottamat alkiot; katso [tuple()](tuple_func.md) |
 | `t1 + t2` (yhdistäminen) | O(len(t1)+len(t2)) | O(len(t1)+len(t2)) | |
-| `t * k` (toisto) | O(nk) | O(nk) | |
+| `t * k` (toisto) | O(nk) | O(nk) | k ≤ 0 antaa tyhjän monikon |
+| `t1 == t2` | O(min(len(t1), len(t2))) | O(1) | Vertaa alkioita, vaikka pituudet eroavat; pysähtyy ensimmäiseen erisuureen pariin |
+| `t1 < t2`, `<=`, `>`, `>=` | O(min(len(t1), len(t2))) | O(1) | Pysähtyy ensimmäiseen erisuureen pariin |
 | `for x in t` (iterointi) | O(n) | O(1) | O(1) askelta kohden |
+| `reversed(t)` | O(1) | O(1) | Laiska iteraattori; sen läpikäynti on O(n) |
 | `min(t)`, `max(t)` | O(n) | O(1) | n-1 vertailua |
-| `hash()` | O(n) ensimmäisellä kerralla; sen jälkeen O(1) versiosta 3.14 alkaen | O(1) | 3.14+ tallentaa tiivisteen kenttään `ob_hash`; 3.11-3.13 laskevat sen joka kutsulla uudelleen |
-| `reversed()` | O(1) | O(1) | Iteraattori, ei materialisoida |
-| `tuple()`-konstruktori | O(n) | O(n) | n = iteroituvan pituus; täsmälleen `tuple`-tyyppinen monikko palautetaan sellaisenaan |
-| `t[i:j]` (viipalointi) | O(j-i) | O(j-i) | Askeleen kanssa O(tuloksen pituus) |
+| `hash(t)` | O(n) ensimmäisellä kerralla; sen jälkeen O(1) versiosta 3.14 alkaen | O(1) | 3.11-3.13 laskevat sen joka kutsulla uudelleen; hajautuskelvoton alkio nostaa `TypeError`-poikkeuksen eikä mitään tallenneta |
 
-## Toteutuksen yksityiskohdat
+## Kopiointi palauttaa saman monikon
 
-### Muuttumattomuuden edut
-
-```python
-# Tuples of hashable elements are hashable - can be dict keys or set members
-d = {(1, 2): 'point', (3, 4): 'another'}
-s = {(0, 0), (1, 1)}
-
-# Lists cannot - they're mutable
-# d[[1, 2]] = 'fails'  # TypeError: unhashable type
-```
-
-### Tiivisteen laskenta
+Täsmälleen `tuple`-tyyppisen monikon kopio ei voisi koskaan erota alkuperäisestä, joten
+`tuple(t)`, `copy.copy(t)` ja `t[:]` palauttavat `t`:n itsensä ajassa O(1). Aliluokan ilmentymä
+kopioidaan ajassa O(n).
 
 ```python
-# hash() computes hash value by iterating all elements
-t = tuple([1, 2, 3])  # built at run time, so not hashed yet
-h1 = hash(t)  # O(n) first call - computes by iterating elements
+import copy
 
-# Python 3.14+ caches the hash in the tuple's ob_hash field;
-# 3.11-3.13 recompute it on every call
-h2 = hash(t)  # O(1) on 3.14+, O(n) on 3.11-3.13
-assert h1 == h2
+t = tuple(range(1_000))
+assert tuple(t) is t  # O(1)
+assert copy.copy(t) is t  # O(1)
+assert t[:] is t  # O(1)
+
+
+class Pair(tuple):
+    pass
+
+
+p = Pair((1, 2))
+assert tuple(p) is not p and type(tuple(p)) is tuple  # O(n): a subclass is copied
 ```
 
-### Viittaus vai kopio
+## Hajautus
+
+`hash(t)` yhdistää jokaisen alkion tiivisteen, joten ensimmäinen kutsu on O(n). Versiosta 3.14
+alkaen tulos säilytetään monikossa ja myöhemmät kutsut ovat O(1); versioissa 3.11-3.13 jokainen
+kutsu käy alkiot uudelleen läpi. Välimuisti kuuluu oliolle: erikseen rakennettu yhtä suuri monikko
+maksaa oman ensimmäisen hajautuksensa.
 
 ```python
-# Tuple "copy" doesn't copy - returns same object
-t1 = (1, 2, 3)
-t2 = tuple(t1)
-assert t1 is t2  # True - same object in memory!
+import sys
 
-# This is safe because tuples are immutable
+calls = 0
+
+
+class Key:
+    def __init__(self, value):
+        self.value = value
+
+    def __eq__(self, other):
+        return isinstance(other, Key) and self.value == other.value
+
+    def __hash__(self):
+        global calls
+        calls += 1
+        return hash(self.value)
+
+
+t = tuple(Key(i) for i in range(100))
+hash(t)  # O(n): hashes every element
+assert calls == 100
+
+calls = 0
+hash(t)  # O(1) on 3.14+, O(n) before
+assert calls == (0 if sys.version_info >= (3, 14) else 100)
+
+try:
+    hash((1, []))
+except TypeError as exc:
+    assert "unhashable type: 'list'" in str(exc)
+else:
+    raise AssertionError("expected TypeError")
 ```
 
-## Suorituskyky listoihin verrattuna
+## Monikoiden vertailu
+
+`==` ei tarkista pituuksia ensin. Se käy läpi yhteisen alkuosan, pysähtyy ensimmäiseen erisuureen
+pariin ja katsoo pituuksia vasta, kun lyhyempi monikko loppuu kaikkien parien ollessa yhtä suuria.
+Toisin kuin [listalla](list.md), eripituisetkin monikot vertaavat yhteisen alkuosansa.
 
 ```python
-# List access: O(1) with bounds checking
-lst = [0] * 1000000
-value = lst[500000]  # O(1)
+compared = 0
 
-# Tuple access: O(1) same as list
-tup = tuple(lst)
-value = tup[500000]  # O(1)
 
-# But tuple creation from list: O(n)
-tup = tuple(lst)  # O(n) - must copy all elements
+class Item:
+    def __init__(self, value):
+        self.value = value
+
+    def __eq__(self, other):
+        global compared
+        compared += 1
+        return self.value == other.value
+
+    __hash__ = None
+
+
+short = tuple(Item(i) for i in range(999))
+long = tuple(Item(i) for i in range(1_000))
+assert short != long  # O(min(len(t1), len(t2))): the common prefix is compared
+assert compared == 999
+
+compared = 0
+assert list(short) != list(long)  # a list answers from the lengths alone
+assert compared == 0
 ```
 
-## Versiohuomiot
+## Monikon rakentaminen
 
-- **Python 3.8+**: Monikoiden purku parantunut joissakin tapauksissa
-- **Python 3.11+**: Mukautuva erikoistaminen voi optimoida toistuvia monikko-operaatioita
-- **Python 3.14+**: `hash()` tallentaa tuloksensa monikkoon, joten toistuvat kutsut ovat O(1)
+`t += (x,)` rakentaa uuden monikon, joten silmukassa se kopioi kaiken siihen mennessä kerätyn joka
+askeleella: yhteensä O(n²). Kerää alkiot listaan ja muunna kerran.
 
-## Toteutusten vertailu
+```python
+slow = ()
+for i in range(1_000):
+    slow += (i,)  # O(len(slow)): copies the tuple each time
 
-### CPython
-Suora jonotyyppi, jossa on muuttumattomuuteen perustuvia optimointeja.
+items = []
+for i in range(1_000):
+    items.append(i)  # O(1) amortized
+fast = tuple(items)  # O(n), once
 
-### PyPy
-JIT-käännös ja escape-analyysi voivat optimoida edelleen.
+assert slow == fast == tuple(range(1_000))
+```
 
-### Jython
-Samankaltaiset ominaisuudet, taustalla Javan taulukot.
-
-## Parhaat käytännöt
+## Suorituskyvyn parhaat käytännöt
 
 ✅ **Tee näin**:
 
-- Käytä monikoita muuttumattomiin jonoihin
-- Käytä monikoita sanakirjan avaimina, kun tarvitset rakenteisia avaimia
-- Käytä monikoita useiden paluuarvojen palauttamiseen
-- Käytä monikon purkua: `x, y = point`
+- Kopioi vapaasti: täsmälleen `tuple`-tyyppisen monikon `tuple(t)` ja `t[:]` ovat O(1)
+- Käytä monikkoa sanakirjan avaimena tai joukon alkiona, kun sen alkiot ovat hajautettavia;
+  versiosta 3.14 alkaen sen tiiviste lasketaan kerran monikkoa kohden
+- Kerää alkiot listaan ja kutsu `tuple()` kerran: yhteensä O(n)
 
 ❌ **Vältä**:
 
-- Toistuvaa yhdistämistä: `t += (item,)` silmukoissa - käytä sen sijaan listaa
-- Monikoiden luomista suurista iteroituvista silmukan sisällä
+- `t += (x,)` silmukassa: jokainen askel kopioi monikon, yhteensä O(n²)
+- `x in t` toisen silmukan sisällä: O(n) testiä kohden - rakenna kerran [joukko](set.md), niin
+  haut ovat keskimäärin O(1)
 
-## Yleisiä ratkaisumalleja
+## Versiohuomiot
 
-### Nimetyt paluuarvot
-
-```python
-# Basic tuples
-def get_coordinates():
-    return (10, 20)
-
-x, y = get_coordinates()
-
-# Better: use named tuples
-from collections import namedtuple
-Point = namedtuple('Point', ['x', 'y'])
-
-def get_point():
-    return Point(10, 20)
-
-p = get_point()
-print(p.x, p.y)  # More readable
-```
-
-### Monikon ja listan suorituskyky
-
-```python
-# Tuple creation: O(n) once, then fast access
-tup = tuple(range(1000000))
-for i in range(1000):
-    x = tup[i]  # O(1)
-
-# List creation: O(n) once, then fast access
-lst = list(range(1000000))
-for i in range(1000):
-    x = lst[i]  # O(1)
-
-# Both have O(1) indexing; tuple is hashable and immutable
-```
+- **Python 3.14+**: `hash(t)` säilyttää tuloksensa monikossa, joten toistuvat kutsut ovat O(1)
 
 ## Liittyvät tyypit
 
 - **[Lista](list.md)** - Muuttuva vaihtoehto
-- **[Namedtuple](../stdlib/collections.md#namedtuple)** - Monikot nimetyillä kentillä
-- **[Dataclass](../stdlib/dataclasses.md)** - Monipuolisempi rakennetyyppi
+- **[tuple()](tuple_func.md)** - Monikon rakentaminen iteroitavasta
+- **[namedtuple](../stdlib/namedtuple.md)** - Monikot nimetyillä kentillä
+- **[Dataclass](../stdlib/dataclasses.md)** - Muuttuvat tietueet nimetyillä kentillä
 
 ## Lisälukemista
 
