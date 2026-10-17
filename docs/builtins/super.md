@@ -1,691 +1,301 @@
 # super() Function Complexity
 
-The `super()` function provides access to methods in a parent or sibling class in a multiple inheritance hierarchy. It's essential for calling parent class methods and implementing cooperative multiple inheritance.
+The `super()` function returns a proxy that looks attributes up in an object's method resolution
+order (MRO), starting after a given class. It is how a method reaches the next implementation in a
+hierarchy, which in multiple inheritance may be a sibling class rather than a parent.
 
-## Complexity Analysis
+A lookup through `super()` is not cached. Ordinary attribute access, `obj.name` or `Parent.method`,
+goes through a per-class cache and costs O(1) once cached, however deep the hierarchy, but every
+`super().name` scans the MRO tuple from the front: first to find the starting class, then through
+each later class's `__dict__` until one defines the name.
+
+`d` is the classes in the MRO the lookup uses: `type(obj).__mro__`, or `obj.__mro__` when `obj` is a
+class. Positions in it count from 1. `s` is the position of the starting class, the class `super()`
+was called in or the one passed as its first argument. `p` is the position where the lookup stops:
+the class that defines the name, or `d` when none does; `s <= p <= d`. Name hashing is treated as
+O(1), and a found descriptor's `__get__` and the method that is then called cost what they do.
+
+## Complexity Reference
+
+### Creating a super object
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| Lookup in MRO | O(d) | O(1) | d = MRO depth; MRO is cached |
-| Bind method | O(1) | O(1) | Create bound method |
-| Call parent method | O(1) | O(1) | Method invocation |
-| MRO resolution | O(d) | O(d) | d = inheritance depth |
-| Total operation | O(d) | O(d) | May traverse full MRO |
+| `super()` inside a method | O(s) | O(1) | Uses the function's `__class__` cell and its first argument, then checks the argument's MRO for that class |
+| `super(cls, obj)` | O(s) | O(1) | `obj` is an instance of `cls` or a subclass of it; any other object except `None` raises `TypeError` |
+| `super(cls)`, `super(cls, None)` | O(1) | O(1) | Unbound: holds no object, so looking up a method of `cls`'s bases raises `AttributeError` |
+| `super()` in a function with no arguments, or outside a class body | O(1) | O(1) | Raises `RuntimeError`, as in a `staticmethod` that takes no arguments |
 
-## Basic Usage
+### Attribute lookup
 
-### Call Parent Constructor
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `super().name`, `super(cls, obj).name` | O(p) | O(1) | Not cached: scans the MRO to the starting class, then each later class's `__dict__` until one defines `name`, and binds what it finds with `__get__` |
+| `super().name`, `name` not defined after the starting class | O(d) | O(1) | Scans to the end of the MRO, then the `super` object's own attributes such as `__self__`; anything else raises `AttributeError` |
+| `super().name = value`, `del super().name` | O(s) | O(1) | Creating the `super` object, then `AttributeError`: it cannot assign or delete through the MRO |
+| `Parent.method(self)` | O(1) | O(1) | An ordinary class attribute, cached per class; it names one class and does not follow the instance's MRO |
+
+## Calling the Next Method
+
+### Single Inheritance
+
+In a single chain, `super()` reaches the parent's version of the method.
 
 ```python
-# O(d) - initialize parent class
 class Parent:
     def __init__(self, name):
         self.name = name
 
 class Child(Parent):
     def __init__(self, name, age):
-        super().__init__(name)  # O(d) - call parent __init__
+        super().__init__(name)  # O(p) - Parent is next in Child's MRO
         self.age = age
 
-# O(d) - create instance
 child = Child("Alice", 30)
-print(child.name, child.age)  # Alice 30
+assert (child.name, child.age) == ("Alice", 30)
+assert Child.__mro__ == (Child, Parent, object)
 ```
 
-### Call Parent Method
+### The Instance's MRO Decides What Is Next
+
+`super()` follows the MRO of the object, not the bases written in the class. In a diamond, `B`'s
+`super()` reaches its sibling `C` when the object is a `D`, so `A` runs once.
 
 ```python
-# O(d) - override method but call parent
-class Parent:
-    def greet(self):
-        return "Hello from Parent"
+calls = []
 
-class Child(Parent):
-    def greet(self):
-        parent_greeting = super().greet()  # O(d)
-        return f"{parent_greeting}, Child"
-
-# O(d) - call overridden method
-child = Child()
-print(child.greet())  # Hello from Parent, Child
-```
-
-### Multiple Inheritance
-
-```python
-# O(d) - resolve method order with MRO
 class A:
-    def method(self):
-        return "A"
+    def setup(self):
+        calls.append("A")
 
 class B(A):
-    def method(self):
-        return f"{super().method()} -> B"
+    def setup(self):
+        calls.append("B")
+        super().setup()
 
 class C(A):
-    def method(self):
-        return f"{super().method()} -> C"
+    def setup(self):
+        calls.append("C")
+        super().setup()
 
 class D(B, C):
-    def method(self):
-        return f"{super().method()} -> D"
+    def setup(self):
+        calls.append("D")
+        super().setup()
 
-# O(d) - follows C3 MRO linearization
-d = D()
-print(d.method())  # A -> C -> B -> D
+D().setup()
+assert calls == ["D", "B", "C", "A"]
+assert D.__mro__ == (D, B, C, A, object)
+
+calls.clear()
+B().setup()  # On a B, the next class after B is A
+assert calls == ["B", "A"]
 ```
 
-## Complexity Details
+### Explicit Arguments
 
-### Method Resolution Order (MRO)
-
-```python
-# O(d) - super() uses MRO to find next method
-class A:
-    def method(self):
-        return "A"
-
-class B(A):
-    def method(self):
-        # MRO: [B, A, object]
-        # super() finds next in line after B
-        return f"{super().method()} + B"
-
-obj = B()
-result = obj.method()  # O(d) - lookup takes O(d) time
-
-# Display MRO
-print(B.__mro__)  # (<class 'B'>, <class 'A'>, <class 'object'>)
-```
-
-### C3 Linearization
+`super()` with no arguments is `super(__class__, first_argument)`. The two-argument form names
+them itself, and in a `classmethod` the first argument is the class.
 
 ```python
-# O(d) - complex MRO computation
-class A:
-    pass
-
-class B(A):
-    pass
-
-class C(A):
-    pass
-
-class D(B, C):
-    pass
-
-# MRO computed at class creation: O(n log n) where n = classes
-# But lookup at runtime: O(d) where d = MRO depth
-mro = D.__mro__  # [D, B, C, A, object]
-
-# super() traverses this in O(d) time
-```
-
-### super() with Explicit Arguments
-
-```python
-# O(1) - explicit form (rarely used)
 class Parent:
     def method(self):
         return "parent"
 
-class Child(Parent):
-    def method(self):
-        # Both forms are O(d):
-        # 1. Implicit: super().method()
-        # 2. Explicit: super(Child, self).method()
-        return super(Child, self).method()
-
-# O(d) - both have same complexity
-child = Child()
-result = child.method()
-```
-
-## Performance Patterns
-
-### super() Overhead
-
-```python
-# Direct parent call - O(1)
-class Parent:
-    def method(self):
-        return 42
+    @classmethod
+    def create(cls):
+        return cls()
 
 class Child(Parent):
     def method(self):
-        return Parent.method(self)  # O(1) - direct reference
+        assert super().method() == super(Child, self).method()
+        return "child"
 
-# super() - O(d)
-class WithSuper(Parent):
-    def method(self):
-        return super().method()  # O(d) - MRO lookup
+    @classmethod
+    def create(cls):
+        instance = super().create()  # super(Child, cls)
+        instance.created = True
+        return instance
 
-# Direct parent call is ~10% faster but inflexible
-# super() is slower but essential for multiple inheritance
+child = Child.create()
+assert type(child) is Child and child.created
+assert child.method() == "child"
 ```
 
-### vs Explicit Parent Name
+## Lookup Cost
+
+### Lookups Are Not Cached
+
+Every `super().name` scans the MRO again, so its cost is the position of the class that defines the
+name. When the starting class is near the front of the MRO, a method found in the next class is
+cheap however long the MRO is. One defined near the far end costs the length of the walk on every
+call, while naming the class directly is an O(1) cached lookup that skips cooperative dispatch.
 
 ```python
-# Explicit parent - O(1) hardcoded
-class Parent:
-    def setup(self):
-        self.ready = True
-
-class Child(Parent):
-    def setup(self):
-        Parent.setup(self)  # O(1) - hardcoded
-        self.extra = "data"
-
-# vs super() - O(d) flexible
-class BetterChild(Parent):
-    def setup(self):
-        super().setup()  # O(d) - works with inheritance
-        self.extra = "data"
-
-# For single inheritance, little difference
-# For multiple inheritance, super() is necessary
-```
-
-### Cooperative Multiple Inheritance
-
-```python
-# O(d) - cooperative pattern with super()
-class Mixin1:
-    def process(self):
-        print("Mixin1")
-        super().process()  # O(d) - find next in MRO
-
-class Mixin2:
-    def process(self):
-        print("Mixin2")
-        super().process()  # O(d)
-
-class Base:
-    def process(self):
-        print("Base")
-
-class Combined(Mixin1, Mixin2, Base):
-    pass
-
-# O(d) - calls in MRO order
-obj = Combined()
-obj.process()
-# Output: Mixin1, Mixin2, Base
-
-# MRO: [Combined, Mixin1, Mixin2, Base, object]
-```
-
-## Common Use Cases
-
-### Initializing Parent Classes
-
-```python
-# O(d) - initialize entire hierarchy
-class Vehicle:
-    def __init__(self, color):
-        self.color = color
-
-class Engine:
-    def __init__(self, power):
-        self.power = power
-
-class Car(Vehicle, Engine):
-    def __init__(self, color, power, brand):
-        super().__init__(color)  # O(d) - initialize Vehicle
-        Engine.__init__(self, power)  # O(d) - initialize Engine
-        self.brand = brand
-
-# O(d) - initialization
-car = Car("red", 150, "Toyota")
-print(car.color, car.power, car.brand)  # red 150 Toyota
-```
-
-### Method Chaining
-
-```python
-# O(d) - method chaining through hierarchy
-class BaseLogger:
-    def log(self, message):
-        print(f"[LOG] {message}")
-
-class TimestampLogger(BaseLogger):
-    def log(self, message):
-        import datetime
-        timestamp = datetime.datetime.now()
-        print(f"[{timestamp}] {message}")
-        super().log(message)  # O(d) - call parent
-
-class FileLogger(TimestampLogger):
-    def log(self, message):
-        with open('log.txt', 'a') as f:
-            f.write(message + '\n')
-        super().log(message)  # O(d) - call parent chain
-
-# O(d) - logs through entire chain
-logger = FileLogger()
-logger.log("test")
-```
-
-### Mixin Pattern
-
-```python
-# O(d) - mixin classes extend functionality
-class JSONMixin:
-    def to_json(self):
-        """Convert to JSON - O(1)"""
-        import json
-        return json.dumps(self.__dict__)
-    
-    def from_json(self, json_str):
-        """Load from JSON - O(1)"""
-        import json
-        data = json.loads(json_str)
-        self.__dict__.update(data)
-
-class ValidationMixin:
-    def validate(self):
-        """Validate state - O(n)"""
-        for key, value in self.__dict__.items():
-            if value is None:
-                raise ValueError(f"{key} cannot be None")
-
-class User(ValidationMixin, JSONMixin):
-    def __init__(self, name, email):
-        self.name = name
-        self.email = email
-
-# O(1) - use mixins
-user = User("Alice", "alice@example.com")
-json_str = user.to_json()
-user.validate()
-```
-
-### Context Manager Inheritance
-
-```python
-# O(d) - proper cleanup through inheritance
-class BaseContext:
-    def __enter__(self):
-        print("Opening base")
-        return self
-    
-    def __exit__(self, *args):
-        print("Closing base")
-
-class LoggingContext(BaseContext):
-    def __enter__(self):
-        print("Opening logger")
-        super().__enter__()  # O(d)
-        return self
-    
-    def __exit__(self, *args):
-        print("Closing logger")
-        super().__exit__(*args)  # O(d)
-
-# O(d) - proper cleanup order
-with LoggingContext() as ctx:
-    print("Working")
-# Output:
-# Opening logger
-# Opening base
-# Working
-# Closing logger
-# Closing base
-```
-
-## Advanced Usage
-
-### super() in Multiple Inheritance
-
-```python
-# O(d) - complex MRO resolution
-class A:
-    def method(self):
-        return "A"
-
-class B(A):
-    def method(self):
-        return f"{super().method()} -> B"
-
-class C(A):
-    def method(self):
-        return f"{super().method()} -> C"
-
-class D(B, C):
-    def method(self):
-        return f"{super().method()} -> D"
-
-# O(d) - follows MRO: [D, B, C, A, object]
-d = D()
-print(d.method())  # A -> C -> B -> D
-```
-
-### Diamond Inheritance
-
-```python
-# O(d) - handle diamond pattern
 class Root:
-    def __init__(self):
-        print("Root init")
+    def ping(self):
+        return "root"
 
-class Left(Root):
-    def __init__(self):
-        print("Left init")
-        super().__init__()  # O(d)
+cls = Root
+for i in range(200):
+    cls = type(f"Level{i}", (cls,), {})
 
-class Right(Root):
-    def __init__(self):
-        print("Right init")
-        super().__init__()  # O(d)
+class Leaf(cls):
+    def ping(self):
+        return super().ping()  # O(p) - Root is at position 202 of 203
 
-class Diamond(Left, Right):
-    def __init__(self):
-        print("Diamond init")
-        super().__init__()  # O(d)
+    def direct(self):
+        return Root.ping(self)  # O(1) - a cached class attribute
 
-# O(d) - Root initialized only once!
-d = Diamond()
-# Output:
-# Diamond init
-# Left init
-# Right init
-# Root init
+leaf = Leaf()
+assert len(Leaf.__mro__) == 203
+assert leaf.ping() == leaf.direct() == "root"
 ```
 
-### Property Override
+### A Missing Name Scans the Whole MRO
+
+When no class after the starting one defines the name, the lookup reaches the end of the MRO
+before it raises.
 
 ```python
-# O(d) - override property with super()
-class Parent:
-    @property
-    def value(self):
-        return self._value if hasattr(self, '_value') else 0
-    
-    @value.setter
-    def value(self, val):
-        self._value = val
-
-class Child(Parent):
-    @property
-    def value(self):
-        """Override with validation - O(d)"""
-        return super().value  # O(d) - get parent property
-    
-    @value.setter
-    def value(self, val):
-        """Override with validation - O(1)"""
-        if val < 0:
-            raise ValueError("Value must be non-negative")
-        super(Child, self.__class__).value.fset(self, val)
-
-# O(d) - validated property
-child = Child()
-child.value = 10  # Valid
-# child.value = -5  # Raises ValueError
-```
-
-## Practical Examples
-
-### Plugin System with super()
-
-```python
-# O(d) - plugin base class with hooks
-class PluginBase:
-    def initialize(self):
-        """Initialize plugin - O(1)"""
-        print("Base initialized")
-    
-    def process(self, data):
-        """Process data - O(1)"""
-        print(f"Base processing: {data}")
-    
-    def cleanup(self):
-        """Cleanup - O(1)"""
-        print("Base cleanup")
-
-class CachingPlugin(PluginBase):
-    def __init__(self):
-        self.cache = {}
-    
-    def process(self, data):
-        """Add caching - O(1)"""
-        if data not in self.cache:
-            super().process(data)  # O(d)
-            self.cache[data] = True
-        else:
-            print(f"Cache hit: {data}")
-
-class LoggingPlugin(PluginBase):
-    def process(self, data):
-        """Add logging - O(1)"""
-        print(f"Processing: {data}")
-        super().process(data)  # O(d)
-
-class EnhancedPlugin(CachingPlugin, LoggingPlugin, PluginBase):
+class Base:
     pass
 
-# O(d) - chain of responsibility
-plugin = EnhancedPlugin()
-plugin.process("test")
-```
+class Child(Base):
+    def probe(self):
+        try:
+            super().missing  # O(d) - checks every later class
+        except AttributeError as error:
+            return str(error)
+        raise AssertionError("expected AttributeError")
 
-### Schema Validation
-
-```python
-# O(n) - validate with parent validation
-class BaseValidator:
-    def validate(self, data):
-        """Base validation - O(n)"""
-        if not isinstance(data, dict):
-            raise TypeError("Must be dict")
-        return True
-
-class SchemaValidator(BaseValidator):
-    def __init__(self, schema):
-        self.schema = schema
-    
-    def validate(self, data):
-        """Validate schema - O(n)"""
-        super().validate(data)  # O(d) - check base
-        
-        for key, required in self.schema.items():
-            if required and key not in data:
-                raise ValueError(f"Missing {key}")
-        
-        return True
-
-class TypeValidator(SchemaValidator):
-    def __init__(self, schema, types):
-        super().__init__(schema)  # O(d)
-        self.types = types
-    
-    def validate(self, data):
-        """Type check - O(n)"""
-        super().validate(data)  # O(d) - check schema
-        
-        for key, expected_type in self.types.items():
-            if key in data and not isinstance(data[key], expected_type):
-                raise TypeError(f"{key} must be {expected_type}")
-        
-        return True
-
-# O(n) - full validation chain
-schema = {'name': True, 'age': False}
-types = {'name': str, 'age': int}
-validator = TypeValidator(schema, types)
-
-validator.validate({'name': 'Alice', 'age': 30})  # Valid
-```
-
-### Serialization with Inheritance
-
-```python
-# O(n) - serialize entire hierarchy
-class Serializable:
-    def to_dict(self):
-        """Get representation - O(n)"""
-        return vars(self)
-
-class Timestamped(Serializable):
-    def __init__(self):
-        import datetime
-        self.created = datetime.datetime.now().isoformat()
-    
-    def to_dict(self):
-        """Include timestamp - O(n)"""
-        data = super().to_dict()  # O(d)
-        return data
-
-class Versioned(Timestamped):
-    def __init__(self, version='1.0'):
-        super().__init__()  # O(d) - initialize parent
-        self.version = version
-    
-    def to_dict(self):
-        """Include version - O(n)"""
-        data = super().to_dict()  # O(d)
-        data['version'] = self.version
-        return data
-
-# O(n) - serialize with all data
-obj = Versioned()
-print(obj.to_dict())
+assert "missing" in Child().probe()
 ```
 
 ## Edge Cases
 
-### super() Without Arguments
+### Where Zero-Argument super() Works
+
+The zero-argument form needs the function's first argument and the `__class__` cell the compiler
+creates for functions defined in a class body that use `super`. A `staticmethod` with no arguments
+has neither argument nor object, and a function defined outside a class has no cell.
 
 ```python
-# O(d) - implicit form (Python 3+)
-class Parent:
-    def method(self):
-        return "parent"
-
-class Child(Parent):
-    def method(self):
-        # Python 3 implicit form
-        return super().method()  # O(d) - works in methods
-    
-    @classmethod
-    def class_method(cls):
-        # Also works in classmethods
-        return super().method(None)  # O(d)
-    
+class Example:
     @staticmethod
-    def static_method():
-        # Cannot use super() here - no class context
-        return Parent.method(None)
+    def static():
+        return super().anything
 
-# Implicit form only works inside class methods
+try:
+    Example.static()
+except RuntimeError as error:
+    assert "no arguments" in str(error)
+else:
+    raise AssertionError("expected RuntimeError")
+
+def outside(self):
+    return super()
+
+try:
+    outside(Example())
+except RuntimeError as error:
+    assert "__class__ cell not found" in str(error)
+else:
+    raise AssertionError("expected RuntimeError")
 ```
 
-### super() with Objects Without __init__
+### Properties Through super()
+
+Reading a parent's property through `super()` runs its getter. Assigning through `super()` raises,
+so a subclass setter reaches the parent's through the property object.
 
 ```python
-# O(d) - parent may not have __init__
-class Base:
-    pass  # No __init__
-
-class Child(Base):
-    def __init__(self, value):
-        super().__init__()  # O(d) - safe even if parent has no __init__
-        self.value = value
-
-# O(d) - works safely
-child = Child(42)
-```
-
-### super() in __del__
-
-```python
-# O(d) - cleanup through inheritance
 class Parent:
-    def __del__(self):
-        print("Parent cleanup")
+    def __init__(self):
+        self._value = 0
+
+    @property
+    def value(self):
+        return self._value
+
+    @value.setter
+    def value(self, new):
+        self._value = new
 
 class Child(Parent):
-    def __del__(self):
-        print("Child cleanup")
-        super().__del__()  # O(d) - call parent cleanup
+    @property
+    def value(self):
+        return super().value  # Runs Parent's getter
 
-# O(d) - cleanup order
-obj = Child()
-del obj  # Prints: Child cleanup, Parent cleanup
+    @value.setter
+    def value(self, new):
+        if new < 0:
+            raise ValueError("must be non-negative")
+        Parent.value.fset(self, new)  # super().value = new would raise
+
+    def assign_through_super(self, new):
+        super().value = new
+
+child = Child()
+child.value = 10
+assert child.value == 10
+
+try:
+    child.assign_through_super(5)
+except AttributeError:
+    pass
+else:
+    raise AssertionError("expected AttributeError")
+assert child.value == 10
 ```
 
-## Performance Considerations
+## Common Patterns
 
-### Caching MRO Results
+### Cooperative Initialisation
+
+Each class takes the keyword arguments it knows and passes the rest along, so every `__init__` in
+the MRO runs exactly once whatever order the classes are combined in.
 
 ```python
-# O(d) - MRO computation happens once
-class Base:
+class Named:
+    def __init__(self, *, name, **rest):
+        super().__init__(**rest)
+        self.name = name
+
+class Sized:
+    def __init__(self, *, size, **rest):
+        super().__init__(**rest)
+        self.size = size
+
+class Item(Named, Sized):
     pass
 
-class Derived(Base):
-    pass
-
-# MRO computed at class definition: O(n log n)
-# Stored in __mro__ tuple
-mro = Derived.__mro__  # O(1) - cached
-
-# super() lookups use cached MRO: O(d)
+item = Item(name="box", size=3)
+assert (item.name, item.size) == ("box", 3)
+assert Item.__mro__ == (Item, Named, Sized, object)
 ```
 
-### Avoiding super() in Hot Paths
-
-```python
-# Direct parent call - faster in performance-critical code
-class Parent:
-    def compute(self, x):
-        return x * 2
-
-class Child(Parent):
-    def compute(self, x):
-        # For single inheritance in tight loops:
-        result = Parent.compute(self, x)  # O(1) - slightly faster
-        
-        # vs
-        # result = super().compute(x)  # O(d)
-        
-        return result
-
-# Difference is small (~5%) but matters in hot paths
-```
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use `super()` for parent method calls
-- Use in cooperative multiple inheritance
-- Use in mixins and plugin systems
-- Keep parent calls near the top of __init__
-- Use implicit form in Python 3 (no arguments)
-- Document MRO in complex hierarchies
+- Call `super()` in every method of a cooperative hierarchy, so each class runs once in MRO order
+- Pass unrecognised keyword arguments on with `**rest`, so classes combine in any order
+- Name the class directly, `Parent.method(self)`, where a call in a hot path over a deep hierarchy
+  does not need cooperative dispatch: it is O(1) where `super()` is O(p)
 
 ❌ **Avoid**:
 
-- Mixing `super()` and explicit parent calls
-- Forgetting to call `super()` in __init__
-- Deep inheritance chains (limit to 3-4 levels)
-- Circular dependencies in super() chains
-- Complex logic in methods using super()
-- Using super() outside class methods (requires arguments)
+- Mixing `super()` with explicit `Parent.method(self)` calls in a diamond; a class can run twice
+  or be skipped
+- Zero-argument `super()` in a function with no arguments, or one defined outside a class; it
+  raises `RuntimeError`
+- Assigning through `super()`; it raises `AttributeError`
 
 ## Related Functions
 
-- **[classmethod()](classmethod.md)** - Decorator for class methods
-- **[type()](type_func.md)** - Get object type
-- **[isinstance()](isinstance.md)** - Check instance type
-- **[issubclass()](issubclass.md)** - Check class hierarchy
-- **[__mro__](https://docs.python.org/3/library/stdtypes.html#class.__mro__)** - Method resolution order
-
-## Version Notes
-
-- **Python 2.x**: `super()` requires arguments: `super(ClassName, self)`
-- **Python 3.x**: Implicit form `super()` automatically finds class and self
-- **All versions**: Uses MRO for method resolution
-- **Python 3.6+**: super() is optimized for performance
+- **[classmethod()](classmethod.md)** - Methods whose `super()` binds to the class
+- **[staticmethod()](staticmethod.md)** - Methods that receive no instance or class for `super()` to bind
+- **[property()](property.md)** - Descriptors a subclass can extend through `super()`
+- **[type()](type_func.md)** - Creates classes, and with them their MRO
+- **[issubclass()](issubclass.md)** - The MRO scan `super(cls, obj)` also performs
