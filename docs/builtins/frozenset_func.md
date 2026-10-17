@@ -1,275 +1,144 @@
 # frozenset() Function Complexity
 
-The `frozenset()` function creates immutable sets from iterables.
+`frozenset()` builds an immutable hash set from an iterable, keeping one reference per distinct
+element. It consumes the iterable one item at a time without copying it first, and an argument that
+is already an exact `frozenset` is returned unchanged. The operations on the result are on the
+[frozenset page](frozenset.md).
 
-## Complexity Analysis
+`n` is the number of items the argument yields, and `u` is
+the number of distinct elements among them, so `u ≤ n`. Hashing and comparing one element is
+treated as O(1), and the argument is assumed to be an exact built-in type unless a row names a
+subclass, as in CPython's own time-complexity table.
 
-| Case | Time | Space | Notes |
-|------|------|-------|-------|
-| Empty frozenset | O(1) | O(1) | frozenset() |
-| From iterable | O(n) avg | O(n) | n = iterable length; O(n²) worst case with hash collisions. A set or dict that had most of its elements removed costs its former size (see [set](set.md)) |
-| From string | O(n) avg | O(n) | n = string length; each char hashed |
-| Duplicate removal | O(n) avg | O(n) | Automatic deduplication via hashing |
-| Shallow copy | O(1) | O(1) | Returns same object (immutable) |
+## Complexity Reference
 
-## Basic Usage
+### frozenset
 
-!!! note "Element order in examples"
-    Frozensets are unordered. The element order shown in comments below is illustrative; actual `repr()` output is not guaranteed and may differ between runs, Python versions, or hash-randomization settings.
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `frozenset()` | O(1) | O(1) | |
+| `frozenset(iterable)` | O(n) avg, O(n²) worst | O(u) | Hashes each item once; the worst case is every hash colliding |
+| `frozenset(s)`, `s` a set, frozenset subclass, dict or frozendict | O(n) avg | O(n) | Reuses the hashes stored in `s`, so no element is hashed again. One that had most of its elements removed costs its former size (see [set](set.md)) |
+| `frozenset(fs)`, `fs` an exact frozenset | O(1) | O(1) | Returns `fs` itself |
 
-### Create Empty Frozenset
+## Building a Frozenset
+
+### From Any Iterable
+
+Each item is hashed and inserted as it arrives, so duplicates take no space in the result and a
+generator is never turned into a list first.
 
 ```python
-# O(1)
-fs = frozenset()  # frozenset()
+words = frozenset("mississippi")              # O(n) - n = 11 characters
+assert words == {"m", "i", "s", "p"}          # u = 4
+
+repeated = frozenset([7] * 1_000)             # O(n) time, O(u) space
+assert len(repeated) == 1
+
+squares = frozenset(i * i for i in range(10))  # Consumed item by item
+assert 81 in squares and len(squares) == 10
+
+assert frozenset() == frozenset([]) == frozenset("")  # O(1) - empty
 ```
 
-### From List
+### From a Set or Dict
+
+A set, a frozenset subclass, a dict and a frozendict (Python 3.15+) already store each element's
+hash, so building from one
+copies those hashes instead of calling `__hash__` again. Building from a list of the same elements
+hashes every one of them.
 
 ```python
-# O(n) - where n = list length
-fs = frozenset([1, 2, 3])           # frozenset({2, 1, 3})
-fs = frozenset([1, 2, 2, 3, 3, 3])  # frozenset({1, 3, 2})
+class Key:
+    hash_calls = 0
+
+    def __init__(self, value):
+        self.value = value
+
+    def __hash__(self):
+        Key.hash_calls += 1
+        return hash(self.value)
+
+    def __eq__(self, other):
+        return isinstance(other, Key) and self.value == other.value
+
+keys = [Key(i) for i in range(100)]
+as_set, as_dict = set(keys), dict.fromkeys(keys)
+
+Key.hash_calls = 0
+assert frozenset(as_set) == frozenset(as_dict)  # O(n) - no element rehashed
+assert Key.hash_calls == 0
+
+frozenset(keys)                                 # O(n) - hashes every element
+assert Key.hash_calls == 100
 ```
 
-### From String
+### From a Frozenset
+
+A frozenset cannot change, so `frozenset(fs)` hands back `fs` itself. An instance of a subclass is
+copied into a new, plain frozenset.
 
 ```python
-# O(n) - where n = string length
-fs = frozenset("hello")    # frozenset({'h', 'l', 'e', 'o'})
-fs = frozenset("aabbcc")   # frozenset({'c', 'b', 'a'})
+fs = frozenset(range(1_000))
+assert frozenset(fs) is fs                     # O(1) - the same object
+
+class Tagged(frozenset):
+    pass
+
+tagged = Tagged(range(1_000))
+plain = frozenset(tagged)                      # O(n) - a new frozenset
+assert plain is not tagged and plain == tagged
+assert type(plain) is frozenset
 ```
 
-### From Other Iterables
+### Unhashable Elements
+
+Every element must be hashable; an unhashable item raises `TypeError`.
 
 ```python
-# O(n) - where n = iterable length
-fs = frozenset((1, 2, 3))         # frozenset({2, 1, 3})
-fs = frozenset({1, 2, 3})         # frozenset({1, 2, 3})
-fs = frozenset(range(5))          # frozenset({0, 2, 1, 3, 4})
-fs = frozenset(map(str, [1, 2]))  # frozenset({'1', '2'})
-```
-
-## Complexity Details
-
-### Hashing and Insertion
-
-```python
-# O(n) - same as set() but immutable
-# Each item:
-# 1. Hash - O(1) average
-# 2. Check for duplicates - O(1) average
-# 3. Insert - O(1) average
-# Total: O(n)
-
-items = [1, 2, 3, 4, 5]
-fs = frozenset(items)  # O(5)
-```
-
-### Immutability
-
-```python
-# O(1) - immutable, cannot modify
-fs = frozenset([1, 2, 3])
-
-# Cannot add/remove
-# fs.add(4)  # AttributeError
-# fs.remove(1)  # AttributeError
-
-# Can use in dict keys
-data = {fs: "value"}  # OK - hashable
+try:
+    frozenset([(1, 2), [3, 4]])
+except TypeError as error:
+    assert "unhashable" in str(error)
+else:
+    raise AssertionError("expected TypeError")
 ```
 
 ## Common Patterns
 
-### Immutable Set
+### Keys for Unordered Collections
+
+A frozenset compares equal to any other frozenset with the same elements, whatever order they were
+given in, which makes it a key for grouping unordered collections. Each frozenset computes its hash
+in O(u) on first use and stores it, so reusing the same key object does not hash it again.
 
 ```python
-# O(n) - create immutable set
-original = frozenset([1, 2, 3])
+orders = [["tea", "milk"], ["milk", "tea"], ["coffee"], ["tea", "milk", "tea"]]
 
-# Safe to use as dict key
-lookup = {original: "config"}  # OK
+counts = {}
+for items in orders:
+    key = frozenset(items)                     # O(n) per order
+    counts[key] = counts.get(key, 0) + 1       # O(u) hash on first use
 
-# Safe to use in set
-sets = {frozenset([1, 2]), frozenset([3, 4])}  # OK
+assert counts == {frozenset({"tea", "milk"}): 3, frozenset({"coffee"}): 1}
 ```
 
-### Set Operations (Read-Only)
-
-```python
-# O(n) - all set operations available
-fs1 = frozenset([1, 2, 3])
-fs2 = frozenset([2, 3, 4])
-
-intersection = fs1 & fs2      # frozenset({2, 3})
-union = fs1 | fs2             # frozenset({1, 2, 3, 4})
-difference = fs1 - fs2        # frozenset({1})
-symmetric_diff = fs1 ^ fs2    # frozenset({1, 4})
-```
-
-### Use as Dict Key
-
-```python
-# O(1) - lookup, O(n) - creation
-coordinates = frozenset([(1, 2), (3, 4)])
-data = {coordinates: "polygon"}  # OK
-
-# Can't use set as key
-# locations = {set([1, 2]): "spot"}  # TypeError
-```
-
-### Cache Key
-
-```python
-# O(n) - create frozenset for cache
-from functools import lru_cache
-
-@lru_cache(maxsize=128)
-def process_items(items):
-    # items must be hashable
-    return sum(items)
-
-# Convert to frozenset before caching
-result = process_items(frozenset([1, 2, 3]))  # O(n)
-```
-
-## Performance Patterns
-
-### vs set()
-
-```python
-# Both O(n) to create
-s = set([1, 2, 3])
-fs = frozenset([1, 2, 3])
-
-# set() is mutable, faster for dynamic changes
-s.add(4)  # O(1)
-s.remove(1)  # O(1)
-
-# frozenset() is immutable, hashable
-# fs.add(4)  # Not available
-# Can use in dict: {fs: value}  # OK
-```
-
-### Set Operations
-
-```python
-# O(n) - both sets and frozensets support operations
-s1 = set([1, 2, 3])
-fs1 = frozenset([1, 2, 3])
-
-s2 = set([2, 3, 4])
-fs2 = frozenset([2, 3, 4])
-
-# All O(n)
-s1 & s2        # {2, 3}
-fs1 & fs2      # frozenset({2, 3})
-s1 & fs2       # {2, 3} - mixed works
-```
-
-## Edge Cases
-
-### Empty Frozenset
-
-```python
-# O(1)
-fs = frozenset()       # frozenset()
-fs = frozenset([])     # frozenset()
-fs = frozenset("")     # frozenset()
-```
-
-### Single Item
-
-```python
-# O(1)
-fs = frozenset([1])    # frozenset({1})
-fs = frozenset("a")    # frozenset({'a'})
-```
-
-### All Duplicates
-
-```python
-# O(n) - still must process all
-items = [1, 1, 1, 1, 1]
-fs = frozenset(items)  # O(5) - results in frozenset({1})
-```
-
-### Unhashable Items
-
-```python
-# O(n) - error for unhashable
-try:
-    fs = frozenset([[1, 2], [3, 4]])  # TypeError - lists not hashable
-except TypeError:
-    pass
-```
-
-### Nested Frozensets
-
-```python
-# O(n) - frozensets can contain frozensets
-inner1 = frozenset([1, 2])
-inner2 = frozenset([3, 4])
-outer = frozenset([inner1, inner2])  # frozenset({...})
-
-# Use as dict key
-data = {outer: "nested"}  # OK - fully hashable
-```
-
-## Comparison with set()
-
-```python
-# Mutability
-s = set([1, 2, 3])
-s.add(4)  # O(1) - works
-
-fs = frozenset([1, 2, 3])
-# fs.add(4)  # AttributeError - not available
-
-# Hashability
-data = {fs: "value"}  # OK - frozenset is hashable
-# data = {s: "value"}  # TypeError - set not hashable
-
-# Performance
-# Both O(1) for lookup
-1 in s   # O(1)
-1 in fs  # O(1)
-```
-
-## Memory Considerations
-
-```python
-# O(n) - memory proportional to frozenset size
-small_fs = frozenset(range(10))      # 10 items
-medium_fs = frozenset(range(10**4))  # 10,000 items
-large_fs = frozenset(range(10**6))   # 1,000,000 items
-```
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use frozenset when you need a hashable set
-- Use frozenset as dict key or in sets
-- Use frozenset for immutable collections
-- Use frozenset for cache keys with sets
+- Pass a generator rather than building a list first; the items are consumed one at a time
+- Pass a set or dict directly; its stored hashes are reused
+- Pass an existing frozenset freely; `frozenset(fs)` is O(1) and returns `fs`
 
 ❌ **Avoid**:
 
-- Using frozenset when you need to modify (use set)
-- Assuming frozenset is faster (usually slower to create)
-- Putting unhashable items in frozensets
-- Creating frozensets from mutable objects
+- `frozenset(list(s))` for a set `s`, which copies it once and then hashes every element again
+- Expecting `frozenset()` of a frozenset subclass instance to be free; it is copied in O(n)
 
 ## Related Functions
 
-- **[set()](set_func.md)** - Mutable set
-- **[tuple()](tuple_func.md)** - Immutable sequence
-- **[dict()](dict_func.md)** - Dictionary (also hashable)
-
-## Version Notes
-
-- **Python 2.x**: frozenset() available
-- **Python 3.x**: Same behavior
-- **All versions**: Hashable, immutable, unordered
+- **[frozenset](frozenset.md)** - The operations on a frozenset once it is built
+- **[set()](set_func.md)** - The mutable counterpart, built in the same O(n)
+- **[set](set.md)** - Hash table behaviour shared by both types
+- **[hash()](hash.md)** - What hashing a frozenset costs

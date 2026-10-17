@@ -37,27 +37,43 @@ Measurement scope:
   frozenset, the table the copy started with; the same difference with a
   set operand is asserted compact. Retention depends on where the removals
   leave the table against its resize threshold: from 65,535 elements the
-  same removal compacts, which is why the page says "can keep". The cost of walking such a table is timed
-  for sets in tests/test_set_complexity.py.
+  same removal compacts, which is why the page says "can keep". The cost of
+  walking such a table is timed for sets in tests/test_set_complexity.py.
+* frozenset_func.md: elements with a counting `__hash__` are
+  hashed exactly once per item from a list of 1,000 holding 100 distinct
+  values, and not at all from a set, a dict, a frozenset subclass instance
+  or (3.15+) a frozendict of 1,000 distinct keys. A result built from 1,000
+  equal items is asserted to be no larger than one built from a single
+  item. `frozenset(itertools.repeat(x, 10**6))` is asserted to trace a peak under 64 KiB, where a copied list would need
+  about 8 MB. With every hash equal, 40 and 80 elements must cost at least
+  k(k-1)/2 `__eq__` calls, and doubling k must more than triple them.
+* frozenset_func.md: building from a dict of 200,000 keys with all but 10
+  deleted must cost more than 50x building from a fresh 10-key dict; the
+  same for a sparse set is timed in tests/test_set_complexity.py. Only int
+  elements were used; element type and hash cost were not varied.
 * Every fenced Python block on both pages runs in its own subprocess, and a
   mutated assertion in one of them is asserted to fail.
 """
 
 from __future__ import annotations
 
+import builtins
+import itertools
 import pathlib
 import re
 import subprocess
 import sys
 import textwrap
 import time
+import tracemalloc
 from collections.abc import Callable
 from typing import Any, ClassVar
 
 import pytest
 
 DOCS = pathlib.Path(__file__).parent.parent / "docs" / "builtins"
-PAGES = {"frozenset.md": 8, "frozenset_func.md": 19}
+PAGES = {"frozenset.md": 8, "frozenset_func.md": 5}
+FROZENDICT: Any = getattr(builtins, "frozendict", None)
 
 
 class SubFrozenset(frozenset[int]):
@@ -229,6 +245,111 @@ class TestDifferenceCanLeaveASparseTable:
     def test_a_set_operand_gives_a_compact_result(self) -> None:
         compact = frozenset(range(65_536)).difference(set(range(65_535)))
         assert sys.getsizeof(compact) == sys.getsizeof(frozenset([65_535]))
+
+
+# docs/builtins/frozenset_func.md
+
+
+class CountingKey:
+    """An element that counts its `__hash__` and `__eq__` calls."""
+
+    hashes = 0
+    comparisons = 0
+
+    def __init__(self, value: int, hash_value: int | None = None) -> None:
+        self.value = value
+        self.hash_value = value if hash_value is None else hash_value
+
+    def __hash__(self) -> int:
+        type(self).hashes += 1
+        return self.hash_value
+
+    def __eq__(self, other: object) -> bool:
+        type(self).comparisons += 1
+        return isinstance(other, CountingKey) and self.value == other.value
+
+
+class SubFrozensetOf(frozenset[Any]):
+    pass
+
+
+class TestBuildingHashesEachItemOnce:
+    """`frozenset(iterable)` hashes each item once; a set, frozenset subclass
+    or dict argument has its stored hashes reused, so nothing is rehashed."""
+
+    def test_an_iterable_is_hashed_once_per_item(self) -> None:
+        distinct = [CountingKey(i) for i in range(100)]
+        items = distinct * 10
+        CountingKey.hashes = 0
+        assert len(frozenset(items)) == 100
+        assert CountingKey.hashes == len(items)
+
+    @pytest.mark.parametrize("kind", ["set", "subclass", "dict", "frozendict"])
+    def test_stored_hashes_are_reused(self, kind: str) -> None:
+        if kind == "frozendict" and FROZENDICT is None:
+            pytest.skip("version: frozendict was added in 3.15")
+        builders: dict[str, Callable[[list[CountingKey]], Any]] = {
+            "set": set,
+            "subclass": SubFrozensetOf,
+            "dict": dict.fromkeys,
+            "frozendict": lambda keys: FROZENDICT(dict.fromkeys(keys)),
+        }
+        keys = [CountingKey(i) for i in range(1_000)]
+        source = builders[kind](keys)
+        CountingKey.hashes = 0
+        assert len(frozenset(source)) == 1_000
+        assert CountingKey.hashes == 0
+
+    def test_collisions_make_building_quadratic(self) -> None:
+        def comparisons(k: int) -> int:
+            keys = [CountingKey(i, hash_value=7) for i in range(k)]
+            CountingKey.comparisons = 0
+            assert len(frozenset(keys)) == k
+            return CountingKey.comparisons
+
+        at_40, at_80 = comparisons(40), comparisons(80)
+        assert at_40 >= 40 * 39 // 2 and at_80 >= 80 * 79 // 2
+        assert at_80 > at_40 * 3, "doubling k must roughly quadruple the comparisons"
+
+
+class TestBuildingSpace:
+    """Space is O(u) in the distinct elements, and the iterable is consumed
+    item by item rather than copied first."""
+
+    def test_duplicates_take_no_space(self) -> None:
+        assert sys.getsizeof(frozenset([2_000] * 1_000)) <= sys.getsizeof(frozenset([2_000]))
+
+    def test_the_iterable_is_not_copied(self) -> None:
+        item = object()
+        tracemalloc.start()
+        try:
+            result = frozenset(itertools.repeat(item, 1_000_000))
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        assert result == {item}
+        assert peak < 64 * 1024, f"traced peak {peak} bytes"
+
+
+def best_ns(func: Callable[[], Any], repeats: int = 5, inner: int = 3) -> float:
+    best = float("inf")
+    for _ in range(repeats):
+        start = time.perf_counter_ns()
+        for _ in range(inner):
+            func()
+        best = min(best, (time.perf_counter_ns() - start) / inner)
+    return best
+
+
+@pytest.mark.timing
+def test_building_from_a_sparse_dict_costs_its_former_size() -> None:
+    sparse = dict.fromkeys(range(200_000))
+    for i in range(10, 200_000):
+        del sparse[i]
+    fresh = dict.fromkeys(range(10))
+    sparse_ns = best_ns(lambda: frozenset(sparse))
+    fresh_ns = best_ns(lambda: frozenset(fresh))
+    assert sparse_ns > fresh_ns * 50, f"{fresh_ns:.0f}ns vs {sparse_ns:.0f}ns"
 
 
 def _blocks(page: str) -> list[tuple[int, str]]:
