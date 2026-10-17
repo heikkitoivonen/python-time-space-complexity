@@ -1,293 +1,182 @@
 # map() Function Complexity
 
-The `map()` function applies a function to every item in an iterable and returns an iterator of results.
+The `map()` function returns an iterator that calls a function on one item from each input iterable
+and yields the result. It is lazy: building it reads no items and does not call the function, and each `next()`
+produces one result, so the results never have to exist at once unless you collect them.
 
-## Complexity Analysis
+`n` is the results a `map` yields, which is the length of its shortest input, and `m` is the input
+iterables. The function and the inputs' own iterators cost what they do; the bounds below are the
+work `map()` adds to them.
 
-| Case | Time | Space | Notes |
-|------|------|-------|-------|
-| Mapping with function | O(n*k) | O(1)† | k = function time, † iterator only |
-| Consuming iterator | O(n*k) | O(n) | If stored in list |
-| Multiple iterables | O(n*k*m) | O(1)† | m = number of iterables |
+## Complexity Reference
 
-## Basic Usage
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `map(function, iterable, *iterables)` | O(m) | O(m) | Calls `iter()` on each input; reads no item and does not call `function` |
+| `next()` on a `map` | O(m) | O(m) | Takes one item from each input, then makes one call of `function` |
+| Iterating a `map` to the end | O(n·m) | O(m) | Plus n calls of `function`; stops at the first input that runs out |
+| `list(map(...))` | O(n·m) | O(n + m) | Plus n calls of `function`; the list holds every result |
+| Iterating a `map(..., strict=True)` to the end | O(n·m) | O(m) | Python 3.14+; raises `ValueError` if the inputs' lengths differ, taking at most one more item from each input to find out |
 
-### Simple Function Application
+## Lazy Evaluation
+
+### No Items Read Until Consumed
+
+Building a `map` costs the same for a ten-item input and a billion-item `range`; the function
+runs once per item taken.
 
 ```python
-# O(n) - iterator, doesn't consume yet
-numbers = [1, 2, 3, 4, 5]
-squared = map(lambda x: x**2, numbers)  # Iterator object
+from itertools import islice
 
-# O(n) - consumes iterator when needed
-result = list(squared)  # [1, 4, 9, 16, 25]
+calls = []
 
-# O(1) - creates iterator immediately
-squared = map(int, ["1", "2", "3"])
+def square(x):
+    calls.append(x)
+    return x * x
 
-# O(n) - consumed when iterating
-for num in squared:
-    print(num)
+squares = map(square, range(10**9))  # O(1) - one input, nothing called yet
+assert calls == []
+
+first_five = list(islice(squares, 5))  # O(5) - five calls
+assert first_five == [0, 1, 4, 9, 16]
+assert calls == [0, 1, 2, 3, 4]
 ```
 
-### Built-in Functions
+### A map Is Used Up Once
+
+A `map` is an iterator, so a second pass yields nothing. Collect the results with `list()` if you
+need them more than once.
 
 ```python
-# O(n) - using built-in functions
-strings = ["1", "2", "3"]
-numbers = list(map(int, strings))  # [1, 2, 3]
+doubled = map(lambda x: 2 * x, [1, 2, 3])
 
-floats = ["1.5", "2.5", "3.5"]
-numbers = list(map(float, floats))  # [1.5, 2.5, 3.5]
-
-strings = [1, 2, 3]
-result = list(map(str, strings))  # ["1", "2", "3"]
+assert list(doubled) == [2, 4, 6]  # O(n)
+assert list(doubled) == []  # Already exhausted
 ```
 
-## Performance Patterns
+### Chaining Without Intermediate Lists
 
-### Lazy Evaluation
+Each `map` in a chain pulls one item at a time from the one before it, so a chain of maps over a
+stream holds one item per stage rather than a list per stage.
 
 ```python
-# O(1) - creates iterator, doesn't process yet
-huge_list = range(10**9)
-mapped = map(lambda x: x**2, huge_list)
+numbers = range(1_000_000)
 
-# O(n) - only when you consume iterator
-for i, val in enumerate(mapped):
-    if i >= 10:
-        break  # O(10) - only processed 10 items
-
-# vs list comprehension
-result = [x**2 for x in range(10**9)]  # O(10^9) and O(10^9) space!
+result = map(lambda x: x + 1, map(lambda x: x * x, numbers))  # O(1) - two iterators
+assert sum(result) == sum(x * x + 1 for x in numbers)  # O(n) time, no list built
 ```
 
-### Multiple Iterables
+## Multiple Iterables
+
+### Shortest Input Wins
+
+With several inputs, `function` receives one item from each, and the `map` stops when any input
+runs out. When an input other than the first runs out, the items already taken from the inputs
+before it in that step are discarded.
 
 ```python
-# O(n*k) where k = function time, n = min length
-list1 = [1, 2, 3]
-list2 = [4, 5, 6]
-list3 = [7, 8, 9]
+sums = list(map(lambda a, b, c: a + b + c, [1, 2, 3], [10, 20, 30], [100, 200, 300]))
+assert sums == [111, 222, 333]  # O(n·m) - m = 3 inputs
 
-# O(n) - adds corresponding elements
-sums = list(map(lambda a, b, c: a + b + c, list1, list2, list3))
-# [(12, 15, 18)]
+longer = iter([1, 2, 3])
+pairs = list(map(lambda a, b: (a, b), longer, [10, 20]))
+assert pairs == [(1, 10), (2, 20)]  # Stops at the shorter input
+assert list(longer) == []  # 3 was taken from the first input, then discarded
 ```
 
-### Expensive Function
+### Checking Lengths With strict
+
+From Python 3.14, `strict=True` raises `ValueError` when the inputs have different lengths instead
+of stopping silently. The check happens when the first input runs out.
 
 ```python
-# O(n*k) where k = function time
-def expensive_operation(x):
-    # O(m) where m = 10000
-    return sum(range(x))
+import sys
 
-numbers = [1, 2, 3, 4, 5]
-results = map(expensive_operation, numbers)  # O(1) - iterator created
+if sys.version_info >= (3, 14):
+    assert list(map(pow, [2, 3], [5, 2], strict=True)) == [32, 9]
 
-# O(n*m) - when consumed
-final = list(results)  # Expensive!
-```
-
-## Common Patterns
-
-### Type Conversion
-
-```python
-# O(n*k) where k = conversion time
-strings = ["1", "2", "3", "4", "5"]
-integers = list(map(int, strings))  # O(n) conversion
-
-floats = list(map(float, strings))  # O(n) conversion
-
-# Alternative: list comprehension (same complexity)
-integers = [int(s) for s in strings]  # O(n)
-```
-
-### Attribute Extraction
-
-```python
-# O(n) - simple attribute access
-class Person:
-    def __init__(self, name, age):
-        self.name = name
-        self.age = age
-
-people = [
-    Person("Alice", 30),
-    Person("Bob", 25),
-    Person("Charlie", 35),
-]
-
-# O(n) - extract names
-names = list(map(lambda p: p.name, people))
-# ["Alice", "Bob", "Charlie"]
-
-# Better with operator module
-from operator import attrgetter
-names = list(map(attrgetter('name'), people))  # Same O(n)
-```
-
-### Chaining Operations
-
-```python
-# O(n) - each step is O(1) per element
-numbers = [1, 2, 3, 4, 5]
-result = map(lambda x: x**2, numbers)
-result = map(lambda x: x + 1, result)  # Chained
-
-# O(n) - consumed once
-final = list(result)  # [2, 5, 10, 17, 26]
-
-# vs multiple list comprehensions - same complexity but more memory
-squared = [x**2 for x in numbers]  # O(n) time and space
-incremented = [x + 1 for x in squared]  # O(n) time and space
-# Total: O(n) time, O(n) space for intermediate list
+    try:
+        list(map(pow, [2, 3, 4], [5, 2], strict=True))
+    except ValueError as error:
+        assert "shorter" in str(error)
+    else:
+        raise AssertionError("expected ValueError")
 ```
 
 ## Comparison with Alternatives
 
 ### map vs List Comprehension
 
-```python
-# Both O(n*k) where k = function time
-numbers = range(1000000)
-
-# map - lazy, space efficient
-result = map(lambda x: x**2, numbers)  # O(1) - iterator only
-# Consume: O(n)
-
-# List comprehension - eager
-result = [x**2 for x in numbers]  # O(n) time, O(n) space
-
-# For-loop
-result = []
-for x in numbers:
-    result.append(x**2)  # O(n) time, O(n) space
-```
-
-### map vs for Loop
+`list(map(f, items))` and `[f(x) for x in items]` are both O(n) time and O(n) space, plus n calls
+of `f`. `map()` alone is lazy, like a generator expression; a list comprehension builds the whole
+list at once.
 
 ```python
-# Same complexity, different style
-numbers = [1, 2, 3, 4, 5]
+words = ["1", "22", "333"]
 
-# map - O(n) to create, O(n) to consume
-squared = list(map(lambda x: x**2, numbers))
+assert list(map(len, words)) == [len(w) for w in words]  # Both O(n)
 
-# for loop - O(n)
-squared = []
-for x in numbers:
-    squared.append(x**2)
-
-# List comprehension - O(n)
-squared = [x**2 for x in numbers]
-
-# All are O(n), map is lazy until consumed
+lazy = map(len, words)  # O(1) - nothing computed
+eager = [len(w) for w in words]  # O(n) - all computed now
+assert next(lazy) == eager[0]
 ```
 
-## Multiple Iterables
+### Arguments Already in Tuples
 
-### Parallel Processing
+`map()` passes one argument per input. When each item is already a tuple of arguments,
+`itertools.starmap()` unpacks it instead, at the same O(n) cost.
 
 ```python
-# O(n*k) - processes corresponding elements
-list1 = [1, 2, 3]
-list2 = [10, 20, 30]
+from itertools import starmap
 
-# O(n) - simple operation
-results = list(map(lambda a, b: a + b, list1, list2))
-# [11, 22, 33]
-
-# Stops at shortest iterable
-list3 = [100, 200]
-results = list(map(lambda a, b: a + b, list1, list3))
-# [101, 202] - stops when list3 ends
+pairs = [(2, 5), (3, 2), (10, 3)]
+assert list(starmap(pow, pairs)) == [32, 9, 1000]  # O(n)
+assert list(map(pow, *zip(*pairs))) == [32, 9, 1000]  # Same result from m = 2 inputs
 ```
 
-## Performance Considerations
+## Common Patterns
 
-### Large Datasets
+### Type Conversion and Attribute Extraction
 
 ```python
-# ✅ Memory efficient - lazy evaluation
-big_list = range(10**8)
-squared = map(lambda x: x**2, big_list)
-result = next(squared)  # Only computes one
+from operator import attrgetter
 
-# ❌ Memory expensive
-big_list = range(10**8)
-squared = [x**2 for x in big_list]  # Creates huge list
+assert list(map(int, ["1", "2", "3"])) == [1, 2, 3]  # O(n)
+
+class Person:
+    def __init__(self, name, age):
+        self.name = name
+        self.age = age
+
+people = [Person("Alice", 30), Person("Bob", 25)]
+assert list(map(attrgetter("name"), people)) == ["Alice", "Bob"]  # O(n)
 ```
 
-### Function Overhead
-
-```python
-# O(n) - built-in functions are optimized
-numbers = ["1", "2", "3"]
-result = list(map(int, numbers))  # Fast
-
-# O(n*k) where k > 1 due to lambda overhead
-result = list(map(lambda x: int(x), numbers))  # Slower
-
-# Prefer direct function reference when possible
-from operator import methodcaller
-numbers = ["1", "2", "3"]
-result = list(map(int, numbers))  # Best
-```
-
-## Edge Cases
-
-### Empty Iterable
-
-```python
-# O(1) - creates empty iterator
-result = map(lambda x: x**2, [])
-final = list(result)  # [] - consumes immediately
-```
-
-### Single Element
-
-```python
-# O(1) - iterator created
-result = map(lambda x: x**2, [5])
-final = list(result)  # [25]
-```
-
-### Unequal Iterables
-
-```python
-# O(n) - stops at shortest
-result = list(map(lambda a, b: a + b, [1, 2, 3], [10, 20]))
-# [11, 22] - third element ignored
-```
-
-## Best Practices
+## Performance Best Practices
 
 ✅ **Do**:
 
-- Use `map()` for lazy evaluation with large datasets
-- Use `map(function, iterable)` instead of `list(map(lambda x: function(x), iterable))`
-- Use `map()` with built-in functions like `int`, `str`, `float`
-- Use generator expressions for complex transformations
+- Use `map()` over a large or unbounded input when you consume the results once, in order
+- Chain maps over a stream instead of building a list at each step
+- Pass `strict=True` on Python 3.14+ when inputs of different lengths are a bug
 
 ❌ **Avoid**:
 
-- `list(map(lambda x: ..., iterable))` - use list comprehension instead
-- Forgetting that `map()` returns an iterator, not a list
-- `map()` with expensive functions without understanding lazy evaluation
-- Using `map()` with multiple iterables of different lengths
-
-## Related Functions
-
-- **[filter()](filter.md)** - Filter items based on predicate
-- **[zip()](zip.md)** - Combine iterables
-- **[reduce()](../stdlib/functools.md#reduce)** - Aggregate values
-- **List comprehensions** - More Pythonic for most cases
+- Iterating a `map` twice; the second pass is empty
+- `list(map(...))` when you only need the first few results; take them with `next()` or `islice()`
+- Passing an iterator you will keep reading ahead of a shorter input in a multi-input `map`: the
+  item taken from it in the last step is lost
 
 ## Version Notes
 
-- **Python 2.x**: `map()` returns a list
-- **Python 3.x**: `map()` returns an iterator (lazy evaluation)
-- **Python 3.8+**: Same lazy behavior, consistent
+- **Python 3.14+**: `map()` accepts `strict=True`, which raises `ValueError` when the inputs have
+  different lengths.
+
+## Related Functions
+
+- **[filter()](filter.md)** - Lazy iterator that keeps the items passing a predicate
+- **[zip()](zip.md)** - Combines inputs into tuples, with the same shortest-input rule and `strict`
+- **[next()](next.md)** - Takes one result from a `map`
+- **[iter()](iter.md)** - The iterator protocol a `map` follows
+- **[itertools.starmap()](../stdlib/itertools.md)** - `map()` for arguments already in tuples
+- **[functools.reduce()](../stdlib/functools.md#reduce)** - Folds results into one value

@@ -123,6 +123,9 @@ ignore = [
 # The getattr tests call getattr() with constant names because getattr() is the
 # subject; B009's fix rewrites each call into the attribute access it measures against.
 "tests/test_getattr_complexity.py" = ["B009"]
+# map() is the subject of the map tests; C417 would rewrite the lambda-based
+# map() calls they measure into comprehensions.
+"tests/test_map_complexity.py" = ["C417"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["python_time_space_complexity"]
