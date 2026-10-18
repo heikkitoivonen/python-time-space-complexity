@@ -1,5 +1,5 @@
 .PHONY: help install dev serve serve-en serve-one build build-en lint format types check clean test audit
-.PHONY: skills-build skills-check skills-package skills-eval
+.PHONY: skills-build skills-check skills-package skills-eval skills-recall
 
 # Address for the dev server. Override for a non-default setup, e.g.
 #   make serve DEV_ADDR=0.0.0.0:5005
@@ -37,6 +37,8 @@ help:
 	@echo "  make skills-check    Validate the generated skill"
 	@echo "  make skills-package  Create release ZIPs and checksums in dist/skills/"
 	@echo "  make skills-eval     Build the skill and show manual evaluation prompts"
+	@echo "  make skills-recall   Measure recall with and without the skill (calls a model;"
+	@echo "                       MODEL=sonnet RUNS=3 PILOT=1 to override)"
 	@echo ""
 	@echo "Maintenance:"
 	@echo "  make clean       Remove build artifacts and cache"
@@ -97,6 +99,13 @@ skills-package:
 # deterministic package checks. This target prepares its input and rubric.
 skills-eval: skills-build
 	@cat skills/evaluations.md
+
+# Runs `claude plugin eval` on your own credential: about 600 agent runs and
+# 3,600 judge calls for the full item set at RUNS=3. See skills/evaluations.md.
+MODEL ?= sonnet
+RUNS ?= 3
+skills-recall:
+	uv run python scripts/skill_eval.py run --model $(MODEL) --runs $(RUNS) $(if $(PILOT),--pilot)
 
 test:
 	uv run pytest -m "not timing and not serial" -n $(TEST_WORKERS) --dist=loadfile

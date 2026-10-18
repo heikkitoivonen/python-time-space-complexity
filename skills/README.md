@@ -38,7 +38,9 @@ permissions; identical inputs and compression tooling produce identical bytes.
 
 `skills-eval` prepares the built skill and displays a manual evaluation packet.
 It does not run an agent. See [evaluations.md](evaluations.md) for prompts and a
-rubric. Automated tests establish content fidelity and package portability;
+rubric. `make skills-recall` does run one: it measures recall of 100 operations'
+bounds with and without the skill through `claude plugin eval`, as that file
+describes. Automated tests establish content fidelity and package portability;
 they do not establish every source claim or end-to-end behavior in agent clients.
 
 ## Release

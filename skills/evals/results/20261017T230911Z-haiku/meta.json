@@ -1,0 +1,23 @@
+{
+  "started": "2026-10-17T23:09:11+00:00",
+  "model": "haiku",
+  "model_ids": [
+    "claude-haiku-5-5"
+  ],
+  "judge_model": "sonnet",
+  "runs_per_arm": 3,
+  "python_asked": "3.14",
+  "items": 100,
+  "pilot": false,
+  "claude_version": "2.1.302",
+  "skill_version": "0.4.0",
+  "skill_revision": "968d9fff4ec4d1ad812850409957efdc301fc4ea-dirty",
+  "skill_files_sha256": "58dd1238699fd2570ac373114bf4183b1d83236c9469f6a4a197abb6d07319bd",
+  "prompt_sha256": "22ab492cf448adec8faabd71f26624f8260bc8228644698eed5e535d7f96e3c3",
+  "questions_sha256": "c448312478c9d49f379a66ab53eb547bffc859d6184ed818e4099174813c3a27",
+  "criteria_sha256": "83c9e6c573e02069dd13231ada4b8353da69c800f1c0b65b9d9dd9367352e683",
+  "exit_code": 0,
+  "partial": false,
+  "cost_usd": 31.972127830000034,
+  "duration_seconds": 2040
+}

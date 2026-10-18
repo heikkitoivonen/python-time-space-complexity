@@ -1,0 +1,1103 @@
+# Recall items for the python-complexity skill evaluation.
+#
+# Each item asks for the time and space bound of one operation. The answer key
+# comes from the bundled reference page and `row` quotes the table row it rests
+# on; tests/test_skill_eval.py fails when that text leaves the page.
+#
+# stratum: common - chosen from the PyPI usage scan (usage.json); `usage` names
+#                   the scan entry that selected it
+#          tail   - less familiar operations whose bound carries a qualifier
+# case:    the bound asked for: worst, average or amortized
+# accept:  equivalent spellings the deterministic grader recognises; the LLM
+#          judge decides any other spelling against `key`
+#
+# Keys treat every size variable as at least 1, the usual convention, so an
+# additive constant or lower-order term such as O(i + 1) or O(n·N + n) is
+# equivalent to O(i) or O(n·N).
+
+- id: list-membership
+  stratum: common
+  usage: op:in
+  pilot: true
+  operation: "`x in lst`, where `lst` is a list"
+  variables: "n = len(lst)"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/list.md, row: "| `x in l` (membership) | O(n) | O(1) |"}
+
+- id: isinstance-plain-class
+  stratum: common
+  usage: builtin:isinstance
+  pilot: true
+  operation: >-
+    `isinstance(obj, cls)`, where `cls` is an ordinary class (not an ABC and with no
+    custom `__instancecheck__`) and `type(obj)` is not exactly `cls`
+  variables: "d = len(type(obj).__mro__)"
+  case: worst
+  time: {key: "O(d)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/isinstance.md, row: "| `isinstance(obj, type)` | O(d) | O(1) |"}
+
+- id: list-append
+  stratum: common
+  usage: method:append
+  pilot: true
+  operation: "`lst.append(x)`, where `lst` is a list"
+  variables: "n = len(lst)"
+  case: amortized
+  time: {key: "O(1)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/list.md, row: "| `l.append(x)` | O(1) amortized | O(1) amortized |"}
+
+- id: list-slice
+  stratum: common
+  usage: op:subscript-slice
+  pilot: true
+  operation: "`lst[i:j]`, where `lst` is a list and 0 <= i <= j <= len(lst)"
+  variables: "n = len(lst); i = the slice start; j = the slice stop"
+  case: worst
+  time: {key: "O(j - i)"}
+  space: {key: "O(j - i)"}
+  source: {page: docs/builtins/list.md, row: "| `l[i:j]` (slicing) | O(j-i) | O(j-i) |"}
+
+- id: len-list
+  stratum: common
+  usage: builtin:len
+  pilot: true
+  operation: "`len(lst)`, where `lst` is a list"
+  variables: "n = len(lst)"
+  case: worst
+  time: {key: "O(1)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/list.md, row: "| `len(l)` | O(1) | O(1) |"}
+
+- id: dict-get
+  stratum: common
+  usage: method:get
+  pilot: true
+  operation: "`d.get(key)`, where `d` is a dict"
+  variables: "n = len(d)"
+  case: average
+  time: {key: "O(1)"}
+  space: {key: "O(1)"}
+  source:
+    page: docs/builtins/dict.md
+    row: "| `d[key]`, `d.get(key, default=None)` | O(1) avg, O(n) worst | O(1) |"
+
+- id: str-join
+  stratum: common
+  usage: method:join
+  pilot: true
+  operation: >-
+    `sep.join(pieces)`, where `sep` is a non-empty str of constant length and `pieces`
+    is a list of p strs
+  variables: "p = len(pieces); r = the length of the resulting string"
+  case: worst
+  time: {key: "O(r)", accept: ["O(r + p)", "O(p + r)"]}
+  space: {key: "O(r)", accept: ["O(r + p)", "O(p + r)"]}
+  source: {page: docs/builtins/str.md, row: "| `sep.join(iterable)` | O(r + p) | O(r + p) |"}
+
+- id: str-split
+  stratum: common
+  usage: method:split
+  pilot: true
+  operation: "`s.split(sep)`, where `s` is a str and `sep` is a str of constant length"
+  variables: "n = len(s)"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(n)"}
+  source: {page: docs/builtins/str.md, row: "| `split(sep)` | O(n) | O(n) |"}
+
+- id: set-from-list
+  stratum: common
+  usage: builtin:set
+  pilot: true
+  operation: "`set(lst)`, where `lst` is a list of n distinct hashable items"
+  variables: "n = len(lst)"
+  case: average
+  time: {key: "O(n)"}
+  space: {key: "O(n)"}
+  source:
+    page: docs/builtins/set_func.md
+    row: "| `set(iterable)` | O(n) avg, O(n²) worst | O(u) |"
+
+- id: sorted-list
+  stratum: common
+  usage: builtin:sorted
+  pilot: true
+  operation: "`sorted(lst)`, where `lst` is a list in random order, with no key function"
+  variables: "n = len(lst)"
+  case: worst
+  time: {key: "O(n log n)"}
+  space: {key: "O(n)"}
+  source: {page: docs/builtins/sorted.md, row: "| Basic sorting | O(n log n) | O(n) |"}
+
+- id: heapq-merge-consume
+  stratum: tail
+  pilot: true
+  operation: >-
+    Consuming every item of `heapq.merge(*iterables)` in a `for` loop that keeps
+    nothing, where each of the r >= 2 inputs is a non-empty sorted list
+  variables: "r = the number of input iterables; m = the total number of items across them"
+  case: worst
+  time: {key: "O(r + m log r)", accept: ["O(m log r)", "O(m log r + r)"]}
+  space: {key: "O(r)"}
+  source:
+    page: docs/stdlib/heapq.md
+    row: "| `heapq.merge(*iterables, key=None, reverse=False)` | O(r + m log r) | O(r) |"
+
+- id: tee-leading-iterator
+  stratum: tail
+  pilot: true
+  operation: >-
+    `a, b = itertools.tee(it)` followed by k calls to `next(a)`, while `b` is never
+    advanced
+  variables: "k = the number of items `a` has run ahead of `b`"
+  case: worst
+  time: {key: "O(k)"}
+  space: {key: "O(k)"}
+  source: {page: docs/stdlib/itertools.md, row: "| `tee(iterable, n)` | O(n) init | O(g + n) |"}
+
+- id: counter-most-common-k
+  stratum: tail
+  pilot: true
+  operation: "`c.most_common(k)`, where `c` is a `collections.Counter` and 1 < k < len(c)"
+  variables: "n = len(c); k = the number of items requested"
+  case: worst
+  time: {key: "O(n log k)"}
+  space: {key: "O(k)"}
+  source: {page: docs/stdlib/counter.md, row: "| `Counter.most_common(k)` | O(n log k) | O(k) |"}
+
+- id: bisect-insort-list
+  stratum: tail
+  pilot: true
+  operation: "`bisect.insort(lst, x)`, where `lst` is a sorted list"
+  variables: "n = len(lst)"
+  case: amortized
+  time: {key: "O(n)"}
+  space: {key: "O(1)"}
+  source:
+    page: docs/stdlib/bisect.md
+    row: "| `bisect.insort(a, x, lo=0, hi=len(a), *, key=None)` | O(n) | O(1) |"
+
+- id: deque-index
+  stratum: tail
+  pilot: true
+  operation: "`dq[i]`, where `dq` is a `collections.deque`, at the index i that costs the most"
+  variables: "n = len(dq)"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(1)"}
+  source: {page: docs/stdlib/deque.md, row: "| `d[i]` / `d[i] = x` | O(min(i, n - i)) | O(1) |"}
+
+- id: str-hash-first-call
+  stratum: tail
+  pilot: true
+  operation: "`hash(s)`, where `s` is a str that has not been hashed before"
+  variables: "n = len(s)"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(1)"}
+  source:
+    page: docs/builtins/str.md
+    row: "| `hash(s)` | O(n) first call; O(1) after | O(1) |"
+
+- id: str-rfind
+  stratum: tail
+  pilot: true
+  operation: "`s.rfind(sub)`, where `s` and `sub` are ASCII strs and len(sub) <= len(s) / 2"
+  variables: "n = len(s); m = len(sub)"
+  case: worst
+  time: {key: "O(n·m)", accept: ["O(n * m)", "O(nm)", "O(m·n)", "O(mn)"]}
+  space: {key: "O(1)"}
+  source:
+    page: docs/builtins/str.md
+    row: "| `rfind(sub, start, end)` | O(n·m) worst | O(1), O(m) to widen |"
+
+- id: chainmap-len
+  stratum: tail
+  pilot: true
+  operation: "`len(cm)`, where `cm` is a `collections.ChainMap` whose maps are dicts"
+  variables: "n = the number of maps; N = the total number of entries across all maps"
+  case: worst
+  time: {key: "O(n + N)", accept: ["O(N + n)"]}
+  space: {key: "O(n + N)", accept: ["O(N + n)"]}
+  source: {page: docs/stdlib/collections.md, row: "| `len(cm)` | O(n + N) | O(n + N) |"}
+
+- id: statistics-median
+  stratum: tail
+  pilot: true
+  operation: "`statistics.median(data)`, where `data` is an unsorted list of numbers"
+  variables: "n = len(data)"
+  case: worst
+  time: {key: "O(n log n)"}
+  space: {key: "O(n)"}
+  source: {page: docs/stdlib/statistics.md, row: "| `statistics.median(data)` | O(n log n) | O(n) |"}
+
+- id: dict-values-membership
+  stratum: tail
+  pilot: true
+  operation: "`v in d.values()`, where `d` is a dict"
+  variables: "n = len(d)"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/dict.md, row: "| `value in d.values()` | O(n) | O(1) |"}
+
+# Common items beyond the pilot, in scan order. Names skipped from the ranking:
+# exception classes, `super`, typing-only helpers (`TypeVar`, `cast`), decorators
+# and factories with no size to vary (`functools.wraps`, `dataclass`), and calls
+# whose cost the operating system decides (`open`, `print`, `os.path.exists`,
+# `time.sleep`). A method name is asked about on the receiver type it most often
+# has in that position.
+
+- id: list-index
+  stratum: common
+  usage: op:subscript-index
+  operation: "`lst[k]`, where `lst` is a list and 0 <= k < len(lst)"
+  variables: "n = len(lst)"
+  case: worst
+  time: {key: "O(1)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/list.md, row: "| `l[k]` | O(1) | O(1) |"}
+
+- id: str-contains
+  stratum: common
+  usage: op:in
+  operation: "`sub in s`, where `s` and `sub` are ASCII strs and len(sub) <= len(s)"
+  variables: "n = len(s); m = len(sub)"
+  case: worst
+  time: {key: "O(n)", accept: ["O(n + m)", "O(m + n)"]}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/str.md, row: "| `sub in s` (substring) | O(n) | O(1), O(m) to widen |"}
+
+- id: list-from-iterator
+  stratum: common
+  usage: builtin:list
+  operation: "`list(gen)`, where `gen` is a generator that yields n items"
+  variables: "n = the number of items `gen` yields"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(n)"}
+  source: {page: docs/builtins/list_func.md, row: "| `list(iterable)` | O(n) | O(n) |"}
+
+- id: str-of-str
+  stratum: common
+  usage: builtin:str
+  operation: "`str(s)`, where `s` is an exact `str` (not a subclass)"
+  variables: "n = len(s)"
+  case: worst
+  time: {key: "O(1)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/str.md, row: "| `s[:]`, `str(s)`, `copy.copy(s)` | O(1) | O(1) |"}
+
+- id: getattr-literal-name
+  stratum: common
+  usage: builtin:getattr
+  operation: >-
+    `getattr(obj, "name")` with a string literal, called repeatedly in a loop, where
+    `name` is a plain instance attribute and the class is not modified
+  variables: "d = len(type(obj).__mro__)"
+  case: average
+  time: {key: "O(1)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/getattr.md, row: "| `getattr(obj, name)` | O(1) avg | O(1) |"}
+
+- id: str-startswith
+  stratum: common
+  usage: method:startswith
+  operation: "`s.startswith(prefix)`, where `s` and `prefix` are strs and len(prefix) <= len(s)"
+  variables: "n = len(s); m = len(prefix)"
+  case: worst
+  time: {key: "O(m)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/str.md, row: "| `startswith(prefix)` | O(m) | O(1) |"}
+
+- id: dict-items-view
+  stratum: common
+  usage: method:items
+  operation: "`d.items()` (creating the view, not iterating it), where `d` is a dict"
+  variables: "n = len(d)"
+  case: worst
+  time: {key: "O(1)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/dict.md, row: "| `d.keys()`, `d.values()`, `d.items()` | O(1) | O(1) |"}
+
+- id: type-of-object
+  stratum: common
+  usage: builtin:type
+  operation: "`type(obj)` with one argument"
+  variables: "d = len(type(obj).__mro__)"
+  case: worst
+  time: {key: "O(1)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/type_func.md, row: "| `type(obj)` | O(1) | O(1) |"}
+
+- id: list-pop-front
+  stratum: common
+  usage: method:pop
+  operation: "`lst.pop(0)`, where `lst` is a non-empty list"
+  variables: "n = len(lst)"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/list.md, row: "| `l.pop(0)` | O(n) | O(1) |"}
+
+- id: list-extend
+  stratum: common
+  usage: method:extend
+  operation: "`lst.extend(t)`, where `lst` and `t` are lists"
+  variables: "n = len(lst); k = len(t)"
+  case: amortized
+  time: {key: "O(k)"}
+  space: {key: "O(k)"}
+  source: {page: docs/builtins/list.md, row: "| `l.extend(t)` | O(len(t)) amortized | O(len(t)) |"}
+
+- id: bool-of-list
+  stratum: common
+  usage: builtin:bool
+  operation: "`bool(lst)`, where `lst` is a list"
+  variables: "n = len(lst)"
+  case: worst
+  time: {key: "O(1)"}
+  space: {key: "O(1)"}
+  source:
+    page: docs/builtins/bool_func.md
+    row: "| Convert built-in container (str, list, dict, set, range, etc) | O(1) | O(1) |"
+
+- id: tuple-from-list
+  stratum: common
+  usage: builtin:tuple
+  operation: "`tuple(lst)`, where `lst` is a list"
+  variables: "n = len(lst)"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(n)"}
+  source: {page: docs/builtins/tuple_func.md, row: "| `tuple(iterable)` | O(n) | O(n) |"}
+
+- id: dict-update
+  stratum: common
+  usage: method:update
+  operation: "`d.update(other)`, where `d` and `other` are dicts"
+  variables: "n = len(d); m = len(other)"
+  case: amortized
+  time: {key: "O(m)"}
+  space: {key: "O(m)"}
+  source: {page: docs/builtins/dict.md, row: '| `d.update(other)`, `d \|= other` | O(m) amortized | O(m) |'}
+
+- id: str-lower
+  stratum: common
+  usage: method:lower
+  operation: "`s.lower()`, where `s` is a str"
+  variables: "n = len(s)"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(n)"}
+  source: {page: docs/builtins/str.md, row: "| `lower()` | O(n) | O(n) |"}
+
+- id: dict-from-pairs
+  stratum: common
+  usage: builtin:dict
+  operation: "`dict(pairs)`, where `pairs` is a list of n two-item tuples with distinct hashable keys"
+  variables: "n = len(pairs)"
+  case: average
+  time: {key: "O(n)"}
+  space: {key: "O(n)"}
+  source: {page: docs/builtins/dict_func.md, row: "| `dict(iterable)` | O(n) | O(n) |"}
+
+- id: str-replace
+  stratum: common
+  usage: method:replace
+  operation: >-
+    `s.replace(old, new)`, where `s`, `old` and `new` are ASCII strs and `old` and `new`
+    have constant length
+  variables: "n = len(s); r = the length of the result"
+  case: worst
+  time: {key: "O(n + r)", accept: ["O(r + n)", "O(n)"]}
+  space: {key: "O(r)"}
+  source: {page: docs/builtins/str.md, row: "| `replace(old, new)` | O(n + r) | O(r), O(m) to widen |"}
+
+- id: re-compile
+  stratum: common
+  usage: stdlib:re.compile
+  operation: >-
+    `re.compile(pattern)`, where `pattern` is a str of letters and digits only (no
+    metacharacters) that is not in the `re` module's cache
+  variables: "n = len(pattern)"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(n)"}
+  source: {page: docs/stdlib/re.md, row: "| `re.compile(pattern, flags=0)` | O(n + u) | O(n) |"}
+
+- id: range-create
+  stratum: common
+  usage: builtin:range
+  operation: "`range(n)`, creating the range object without iterating it"
+  variables: "n = the argument"
+  case: worst
+  time: {key: "O(1)"}
+  space: {key: "O(1)"}
+  source:
+    page: docs/builtins/range.md
+    row: "| `range(stop)`, `range(start, stop[, step])` | O(1) | O(1) |"
+
+- id: set-add
+  stratum: common
+  usage: method:add
+  operation: "`s.add(x)`, where `s` is a set and `x` is hashable"
+  variables: "n = len(s)"
+  case: amortized
+  time: {key: "O(1)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/set.md, row: "| `s.add(x)` | O(1) amortized | O(1) amortized |"}
+
+- id: any-all-falsy
+  stratum: common
+  usage: builtin:any
+  operation: "`any(lst)`, where `lst` is a list whose items are all falsy"
+  variables: "n = len(lst)"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/any.md, row: "| All items falsy | O(n) | O(1) |"}
+
+- id: enumerate-create
+  stratum: common
+  usage: builtin:enumerate
+  operation: "`enumerate(lst)`, creating the iterator without consuming it, where `lst` is a list"
+  variables: "n = len(lst)"
+  case: worst
+  time: {key: "O(1)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/enumerate.md, row: "| `enumerate(iterable, start=0)` | O(1) | O(1) |"}
+
+- id: str-encode
+  stratum: common
+  usage: method:encode
+  operation: "`s.encode(\"utf-8\")`, where `s` is a str"
+  variables: "n = len(s)"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(n)"}
+  source: {page: docs/builtins/str.md, row: "| `encode(encoding)` | O(n) | O(n) |"}
+
+- id: bytes-decode
+  stratum: common
+  usage: method:decode
+  operation: "`b.decode(\"utf-8\")`, where `b` is a bytes object holding valid UTF-8"
+  variables: "n = len(b)"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(n)"}
+  source:
+    page: docs/builtins/bytes.md
+    row: "| `decode(encoding='utf-8', errors='strict')` | O(n) | O(n) |"
+
+- id: iter-list
+  stratum: common
+  usage: builtin:iter
+  operation: "`iter(lst)`, where `lst` is a list"
+  variables: "n = len(lst)"
+  case: worst
+  time: {key: "O(1)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/iter.md, row: "| `iter(iterable)` | O(1) | O(1) |"}
+
+- id: max-list
+  stratum: common
+  usage: builtin:max
+  operation: "`max(lst)`, where `lst` is a non-empty list of ints"
+  variables: "n = len(lst)"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/max.md, row: "| `max(iterable)` | O(n) | O(1) |"}
+
+- id: list-clear
+  stratum: common
+  usage: method:clear
+  operation: "`lst.clear()`, where `lst` is a list"
+  variables: "n = len(lst)"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/list.md, row: "| `l.clear()` | O(n) | O(1) |"}
+
+- id: reversed-list
+  stratum: common
+  usage: builtin:reversed
+  operation: "`reversed(lst)`, creating the iterator without consuming it, where `lst` is a list"
+  variables: "n = len(lst)"
+  case: worst
+  time: {key: "O(1)"}
+  space: {key: "O(1)"}
+  source:
+    page: docs/builtins/reversed.md
+    row: >-
+      | `reversed(seq)` on a `list`, `range`, `dict`, dict view, `OrderedDict` or `deque` | O(1) | O(1) |
+
+- id: dict-copy
+  stratum: common
+  usage: method:copy
+  operation: "`d.copy()`, where `d` is a dict"
+  variables: "n = len(d)"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(n)"}
+  source: {page: docs/builtins/dict.md, row: "| `d.copy()` | O(n) | O(n) |"}
+
+- id: list-insert-front
+  stratum: common
+  usage: method:insert
+  operation: "`lst.insert(0, x)`, where `lst` is a list"
+  variables: "n = len(lst)"
+  case: amortized
+  time: {key: "O(n)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/list.md, row: "| `l.insert(0, x)` | O(n) | O(1) amortized |"}
+
+- id: setattr-literal-name
+  stratum: common
+  usage: builtin:setattr
+  operation: >-
+    `setattr(obj, "name", value)` with a string literal, called repeatedly in a loop, where
+    `obj` is an instance of an ordinary class that is not modified and already has the
+    attribute `name` in its `__dict__`
+  variables: "d = len(type(obj).__mro__)"
+  case: average
+  time: {key: "O(1)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/setattr.md, row: "| `setattr(obj, name, value)` | O(1) avg | O(1) |"}
+
+- id: dict-setdefault
+  stratum: common
+  usage: method:setdefault
+  operation: "`d.setdefault(key, [])`, where `d` is a dict"
+  variables: "n = len(d)"
+  case: amortized
+  time: {key: "O(1)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/dict.md, row: "| `d.setdefault(key, default=None)` | O(1) amortized | O(1) |"}
+
+- id: map-create
+  stratum: common
+  usage: builtin:map
+  operation: "`map(f, lst)`, creating the iterator without consuming it, where `lst` is a list"
+  variables: "n = len(lst)"
+  case: worst
+  time: {key: "O(1)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/map.md, row: "| `map(function, iterable, *iterables)` | O(m) | O(m) |"}
+
+- id: list-remove
+  stratum: common
+  usage: method:remove
+  operation: "`lst.remove(x)`, where `lst` is a list that contains `x`"
+  variables: "n = len(lst)"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/list.md, row: "| `l.remove(x)` | O(n) | O(1) |"}
+
+- id: sum-small-ints
+  stratum: common
+  usage: builtin:sum
+  operation: "`sum(lst)`, where `lst` is a list of ints whose running total fits in a machine word"
+  variables: "n = len(lst)"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(1)"}
+  source:
+    page: docs/builtins/sum.md
+    row: "| Exact `int` and `bool` items, running total within a machine word | O(n) | O(1) |"
+
+- id: os-environ-get
+  stratum: common
+  usage: stdlib:os.environ.get
+  operation: "`os.environ.get(key)` on Linux, where the variable `key` is set"
+  variables: "e = the number of environment variables; k = len(key); v = the length of the value"
+  case: average
+  time: {key: "O(k + v)", accept: ["O(v + k)"]}
+  space: {key: "O(k + v)", accept: ["O(v + k)"]}
+  source: {page: docs/stdlib/os.md, row: "| `os.environ.get(key, default)` | O(k + v) | O(k + v) |"}
+
+- id: os-path-join
+  stratum: common
+  usage: stdlib:os.path.join
+  operation: "`os.path.join(*parts)` on Linux, where `parts` holds n non-empty strs"
+  variables: "n = len(parts); L = the total length of the parts"
+  case: worst
+  time: {key: "O(n + L)", accept: ["O(L + n)", "O(L)"]}
+  space: {key: "O(L)", accept: ["O(n + L)", "O(L + n)"]}
+  source:
+    page: docs/stdlib/posixpath.md
+    row: "| `posixpath.join(a, *p)` | O(n + L); O(n·L) for bytes | O(L) |"
+
+- id: str-find
+  stratum: common
+  usage: method:find
+  operation: "`s.find(sub)`, where `s` and `sub` are ASCII strs and len(sub) <= len(s)"
+  variables: "n = len(s); m = len(sub)"
+  case: worst
+  time: {key: "O(n)", accept: ["O(n + m)", "O(m + n)"]}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/str.md, row: "| `find(sub, start, end)` | O(n) | O(1), O(m) to widen |"}
+
+- id: list-sort
+  stratum: common
+  usage: method:sort
+  operation: "`lst.sort()`, where `lst` is a list in random order, with no key function"
+  variables: "n = len(lst)"
+  case: worst
+  time: {key: "O(n log n)"}
+  space: {key: "O(n)"}
+  source: {page: docs/builtins/list.md, row: "| `l.sort(key=None, reverse=False)` | O(n log n) | O(n) |"}
+
+- id: bytesio-from-bytes
+  stratum: common
+  usage: stdlib:io.BytesIO
+  operation: "`io.BytesIO(data)`, where `data` is a bytes object"
+  variables: "n = len(data)"
+  case: worst
+  time: {key: "O(1)"}
+  space: {key: "O(1)"}
+  source: {page: docs/stdlib/io.md, row: "| `io.BytesIO(initial_bytes=b'')` | O(1) | O(1) |"}
+
+- id: list-count
+  stratum: common
+  usage: method:count
+  operation: "`lst.count(x)`, where `lst` is a list"
+  variables: "n = len(lst)"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/list.md, row: "| `l.count(x)` | O(n) | O(1) |"}
+
+- id: str-partition
+  stratum: common
+  usage: method:partition
+  operation: "`s.partition(sep)`, where `s` is an ASCII str and `sep` is a str of constant length"
+  variables: "n = len(s)"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(n)"}
+  source: {page: docs/builtins/str.md, row: "| `partition(sep)` | O(n) | O(n) |"}
+
+- id: str-rsplit
+  stratum: common
+  usage: method:rsplit
+  operation: "`s.rsplit(sep)`, where `s` and `sep` are ASCII strs and len(sep) <= len(s) / 2"
+  variables: "n = len(s); m = len(sep)"
+  case: worst
+  time: {key: "O(n·m)", accept: ["O(n * m)", "O(nm)", "O(m·n)", "O(mn)"]}
+  space: {key: "O(n)"}
+  source: {page: docs/builtins/str.md, row: "| `rsplit(sep)` | O(n·m) worst | O(n) |"}
+
+- id: json-loads
+  stratum: common
+  usage: stdlib:json.loads
+  operation: "`json.loads(s)`, where `s` is a str holding a JSON document"
+  variables: "n = len(s)"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(n)"}
+  source:
+    page: docs/stdlib/json.md
+    row: >-
+      | `json.loads(s, *, cls=None, object_hook=None, parse_float=None, parse_int=None,
+      parse_constant=None, object_pairs_hook=None)` | O(n) | O(n) |
+
+- id: copy-copy-list
+  stratum: common
+  usage: stdlib:copy.copy
+  operation: "`copy.copy(lst)`, where `lst` is a list"
+  variables: "n = len(lst)"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(n)"}
+  source: {page: docs/stdlib/copy.md, row: "| `copy.copy(x)`, list, dict, set or bytearray | O(n) | O(n) |"}
+
+- id: lru-cache-hit
+  stratum: common
+  usage: stdlib:functools.lru_cache
+  operation: >-
+    Calling a function decorated with `functools.lru_cache()` when the call is a cache hit,
+    passing a positional arguments and m >= 1 keyword arguments, each a small int
+  variables: "a = the number of positional arguments; m = the number of keyword arguments"
+  case: average
+  time: {key: "O(a + m)", accept: ["O(m + a)"]}
+  space: {key: "O(a + m)", accept: ["O(m + a)"]}
+  source: {page: docs/stdlib/functools.md, row: "| Calling a cached function, hit | O(a + m) | O(a + m) |"}
+
+- id: defaultdict-missing-key
+  stratum: common
+  usage: stdlib:collections.defaultdict
+  operation: "`dd[key]`, where `dd` is a `collections.defaultdict(list)` and `key` is missing"
+  variables: "n = len(dd)"
+  case: amortized
+  time: {key: "O(1)"}
+  space: {key: "O(1)"}
+  source:
+    page: docs/stdlib/defaultdict.md
+    row: "| `dd[key]`, key missing | O(1 + f) amortized | O(1 + f) amortized |"
+
+- id: deque-popleft
+  stratum: common
+  usage: stdlib:collections.deque
+  operation: "`dq.popleft()`, where `dq` is a non-empty `collections.deque`"
+  variables: "n = len(dq)"
+  case: worst
+  time: {key: "O(1)"}
+  space: {key: "O(1)"}
+  source: {page: docs/stdlib/deque.md, row: "| `d.pop()` / `d.popleft()` | O(1) | O(1) |"}
+
+- id: set-discard
+  stratum: common
+  usage: method:discard
+  operation: "`s.discard(x)`, where `s` is a set"
+  variables: "n = len(s)"
+  case: average
+  time: {key: "O(1)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/set.md, row: "| `s.remove(x)`, `s.discard(x)` | O(1) avg, O(n) worst | O(1) |"}
+
+- id: deepcopy
+  stratum: common
+  usage: stdlib:copy.deepcopy
+  operation: "`copy.deepcopy(x)`, where `x` is a structure of nested lists and dicts"
+  variables: "v = the number of objects reachable from `x`; e = the number of references between them"
+  case: worst
+  time: {key: "O(v + e)", accept: ["O(e + v)"]}
+  space: {key: "O(v + e)", accept: ["O(e + v)"]}
+  source: {page: docs/stdlib/copy.md, row: "| `copy.deepcopy(x, memo=None)` | O(v + e) | O(v + e) |"}
+
+- id: namedtuple-class
+  stratum: common
+  usage: stdlib:collections.namedtuple
+  operation: "`collections.namedtuple(\"Point\", fields)`, creating the class, where `fields` lists f field names of constant length"
+  variables: "f = the number of fields"
+  case: worst
+  time: {key: "O(f)"}
+  space: {key: "O(f)"}
+  source:
+    page: docs/stdlib/namedtuple.md
+    row: >-
+      | `collections.namedtuple(typename, field_names, *, rename=False, defaults=None,
+      module=None)` | O(f) | O(f) |
+
+- id: list-reverse
+  stratum: common
+  usage: method:reverse
+  operation: "`lst.reverse()`, where `lst` is a list"
+  variables: "n = len(lst)"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/list.md, row: "| `l.reverse()` | O(n) | O(1) |"}
+
+# Tail items beyond the pilot.
+
+- id: isinstance-tuple
+  stratum: tail
+  operation: >-
+    `isinstance(obj, classes)`, where `classes` is an existing tuple of k ordinary classes
+    (no ABCs and no custom `__instancecheck__`), none of which `obj` is an instance of
+  variables: "k = the number of classes in the tuple; d = len(type(obj).__mro__)"
+  case: worst
+  time: {key: "O(k·d)", accept: ["O(k * d)", "O(kd)", "O(d·k)", "O(dk)"]}
+  space: {key: "O(1)"}
+  source:
+    page: docs/builtins/isinstance.md
+    row: "| `isinstance(obj, (type1, type2, ...))` | O(k*d) | O(1) |"
+
+- id: getattr-runtime-name
+  stratum: tail
+  operation: >-
+    `getattr(obj, prefix + suffix)`, where the attribute name is concatenated anew on
+    every call and names an attribute in the instance's `__dict__` that no class in
+    `type(obj).__mro__` defines
+  variables: "d = len(type(obj).__mro__); the name has constant length"
+  case: worst
+  time: {key: "O(d)"}
+  space: {key: "O(1)"}
+  source:
+    page: docs/builtins/getattr.md
+    row: "| `getattr(obj, name)` with a name built at run time | O(d) | O(1) |"
+
+- id: set-intersection
+  stratum: tail
+  operation: "`s & t`, where `s` and `t` are sets"
+  variables: "n = len(s); m = len(t)"
+  case: average
+  time: {key: "O(min(n, m))"}
+  space: {key: "O(min(n, m))"}
+  source:
+    page: docs/builtins/set.md
+    row: >-
+      | `s.intersection(other)`, `s & other` | O(min(n,m)); O(m) if `other` is not a set
+      | O(min(n,m)) |
+
+- id: set-difference
+  stratum: tail
+  operation: "`s - t`, where `s` and `t` are sets"
+  variables: "n = len(s); m = len(t)"
+  case: average
+  time: {key: "O(n)"}
+  space: {key: "O(n)"}
+  source:
+    page: docs/builtins/set.md
+    row: "| `s.difference(other)`, `s - other` | O(n); O(n+m) if `other` is not a set | O(n) |"
+
+- id: list-del-slice
+  stratum: tail
+  operation: "`del lst[i:j]`, where `lst` is a list and 0 <= i <= j <= len(lst)"
+  variables: "n = len(lst); i = the slice start; j = the slice stop"
+  case: worst
+  time: {key: "O(n - i)"}
+  space: {key: "O(j - i)"}
+  source: {page: docs/builtins/list.md, row: "| `del l[i:j]` | O(n-i) | O(j-i) |"}
+
+- id: list-slice-assign
+  stratum: tail
+  operation: >-
+    `lst[i:j] = t`, where `lst` and `t` are lists, 0 <= i <= j <= len(lst), and
+    len(t) != j - i
+  variables: "n = len(lst); k = len(t); i = the slice start; j = the slice stop"
+  case: amortized
+  time: {key: "O(n - i + k)", accept: ["O(n + k - i)", "O(k + n - i)"]}
+  space: {key: "O(j - i + k)", accept: ["O(k + j - i)"]}
+  source:
+    page: docs/builtins/list.md
+    row: >-
+      | `l[i:j] = t` | O(j-i) if len(t) == j-i, otherwise O(n-i+len(t)) amortized |
+      O(j-i+len(t)) |
+
+- id: list-eq-different-lengths
+  stratum: tail
+  operation: "`a == b`, where `a` and `b` are lists and len(a) != len(b)"
+  variables: "n = len(a); m = len(b)"
+  case: worst
+  time: {key: "O(1)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/list.md, row: "| `l1 == l2` | O(n) | O(1) | O(1) when the lengths differ"}
+
+- id: heapq-nlargest
+  stratum: tail
+  operation: "`heapq.nlargest(k, it)`, where `it` yields m items and 1 < k < m"
+  variables: "m = the number of items; k = the number requested"
+  case: worst
+  time: {key: "O(m log k)"}
+  space: {key: "O(k)"}
+  source:
+    page: docs/stdlib/heapq.md
+    row: "| `heapq.nlargest(k, iterable, key=None)` | O(m log k) | O(k) |"
+
+- id: heapq-heapify
+  stratum: tail
+  operation: "`heapq.heapify(lst)`, where `lst` is a list"
+  variables: "n = len(lst)"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(1)"}
+  source: {page: docs/stdlib/heapq.md, row: "| `heapq.heapify(x)` | O(n) | O(1) |"}
+
+- id: product-create
+  stratum: tail
+  operation: >-
+    `itertools.product(a, b)`, creating the iterator without taking any item from it, where
+    `a` and `b` are generators
+  variables: "p = the number of items `a` yields; q = the number of items `b` yields"
+  case: worst
+  time: {key: "O(p + q)", accept: ["O(q + p)"]}
+  space: {key: "O(p + q)", accept: ["O(q + p)"]}
+  source: {page: docs/stdlib/itertools.md, row: "| `product(iter1, iter2, ...)` | O(k + Σnᵢ + k×n₁×n₂×...×nₖ) total | O(k + Σnᵢ) init + O(k) per item |"}
+
+- id: sequencematcher-create
+  stratum: tail
+  operation: "`difflib.SequenceMatcher(None, a, b)`, constructing the matcher only"
+  variables: "A = len(a); B = len(b)"
+  case: worst
+  time: {key: "O(B)"}
+  space: {key: "O(B)"}
+  source:
+    page: docs/stdlib/difflib.md
+    row: >-
+      | `difflib.SequenceMatcher(isjunk=None, a='', b='', autojunk=True)` | O(B) | O(B) |
+
+- id: decimal-from-int
+  stratum: tail
+  operation: "`decimal.Decimal(i)`, where `i` is an int of n decimal digits, not limited to a machine word"
+  variables: "n = the number of decimal digits of `i`"
+  case: worst
+  time: {key: "O(n²)", accept: ["O(n^2)"]}
+  space: {key: "O(n)"}
+  source: {page: docs/stdlib/decimal.md, row: "| `Decimal(value)` from an int | O(n²) | O(n) |"}
+
+- id: decimal-from-str
+  stratum: tail
+  operation: "`decimal.Decimal(s)`, where `s` is a str of n decimal digits"
+  variables: "n = len(s)"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(n)"}
+  source: {page: docs/stdlib/decimal.md, row: "| `Decimal(value)` from a string | O(L) | O(L) |"}
+
+- id: random-sample
+  stratum: tail
+  operation: "`random.sample(population, k)`, where `population` is a list"
+  variables: "n = len(population); k = the sample size"
+  case: average
+  time: {key: "O(k)"}
+  space: {key: "O(k)"}
+  source: {page: docs/stdlib/random.md, row: "| `random.sample(population, k)` | O(k) expected | O(k) |"}
+
+- id: ordereddict-move-to-end
+  stratum: tail
+  operation: "`od.move_to_end(key)`, where `od` is a `collections.OrderedDict` containing `key`"
+  variables: "n = len(od)"
+  case: amortized
+  time: {key: "O(1)"}
+  space: {key: "O(1)"}
+  source:
+    page: docs/stdlib/ordereddict.md
+    row: "| `OrderedDict.move_to_end(key, last=True)` | O(1) amortized | O(1) |"
+
+- id: sorted-with-key
+  stratum: tail
+  operation: "`sorted(lst, key=f)`, where `lst` is a list in random order and each call of `f` costs O(k) and returns a key of constant size"
+  variables: "n = len(lst); k = the cost of one call to `f`"
+  case: worst
+  time: {key: "O(n log n + n·k)", accept: ["O(n log n + n * k)", "O(n log n + nk)", "O(n·k + n log n)", "O(nk + n log n)", "O(n(log n + k))", "O(n * (log n + k))", "O(n·(log n + k))", "O(n(k + log n))", "O(n·(k + log n))"]}
+  space: {key: "O(n)"}
+  source: {page: docs/builtins/sorted.md, row: "| With key function | O(n log n + n*k) | O(n) |"}
+
+- id: sorted-presorted
+  stratum: tail
+  operation: "`sorted(lst)`, where `lst` is a list that is already in ascending order"
+  variables: "n = len(lst)"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(n)"}
+  source: {page: docs/builtins/sorted.md, row: "| Already sorted | O(n) | O(n) |"}
+
+- id: statistics-mode
+  stratum: tail
+  operation: "`statistics.mode(data)`, where `data` is a list of hashable values"
+  variables: "n = len(data); u = the number of distinct values"
+  case: average
+  time: {key: "O(n)"}
+  space: {key: "O(u)"}
+  source: {page: docs/stdlib/statistics.md, row: "| `statistics.mode(data)` | O(n) | O(u) |"}
+
+- id: max-with-key
+  stratum: tail
+  operation: >-
+    `max(lst, key=f)`, where `lst` is a non-empty list and each call of `f` costs O(k) and
+    returns a key of constant size
+  variables: "n = len(lst); k = the cost of one call to `f`"
+  case: worst
+  time: {key: "O(n·k)", accept: ["O(n * k)", "O(nk)", "O(k·n)", "O(kn)"]}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/max.md, row: "| `max(iterable, key=func)` | O(n·k) | O(1) |"}
+- id: reduce-concat-str
+  stratum: tail
+  operation: >-
+    `functools.reduce(operator.add, strs)`, where `strs` is a list of n one-character
+    strs
+  variables: "n = len(strs)"
+  case: worst
+  time: {key: "O(n²)", accept: ["O(n^2)"]}
+  space: {key: "O(n)"}
+  source:
+    page: docs/stdlib/functools.md
+    row: "| `functools.reduce(function, iterable[, initial])` | O(n·f) | O(1) auxiliary, plus the accumulator |"
+
+- id: sum-of-lists
+  stratum: tail
+  operation: "`sum(lists, [])`, where `lists` is a list of n lists"
+  variables: "n = len(lists); N = the total number of elements across them"
+  case: worst
+  time: {key: "O(n·N)", accept: ["O(n * N)", "O(nN)", "O(N·n)", "O(Nn)", "O(n·N + n)", "O(nN + n)", "O(n(N + 1))", "O(n·(N + 1))"]}
+  space: {key: "O(N)", accept: ["O(N + 1)"]}
+  source:
+    page: docs/builtins/sum.md
+    row: "| `list` or `tuple` items with a matching `start` | O(n·N) | O(N) |"
+
+- id: range-contains-int
+  stratum: tail
+  operation: "`x in range(n)`, where `x` is an exact `int`"
+  variables: "n = the range's length"
+  case: worst
+  time: {key: "O(1)"}
+  space: {key: "O(1)"}
+  source: {page: docs/builtins/range.md, row: "| `x in r` | O(1) | O(1) |"}
+
+- id: range-contains-float
+  stratum: tail
+  operation: "`x in range(n)`, where `x` is a float"
+  variables: "n = the range's length"
+  case: worst
+  time: {key: "O(n)"}
+  space: {key: "O(1)"}
+  source:
+    page: docs/builtins/range.md
+    row: "For an exact `int` or a `bool`; any other type, an `int` subclass included, is searched in O(n)"
+
+- id: dict-merge-operator
+  stratum: tail
+  operation: "`d | other`, where `d` and `other` are dicts"
+  variables: "n = len(d); m = len(other)"
+  case: average
+  time: {key: "O(n + m)", accept: ["O(m + n)"]}
+  space: {key: "O(n + m)", accept: ["O(m + n)"]}
+  source: {page: docs/builtins/dict.md, row: '| `d \| other` | O(n + m) | O(n + m) |'}
+
+- id: chainmap-getitem
+  stratum: tail
+  operation: >-
+    `cm[key]`, where `cm` is a `collections.ChainMap` of dicts and the first map holding
+    `key` is at position i in `cm.maps`
+  variables: "n = the number of maps; i = the position of the first map holding `key`"
+  case: worst
+  time: {key: "O(i)", accept: ["O(i + 1)", "O(1 + i)"]}
+  space: {key: "O(1)"}
+  source: {page: docs/stdlib/collections.md, row: "| `cm[key]` | O(i) | O(1) |"}
+
+- id: chainmap-to-dict
+  stratum: tail
+  operation: "`dict(cm)`, where `cm` is a `collections.ChainMap` whose maps are dicts"
+  variables: "n = the number of maps; N = the total number of entries across all maps"
+  case: worst
+  time: {key: "O(n + N·n)", accept: ["O(N·n)", "O(n·N)", "O(nN)", "O(Nn)", "O(n * N)", "O(N * n)", "O(n + n·N)"]}
+  space: {key: "O(N)"}
+  source:
+    page: docs/stdlib/collections.md
+    row: "| Iterating `cm.items()` or `cm.values()`, `dict(cm)` | O(n + N·n) | O(N) |"
+
+- id: counter-from-list
+  stratum: tail
+  operation: "`collections.Counter(lst)`, where `lst` is a list of hashable items"
+  variables: "t = len(lst); u = the number of distinct items"
+  case: average
+  time: {key: "O(t)"}
+  space: {key: "O(u)"}
+  source: {page: docs/stdlib/counter.md, row: "| `Counter(iterable=None, /, **kwds)` | O(t + m) | O(n) |"}
+
+- id: deque-rotate
+  stratum: tail
+  operation: "`dq.rotate(s)`, where `dq` is a `collections.deque` and 0 < s < len(dq)"
+  variables: "n = len(dq); s = the rotation"
+  case: worst
+  time: {key: "O(min(s, n - s))"}
+  space: {key: "O(1)"}
+  source: {page: docs/stdlib/deque.md, row: "| `d.rotate(steps)` | O(k) | O(1) |"}
+
+- id: copy-copy-tuple
+  stratum: tail
+  operation: "`copy.copy(t)`, where `t` is a tuple"
+  variables: "n = len(t)"
+  case: worst
+  time: {key: "O(1)"}
+  space: {key: "O(1)"}
+  source: {page: docs/stdlib/copy.md, row: "| `copy.copy(x)`, immutable | O(1) | O(1) |"}
