@@ -92,6 +92,8 @@ Skills support should load the matching skill before starting this work:
   auditing claim coverage, or creating module complexity tests.
 - `updating-python-support` - Use when dropping an EOL Python version, adding a
   newly released Python version, or changing the supported Python range.
+- `evaluating-skill-recall` - Use when adding or changing the skill evaluation's
+  items, rerunning it, or adjudicating its results.
 
 `.agents/skills/` is the canonical source. Claude Code compatibility symlinks
 live in `.claude/skills/`; edit the canonical skill rather than the symlink.

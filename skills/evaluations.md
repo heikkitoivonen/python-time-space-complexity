@@ -126,8 +126,9 @@ from `runs.jsonl` against the current answer keys, extracting each bound from th
 stored reply again. A corrected key re-scores an earlier run's exact matches; a judge verdict given under different criteria is
 discarded rather than re-run, and `summary.md` names the items affected.
 
-Compare runs only when their question and criteria digests, judge, model IDs and
-skill digest agree. The
+Two runs are comparable when their question and criteria digests, judge, model IDs
+and skill digest all agree except the one being compared: the model IDs when
+comparing models, the skill digest when comparing skill releases. The
 evaluation measures recall of single operations; it does not measure analysis of
 whole programs, which the prompts above cover.
 
