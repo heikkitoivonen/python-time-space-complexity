@@ -72,7 +72,7 @@ dev = [
 # Resolve against releases that have been on the index for at least this long,
 # rather than whatever was published today. Recorded in uv.lock as
 # `exclude-newer-span`; a bare date or timestamp is also accepted here.
-exclude-newer = "15 days"
+exclude-newer = "2 days"
 
 [tool.ruff]
 target-version = "py311"
