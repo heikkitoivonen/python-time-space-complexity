@@ -606,7 +606,9 @@ class TestUsingAnEnvironmentWithoutActivating:
         ).stdout.splitlines()
 
         assert os.path.realpath(output[0]) == os.path.realpath(env)
-        assert output[1] == sys.base_prefix
+        # uv reaches a patch install through a per-minor link (a junction on
+        # Windows), which only one of the two interpreters may have resolved.
+        assert os.path.realpath(output[1]) == os.path.realpath(sys.base_prefix)
 
     @POSIX_ONLY
     def test_the_activate_script_sets_path_for_this_environment(

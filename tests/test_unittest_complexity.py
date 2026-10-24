@@ -31,8 +31,9 @@ Measurement scope:
   timing test beside it takes the same 4x step on *equal* inputs, which is where
   the paths diverge most, because the counting path returns early and the
   fallback does not. A third case makes every element the same value, which the
-  fallback marks off as it goes, so its cost stays near linear - without it the
-  quadratic row would read as a claim about length. Which path a mixed sequence
+  fallback marks off as it goes: it compares exactly 2n times, one pass over
+  each list, at 500 and 2,000 elements - without it the quadratic row would
+  read as a claim about length. Which path a mixed sequence
   took is settled by counting too: an element that is hashable and counts its
   own comparisons is never compared while every element hashes, and is compared
   once one element beside it cannot.
@@ -365,6 +366,22 @@ class TestShortCircuitsAreNotUniform:
             unittest.TestCase().assertNotAlmostEqual(value, value)
 
 
+class UnhashableCounted:
+    """An element that counts its equality comparisons and has no hash, so a
+    container of these takes `assertCountEqual`'s pairwise fallback."""
+
+    comparisons = 0
+
+    def __init__(self, value: int) -> None:
+        self.value = value
+
+    def __eq__(self, other: object) -> bool:
+        type(self).comparisons += 1
+        return isinstance(other, UnhashableCounted) and other.value == self.value
+
+    __hash__ = None  # type: ignore[assignment]
+
+
 class TestCountEqualNeedsHashableElements:
     """The counting path is linear; the fallback scans pairwise even when equal.
 
@@ -392,39 +409,26 @@ class TestCountEqualNeedsHashableElements:
 
         assert dear > cheap * 20, f"hashable {cheap:.6f}s, unhashable {dear:.6f}s"
 
-    def test_the_fallback_is_linear_when_every_element_is_the_same_value(self) -> None:
+    @pytest.mark.parametrize("size", [500, 2_000])
+    def test_the_fallback_is_linear_when_every_element_is_the_same_value(self, size: int) -> None:
         # The pairwise scan marks a value's duplicates as it goes, so its cost
         # follows the distinct values rather than the length. Without this the
         # quadratic row would read as a claim about n.
-        case = unittest.TestCase()
+        UnhashableCounted.comparisons = 0
+        same = [UnhashableCounted(0)] * size
 
-        def cost(size: int) -> float:
-            same = [[0]] * size
-            return timed(lambda: case.assertCountEqual(same, list(same)))
+        unittest.TestCase().assertCountEqual(same, list(same))
 
-        assert cost(2000) < cost(500) * 8, "one repeated value did not stay near linear"
+        assert UnhashableCounted.comparisons == 2 * size, "one pass over each list"
 
     def test_the_fallback_makes_quadratically_many_comparisons(self) -> None:
         """Counting separates the two paths with no clock and no tolerance."""
 
-        class Counted:
-            comparisons = 0
-
-            def __init__(self, value: int) -> None:
-                self.value = value
-
-            def __eq__(self, other: object) -> bool:
-                type(self).comparisons += 1
-                return isinstance(other, Counted) and other.value == self.value
-
-            # No __hash__, so a container of these takes the fallback.
-            __hash__ = None  # type: ignore[assignment]
-
         def comparisons(size: int) -> int:
-            Counted.comparisons = 0
-            items = [Counted(index) for index in range(size)]
+            UnhashableCounted.comparisons = 0
+            items = [UnhashableCounted(index) for index in range(size)]
             unittest.TestCase().assertCountEqual(items, list(items))
-            return Counted.comparisons
+            return UnhashableCounted.comparisons
 
         small, large = comparisons(40), comparisons(160)
 

@@ -138,7 +138,7 @@ with tempfile.TemporaryDirectory() as tmp:
         capture_output=True, text=True, check=True,
     ).stdout.splitlines()
     assert os.path.realpath(output[0]) == os.path.realpath(env)
-    assert output[1] == sys.base_prefix
+    assert os.path.realpath(output[1]) == os.path.realpath(sys.base_prefix)
 ```
 
 ## Recreating an Environment
