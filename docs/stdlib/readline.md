@@ -125,8 +125,8 @@ after writing. With a limit set, `append_history_file()` costs O(F) like the ful
 !!! warning "Truncated files on libedit"
     Before CPython 3.14.8, and in CPython 3.15.0, some libedit versions drop the file's header
     line when truncating to the length limit, and `read_history_file()` then raises `OSError` for
-    that file. CPython 3.14.8 and later 3.14 releases preserve the header; macOS's libedit also keeps it readable on older Python
-    versions. When supporting affected builds, cap the history yourself before writing rather
+    that file. CPython 3.14.8 and later 3.14 releases, and 3.15.1 and later, preserve the header;
+    macOS's libedit also keeps it readable on older Python versions. When supporting affected builds, cap the history yourself before writing rather
     than relying on `set_history_length()`.
 
 ```python

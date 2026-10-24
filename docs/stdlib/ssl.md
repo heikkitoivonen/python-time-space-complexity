@@ -70,7 +70,7 @@ below are the methods TLS changes.
 | `SSLSocket.get_verified_chain()`, `SSLSocket.get_unverified_chain()` | O(c·k) | O(c·k) | Python 3.13+; re-encodes every certificate in the chain to DER on each call |
 | `SSLSocket.cipher()`, `SSLSocket.version()`, `SSLSocket.compression()`, `SSLSocket.selected_alpn_protocol()` | O(1) | O(1) | Read from the negotiated connection; `None` before the handshake |
 | `SSLSocket.selected_npn_protocol()` | O(1) | O(1) | Returns `None` on every supported version; deprecated since 3.10 |
-| `SSLSocket.group()`, `SSLSocket.client_sigalg()`, `SSLSocket.server_sigalg()` | O(1) | O(1) | Python 3.15+. The negotiated key-agreement group and signature algorithms, `None` where none was used. `group()` needs OpenSSL 3.2+ and the other two 3.5+, raising `NotImplementedError` otherwise. Call `group()` only after the handshake: on 3.15.0 it crashes the interpreter on a connection that has not finished one |
+| `SSLSocket.group()`, `SSLSocket.client_sigalg()`, `SSLSocket.server_sigalg()` | O(1) | O(1) | Python 3.15+. The negotiated key-agreement group and signature algorithms, `None` where none was used. `group()` needs OpenSSL 3.2+ and the other two 3.5+, raising `NotImplementedError` otherwise. On a connection that has not finished its handshake, `group()` returns `None` from 3.15.1 and crashes the interpreter on 3.15.0 |
 | `SSLSocket.shared_ciphers()` | O(q²) | O(q) | Server side only: the ciphers both ends have in common, found by scanning one list for each entry of the other. `None` on a client socket |
 | `SSLSocket.get_channel_binding(cb_type='tls-unique')` | O(1) | O(1) | A fixed-size value; `None` before the handshake, `ValueError` for an unknown type |
 | `SSLSocket.verify_client_post_handshake()` | O(1) | O(1) | Only flags the request. The certificate exchange happens on the next write, and the verification cost lands there |
@@ -96,7 +96,7 @@ has no socket methods at all, so there is no `recv`, `sendall` or `sendfile`.
 | `SSLObject.do_handshake()` | O(c·k) | O(c·k) | As on a socket, and raises `SSLWantReadError` each time it needs bytes the incoming BIO does not have yet |
 | `SSLObject.unwrap()` | O(1) | O(1) | Writes `close_notify`; raises `SSLWantReadError` until the peer's arrives |
 | `SSLObject.pending()`, `SSLObject.cipher()`, `SSLObject.version()`, `SSLObject.compression()`, `SSLObject.selected_alpn_protocol()`, `SSLObject.selected_npn_protocol()`, `SSLObject.get_channel_binding(cb_type='tls-unique')`, `SSLObject.verify_client_post_handshake()` | O(1) | O(1) | As on `SSLSocket` |
-| `SSLObject.group()`, `SSLObject.client_sigalg()`, `SSLObject.server_sigalg()` | O(1) | O(1) | Python 3.15+; as on `SSLSocket`, including the crash from `group()` before the handshake |
+| `SSLObject.group()`, `SSLObject.client_sigalg()`, `SSLObject.server_sigalg()` | O(1) | O(1) | Python 3.15+; as on `SSLSocket`, including `group()` before the handshake |
 | `SSLObject.getpeercert(binary_form=False)` | O(k) | O(k) | A fresh dictionary or DER copy per call |
 | `SSLObject.get_verified_chain()`, `SSLObject.get_unverified_chain()` | O(c·k) | O(c·k) | Python 3.13+ |
 | `SSLObject.shared_ciphers()` | O(q²) | O(q) | Server side only |

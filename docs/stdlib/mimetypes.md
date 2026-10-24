@@ -32,7 +32,7 @@ shows the O(e) scan behind it.
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `mimetypes.inited` | O(1) | O(1) | `True` once `init()` has run |
-| `mimetypes.knownfiles` | O(1) | O(1) | The `mime.types` paths `init()` tries; a missing one is skipped |
+| `mimetypes.knownfiles` | O(1) | O(1) | The `mime.types` paths `init()` tries; a missing one is skipped. Empty on Windows from 3.14.9 and 3.15.1, where `init()` reads the registry and no `mime.types` file unless given `files` |
 | `mimetypes.types_map`, `mimetypes.common_types` | O(1) | O(1) | Extension to type, strict and non-standard; after `init()`, the module database's own dicts, so an edit changes later guesses |
 | `mimetypes.encodings_map`, `mimetypes.suffix_map` | O(1) | O(1) | Extension to encoding (`.gz` to `gzip`), and extension to extensions (`.tgz` to `.tar.gz`); the same live dicts after `init()` |
 
@@ -222,6 +222,8 @@ assert content_headers('noextension') == {'Content-Type': 'application/octet-str
   the name the extension is taken from and can change the result
 - **Python 3.13+**: Added `guess_file_type()`; passing a path to `guess_type()` is soft deprecated
 - **Python 3.14+**: `add_type()` with an extension not starting with `.` emits `DeprecationWarning`
+- **Python 3.14.9+ and 3.15.1+**: `knownfiles` is empty on Windows, so `init()` reads no
+  `mime.types` file there unless given `files`
 - **All Python 3**: The module functions include the system's `mime.types` files, so their answers
   vary by machine; a `MimeTypes` instance does not read them
 

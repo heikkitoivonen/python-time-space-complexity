@@ -36,7 +36,12 @@ Measurement scope:
   under all three.
   ``get_all_start_methods()`` is a new list each call, an unknown method
   raises ValueError, and a second ``set_start_method()`` raises RuntimeError
-  unless forced.
+  unless forced. In a fresh interpreter the first ``get_start_method()``
+  creates a temporary file, seen by an audit hook, on 3.14.9+ and 3.15.1+
+  outside macOS and Windows, and touches no file before them or on those two.
+  That the default falls back to ``spawn`` when no temporary file can be
+  created is read from Lib/multiprocessing/context.py and util.py; no test
+  makes every candidate temporary directory unwritable.
 * ``Pool``: ``Pool(2)`` adds two children and ``close()`` + ``join()``
   removes them, a default ``Pool()`` adds the CPU count. ``map()`` returns
   results in order and exhausts a generator; ``map_async()`` has exhausted
@@ -2254,6 +2259,33 @@ class TestModuleFunctionRows:
         assert multiprocessing.get_context() is multiprocessing.get_context()
         with pytest.raises(ValueError):
             multiprocessing.get_context("nonsense")
+
+    def test_whether_the_first_default_lookup_probes_the_temporary_directory(self) -> None:
+        source = """
+            import multiprocessing
+            import sys
+
+            made = []
+            sys.addaudithook(lambda event, args: made.append(event == "tempfile.mkstemp"))
+            multiprocessing.get_start_method()
+            print(any(made))
+            """
+
+        result = subprocess.run(
+            [sys.executable, "-c", textwrap.dedent(source)],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+
+        # gh-155717: forkserver, the default outside macOS and Windows, needs a
+        # writable temporary directory, and from these releases the default checks.
+        probes = sys.platform not in ("darwin", "win32") and (
+            sys.version_info >= (3, 15, 1) or (3, 14, 9) <= sys.version_info < (3, 15)
+        )
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.split() == [str(probes)]
 
     def test_set_start_method_refuses_a_second_call_unless_forced(self) -> None:
         source = """

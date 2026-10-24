@@ -91,9 +91,15 @@ Not settled here:
   guarded on `sys.platform == "win32"` and skip on every run this project
   performs. `OleDLL`, `oledll`, `HRESULT`, `GetLastError`,
   `get_last_error`, `COMError`, `CopyComPointer`, `DllCanUnloadNow`,
-  `DllGetClassObject`, `util.find_msvcrt` and `ctypes.wintypes` are priced
-  from the official documentation and Lib/ctypes/__init__.py. None of these
-  rows is verified here.
+  `DllGetClassObject` and `util.find_msvcrt` are priced from the official
+  documentation and Lib/ctypes/__init__.py. None of these rows is verified
+  here.
+* `ctypes.wintypes` imports on every platform, so its rows run everywhere:
+  each structure is a `Structure` subclass whose instance is zero-filled and
+  `sizeof()` its type, each `LP`/`P` name is the cached `POINTER()` of its
+  `_type_`, `VARIANT_BOOL` is a two-byte simple type distinct from `c_short`,
+  and `RGB(1, 2, 3)` is `0x030201`. The field widths are the platform's, so
+  sizes are not asserted.
 * `ctypes.macholib` is the macOS library-search helper behind
   `find_library()` there, not a documented API, and `ctypes.util.test` is a
   self-test; neither is priced.
@@ -106,6 +112,7 @@ from __future__ import annotations
 
 import ctypes
 import ctypes.util
+import ctypes.wintypes
 import gc
 import os
 import pathlib
@@ -921,6 +928,69 @@ class TestWindowsOnly:
         assert ctypes.set_last_error(0) == 5  # type: ignore[attr-defined]
         assert isinstance(ctypes.WinError(5), OSError)  # type: ignore[attr-defined]
         assert ctypes.FormatError(5)  # type: ignore[attr-defined]
+
+
+WINTYPES_STRUCTURES = [
+    "FILETIME",
+    "MSG",
+    "POINT",
+    "RECT",
+    "SIZE",
+    "SMALL_RECT",
+    "WIN32_FIND_DATAA",
+    "WIN32_FIND_DATAW",
+]
+WINTYPES_POINTERS = [
+    "LPBOOL",
+    "LPBYTE",
+    "LPCOLORREF",
+    "LPFILETIME",
+    "LPHANDLE",
+    "LPINT",
+    "LPMSG",
+    "LPPOINT",
+    "LPRECT",
+    "LPSIZE",
+    "LPUINT",
+    "LPWIN32_FIND_DATAA",
+    "LPWIN32_FIND_DATAW",
+    "LPWORD",
+    "PCHAR",
+    "PFLOAT",
+    "PSHORT",
+    "PSMALL_RECT",
+    "PWCHAR",
+]
+
+
+class TestWintypes:
+    """The `wintypes` rows: fixed structures, cached pointer types, one simple
+    type of its own and an O(1) packing function."""
+
+    @pytest.mark.parametrize("name", WINTYPES_STRUCTURES)
+    def test_structures_are_fixed_and_zero_filled(self, name: str) -> None:
+        kind = getattr(ctypes.wintypes, name)
+        instance = kind()
+
+        assert issubclass(kind, ctypes.Structure)
+        assert ctypes.sizeof(instance) == ctypes.sizeof(kind) > 0
+        assert bytes(instance) == b"\x00" * ctypes.sizeof(kind)
+
+    @pytest.mark.parametrize("name", WINTYPES_POINTERS)
+    def test_pointer_names_are_the_cached_pointer_types(self, name: str) -> None:
+        kind = getattr(ctypes.wintypes, name)
+
+        assert kind is ctypes.POINTER(kind._type_)
+
+    def test_variant_bool_is_its_own_two_byte_type(self) -> None:
+        variant_bool = ctypes.wintypes.VARIANT_BOOL
+
+        assert variant_bool is not ctypes.c_short
+        assert ctypes.sizeof(variant_bool) == 2
+        assert variant_bool(True).value is True
+
+    def test_rgb_packs_three_bytes(self) -> None:
+        assert ctypes.wintypes.RGB(1, 2, 3) == 0x030201
 
 
 def _blocks() -> list[tuple[int, str]]:

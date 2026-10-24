@@ -21,11 +21,11 @@ member at O(b); running a module's body is the module's own cost and is not pric
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
 | `zipimport.zipimporter(archivepath)` | O(n) | O(n) | The first importer for an archive reads its central directory, not its member data; later ones reuse the cached directory, O(1). A subpath such as `app.zip/lib` sets `prefix` |
-| `zipimporter.find_spec(fullname, target=None)` | O(b) | O(b) | A miss is O(1): a few name lookups. A module or package it holds is read and decoded to learn its file name |
+| `zipimporter.find_spec(fullname, target=None)` | O(b) | O(b) | A miss is O(1): a few name lookups. A module or package it holds is read and decoded to learn its file name, as `get_filename()` does; from 3.15.1 a module with no `.pyc` beside its `.py` member is found by name alone, O(1) |
 | `zipimporter.create_module(spec)` | O(1) | O(1) | Returns `None`, asking for the default module object |
-| `zipimporter.exec_module(module)` | O(b) | O(b) | Reads and decodes the member again through `get_code()`, then runs the module body |
+| `zipimporter.exec_module(module)` | O(b) | O(b) | Reads and decodes the member through `get_code()`, then runs the module body |
 | `zipimporter.get_code(fullname)` | O(b) | O(b) | Tries `__init__.pyc`, `__init__.py`, `.pyc` and `.py` in that order; a `.py` member it falls back to is compiled on every call |
-| `zipimporter.get_filename(fullname)` | O(b) | O(b) | Reads and decodes the member exactly as `get_code()` does, to report which member it would use |
+| `zipimporter.get_filename(fullname)` | O(b) | O(b) | Reads and decodes the member exactly as `get_code()` does, to report which member it would use. From 3.15.1 it reads only a `.pyc` member, and reports a `.py` one without reading it, O(1) |
 | `zipimporter.get_source(fullname)` | O(b) | O(b) | Reads the `.py` member; `None` when the archive holds only bytecode for the module |
 | `zipimporter.get_data(pathname)` | O(b) | O(b) | Opens the archive and reads the member on every call; `OSError` if there is no such member |
 | `zipimporter.is_package(fullname)` | O(1) | O(1) | Name lookups only; raises `ZipImportError` if the module is not in the archive |
@@ -44,8 +44,9 @@ member at O(b); running a module's body is the module's own cost and is not pric
 
 The first import through an archive path builds its `zipimporter`, O(n), and the import system
 keeps it in `sys.path_importer_cache`. Each module imported after that costs `find_spec()` plus
-`exec_module()`, which read and decode the member twice. An import that the archive cannot satisfy
-still asks it, but a miss is a few name lookups.
+`exec_module()`, which read and decode the member twice; from 3.15.1 a `.py` member is read and
+compiled once, by `exec_module()`. An import that the archive cannot satisfy still asks it, but a
+miss is a few name lookups.
 
 ```python
 import os
@@ -61,7 +62,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     sys.path.insert(0, archive)  # nothing is read yet
     try:
-        import greeting  # O(n) once for the directory, then O(b) twice for the member
+        import greeting  # O(n) once for the directory, then O(b) for the member
 
         assert greeting.MESSAGE == 'hello'
         assert greeting.__file__ == os.path.join(archive, 'greeting.py')
@@ -77,7 +78,8 @@ with tempfile.TemporaryDirectory() as tmp:
 ### Lookups vs Reads
 
 `is_package()` and a `find_spec()` that misses look names up in the cached directory. Every call
-that returns member contents, or the name of the member it would load, reads that member from disk.
+that returns member contents, or the name of the member it would load, reads that member from disk,
+except that from 3.15.1 the name of a `.py` member is a lookup too.
 
 ```python
 import os
@@ -99,7 +101,7 @@ with tempfile.TemporaryDirectory() as tmp:
     assert importer.is_package('pkg') is True  # O(1)
     assert importer.find_spec('missing') is None  # O(1)
 
-    spec = importer.find_spec('pkg')  # O(b) - reads the member for its file name
+    spec = importer.find_spec('pkg')  # O(b), reading the member; O(1) from 3.15.1
     assert spec.submodule_search_locations == [os.path.join(archive, 'lib', 'pkg')]
 
     assert importer.get_source('pkg') == ''  # O(b)
@@ -117,8 +119,9 @@ with tempfile.TemporaryDirectory() as tmp:
 
 `zipimport` looks for a `.pyc` next to each `.py`, not in `__pycache__`, and never writes one
 into the archive. With bytecode there that still matches the source, an import unmarshals it;
-without it, an import compiles the source, once in `find_spec()` and again in `exec_module()`. `compileall` writes the layout it
-looks for with `legacy=True`, and `get_filename()` reports which member it chose.
+without it, an import compiles the source in `exec_module()`, and before 3.15.1 in `find_spec()`
+as well. `compileall` writes the layout it looks for with `legacy=True`, and `get_filename()`
+reports which member it chose.
 
 ```python
 import compileall
@@ -142,8 +145,9 @@ with tempfile.TemporaryDirectory() as tmp:
     with zipfile.ZipFile(source_only, 'w') as zf:
         zf.write(source, 'fast.py')
 
-    # O(b) either way; only the member it decodes differs
+    # O(b) to decode fast.pyc
     assert zipimport.zipimporter(with_bytecode).get_filename('fast').endswith('fast.pyc')
+    # O(b) to decode fast.py; O(1) from 3.15.1, which only finds it
     assert zipimport.zipimporter(source_only).get_filename('fast').endswith('fast.py')
 ```
 
@@ -170,7 +174,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     assert importer.find_spec('second') is None  # the cached directory is unchanged
     importer.invalidate_caches()  # O(1); O(n) on Python 3.11 and 3.12
-    assert importer.find_spec('second') is not None  # O(n) to reread on 3.13+, then O(b)
+    assert importer.find_spec('second') is not None  # O(n) to reread on 3.13+, O(b) before 3.15.1
 ```
 
 ## Performance Best Practices
@@ -178,14 +182,15 @@ with tempfile.TemporaryDirectory() as tmp:
 ✅ **Do**:
 
 - Pack a `.pyc` beside each `.py` (`compileall` with `legacy=True`), so an import unmarshals
-  bytecode instead of compiling the source twice
+  bytecode instead of compiling the source, twice before 3.15.1
 - Call `invalidate_caches()`, or `importlib.invalidate_caches()` for importers on `sys.path`,
   after changing an archive in place
 
 ❌ **Avoid**:
 
 - Calling `get_filename()`, or `find_spec()` for a module the archive holds, as a cheap check -
-  both decode the member; `is_package()` is the lookup-only question
+  both decode a `.pyc` member, and a `.py` one before 3.15.1; `is_package()` is the lookup-only
+  question
 - Packing bytecode only under `__pycache__` - `zipimport` does not look there, so every import
   compiles
 - Reading the same member repeatedly with `get_data()` - nothing caches it
@@ -201,6 +206,8 @@ with tempfile.TemporaryDirectory() as tmp:
 - **Python 3.14+**: A directory that has no entry of its own in the archive is found as a
   namespace package
 - **Python 3.15+**: `zipimporter.load_module()` was removed; use `exec_module()`
+- **Python 3.15.1+**: `get_filename()`, and so `find_spec()`, report a `.py` member without reading
+  or compiling it, so an import from source compiles it once rather than twice
 
 ## Related Modules
 

@@ -6,8 +6,8 @@ is asked for, keeps every line in a module-level cache, and answers later calls 
 without touching the file again.
 
 `n` is the characters in one source file, `f` is the files in the cache, `t` is the lines held
-across all of them, and `p` is the entries on `sys.path`. Cache lookups by file name and each
-`os.stat()` call are priced at O(1). Source that comes from a module loader rather than a file
+across all of them, `p` is the entries on `sys.path`, and `d` is the directories in a file name's
+path. Cache lookups by file name and each `os.stat()` call are priced at O(1). Source that comes from a module loader rather than a file
 also costs whatever the loader's `get_source()` costs, which is not priced here.
 
 ## Complexity Reference
@@ -16,9 +16,9 @@ also costs whatever the loader's `get_source()` costs, which is not priced here.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `linecache.getline(filename, lineno, module_globals=None)`, first call for a file | O(p + n) | O(n) | Reads and keeps the whole file, whichever line is asked for; `p` applies only to a relative name not found as given, which is then searched for along `sys.path` |
+| `linecache.getline(filename, lineno, module_globals=None)`, first call for a file | O(p + d + n) | O(n) | Reads and keeps the whole file, whichever line is asked for; `p` applies only to a relative name not found as given, which is then searched for along `sys.path`, and `d` only to a name not found as given on 3.14.9+ and 3.15.1+, which first look for it in an archive |
 | `linecache.getline(...)` for a cached file | O(1) | O(1) | No I/O and no `os.stat()`: a file changed on disk keeps returning its old lines until `checkcache()` |
-| `linecache.getline(...)` for a file it cannot find | O(p) | O(1) | Returns `''`; a miss is not cached, so every call repeats the search. Names such as `'<string>'` return `''` in O(1) without one |
+| `linecache.getline(...)` for a file it cannot find | O(p + d) | O(1) | Returns `''`; a miss is not cached, so every call repeats the search. From 3.14.9 and 3.15.1 it first looks up each of the name's d parent directories in `sys.path_importer_cache`, for an archive holding the file; before, O(p). Names such as `'<string>'` return `''` in O(1) without one |
 | `linecache.lazycache(filename, module_globals)` | O(1) | O(1) | Records the module loader's `get_source`; nothing is fetched until the first `getline()` for that name |
 
 ### Cache management
@@ -177,7 +177,7 @@ assert context == [f'line {i}\n' for i in range(40, 45)]
 
 - `getline()` for one line of a large file you will not read again - it reads and keeps the whole
   file; iterate the file with `itertools.islice` instead
-- Calling `getline()` repeatedly for a name that does not resolve - each call repeats the O(p)
+- Calling `getline()` repeatedly for a name that does not resolve - each call repeats the O(p + d)
   search
 - Expecting `getline()` to see a file's edits without a `checkcache()` in between
 
@@ -185,6 +185,9 @@ assert context == [f'line {i}\n' for i in range(40, 45)]
 
 - **Python 3.14+**: `getline()` reads a `<frozen ...>` module's source through
   `module_globals['__file__']`; earlier versions return `''` for those names
+- **Python 3.14.9+ and 3.15.1+**: `getline()` reads a file inside an archive whose importer is in
+  `sys.path_importer_cache`, as it is once a module has been imported from the archive, without
+  `module_globals`; earlier versions return `''` for it
 
 ## Related Modules
 

@@ -66,7 +66,9 @@ Not settled here:
   object, no other loop. The
   timing tests vary list counts only; dicts, tuples and instances follow the
   same dispatch but are not timed. Treating hashing and memo lookups as O(1)
-  is a cost-model assumption.
+  is a cost-model assumption. On 3.15.0 alone, an object whose `__deepcopy__`
+  returns `None` is not found in the memo and is copied again at every
+  reference (gh-154594); that version and that return value are not tested.
 * The cost of a custom `__copy__`, `__deepcopy__`, `__replace__`, reduction,
   state hook or `copyreg` reducer is the type's and is outside every bound
   but `copy.replace()`'s, which is that cost by definition. A dataclass's `__replace__` passes
@@ -240,7 +242,8 @@ class TestImmutablesAreReturned:
 
 
 class CountingMemo(dict[int, Any]):
-    """A memo that counts the lookups deepcopy makes in it."""
+    """A memo that counts deepcopy's probes of it: `memo.get()`, or `key in
+    memo` from 3.15.1, which a hit follows with `memo[key]`."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -249,6 +252,10 @@ class CountingMemo(dict[int, Any]):
     def get(self, key: int, default: Any = None) -> Any:
         self.gets += 1
         return super().get(key, default)
+
+    def __contains__(self, key: object) -> bool:
+        self.gets += 1
+        return super().__contains__(key)
 
 
 class TestDeepCopyFollowsEachReferenceOnce:

@@ -140,7 +140,10 @@ Measurement scope:
   `exc_info`, and leaves `exc_text` on the record. `DatagramHandler`
   makes an unconnected datagram socket and sends one datagram per record.
 * `SysLogHandler` with a missing Unix socket path constructs without error
-  and has `createSocket()`; on Windows the same address
+  and has `createSocket()`; with `socket.getaddrinfo` patched to raise
+  `gaierror`, a host address raises from the constructor before 3.13.16,
+  3.14.9 and 3.15.1, and from those releases constructs with no socket and calls
+  `getaddrinfo` once more on each of two `emit()` calls; on Windows the same address
   raises `AttributeError` naming `AF_UNIX`;
   `encodePriority('user', 'info')` is 14; `mapPriority()` maps an unknown
   name to `warning`; `emit()` sends `<14>` + ident + message + NUL in one
@@ -2386,6 +2389,39 @@ class TestSysLogHandler:
     def test_on_windows_a_unix_socket_address_raises(self, tmp_path: pathlib.Path) -> None:
         with pytest.raises(AttributeError, match="AF_UNIX"):
             logging.handlers.SysLogHandler(address=str(tmp_path / "missing.sock"))
+
+    def test_an_unresolved_host_raises_on_older_patches_and_resolves_again_after(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        lookups: list[Any] = []
+
+        def unresolvable(*args: Any, **kwargs: Any) -> Any:
+            lookups.append(args[0])
+            raise socket.gaierror(socket.EAI_NONAME, "unresolvable")
+
+        monkeypatch.setattr(socket, "getaddrinfo", unresolvable)
+        address = ("syslog.invalid", 514)
+        # gh-82535: the constructor leaves the name to be resolved at emit().
+        if (
+            sys.version_info >= (3, 15, 1)
+            or (3, 14, 9) <= sys.version_info < (3, 15)
+            or (3, 13, 16) <= sys.version_info < (3, 14)
+        ):
+            handler = logging.handlers.SysLogHandler(address=address)
+            failed: list[logging.LogRecord] = []
+            handler.handleError = failed.append  # type: ignore[method-assign]
+            try:
+                assert handler.socket is None  # type: ignore[attr-defined]
+                handler.emit(make_record())
+                handler.emit(make_record())
+            finally:
+                handler.close()
+            assert lookups == ["syslog.invalid"] * 3
+            assert len(failed) == 2
+        else:
+            with pytest.raises(socket.gaierror):
+                logging.handlers.SysLogHandler(address=address)
+            assert lookups == ["syslog.invalid"]
 
     def test_priorities_are_lookups(self) -> None:
         # A UDP handler sends nothing until emit(), and works where AF_UNIX is missing.

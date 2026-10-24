@@ -44,6 +44,10 @@ Not settled here:
   are proportional to their input. A registered handler may return a
   replacement of any length, and a codec that rebuilds its result as it goes
   costs more than its output; both are caller-chosen and neither is measured.
+  From 3.15.1 an encoded `bytes` whose hash was computed is copied in even
+  when nothing else references it (gh-158219). The built-in codecs never
+  hash their result, which is why the row names them; a codec that does is
+  not measured.
 * Timings hold the element values fixed, all zeros or one repeated
   character. The iterable is timed as a list, whose size is known up front
   from 3.11; a generator, which grows the buffer as it goes, is exercised

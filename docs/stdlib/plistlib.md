@@ -31,7 +31,7 @@ treated as O(1).
 | `plistlib.dump(value, fp, fmt=FMT_BINARY)` | O(v) | O(m + s) | Tables every object before writing any, and hashes every scalar to store equal ones once; a `bytearray` is tabled by identity |
 | `plistlib.dumps(value, *, fmt=FMT_XML, skipkeys=False, sort_keys=True, aware_datetime=False)` | O(n) XML, O(v) binary | O(n) | `dump()` into a `BytesIO`; the whole plist is returned as one `bytes` |
 | `sort_keys=True` | O(d log d) per dictionary | O(d) per open dictionary | The default: each dictionary's items are sorted before it is written. `sort_keys=False` writes insertion order and skips the sort |
-| `skipkeys=True` | O(1) per skipped key | Unchanged | A key that is not a `str` is skipped instead of raising `TypeError`; some versions, 3.15.0 among them, require `sort_keys=False` for mixed key types (see Version Notes) |
+| `skipkeys=True` | O(1) per skipped key | Unchanged | A key that is not a `str` is skipped instead of raising `TypeError`; versions before 3.13.16, 3.14.8 and 3.15.1 require `sort_keys=False` for mixed key types (see Version Notes) |
 | `aware_datetime=True` | O(1) per date | O(1) | Python 3.13+: dates are read as UTC-aware `datetime`s, and aware ones are converted to UTC when written |
 
 ### UID
@@ -304,9 +304,9 @@ with tempfile.TemporaryDirectory() as directory:
 
 ## Version Notes
 
-- **Python 3.13.16+ on the 3.13 line, and 3.14.8+ on the 3.14 line**: `skipkeys=True` skips
-  non-string keys before sorting. Earlier versions, and 3.15.0, can raise `TypeError` when
-  sorting mixed key types; pass `sort_keys=False` for compatibility
+- **Python 3.13.16+, 3.14.8+ and 3.15.1+**: `skipkeys=True` skips non-string keys before
+  sorting. Earlier versions can raise `TypeError` when sorting mixed key types; pass
+  `sort_keys=False` for compatibility
 - **Python 3.13+**: `loads()` accepts a `str` holding XML; `load()`, `loads()`, `dump()` and
   `dumps()` take `aware_datetime`
 - **All Python 3**: `tuple` and `bytearray` are written as arrays and data, and read back as `list`

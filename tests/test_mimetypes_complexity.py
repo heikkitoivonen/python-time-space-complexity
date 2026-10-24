@@ -52,6 +52,8 @@ Measurement scope:
   once per line and once more at the end. Comments and blank lines add
   nothing.
 * On Linux, `read_windows_registry()` adds nothing to either table.
+* `knownfiles` holds `/etc/mime.types`, except on Windows from 3.14.9 and
+  3.15.1, where it is empty.
 * `guess_type()` is asserted to ignore a URL's query string and fragment.
   The 3.13+ `guess_file_type()` is guarded on `sys.version_info`.
 * Every fenced Python block runs in its own subprocess, and a mutated
@@ -620,7 +622,14 @@ class TestTheModuleDatabase:
 
     def test_the_module_data_names(self) -> None:
         assert isinstance(mimetypes.knownfiles, list)
-        assert "/etc/mime.types" in mimetypes.knownfiles
+        # gh-159428: the default paths would resolve to the current drive's root on Windows.
+        registry_only = sys.platform == "win32" and (
+            sys.version_info >= (3, 15, 1) or (3, 14, 9) <= sys.version_info < (3, 15)
+        )
+        if registry_only:
+            assert mimetypes.knownfiles == []
+        else:
+            assert "/etc/mime.types" in mimetypes.knownfiles
         mimetypes.init()
         assert mimetypes.inited is True
         assert mimetypes.suffix_map[".tgz"] == ".tar.gz"

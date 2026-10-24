@@ -33,8 +33,8 @@ Measurement scope:
   line, and without one the source's shebang is gone from the copy.
 * The executable bit is asserted on both target spellings. A `str` target gets
   it on both build paths; a `pathlib.Path` target gets it from a directory
-  build and not from a copy. Windows has no executable bit, so those tests are
-  guarded on `sys.platform`.
+  build, and from a copy only on 3.14.9+ and 3.15.1+. Windows has no
+  executable bit, so those tests are guarded on `sys.platform`.
 * Whether a refused build opens the target is settled by the target's absence
   afterwards, for each of the four `ZipAppError` paths that exist on every
   version and the fifth that 3.13.3 adds.
@@ -45,9 +45,10 @@ Measurement scope:
   3.13.3 sorts before opening it and checks for an existing target.
 * The compile at every start is a subprocess per archive that replaces
   `builtins.compile` before importing the package. Each `.py` member imported
-  compiles twice, on every supported version: `zipimporter.get_filename()`
-  compiles the member to learn its path while the spec is being built, and
-  `get_code()` compiles it again to execute it. The same tree packed after
+  compiles twice before 3.15.1: `zipimporter.get_filename()` compiles the
+  member to learn its path while the spec is being built, and `get_code()`
+  compiles it again to execute it. From 3.15.1 `get_filename()` finds it by
+  name, and it compiles once. The same tree packed after
   `compileall.compile_dir(legacy=True)` with timestamp invalidation compiles
   nothing; editing one source after compiling makes that one member compile
   again and the other not; and the same bytecode packed under `__pycache__`
@@ -55,8 +56,8 @@ Measurement scope:
   application is a second driver over `runpy.run_path()`: with bytecode
   beside the sources the only member compiled is the `__main__.py` that
   `main=` generates. The inflation row is a patched `zlib.decompress` in the
-  same subprocess shape: a deflated member is inflated once per compile, so
-  twice, and a stored one never.
+  same subprocess shape: a deflated member is inflated once per compile, and
+  a stored one never.
 * The `python -m zipapp` row runs the page's shell block command by command
   in a subprocess, with `python` replaced by the running interpreter, against
   the same tree the Python blocks build. The three refusals are run the same
@@ -431,7 +432,7 @@ class TestCopyingAnArchive:
         assert target.getvalue() == b"#!/new\nPKpayload"
 
     @NEEDS_EXEC_BIT
-    def test_only_a_str_target_gets_the_executable_bit(self, tmp_path: pathlib.Path) -> None:
+    def test_which_copy_targets_get_the_executable_bit(self, tmp_path: pathlib.Path) -> None:
         source = app_tree(tmp_path)
         built = tmp_path / "built.pyz"
         zipapp.create_archive(source, built, main="pkg:main")
@@ -444,7 +445,9 @@ class TestCopyingAnArchive:
         assert zipapp.get_interpreter(as_str) == INTERPRETER
         assert zipapp.get_interpreter(as_path) == INTERPRETER
         assert is_executable(as_str)
-        assert not is_executable(as_path)
+        # gh-156568: os.PathLike targets get the bit too.
+        path_too = sys.version_info >= (3, 15, 1) or (3, 14, 9) <= sys.version_info < (3, 15)
+        assert is_executable(as_path) is path_too
 
 
 class TestGetInterpreter:
@@ -568,7 +571,9 @@ def imports_from(archive: pathlib.Path) -> tuple[list[str], int, int]:
     return compiled, inflations, value
 
 
-BOTH_TWICE = ["/pkg/__init__.py", "/pkg/__init__.py", "/pkg/helper.py", "/pkg/helper.py"]
+# gh-141276: from 3.15.1 zipimport's get_filename() no longer compiles a source member.
+COMPILES_PER_IMPORT = 1 if sys.version_info >= (3, 15, 1) else 2
+BOTH = ["/pkg/__init__.py"] * COMPILES_PER_IMPORT + ["/pkg/helper.py"] * COMPILES_PER_IMPORT
 
 
 class TestRunningAnArchive:
@@ -584,8 +589,8 @@ class TestRunningAnArchive:
         first = imports_from(target)
         second = imports_from(target)
 
-        assert first == (BOTH_TWICE, 0, 1), first
-        assert second == (BOTH_TWICE, 0, 1), second
+        assert first == (BOTH, 0, 1), first
+        assert second == (BOTH, 0, 1), second
         assert target.read_bytes() == before
         assert sorted(tmp_path.iterdir()) == [source, target]
 
@@ -605,7 +610,7 @@ class TestRunningAnArchive:
         target = tmp_path / "app.pyz"
         zipapp.create_archive(source, target, main="pkg:main")
 
-        assert imports_from(target) == (["/pkg/helper.py", "/pkg/helper.py"], 0, 12345)
+        assert imports_from(target) == (["/pkg/helper.py"] * COMPILES_PER_IMPORT, 0, 12345)
 
     def test_a_packed_pycache_is_ignored(self, tmp_path: pathlib.Path) -> None:
         source = app_tree(tmp_path)
@@ -614,7 +619,7 @@ class TestRunningAnArchive:
         zipapp.create_archive(source, target, main="pkg:main")
         assert any(name.startswith("pkg/__pycache__/") for name in names_in(target))
 
-        assert imports_from(target) == (BOTH_TWICE, 0, 1)
+        assert imports_from(target) == (BOTH, 0, 1)
 
     def test_running_the_archive_compiles_the_generated_main_only(
         self, tmp_path: pathlib.Path
@@ -636,8 +641,8 @@ class TestRunningAnArchive:
         zipapp.create_archive(source, stored, main="pkg:main")
         zipapp.create_archive(source, deflated, main="pkg:main", compressed=True)
 
-        assert imports_from(stored) == (BOTH_TWICE, 0, 1)
-        assert imports_from(deflated) == (BOTH_TWICE, 4, 1)
+        assert imports_from(stored) == (BOTH, 0, 1)
+        assert imports_from(deflated) == (BOTH, 2 * COMPILES_PER_IMPORT, 1)
 
     def test_the_archive_runs(self, tmp_path: pathlib.Path) -> None:
         source = app_tree(tmp_path)

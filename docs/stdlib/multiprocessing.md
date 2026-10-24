@@ -48,7 +48,7 @@ call `TerminateProcess()` and `interrupt()` is unavailable, there is no resource
 | `multiprocessing.current_process()`, `multiprocessing.parent_process()` | O(1) | O(1) | `parent_process()` is `None` in the main process |
 | `multiprocessing.active_children()` | O(k) | O(k) | Reaps finished children and returns a new list of the live ones |
 | `multiprocessing.cpu_count()` | O(1) | O(1) | `os.cpu_count()`, raising `NotImplementedError` where that is `None` |
-| `multiprocessing.get_context(method=None)` | O(1) | O(1) | The module's API bound to one start method; raises `ValueError` for an unknown one |
+| `multiprocessing.get_context(method=None)` | O(1) | O(1) | The module's API bound to one start method; raises `ValueError` for an unknown one. From 3.14.9 and 3.15.1 the first call that needs the default picks it, and on POSIX other than macOS creates and removes a temporary file to do so |
 | `multiprocessing.get_start_method(allow_none=False)`, `multiprocessing.set_start_method(method, force=False)` | O(1) | O(1) | A second `set_start_method()` raises `RuntimeError` unless `force=True` |
 | `multiprocessing.get_all_start_methods()` | O(1) | O(1) | A new list each call |
 | `multiprocessing.get_logger()`, `multiprocessing.log_to_stderr(level=None)` | O(1) | O(1) | One logger, created on first use; every `log_to_stderr()` call adds another handler |
@@ -552,6 +552,7 @@ if __name__ == "__main__":
 - **Python 3.12+**: The `fork` start method emits a `DeprecationWarning` when the parent has more than one thread
 - **Python 3.13+**: `Pool()` defaults to `os.process_cpu_count()` workers; `SharedMemory` takes `track=False`
 - **Python 3.14+**: The default start method on POSIX other than macOS is `forkserver`, not `fork`; `Process.interrupt()`, `Lock.locked()`, `RLock.locked()`, `Semaphore.locked()` and `SyncManager.set()` added
+- **Python 3.14.9+ and 3.15.1+**: The default start method is chosen on first use; on POSIX other than macOS it is `forkserver` only when a temporary file can be created, and `spawn` otherwise
 
 ## Related Modules
 

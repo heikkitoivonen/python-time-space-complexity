@@ -42,7 +42,7 @@ drawn, redrawing all `T` turtles, with no pause and no hop animation.
 | `forward(distance)`, `fd(distance)`, `back(distance)`, `bk(distance)`, `backward(distance)` | O(i + f) | O(i) | Copies the turtle's item list into an undo entry before every move, buffer or not; with a buffer the last u entries keep theirs, a `circle()` entry one per step |
 | `goto(x, y=None)`, `setpos(x, y=None)`, `setposition(x, y=None)`, `setx(x)`, `sety(y)` | O(i + f) | O(i) | The same move as `forward()`, to an absolute point |
 | `home()` | O(i + f) | O(i) | A `goto(0, 0)` and then a `setheading(0)`: the frames of a move plus those of a turn |
-| `teleport(x=None, y=None, *, fill_gap=False)` | O(p + f) | O(p) | Python 3.12+. No line, no item-list copy, no hop animation: two pen changes, so two frames and two undo entries with the pen down; a fill in progress is closed and restarted, an `end_fill()` and a `begin_fill()` more, unless `fill_gap=True` |
+| `teleport(x=None, y=None, *, fill_gap=False)` | O(p + f) | O(p) | Python 3.12+. No line, no item-list copy, no hop animation: two pen changes, so two frames with the pen down; a fill in progress is closed and restarted, an `end_fill()` and a `begin_fill()` more, unless `fill_gap=True`. From 3.14.9 and 3.15.1 all of it is one undo entry, and `undo()` moves the turtle back; before, each pen change and fill call is an entry of its own and the position is not restored |
 | `right(angle)`, `rt(angle)`, `left(angle)`, `lt(angle)` | O(1 + f) | O(1) | A 90° turn at the default speed 3 is 12 frames, more than `forward(100)` |
 | `setheading(to_angle)`, `seth(to_angle)` | O(1 + f) | O(1) | Turns the shorter way round, so at most half a circle |
 | `circle(radius, extent=None, steps=None)` | O(steps·i + f) | O(steps·i) | `steps` defaults to at most 60 for a full circle, fewer for a small radius; each step is a move, a turn and two speed changes, so at speed 1 to 10 at least four frames plus the move's hops, at speed 0 two frames for the whole circle; every step goes into one undo entry |
@@ -78,7 +78,7 @@ drawn, redrawing all `T` turtles, with no pause and no hop animation.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `stamp()` | O(v) | O(v) | Transforms the shape's vertices into one new canvas item (c items for a compound shape); no frame, so it appears with the next one; requires an undo buffer |
+| `stamp()` | O(v) | O(v) | Transforms the shape's vertices into one new canvas item (c items for a compound shape); no frame, so it appears with the next one; before 3.14.9 and 3.15.1, requires an undo buffer |
 | `clearstamp(stampid)` | O(m + u) | O(1) | Scans the stamp list and the whole undo buffer; one frame |
 | `clearstamps(n=None)` | O(n·(m + u)) | O(n) | One `clearstamp()` per stamp, so clearing all m stamps is O(m·(m + u)); one frame |
 
@@ -98,8 +98,8 @@ drawn, redrawing all `T` turtles, with no pause and no hop animation.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `undo()` | O(steps·i² + f) | O(steps) | Undoing a move compares the current item list with the saved copy pairwise, then moves back at the same speed; a turn or pen change is O(1); a stamp is a `clearstamp()`, O(m + u); a `circle()`, `dot()` or `write()` entry is a sequence of steps, each undone in turn, and steps is 1 for a plain move |
-| `setundobuffer(size)` | O(size) | O(size) | Replaces the buffer, freeing the old history; `None` or 0 removes it, after which `stamp()` and `clearstamp()` raise `AttributeError`, as does `clearstamps()` with a stamp to clear |
+| `undo()` | O(steps·i² + f) | O(steps) | Undoing a move compares the current item list with the saved copy pairwise, then moves back at the same speed; a turn or pen change is O(1); a stamp is a `clearstamp()`, O(m + u); a `circle()`, `dot()` or `write()` entry, and from 3.14.9 and 3.15.1 a `teleport()` one, is a sequence of steps, each undone in turn, and steps is 1 for a plain move |
+| `setundobuffer(size)` | O(size) | O(size) | Replaces the buffer, freeing the old history; `None` or 0 removes it, after which, before 3.14.9 and 3.15.1, `stamp()` and `clearstamp()` raise `AttributeError`, as does `clearstamps()` with a stamp to clear |
 | `undobufferentries()` | O(u) | O(1) | Counts the empty slots of the whole buffer |
 | `clear()` | O(i + u + m·(m + u) + f) | O(m + u) | Deletes every item, clears every stamp through `clearstamp()` from a copy of the stamp list, and installs a fresh undo buffer of the size the turtle was built with; the turtle stays put |
 | `reset()` | O(i + u + m·(m + u) + f) | O(m + u) | `clear()` plus home position, heading and default pen |
@@ -204,9 +204,10 @@ assert screen.tracer() == 0
 A turtle keeps its last `u` actions, 1,000 by default. Every move copies the turtle's whole item
 list into its entry, so a turtle that has drawn many separate items pays O(i) per move and holds
 a copy for every buffered move. Removing the buffer with `setundobuffer(None)` stops the retention, not
-the copy, and stamps need a buffer.
+the copy, and before 3.14.9 and 3.15.1 stamps need a buffer.
 
 ```python
+import sys
 from turtle import Screen, Turtle
 
 screen = Screen()
@@ -228,12 +229,13 @@ for _ in range(20):
 assert pen.undobufferentries() == 10  # the ring keeps only the last ten
 
 pen.setundobuffer(None)  # frees the history; moves still copy the item list, then drop it
+stamps_unbuffered = sys.version_info >= (3, 15, 1) or (3, 14, 9) <= sys.version_info < (3, 15)
 try:
     pen.stamp()
 except AttributeError:
-    pass
+    assert not stamps_unbuffered, "stamp() needed an undo buffer"
 else:
-    raise AssertionError("stamp() worked without an undo buffer")
+    assert stamps_unbuffered, "stamp() worked without an undo buffer"
 ```
 
 ## Stamps
@@ -397,7 +399,7 @@ screen.mainloop()  # blocks until the window is closed
 - **Python 3.12+**: Added `teleport()`
 - **Python 3.13+**: Removed `settiltangle()`; `tiltangle(angle)` sets the tilt
 - **Python 3.14+**: Added the `fill()`, `poly()` and `no_animation()` context managers and `save()`; `register_shape()` accepts PNG, PGM and PPM files as well as GIF, and `Shape('image', data)` requires a `PhotoImage`
-- **All Python 3**: `stamp()` and `clearstamp()` raise `AttributeError` on a turtle whose undo buffer was removed with `setundobuffer(None)`, and so does `clearstamps()` with a stamp to clear
+- **Python 3.14.9+ and 3.15.1+**: `stamp()` and `clearstamp()` work on a turtle whose undo buffer was removed with `setundobuffer(None)`, as does `clearstamps()` with a stamp to clear; earlier releases raise `AttributeError`. `teleport()` is one undo entry, and undoing it moves the turtle back
 
 ## Related Modules
 

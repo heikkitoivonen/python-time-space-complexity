@@ -31,8 +31,8 @@ Measurement scope:
   leaves six in-memory entries alone and leaves three in the file after either
   writer. Before 3.14.8, and on 3.15.0, the libedit bundled with the Linux
   interpreters drops the header and `read_history_file()` raises `OSError`;
-  on 3.14.8 and later 3.14 releases CPython preserves the header and the
-  retained entries read back. GNU readline and
+  on 3.14.8 and later 3.14 releases, and on 3.15.1 and later, CPython
+  preserves the header and the retained entries read back. GNU readline and
   macOS's libedit keep the file readable on both versions. Removing the oldest
   entries before writing also keeps it readable. `append_history_file(1)` writes
   the newest entry. Timed: `append_history_file(1)` costs less than 3x as much
@@ -430,8 +430,8 @@ def assert_truncated_to(path: str, expected: list[str]) -> None:
 
     GNU readline, and the older libedit macOS ships, keep it readable. The
     libedit the Linux interpreters bundle drops the header when it truncates;
-    CPython 3.14.8+ preserves it with its own truncator (gh-123018), which
-    3.15.0 does not carry.
+    CPython 3.14.8+ and 3.15.1+ preserve it with their own truncator
+    (gh-123018), which 3.15.0 does not carry.
     """
     empty_history()
     header_dropped = sys.version_info < (3, 14, 8) or sys.version_info[:3] == (3, 15, 0)

@@ -90,7 +90,9 @@ Not settled here:
 * The "amortized" qualifiers on `insert(k, x)`, `pop()`, `pop(k)` and the
   length-changing slice assignment: the occasional resize is an allocator
   `realloc`, whose cost the tests do not isolate. A shrinking `pop()` that reallocates is read from
-  Objects/listobject.c (`list_resize`), not measured.
+  Objects/listobject.c (`list_resize`), not measured; `del l[k]` goes through the same shrink from
+  3.14.9 and 3.15.1, and its row, like the official time-complexity table's, is not marked
+  amortized.
 * `extend(t)` paying the cost of iterating `t` is a statement about the
   caller's iterable, not the list.
 * Element comparison and `key` cost are held at O(1) by the cost model;

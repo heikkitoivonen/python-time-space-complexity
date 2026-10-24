@@ -27,7 +27,11 @@ Measurement scope:
   at p = 10 and p = 1,000, and the same again on a second call, so nothing is
   cached; its traced peak at p = 1,000 is under twice the peak at p = 10. An
   absolute missing name costs one `os.stat()` whatever p is, and `'<string>'`
-  costs none.
+  costs none. From 3.14.9 and 3.15.1 a miss makes one
+  `sys.path_importer_cache.get()` per parent directory of the name, at 10 and
+  100 directories below the temporary directory, and none before; a member
+  of a zip archive on `sys.path` is read from 3.14.9 and 3.15.1, and is `''`
+  before.
 * `lazycache()`: a counting loader's `get_source()` is not called by
   registration, is called once by the first `getline()` and not by later
   ones. Registration returns `False` for a name already holding lines and for
@@ -69,6 +73,7 @@ Not settled here:
 
 from __future__ import annotations
 
+import importlib.util
 import linecache
 import os
 import pathlib
@@ -79,6 +84,7 @@ import textwrap
 import time
 import tokenize
 import tracemalloc
+import zipfile
 from collections.abc import Callable
 from typing import Any
 
@@ -86,6 +92,9 @@ import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "linecache.md"
 EXPECTED_BLOCKS = 5
+
+# gh-157146: a file not found on disk is looked for in an archive on sys.path.
+READS_ARCHIVES = sys.version_info >= (3, 15, 1) or (3, 14, 9) <= sys.version_info < (3, 15)
 
 
 def best_ns(setup: Callable[[], Any], func: Callable[[], Any], repeats: int = 7) -> float:
@@ -126,6 +135,16 @@ class Counter:
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         self.calls.append(args[0] if args else None)
         return self.func(*args, **kwargs)
+
+
+class CountingImporterCache(dict[str, Any]):
+    """A `sys.path_importer_cache` that counts `get()` lookups."""
+
+    gets = 0
+
+    def get(self, key: str, default: Any = None) -> Any:
+        self.gets += 1
+        return super().get(key, default)
 
 
 class CountingLoader:
@@ -304,6 +323,35 @@ class TestMissesAreNotCached:
 
         assert linecache.getline(str(tmp_path / "absent.py"), 1) == ""
         assert len(stats.calls) == 1
+
+    @pytest.mark.parametrize("depth", [10, 100])
+    def test_a_miss_looks_up_each_parent_directory_from_3_14_9(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, depth: int
+    ) -> None:
+        name = tmp_path.joinpath(*(f"d{level}" for level in range(depth)), "absent.py")
+        importers = CountingImporterCache(sys.path_importer_cache)
+        monkeypatch.setattr(sys, "path_importer_cache", importers)
+
+        assert linecache.getline(str(name), 1) == ""
+
+        assert importers.gets == (len(name.parents) if READS_ARCHIVES else 0)
+
+    def test_a_member_of_an_archive_on_sys_path_is_read_from_3_14_9(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        archive = tmp_path / "lib.zip"
+        with zipfile.ZipFile(archive, "w") as zf:
+            zf.writestr("zipped_linecache_probe.py", "first = 1\nsecond = 2\n")
+        member = os.path.join(str(archive), "zipped_linecache_probe.py")
+        monkeypatch.syspath_prepend(str(archive))
+        try:
+            assert importlib.util.find_spec("zipped_linecache_probe") is not None
+            line = linecache.getline(member, 2)
+        finally:
+            sys.path_importer_cache.pop(str(archive), None)
+            linecache.checkcache(member)
+
+        assert line == ("second = 2\n" if READS_ARCHIVES else "")
 
     def test_a_pseudo_file_name_is_not_looked_up(self, stats: Counter) -> None:
         assert linecache.getline("<string>", 1) == ""

@@ -37,14 +37,19 @@ actionable ranking. There are no network requests during ordinary audits. The de
 actionable gaps and summary counts; use `--include-review` for classification
 details, or `--json` for the complete structured inventory.
 
-To refresh a snapshot, use the matching interpreter, verify the documentation
-release shown on the official site, download its inventory, then run:
+To refresh a snapshot, use the matching interpreter and take the inventory from
+that release's documentation archive. The live `docs.python.org` inventory is
+rebuilt from the maintenance branch, so it can list names documented after the
+release. `--source-url` stays the live URL, which the entries' links resolve
+against:
 
 ```sh
-curl --fail --location https://docs.python.org/3.14/objects.inv --output /tmp/python-3.14-objects.inv
-uv run python scripts/build_api_manifest.py \
-  --inventory /tmp/python-3.14-objects.inv \
-  --documentation-version 3.14.8 \
+curl --fail --location \
+  https://www.python.org/ftp/python/doc/3.14.9/python-3.14.9-docs-html.tar.bz2 \
+  | tar -xj -C /tmp python-3.14.9-docs-html/objects.inv
+uv run --no-project --python 3.14.9 python scripts/build_api_manifest.py \
+  --inventory /tmp/python-3.14.9-docs-html/objects.inv \
+  --documentation-version 3.14.9 \
   --source-url https://docs.python.org/3.14/objects.inv \
   --output scripts/api_manifests/python-3.14.json
 ```

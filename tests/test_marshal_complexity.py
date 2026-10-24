@@ -48,7 +48,8 @@ Measurement scope:
   round-trips on 3.15+ and raises `ValueError` with version 5. On 3.15.0 a
   list holding one `frozendict` twice dumps but fails to load with
   `ValueError` ("invalid reference"), where the same list of a `dict` loads
-  with the sharing kept. `marshal.version` is asserted as 6 on 3.15+, 5 on
+  with the sharing kept; from 3.15.1 the `frozendict` list loads with the
+  sharing kept too. `marshal.version` is asserted as 6 on 3.15+, 5 on
   3.14 and 4 before.
 * `allow_code=False` is asserted, on 3.13+, to make each of the four
   functions raise `ValueError` for a code object and to pass plain data.
@@ -62,8 +63,10 @@ Not settled here:
 
 * The O(s log s) sort of a set's elements is read from Python/marshal.c
   (`w_complex_object`, set branch, 3.11+), which sorts the pairs of each
-  element's serialized form and the element. The tests observe the sorted
-  order, which a comparison sort produces, not the comparison count.
+  element's serialized form and the element; from 3.14.9 and 3.15.1, triples
+  with an index between them, so two elements are never compared. The tests
+  observe the sorted order, which a comparison sort produces, not the
+  comparison count.
 * The 1,000-level limit applies on Windows only; it is guarded on
   `sys.platform` and runs on Windows CI, not locally. WASI and iOS builds,
   which the page does not mention, use 1,500.
@@ -467,6 +470,15 @@ class TestSupportedTypes:
         data = marshal.dumps([shared, shared])
         with pytest.raises(ValueError, match="invalid reference"):
             marshal.loads(data)
+
+    @pytest.mark.skipif(sys.version_info < (3, 15, 1), reason="3.15.0 cannot load it")
+    def test_a_frozendict_reached_twice_keeps_the_sharing_from_3_15_1(self) -> None:
+        shared = FROZENDICT(a=1)
+
+        restored = marshal.loads(marshal.dumps([shared, shared]))
+
+        assert restored[0] is restored[1]
+        assert restored[0] == shared
 
     @pytest.mark.skipif(sys.version_info >= (3, 14), reason="version 5 adds slice in 3.14")
     def test_slice_is_unsupported_before_3_14(self) -> None:

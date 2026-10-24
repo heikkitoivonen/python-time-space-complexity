@@ -200,7 +200,8 @@ assert namespace['total'] == 45
 - **Python 3.13+**: Added the `allow_code` parameter to all four functions
 - **Python 3.14+**: Format version 5, the new default, adds `slice`
 - **Python 3.15+**: Format version 6, the new default, adds `frozendict`. On 3.15.0, `loads()`
-  raises `ValueError` for data in which one `frozendict` object is reached twice
+  raises `ValueError` for data in which one `frozendict` object is reached twice; 3.15.1 loads it
+  with the sharing kept
 - **All Python 3**: A code object is only valid on the Python version that wrote it
 
 ## Related Modules

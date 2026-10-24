@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "python_version": "3.15",
-  "documentation_version": "3.15.0",
+  "documentation_version": "3.15.1",
   "source_url": "https://docs.python.org/3.15/objects.inv",
-  "inventory_sha256": "18bb602dbb90a499f3b2a62997813cafd279fd57acc875cd5241c98898a3c20c",
+  "inventory_sha256": "f93bafb7154df807cb3800b62070856d2e5ff4b92abc81bd57983eef69ae2dd6",
   "apis": {
     "__future__._Feature": {
       "kind": "class",
@@ -7400,6 +7400,578 @@
     "ctypes.windll": {
       "kind": "attribute",
       "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.windll"
+    },
+    "ctypes.wintypes": {
+      "kind": "module",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#module-ctypes.wintypes"
+    },
+    "ctypes.wintypes.ATOM": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.ATOM"
+    },
+    "ctypes.wintypes.BOOL": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.BOOL"
+    },
+    "ctypes.wintypes.BOOLEAN": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.BOOLEAN"
+    },
+    "ctypes.wintypes.BYTE": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.BYTE"
+    },
+    "ctypes.wintypes.CHAR": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.CHAR"
+    },
+    "ctypes.wintypes.COLORREF": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.COLORREF"
+    },
+    "ctypes.wintypes.DOUBLE": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.DOUBLE"
+    },
+    "ctypes.wintypes.DWORD": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.DWORD"
+    },
+    "ctypes.wintypes.FILETIME": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.FILETIME"
+    },
+    "ctypes.wintypes.FLOAT": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.FLOAT"
+    },
+    "ctypes.wintypes.HACCEL": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HACCEL"
+    },
+    "ctypes.wintypes.HANDLE": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HANDLE"
+    },
+    "ctypes.wintypes.HBITMAP": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HBITMAP"
+    },
+    "ctypes.wintypes.HBRUSH": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HBRUSH"
+    },
+    "ctypes.wintypes.HCOLORSPACE": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HCOLORSPACE"
+    },
+    "ctypes.wintypes.HCONV": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HCONV"
+    },
+    "ctypes.wintypes.HCONVLIST": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HCONVLIST"
+    },
+    "ctypes.wintypes.HCURSOR": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HCURSOR"
+    },
+    "ctypes.wintypes.HDC": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HDC"
+    },
+    "ctypes.wintypes.HDDEDATA": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HDDEDATA"
+    },
+    "ctypes.wintypes.HDESK": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HDESK"
+    },
+    "ctypes.wintypes.HDROP": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HDROP"
+    },
+    "ctypes.wintypes.HDWP": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HDWP"
+    },
+    "ctypes.wintypes.HENHMETAFILE": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HENHMETAFILE"
+    },
+    "ctypes.wintypes.HFILE": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HFILE"
+    },
+    "ctypes.wintypes.HFONT": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HFONT"
+    },
+    "ctypes.wintypes.HGDIOBJ": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HGDIOBJ"
+    },
+    "ctypes.wintypes.HGLOBAL": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HGLOBAL"
+    },
+    "ctypes.wintypes.HHOOK": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HHOOK"
+    },
+    "ctypes.wintypes.HICON": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HICON"
+    },
+    "ctypes.wintypes.HINSTANCE": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HINSTANCE"
+    },
+    "ctypes.wintypes.HKEY": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HKEY"
+    },
+    "ctypes.wintypes.HKL": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HKL"
+    },
+    "ctypes.wintypes.HLOCAL": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HLOCAL"
+    },
+    "ctypes.wintypes.HMENU": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HMENU"
+    },
+    "ctypes.wintypes.HMETAFILE": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HMETAFILE"
+    },
+    "ctypes.wintypes.HMODULE": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HMODULE"
+    },
+    "ctypes.wintypes.HMONITOR": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HMONITOR"
+    },
+    "ctypes.wintypes.HPALETTE": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HPALETTE"
+    },
+    "ctypes.wintypes.HPEN": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HPEN"
+    },
+    "ctypes.wintypes.HRESULT": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HRESULT"
+    },
+    "ctypes.wintypes.HRGN": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HRGN"
+    },
+    "ctypes.wintypes.HRSRC": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HRSRC"
+    },
+    "ctypes.wintypes.HSTR": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HSTR"
+    },
+    "ctypes.wintypes.HSZ": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HSZ"
+    },
+    "ctypes.wintypes.HTASK": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HTASK"
+    },
+    "ctypes.wintypes.HWINSTA": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HWINSTA"
+    },
+    "ctypes.wintypes.HWND": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.HWND"
+    },
+    "ctypes.wintypes.INT": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.INT"
+    },
+    "ctypes.wintypes.LANGID": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LANGID"
+    },
+    "ctypes.wintypes.LARGE_INTEGER": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LARGE_INTEGER"
+    },
+    "ctypes.wintypes.LCID": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LCID"
+    },
+    "ctypes.wintypes.LCTYPE": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LCTYPE"
+    },
+    "ctypes.wintypes.LGRPID": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LGRPID"
+    },
+    "ctypes.wintypes.LONG": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LONG"
+    },
+    "ctypes.wintypes.LPARAM": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPARAM"
+    },
+    "ctypes.wintypes.LPBOOL": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPBOOL"
+    },
+    "ctypes.wintypes.LPBYTE": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPBYTE"
+    },
+    "ctypes.wintypes.LPCOLESTR": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPCOLESTR"
+    },
+    "ctypes.wintypes.LPCOLORREF": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPCOLORREF"
+    },
+    "ctypes.wintypes.LPCSTR": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPCSTR"
+    },
+    "ctypes.wintypes.LPCVOID": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPCVOID"
+    },
+    "ctypes.wintypes.LPCWSTR": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPCWSTR"
+    },
+    "ctypes.wintypes.LPDWORD": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPDWORD"
+    },
+    "ctypes.wintypes.LPFILETIME": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPFILETIME"
+    },
+    "ctypes.wintypes.LPHANDLE": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPHANDLE"
+    },
+    "ctypes.wintypes.LPHKL": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPHKL"
+    },
+    "ctypes.wintypes.LPINT": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPINT"
+    },
+    "ctypes.wintypes.LPLONG": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPLONG"
+    },
+    "ctypes.wintypes.LPMSG": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPMSG"
+    },
+    "ctypes.wintypes.LPOLESTR": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPOLESTR"
+    },
+    "ctypes.wintypes.LPPOINT": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPPOINT"
+    },
+    "ctypes.wintypes.LPRECT": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPRECT"
+    },
+    "ctypes.wintypes.LPRECTL": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPRECTL"
+    },
+    "ctypes.wintypes.LPSC_HANDLE": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPSC_HANDLE"
+    },
+    "ctypes.wintypes.LPSIZE": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPSIZE"
+    },
+    "ctypes.wintypes.LPSIZEL": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPSIZEL"
+    },
+    "ctypes.wintypes.LPSTR": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPSTR"
+    },
+    "ctypes.wintypes.LPUINT": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPUINT"
+    },
+    "ctypes.wintypes.LPVOID": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPVOID"
+    },
+    "ctypes.wintypes.LPWIN32_FIND_DATAA": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPWIN32_FIND_DATAA"
+    },
+    "ctypes.wintypes.LPWIN32_FIND_DATAW": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPWIN32_FIND_DATAW"
+    },
+    "ctypes.wintypes.LPWORD": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPWORD"
+    },
+    "ctypes.wintypes.LPWSTR": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.LPWSTR"
+    },
+    "ctypes.wintypes.MAX_PATH": {
+      "kind": "attribute",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.MAX_PATH"
+    },
+    "ctypes.wintypes.MSG": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.MSG"
+    },
+    "ctypes.wintypes.OLESTR": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.OLESTR"
+    },
+    "ctypes.wintypes.PBOOL": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PBOOL"
+    },
+    "ctypes.wintypes.PBOOLEAN": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PBOOLEAN"
+    },
+    "ctypes.wintypes.PBYTE": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PBYTE"
+    },
+    "ctypes.wintypes.PCHAR": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PCHAR"
+    },
+    "ctypes.wintypes.PDWORD": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PDWORD"
+    },
+    "ctypes.wintypes.PFILETIME": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PFILETIME"
+    },
+    "ctypes.wintypes.PFLOAT": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PFLOAT"
+    },
+    "ctypes.wintypes.PHANDLE": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PHANDLE"
+    },
+    "ctypes.wintypes.PHKEY": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PHKEY"
+    },
+    "ctypes.wintypes.PINT": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PINT"
+    },
+    "ctypes.wintypes.PLARGE_INTEGER": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PLARGE_INTEGER"
+    },
+    "ctypes.wintypes.PLCID": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PLCID"
+    },
+    "ctypes.wintypes.PLONG": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PLONG"
+    },
+    "ctypes.wintypes.PMSG": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PMSG"
+    },
+    "ctypes.wintypes.POINT": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.POINT"
+    },
+    "ctypes.wintypes.POINTL": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.POINTL"
+    },
+    "ctypes.wintypes.PPOINT": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PPOINT"
+    },
+    "ctypes.wintypes.PPOINTL": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PPOINTL"
+    },
+    "ctypes.wintypes.PRECT": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PRECT"
+    },
+    "ctypes.wintypes.PRECTL": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PRECTL"
+    },
+    "ctypes.wintypes.PSHORT": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PSHORT"
+    },
+    "ctypes.wintypes.PSIZE": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PSIZE"
+    },
+    "ctypes.wintypes.PSIZEL": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PSIZEL"
+    },
+    "ctypes.wintypes.PSMALL_RECT": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PSMALL_RECT"
+    },
+    "ctypes.wintypes.PUINT": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PUINT"
+    },
+    "ctypes.wintypes.PULARGE_INTEGER": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PULARGE_INTEGER"
+    },
+    "ctypes.wintypes.PULONG": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PULONG"
+    },
+    "ctypes.wintypes.PUSHORT": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PUSHORT"
+    },
+    "ctypes.wintypes.PWCHAR": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PWCHAR"
+    },
+    "ctypes.wintypes.PWIN32_FIND_DATAA": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PWIN32_FIND_DATAA"
+    },
+    "ctypes.wintypes.PWIN32_FIND_DATAW": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PWIN32_FIND_DATAW"
+    },
+    "ctypes.wintypes.PWORD": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.PWORD"
+    },
+    "ctypes.wintypes.RECT": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.RECT"
+    },
+    "ctypes.wintypes.RECTL": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.RECTL"
+    },
+    "ctypes.wintypes.RGB": {
+      "kind": "function",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.RGB"
+    },
+    "ctypes.wintypes.SC_HANDLE": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.SC_HANDLE"
+    },
+    "ctypes.wintypes.SERVICE_STATUS_HANDLE": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.SERVICE_STATUS_HANDLE"
+    },
+    "ctypes.wintypes.SHORT": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.SHORT"
+    },
+    "ctypes.wintypes.SIZE": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.SIZE"
+    },
+    "ctypes.wintypes.SIZEL": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.SIZEL"
+    },
+    "ctypes.wintypes.SMALL_RECT": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.SMALL_RECT"
+    },
+    "ctypes.wintypes.UINT": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.UINT"
+    },
+    "ctypes.wintypes.ULARGE_INTEGER": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.ULARGE_INTEGER"
+    },
+    "ctypes.wintypes.ULONG": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.ULONG"
+    },
+    "ctypes.wintypes.USHORT": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.USHORT"
+    },
+    "ctypes.wintypes.VARIANT_BOOL": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.VARIANT_BOOL"
+    },
+    "ctypes.wintypes.WCHAR": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.WCHAR"
+    },
+    "ctypes.wintypes.WIN32_FIND_DATAA": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.WIN32_FIND_DATAA"
+    },
+    "ctypes.wintypes.WIN32_FIND_DATAW": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.WIN32_FIND_DATAW"
+    },
+    "ctypes.wintypes.WORD": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.WORD"
+    },
+    "ctypes.wintypes.WPARAM": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.WPARAM"
+    },
+    "ctypes.wintypes.tagMSG": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.tagMSG"
+    },
+    "ctypes.wintypes.tagPOINT": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.tagPOINT"
+    },
+    "ctypes.wintypes.tagRECT": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.tagRECT"
+    },
+    "ctypes.wintypes.tagSIZE": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/ctypes.html#ctypes.wintypes.tagSIZE"
     },
     "ctypes.wstring_at": {
       "kind": "function",

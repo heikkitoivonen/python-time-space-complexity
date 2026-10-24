@@ -70,7 +70,7 @@ jobs:
       matrix:
         # Every supported line, at or above its CVE-2026-3276 fix release,
         # so the timing job's normalization assertion runs on each version.
-        python: &supported-pythons ["3.11.17", "3.12.15", "3.13.16", "3.14.8", "3.15.0"]
+        python: &supported-pythons ["3.11.17", "3.12.15", "3.13.17", "3.14.9", "3.15.1"]
     env:
       UV_PYTHON: ${{ matrix.python }}
       # The runner lacks nothing the suite needs; see tests/conftest.py.

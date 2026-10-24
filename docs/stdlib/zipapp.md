@@ -44,7 +44,7 @@ already exists is among them.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `create_archive(archive, target, interpreter=None)` | O(a + s) | O(s) | Skips the source's shebang line and streams the rest without parsing it. `interpreter=None` drops the shebang rather than keeping it. The executable bit is set for a `str` target only, not a `pathlib.Path` |
+| `create_archive(archive, target, interpreter=None)` | O(a + s) | O(s) | Skips the source's shebang line and streams the rest without parsing it. `interpreter=None` drops the shebang rather than keeping it. Before 3.14.9 and 3.15.1, the executable bit is set for a `str` target only, not a `pathlib.Path` |
 | `get_interpreter(archive)` | O(s) | O(s) | Reads two bytes, and the rest of the line only when they are `#!`. `None` when there is no shebang |
 | `python -m zipapp` | as `create_archive()` | as `create_archive()` | `--info` is `get_interpreter()`. Copying an archive onto itself, or with `-m`, is refused |
 
@@ -94,7 +94,8 @@ with tempfile.TemporaryDirectory() as tmp:
 Giving an existing archive as the source replaces its shebang line and copies
 the rest byte for byte. The archive is not parsed, so the copy costs its size
 and nothing more, and a file that is not a ZIP archive at all is copied just as
-readily. Pass the target as a `str` when the copy should be executable.
+readily. Before 3.14.9 and 3.15.1, pass the target as a `str` when the copy
+should be executable.
 
 ```python
 import os
@@ -168,6 +169,11 @@ python -m zipapp app.pyz -p "/usr/bin/env python3" -o app-shipped.pyz
 # Read the shebang back - O(s)
 python -m zipapp app-shipped.pyz --info
 ```
+
+## Version Notes
+
+- **Python 3.14.9+ and 3.15.1+**: copying an archive with `interpreter` makes a `pathlib.Path`
+  target executable too; earlier releases set the bit only for a `str` target
 
 ## Related Documentation
 

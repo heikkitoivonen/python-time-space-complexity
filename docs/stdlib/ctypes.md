@@ -129,6 +129,10 @@ the library and the platform: every bound here is the part `ctypes` adds.
 | `ctypes.CopyComPointer(src, dst)`, `ctypes.DllCanUnloadNow()`, `ctypes.DllGetClassObject(rclsid, riid, ppv)` | O(1) | O(1) | COM helpers; `CopyComPointer` is public in 3.14+ |
 | `ctypes.util.find_msvcrt()` | O(1) | O(1) | |
 | `ctypes.wintypes` | O(1) | O(1) | Windows type names as aliases of the types above |
+| `wintypes.FILETIME`, `wintypes.MSG`, `wintypes.POINT`, `wintypes.RECT`, `wintypes.SIZE`, `wintypes.SMALL_RECT`, `wintypes.WIN32_FIND_DATAA`, `wintypes.WIN32_FIND_DATAW` | O(1) | O(1) | `Structure` subclasses with fixed fields; an instance costs its bytes, as any structure |
+| `wintypes.LPBOOL`, `wintypes.LPBYTE`, `wintypes.LPCOLORREF`, `wintypes.LPFILETIME`, `wintypes.LPHANDLE`, `wintypes.LPINT`, `wintypes.LPMSG`, `wintypes.LPPOINT`, `wintypes.LPRECT`, `wintypes.LPSIZE`, `wintypes.LPUINT`, `wintypes.LPWIN32_FIND_DATAA`, `wintypes.LPWIN32_FIND_DATAW`, `wintypes.LPWORD`, `wintypes.PCHAR`, `wintypes.PFLOAT`, `wintypes.PSHORT`, `wintypes.PSMALL_RECT`, `wintypes.PWCHAR` | O(1) | O(1) | `POINTER()` of the named type, the same cached class |
+| `wintypes.VARIANT_BOOL` | O(1) | O(1) | A 16-bit simple type of its own, not an alias of `c_short` |
+| `wintypes.RGB(red, green, blue)` | O(1) | O(1) | Packs the three values into one `COLORREF` integer |
 
 ## Loading Libraries
 

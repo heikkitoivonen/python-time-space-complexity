@@ -63,7 +63,7 @@ for the default `'settrace'` backend.
 | `Bdb.set_break(filename, lineno, temporary=False, cond=None, funcname=None)` | O(b + d·b) | O(1) | Returns an error string for a line that does not exist; during a stop, 3.12.9+ and 3.13.1+ also run `break_anywhere()` on every frame of the stack |
 | `Bdb.clear_break(filename, lineno)` | O(b + k²) | O(k) | Each deletion shifts the rest of that line's list |
 | `Bdb.clear_bpbynumber(arg)` | O(b + k) | O(1) | |
-| `Bdb.clear_all_file_breaks(filename)` | O(b·k²) | O(1) | At a line holding several breakpoints, every second one survives in `Breakpoint.bplist` |
+| `Bdb.clear_all_file_breaks(filename)` | O(b·k²) | O(k) | Before 3.14.9 and 3.15.1, at a line holding several breakpoints, every second one survives in `Breakpoint.bplist` |
 | `Bdb.clear_all_breaks()` | O(B·k) | O(1) | Walks every number ever assigned, deleted ones included |
 | `Bdb.get_bpbynumber(arg)` | O(1) | O(1) | Raises `ValueError` for a non-numeric, unknown or deleted number |
 | `Bdb.get_break(filename, lineno)` | O(b) | O(1) | |
@@ -282,13 +282,15 @@ assert (off.hits, never.hits, second_hit.hits) == (0, 2, 2)
 
 ### Clearing a File's Breakpoints
 
-`clear_all_file_breaks()` deletes breakpoints from a line's list while iterating over it, so at a
-line holding several, every second one survives. The instance forgets the file anyway, but the
-survivors stay in `Breakpoint.bplist`, and a `Bdb` built later picks them up again.
-`clear_break()` iterates over a copy and removes them all.
+Before 3.14.9 and 3.15.1, `clear_all_file_breaks()` deletes breakpoints from a line's list while
+iterating over it, so at a line holding several, every second one survives. The instance forgets
+the file anyway, but the survivors stay in `Breakpoint.bplist`, and a `Bdb` built later picks them
+up again. From those releases it iterates over a copy, as `clear_break()` does, and removes them
+all.
 
 ```python
 import bdb
+import sys
 
 bdb.Breakpoint.clearBreakpoints()
 debugger = bdb.Bdb()
@@ -299,10 +301,12 @@ for _ in range(4):
 
 assert debugger.clear_all_file_breaks(filename) is None  # O(b·k²)
 assert debugger.get_file_breaks(filename) == []
-assert len(bdb.Breakpoint.bplist[filename, line]) == 2
 
-later = bdb.Bdb()  # O(L·b) - sees the survivors
-assert later.clear_break(filename, line) is None  # O(b + k²)
+removes_all = sys.version_info >= (3, 15, 1) or (3, 14, 9) <= sys.version_info < (3, 15)
+if not removes_all:
+    assert len(bdb.Breakpoint.bplist[filename, line]) == 2
+    later = bdb.Bdb()  # O(L·b) - sees the survivors
+    assert later.clear_break(filename, line) is None  # O(b + k²)
 assert (filename, line) not in bdb.Breakpoint.bplist
 ```
 
@@ -387,10 +391,14 @@ assert logger.seen == [0, 25, 50, 75]
 - Stepping with `set_step()` through code you do not need to see; every line event outside a
   skipped module reaches `user_line()`
 - Long `skip` lists: an event matches the frame's module against every pattern until one fits
-- `clear_all_file_breaks()` on a line holding several breakpoints; every second one survives
+- `clear_all_file_breaks()` before 3.14.9 and 3.15.1 on a line holding several breakpoints; every
+  second one survives
 
 ## Version Notes
 
+- **Python 3.14.9+ and 3.15.1+**: `clear_all_file_breaks()` removes every breakpoint at a line;
+  earlier releases, 3.13.17 and the older lines included, leave every second one in
+  `Breakpoint.bplist`
 - **Python 3.14+**: `Bdb(backend='monitoring')` runs on `sys.monitoring`; `start_trace()`,
   `stop_trace()`, `disable_current_event()` and `restart_events()` added
 - **Python 3.14+**: `break_anywhere()` looks for a breakpoint in the frame's own code, so while

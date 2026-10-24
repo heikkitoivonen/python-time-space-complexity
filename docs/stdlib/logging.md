@@ -220,7 +220,7 @@ destination.
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `logging.handlers.SysLogHandler(address=('localhost', SYSLOG_UDP_PORT), facility=LOG_USER, socktype=None, timeout=None)` | one `createSocket()` | O(1) | A `str` address is a Unix socket, connected now, silently if it fails; Windows has no Unix sockets and raises `AttributeError` for one. A host tuple costs a `getaddrinfo()` and, for a stream socket, a connect. `timeout` is Python 3.14+ |
+| `logging.handlers.SysLogHandler(address=('localhost', SYSLOG_UDP_PORT), facility=LOG_USER, socktype=None, timeout=None)` | one `createSocket()` | O(1) | A `str` address is a Unix socket, connected now, silently if it fails; Windows has no Unix sockets and raises `AttributeError` for one. A host tuple costs a `getaddrinfo()` and, for a stream socket, a connect; from 3.13.16, 3.14.9 and 3.15.1 a name that does not resolve leaves no socket instead of raising `socket.gaierror`, and each `emit()` resolves it again. `timeout` is Python 3.14+ |
 | `SysLogHandler.createSocket()` | as above | O(1) | Python 3.11+; called again from `emit()` whenever there is no socket |
 | `SysLogHandler.encodePriority(facility, priority)`, `SysLogHandler.mapPriority(levelName)` | O(1) | O(1) | Dict lookups; an unknown level name maps to `'warning'` |
 | `SysLogHandler.emit(record)` | O(k) plus one send | O(k) | Formats, prefixes `ident` and the priority, encodes as UTF-8 and appends a NUL when `append_nul`; one send per record, and a failed Unix-socket send reconnects and retries once |
@@ -799,6 +799,7 @@ assert logging.getLogger().level == logging.WARNING
 - **Python 3.12.6+**: `RotatingFileHandler` never rolls over an empty file and stats the path only when a rollover is due
 - **Python 3.13+**: `LoggerAdapter(merge_extra=True)`; a second `QueueListener.stop()` is a no-op, and from 3.13.4 a second `start()` raises
 - **Python 3.14+**: `QueueListener` is a context manager; `SysLogHandler(timeout=...)`
+- **Python 3.13.16+, 3.14.9+ and 3.15.1+**: `SysLogHandler` constructs with no socket when its host does not resolve, rather than raising `socket.gaierror`, and resolves it again on each `emit()`
 - **Python 3.15+**: `NTEventLogHandler` needs no pywin32 on Windows, and raises `ImportError` on construction elsewhere
 - **All Python 3**: `StreamHandler.emit()` flushes after every record
 

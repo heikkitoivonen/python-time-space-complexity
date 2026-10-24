@@ -19,23 +19,25 @@ Measurement scope:
   Over ten members of 1 MB and ten of one byte, the peaks are within 2x of
   each other and under 1 MB, below one member's size, and no member is read.
 * A `find_spec()` miss and `is_package()` make at most five probes of the
-  directory and read no member, at 10 entries and at 10,000 alike. A
-  `find_spec()` hit on a module or package reads its member once and, for a
-  `.py` member, compiles it once; a namespace directory is found by lookups
-  alone.
+  directory and read no member, at 10 entries and at 10,000 alike. Before
+  3.15.1 a `find_spec()` hit on a `.py` module or package reads its member
+  once and compiles it once; from 3.15.1 it reads and compiles nothing. A
+  namespace directory is found by lookups alone.
 * `get_code()`, `get_filename()` and `get_source()` read the member once per
-  call and repeat it on the next call; `get_code()` and `get_filename()`
-  compile a `.py` member on every call and compile nothing when a `.pyc`
-  written by `compileall` with `legacy=True` sits beside it, and the archive's
-  bytes are unchanged afterwards. A `.pyc` under `__pycache__` is not used,
-  and one whose recorded source size no longer matches the `.py` member is
-  passed over for the source. `pkg/__init__.py` is chosen over `pkg.py`. `get_data()` reads once per call, and its traced
+  call and repeat it on the next call; `get_code()` compiles a `.py` member on
+  every call, as `get_filename()` does before 3.15.1, while from 3.15.1
+  `get_filename()` neither reads nor compiles one. Both compile nothing when a
+  `.pyc` written by `compileall` with `legacy=True` sits beside it, and read
+  that `.pyc` on every call; the archive's bytes are unchanged afterwards. A
+  `.pyc` under `__pycache__` is not used, and one whose recorded source size
+  no longer matches the `.py` member is passed over for the source. `pkg/__init__.py` is chosen over `pkg.py`. `get_data()` reads once per call, and its traced
   peak exceeds 5 MB for a 5 MB member, over 20x its peak for a 10 KB one,
   while a 20,000-entry archive with a 10 KB member stays within 2x of a
   10-entry one.
-* Importing through `sys.path` reads the member twice and compiles a `.py`
-  member twice, once in `find_spec()` and once in `exec_module()`, and a
-  `.pyc` beside it none. A module the archive lacks, looked up through
+* Importing through `sys.path` reads a `.py` member twice and compiles it
+  twice before 3.15.1, once in `find_spec()` and once in `exec_module()`, and
+  once each from 3.15.1. A `.pyc` beside it is read twice on every version
+  and nothing is compiled. A module the archive lacks, looked up through
   `sys.path` with the archive first, makes between one and five probes of
   its 10,001-entry directory and reads nothing.
 * `invalidate_caches()` calls `_read_directory` inside the call on 3.11 and 3.12
@@ -98,6 +100,9 @@ import pytest
 
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "zipimport.md"
 EXPECTED_BLOCKS = 4
+
+# gh-141276: get_filename(), and so find_spec(), names a .py member without reading it.
+NAMES_SOURCE_UNREAD = sys.version_info >= (3, 15, 1)
 
 
 def peak_bytes(func: Callable[[], Any]) -> int:
@@ -299,20 +304,21 @@ class TestLookupsAreNameProbes:
             importer.is_package("missing")
         assert issubclass(zipimport.ZipImportError, ImportError)
 
-    def test_a_hit_reads_and_compiles_its_member(
+    def test_a_hit_on_source_reads_and_compiles_it_before_3_15_1(
         self, tmp_path: pathlib.Path, calls: Calls
     ) -> None:
         archive = build(tmp_path / "a.zip", {"mod.py": "X = 1\n", "pkg/__init__.py": ""})
         importer = zipimport.zipimporter(archive)
+        per_hit = 0 if NAMES_SOURCE_UNREAD else 1
 
         spec = importer.find_spec("mod")
         assert spec is not None and spec.loader is importer
-        assert (calls.member, calls.compiled) == (1, 1)
+        assert (calls.member, calls.compiled) == (per_hit, per_hit)
 
         package = importer.find_spec("pkg")
         assert package is not None
         assert package.submodule_search_locations == [os.path.join(archive, "pkg")]
-        assert (calls.member, calls.compiled) == (2, 2)
+        assert (calls.member, calls.compiled) == (2 * per_hit, 2 * per_hit)
 
     def test_a_namespace_directory_is_found_by_lookup_alone(
         self, tmp_path: pathlib.Path, calls: Calls
@@ -332,10 +338,11 @@ class TestLookupsAreNameProbes:
 
 class TestMembersAreReadEveryTime:
     """`get_code`, `get_filename`, `get_source`, `get_data` | O(b) | O(b): each
-    call reads its member from disk, and `get_code` and `get_filename` compile a
-    `.py` member each time."""
+    call reads its member from disk, and `get_code` compiles a `.py` member
+    each time; `get_filename` does both before 3.15.1, and from 3.15.1 neither
+    for a `.py` member."""
 
-    def test_get_code_and_get_filename_read_and_compile_on_every_call(
+    def test_get_code_compiles_every_call_and_get_filename_does_before_3_15_1(
         self, tmp_path: pathlib.Path, calls: Calls
     ) -> None:
         archive = build(tmp_path / "a.zip", {"mod.py": "X = 1\n"})
@@ -348,7 +355,8 @@ class TestMembersAreReadEveryTime:
 
         assert importer.get_filename("mod") == os.path.join(archive, "mod.py")
         assert importer.get_filename("mod") == os.path.join(archive, "mod.py")
-        assert (calls.member, calls.compiled) == (4, 4)
+        expected = 2 if NAMES_SOURCE_UNREAD else 4
+        assert (calls.member, calls.compiled) == (expected, expected)
         assert pathlib.Path(archive).read_bytes() == before, "the archive was modified"
 
     def test_bytecode_beside_the_source_is_not_compiled(
@@ -370,9 +378,9 @@ class TestMembersAreReadEveryTime:
         importer = zipimport.zipimporter(with_bytecode(tmp_path, "slow", legacy=False))
 
         assert importer.get_filename("slow").endswith("slow.py")
-        assert calls.compiled == 1
+        assert calls.compiled == (0 if NAMES_SOURCE_UNREAD else 1)
 
-    def test_stale_bytecode_falls_back_to_compiling_the_source(
+    def test_stale_bytecode_is_passed_over_for_the_source(
         self, tmp_path: pathlib.Path, calls: Calls
     ) -> None:
         archive = with_bytecode(tmp_path, "stale")
@@ -382,7 +390,7 @@ class TestMembersAreReadEveryTime:
         importer = zipimport.zipimporter(build(tmp_path / "stale2.zip", members))
 
         assert importer.get_filename("stale").endswith("stale.py")
-        assert calls.compiled == 1
+        assert calls.compiled == (0 if NAMES_SOURCE_UNREAD else 1)
 
     def test_a_package_is_tried_before_a_module_of_the_same_name(
         self, tmp_path: pathlib.Path, calls: Calls
@@ -438,7 +446,8 @@ class TestMembersAreReadEveryTime:
 
 class TestImportingThroughSysPath:
     """Each module imported from an archive on `sys.path` is read and decoded
-    twice, once by `find_spec()` and once by `exec_module()`."""
+    twice, once by `find_spec()` and once by `exec_module()`; from 3.15.1 a
+    `.py` member only by `exec_module()`."""
 
     @pytest.fixture
     def on_path(self, monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[[str], None]]:
@@ -452,14 +461,13 @@ class TestImportingThroughSysPath:
         for archive in added:
             sys.path_importer_cache.pop(archive, None)
 
-    @pytest.mark.parametrize(("legacy", "compiles"), [(False, 2), (True, 0)])
-    def test_an_import_reads_the_member_twice_and_compiles_only_source(
+    @pytest.mark.parametrize("legacy", [False, True])
+    def test_an_import_reads_the_member_and_compiles_only_source(
         self,
         tmp_path: pathlib.Path,
         calls: Calls,
         on_path: Callable[[str], None],
         legacy: bool,
-        compiles: int,
     ) -> None:
         name = f"zipimport_probe_{'pyc' if legacy else 'py'}"
         if legacy:
@@ -476,8 +484,9 @@ class TestImportingThroughSysPath:
 
         assert module.VALUE == 42
         assert isinstance(sys.path_importer_cache[archive], zipimport.zipimporter)
-        assert calls.compiled == compiles
-        assert calls.member == 2
+        source_reads = 1 if NAMES_SOURCE_UNREAD else 2
+        assert calls.compiled == (0 if legacy else source_reads)
+        assert calls.member == (2 if legacy else source_reads)
 
     def test_a_module_the_archive_lacks_costs_it_a_few_lookups(
         self, tmp_path: pathlib.Path, calls: Calls, on_path: Callable[[str], None]

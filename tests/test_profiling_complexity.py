@@ -50,6 +50,10 @@ Not settled here:
   Lib/profiling/sampling/sample.py, which reads the whole stack once per
   sample, and from the collectors, which walk each sample's frames. k is not
   varied, and neither is the rate: n is only bounded from below.
+* On 3.15.0 alone, `replay` of a recording whose thread status alternates
+  between samples is quadratic in the length of each repeat record, up to
+  the writer's cap on one (gh-152721). That version and that input shape
+  are not tested.
 * That the target is never paused without `--blocking`, and that `--blocking`
   pauses its threads, is taken from the official documentation and
   `_pause_threads()` in sample.py; it is not observed.

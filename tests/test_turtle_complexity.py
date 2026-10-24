@@ -72,9 +72,11 @@ Measurement scope:
   adds no polygon, only the line item that closing the current line makes,
   and restarts the path at one vertex; `clear()` installs a buffer of the
   size the turtle was built with, 100,000 slots after `setundobuffer(1)`; `get_poly()` is a new tuple of one vertex per
-  move plus the start; `teleport()` pushes two pen entries with the pen down
-  and no move entry, and while filling adds a fill item and at least one
-  more entry unless `fill_gap=True`. An exception inside `fill()` ends the
+  move plus the start; before 3.14.9 and 3.15.1 `teleport()` pushes two pen
+  entries with the pen down and no move entry, and while filling at least
+  one more; from those releases it pushes one sequence entry holding the
+  pen changes and a teleport step either way, and undoing it moves the
+  turtle back. While filling it adds a fill item unless `fill_gap=True`. An exception inside `fill()` ends the
   fill and propagates. `circle(1000)` records 60 moves, `circle(10)` 13,
   `circle(50, steps=6)` 6 and `circle(50, 180)` 10; a quarter circle is one
   undo entry, and undoing it restores the start position and heading.
@@ -100,8 +102,8 @@ Measurement scope:
   assertion of `Shape('image', data)` are guarded on 3.14, where before it a
   string that is not an existing `.gif` path is stored as given. `stamp()`,
   `clearstamp()` and `clearstamps()` raise `AttributeError` after
-  `setundobuffer(None)`, while `clearstamps()` with nothing to clear does
-  not; `Terminator` is raised by the first command after
+  `setundobuffer(None)` before 3.14.9 and 3.15.1 and work from them, while
+  `clearstamps()` with nothing to clear never raises; `Terminator` is raised by the first command after
   the screen stops running. `pos()` and `turtles()` return the stored objects.
   `Vec2D` arithmetic, `Shape` construction, `write_docstringdict()`, the
   module-level delegation to the anonymous turtle and `RawTurtle()` on a bare
@@ -170,6 +172,8 @@ PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "turtle.md"
 EXPECTED_BLOCKS = 8
 DEFAULT_SPEED = 3
 DEFAULT_DELAY = 10
+# gh-158563: stamps work without an undo buffer, and teleport() is one undo step.
+UNDO_FIXES = sys.version_info >= (3, 15, 1) or (3, 14, 9) <= sys.version_info < (3, 15)
 
 
 def best_ns(func: Callable[[], Any], repeats: int = 5, inner: int = 1) -> float:
@@ -1014,7 +1018,7 @@ class TestUndoAndTheBuffer:
 
         assert ratio > 20, f"100x the slots cost x{ratio:.1f}: {durations} ns"
 
-    def test_removing_the_buffer_breaks_stamps(self) -> None:
+    def test_removing_the_buffer_breaks_stamps_before_3_14_9(self) -> None:
         setup = Setup(tracer=0)
         stamp = setup.pen.stamp()
         setup.pen.setundobuffer(None)
@@ -1024,14 +1028,20 @@ class TestUndoAndTheBuffer:
         setup.pen.write("x")
         setup.pen.dot()
         setup.pen.undo()
-        with pytest.raises(AttributeError):
-            setup.pen.stamp()
-        with pytest.raises(AttributeError):
+        if UNDO_FIXES:
+            second = setup.pen.stamp()
             setup.pen.clearstamp(stamp)
-        with pytest.raises(AttributeError):
+            assert setup.pen.stampItems == [second]
             setup.pen.clearstamps()
-        setup.pen.stampItems.clear()
-        setup.pen.clearstamps()
+        else:
+            with pytest.raises(AttributeError):
+                setup.pen.stamp()
+            with pytest.raises(AttributeError):
+                setup.pen.clearstamp(stamp)
+            with pytest.raises(AttributeError):
+                setup.pen.clearstamps()
+            setup.pen.stampItems.clear()
+            setup.pen.clearstamps()
         assert setup.pen.stampItems == [], "nothing to clear, nothing dereferenced"
 
 
@@ -1259,7 +1269,7 @@ class TestFillingAndPolygons:
         assert setup.pen.filling() is False
 
     @pytest.mark.skipif(sys.version_info < (3, 12), reason="added in 3.12")
-    def test_teleport_pushes_no_entry_and_restarts_a_fill(self) -> None:
+    def test_teleport_pushes_no_move_entry_and_restarts_a_fill(self) -> None:
         setup = Setup(tracer=0)
         setup.pen.forward(10)
         entries = setup.pen.undobufferentries()
@@ -1268,18 +1278,30 @@ class TestFillingAndPolygons:
         setup.pen.teleport(50, 50)
 
         assert setup.pen.pos() == (50, 50)
-        assert setup.pen.undobufferentries() == entries + 2, "two pen entries, no move entry"
-        buffer = setup.pen.undobuffer.buffer
-        newest = buffer[setup.pen.undobuffer.ptr], buffer[setup.pen.undobuffer.ptr - 1]
-        assert [entry[0] for entry in newest] == ["pen", "pen"]
         assert len(setup.pen.items) == items + 1, "the drawn line is closed, as by penup()"
+        buffer = setup.pen.undobuffer.buffer
+        newest = buffer[setup.pen.undobuffer.ptr]
+        if UNDO_FIXES:
+            assert setup.pen.undobufferentries() == entries + 1, "one sequence entry"
+            assert newest[0] == "seq"
+            assert [step[0] for step in newest[1:]] == ["pen", "teleport", "pen"]
+            setup.pen.undo()
+            assert setup.pen.pos() == (10, 0)
+            setup.pen.teleport(50, 50)
+        else:
+            assert setup.pen.undobufferentries() == entries + 2, "two pen entries, no move entry"
+            previous = buffer[setup.pen.undobuffer.ptr - 1]
+            assert [newest[0], previous[0]] == ["pen", "pen"]
 
         setup.pen.begin_fill()
         items = len(setup.pen.items)
         entries = setup.pen.undobufferentries()
         setup.pen.teleport(0, 0)
         assert len(setup.pen.items) == items + 1, "the fill was closed and a new one begun"
-        assert setup.pen.undobufferentries() >= entries + 3, "begin_fill() pushes its own"
+        if UNDO_FIXES:
+            assert setup.pen.undobufferentries() == entries + 1
+        else:
+            assert setup.pen.undobufferentries() >= entries + 3, "begin_fill() pushes its own"
         setup.pen.teleport(10, 10, fill_gap=True)
         assert len(setup.pen.items) == items + 1
         assert setup.pen.filling() is True

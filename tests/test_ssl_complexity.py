@@ -123,8 +123,7 @@ Measurement scope:
   names raise `SSLError` from each setter. `get_groups()` and `get_sigalgs()`
   return equal lists that are not the same object on two calls. Before a
   handshake the sigalg accessors return `None`, and `group()` kills a child
-  interpreter on 3.15.0 with OpenSSL 3.5 - the reason the row says to call it
-  only afterwards.
+  interpreter on 3.15.0 with OpenSSL 3.5 and returns `None` from 3.15.1.
 * Every fenced Python block except the one that opens a connection runs in its
   own subprocess and working directory, and a mutated assertion in one of them
   is asserted to fail.
@@ -1421,10 +1420,7 @@ class TestGroupsAndSignatureAlgorithms:
         assert unfinished.server_sigalg() is None  # type: ignore[attr-defined]
 
     def test_group_before_the_handshake_crashes_3_15_0(self) -> None:
-        """Why the row says to call `group()` only after the handshake.
-
-        Run in a child, which dies rather than printing None.
-        """
+        """Run in a child, which dies rather than printing None."""
         if sys.version_info[:3] != (3, 15, 0):
             pytest.skip("version: the crash is the one observed on 3.15.0")
         if ssl.OPENSSL_VERSION_INFO < (3, 2):
@@ -1446,6 +1442,16 @@ class TestGroupsAndSignatureAlgorithms:
         assert result.returncode != 0, (result.returncode, result.stdout, result.stderr)
         assert result.stdout == "", result.stdout
         assert "Traceback" not in result.stderr, "an exception is not the crash the row warns of"
+
+    def test_group_before_the_handshake_is_none_from_3_15_1(self) -> None:
+        if sys.version_info < (3, 15, 1):
+            pytest.skip("version: 3.15.0 crashes, and group() is new in 3.15")
+        if ssl.OPENSSL_VERSION_INFO < (3, 2):
+            pytest.skip("version: an OpenSSL before 3.2 raises NotImplementedError instead")
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        unfinished = context.wrap_bio(ssl.MemoryBIO(), ssl.MemoryBIO(), server_side=True)
+
+        assert unfinished.group() is None  # type: ignore[attr-defined]
 
 
 class TestVersionNotes:

@@ -61,7 +61,7 @@ Measurement scope:
   length k, k - 1, ... 1, for k of 5 and 50. `deleteMe()` calls `remove()`
   once and leaves `None` at its number. `clear_all_file_breaks()` leaves the
   even-numbered breakpoints of k at a line, for k of 4 and 5, and a later `Bdb`
-  sees them.
+  sees them; on 3.14.9+ and 3.15.1+ it leaves none.
   `clear_all_breaks()` walks all 1,001 numbers after 999 of 1,000
   breakpoints were deleted. `get_breaks()`, `get_file_breaks()` and
   `get_all_breaks()` return the registry's list, the instance's list and the
@@ -93,8 +93,9 @@ Not settled here:
 * The O(k²) of `clear_break()` and the O(k) of `deleteMe()` are the list
   lengths `remove()` is observed to work on, priced by `list.remove()` being
   linear. The O(B·k) and O(b·k²) of `clear_all_breaks()` and
-  `clear_all_file_breaks()` are upper bounds read from Lib/bdb.py; only the
-  walk over B is observed.
+  `clear_all_file_breaks()` are upper bounds read from Lib/bdb.py, as is the
+  O(k) copy of a line's list the latter makes on 3.14.9+ and 3.15.1+; only
+  the walk over B is observed.
 * Pricing file names, module names, source lines and conditions at O(1) is
   the page's cost model; `canonic()` runs `os.path.abspath()` once per name,
   and `fnmatch` matches each pattern against the module name.
@@ -144,6 +145,8 @@ EXPECTED_BLOCKS = 8
 # Already in `Bdb.canonic()` form, so a breakpoint registered under it is found
 # by name on every platform (on Windows `canonic()` adds a drive letter).
 FAKE_FILE = os.path.normcase(os.path.abspath("/nonexistent/bdb_complexity_target.py"))
+# gh-149015: clear_all_file_breaks() iterates over a copy of each line's list.
+CLEARS_EVERY_FILE_BREAK = sys.version_info >= (3, 15, 1) or (3, 14, 9) <= sys.version_info < (3, 15)
 
 
 @pytest.fixture(autouse=True)
@@ -965,8 +968,8 @@ class TestSetBreak:
 
 class TestClearingBreakpoints:
     """The clearing rows: `clear_break()` removes each of k from a shrinking
-    list, `clear_all_file_breaks()` leaves every second one, and
-    `clear_all_breaks()` walks every number ever assigned."""
+    list, `clear_all_file_breaks()` leaves every second one before 3.14.9
+    and 3.15.1, and `clear_all_breaks()` walks every number ever assigned."""
 
     @staticmethod
     def set_k(debugger: bdb.Bdb, count: int) -> tuple[str, int]:
@@ -990,17 +993,21 @@ class TestClearingBreakpoints:
         assert debugger.get_all_breaks() == {}
 
     @pytest.mark.parametrize("count", [4, 5])
-    def test_clear_all_file_breaks_leaves_every_second_one(self, count: int) -> None:
+    def test_what_clear_all_file_breaks_leaves(self, count: int) -> None:
         debugger = bdb.Bdb()
         filename, line = self.set_k(debugger, count)
 
         assert debugger.clear_all_file_breaks(filename) is None
 
         assert debugger.get_file_breaks(filename) == []
-        survivors = [each.number for each in bdb.Breakpoint.bplist[filename, line]]
-        assert survivors == list(range(2, count + 1, 2))
         assert debugger.clear_all_breaks() == "There are no breakpoints"
-        assert bdb.Bdb().get_break(filename, line)
+        if CLEARS_EVERY_FILE_BREAK:
+            assert (filename, line) not in bdb.Breakpoint.bplist
+            assert not bdb.Bdb().get_break(filename, line)
+        else:
+            survivors = [each.number for each in bdb.Breakpoint.bplist[filename, line]]
+            assert survivors == list(range(2, count + 1, 2))
+            assert bdb.Bdb().get_break(filename, line)
 
     def test_clear_all_breaks_walks_every_number_ever_assigned(self) -> None:
         for line in range(1, 1_001):
