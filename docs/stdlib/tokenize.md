@@ -21,7 +21,7 @@ most two; c = characters in the source `untokenize()` produces.
 |-----------|------|-------|-------|
 | `generate_tokens(readline)` | O(n) | O(L) | Lazy. Calls `readline` for one line at a time, never ahead of the token being yielded, and drops each line once the next begins unless a token spans them. Stopping after k tokens costs the lines read to reach them |
 | `tokenize(readline)` | O(n) | O(L) | `detect_encoding()` first, then decodes each line as it is read. The first token yielded is `ENCODING` |
-| `TokenInfo` fields, `exact_type` | O(1) | O(1) | Tokens on one line share one `line` string, so a list of every token holds each line once: O(t + n), not O(t·L) |
+| `TokenInfo`, `TokenInfo.type`, `TokenInfo.string`, `TokenInfo.start`, `TokenInfo.end`, `TokenInfo.line`, `TokenInfo.exact_type` | O(1) | O(1) | Tokens on one line share one `line` string, so a list of every token holds each line once: O(t + n), not O(t·L) |
 | `TokenError` | — | — | Raised from inside the stream, so the tokens of the lines before the fault have already been yielded. Up to 3.11 it is raised only for an EOF inside a string, a bracket or a backslash continuation, and a malformed token is yielded as `ERRORTOKEN` with tokenizing continuing; from 3.12 an unterminated string or a NUL byte raises it too. An inconsistent dedent raises `IndentationError` instead, on every version |
 | `tok_name` | O(1) | O(1) | Token type to its name; `exact_type` names the operator itself |
 

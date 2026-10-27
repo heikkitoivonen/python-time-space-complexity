@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "python_version": "3.15",
-  "documentation_version": "3.15.1",
+  "documentation_version": "3.15.2",
   "source_url": "https://docs.python.org/3.15/objects.inv",
-  "inventory_sha256": "f93bafb7154df807cb3800b62070856d2e5ff4b92abc81bd57983eef69ae2dd6",
+  "inventory_sha256": "4ca707e693ec0bfcf92ecf119f4deadea7669b41cc0c535b23cdc798363cb5db",
   "apis": {
     "__future__._Feature": {
       "kind": "class",
@@ -6180,6 +6180,10 @@
     "concurrent.futures.ThreadPoolExecutor": {
       "kind": "class",
       "source": "https://docs.python.org/3.15/library/concurrent.futures.html#concurrent.futures.ThreadPoolExecutor"
+    },
+    "concurrent.futures.ThreadPoolExecutor.prepare_context": {
+      "kind": "method",
+      "source": "https://docs.python.org/3.15/library/concurrent.futures.html#concurrent.futures.ThreadPoolExecutor.prepare_context"
     },
     "concurrent.futures.TimeoutError": {
       "kind": "class",
@@ -20097,6 +20101,26 @@
       "kind": "module",
       "source": "https://docs.python.org/3.15/library/mmap.html#module-mmap"
     },
+    "mmap.ACCESS_COPY": {
+      "kind": "attribute",
+      "source": "https://docs.python.org/3.15/library/mmap.html#mmap.ACCESS_COPY"
+    },
+    "mmap.ACCESS_DEFAULT": {
+      "kind": "attribute",
+      "source": "https://docs.python.org/3.15/library/mmap.html#mmap.ACCESS_DEFAULT"
+    },
+    "mmap.ACCESS_READ": {
+      "kind": "attribute",
+      "source": "https://docs.python.org/3.15/library/mmap.html#mmap.ACCESS_READ"
+    },
+    "mmap.ACCESS_WRITE": {
+      "kind": "attribute",
+      "source": "https://docs.python.org/3.15/library/mmap.html#mmap.ACCESS_WRITE"
+    },
+    "mmap.ALLOCATIONGRANULARITY": {
+      "kind": "attribute",
+      "source": "https://docs.python.org/3.15/library/mmap.html#mmap.ALLOCATIONGRANULARITY"
+    },
     "mmap.MADV_AUTOSYNC": {
       "kind": "attribute",
       "source": "https://docs.python.org/3.15/library/mmap.html#mmap.MADV_AUTOSYNC"
@@ -20288,6 +20312,22 @@
     "mmap.MS_SYNC": {
       "kind": "attribute",
       "source": "https://docs.python.org/3.15/library/mmap.html#mmap.MS_SYNC"
+    },
+    "mmap.PAGESIZE": {
+      "kind": "attribute",
+      "source": "https://docs.python.org/3.15/library/mmap.html#mmap.PAGESIZE"
+    },
+    "mmap.PROT_EXEC": {
+      "kind": "attribute",
+      "source": "https://docs.python.org/3.15/library/mmap.html#mmap.PROT_EXEC"
+    },
+    "mmap.PROT_READ": {
+      "kind": "attribute",
+      "source": "https://docs.python.org/3.15/library/mmap.html#mmap.PROT_READ"
+    },
+    "mmap.PROT_WRITE": {
+      "kind": "attribute",
+      "source": "https://docs.python.org/3.15/library/mmap.html#mmap.PROT_WRITE"
     },
     "mmap.mmap": {
       "kind": "class",
@@ -30633,6 +30673,10 @@
       "kind": "attribute",
       "source": "https://docs.python.org/3.15/library/sys.html#sys.flags.isolated"
     },
+    "sys.flags.lazy_imports": {
+      "kind": "attribute",
+      "source": "https://docs.python.org/3.15/library/sys.html#sys.flags.lazy_imports"
+    },
     "sys.flags.no_site": {
       "kind": "attribute",
       "source": "https://docs.python.org/3.15/library/sys.html#sys.flags.no_site"
@@ -36448,6 +36492,34 @@
     "tokenize.TokenError": {
       "kind": "class",
       "source": "https://docs.python.org/3.15/library/tokenize.html#tokenize.TokenError"
+    },
+    "tokenize.TokenInfo": {
+      "kind": "class",
+      "source": "https://docs.python.org/3.15/library/tokenize.html#tokenize.TokenInfo"
+    },
+    "tokenize.TokenInfo.end": {
+      "kind": "attribute",
+      "source": "https://docs.python.org/3.15/library/tokenize.html#tokenize.TokenInfo.end"
+    },
+    "tokenize.TokenInfo.exact_type": {
+      "kind": "attribute",
+      "source": "https://docs.python.org/3.15/library/tokenize.html#tokenize.TokenInfo.exact_type"
+    },
+    "tokenize.TokenInfo.line": {
+      "kind": "attribute",
+      "source": "https://docs.python.org/3.15/library/tokenize.html#tokenize.TokenInfo.line"
+    },
+    "tokenize.TokenInfo.start": {
+      "kind": "attribute",
+      "source": "https://docs.python.org/3.15/library/tokenize.html#tokenize.TokenInfo.start"
+    },
+    "tokenize.TokenInfo.string": {
+      "kind": "attribute",
+      "source": "https://docs.python.org/3.15/library/tokenize.html#tokenize.TokenInfo.string"
+    },
+    "tokenize.TokenInfo.type": {
+      "kind": "attribute",
+      "source": "https://docs.python.org/3.15/library/tokenize.html#tokenize.TokenInfo.type"
     },
     "tokenize.detect_encoding": {
       "kind": "function",

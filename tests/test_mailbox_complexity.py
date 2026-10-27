@@ -104,13 +104,19 @@ Measurement scope:
   renumbers to close a gap and rewrites the sequences.
 * `Babyl` is asserted to store each header twice by counting a distinctive
   header name in the file it wrote, against `mbox` storing it once - and to
-  store it only once when handed a `BabylMessage` - a visible set carrying a
-  header of its own is asserted absent from the file. All three readers then
-  raise `AssertionError` on a stored `BabylMessage` whose body holds no blank
-  line, and succeed on the same message stored plain. With a blank line in the
-  body the read instead succeeds and returns only what followed it - asserted
-  through `get_message()`, `get_bytes()` and `get_file()`, each keeping the
-  text after the blank line and losing the text before it.
+  store it only once when handed a `BabylMessage`. Before 3.14.10 and 3.15.2
+  a visible set carrying a header of its own is asserted absent from the
+  file; all three readers then raise `AssertionError` on a stored
+  `BabylMessage` whose body holds no blank line, and succeed on the same
+  message stored plain. With a blank line in the body the read instead
+  succeeds and returns only what followed it - asserted through
+  `get_message()`, `get_bytes()` and `get_file()`, each keeping the text
+  after the blank line and losing the text before it. From those releases the
+  visible set's header is asserted written once and read back, all three
+  readers return the one-paragraph message, and all three keep both
+  paragraphs of the other. The two sides are guarded on
+  `sys.version_info` and were run on 3.11.18, 3.13.18, 3.14.9, 3.14.10,
+  3.15.1 and 3.15.2.
 * A `Maildir` holding two messages and five dotted entries in `cur` is
   asserted to have length two from 3.13, which is the second version note and
   `e` exceeding `n` on that format.
@@ -183,9 +189,12 @@ Not settled here:
   the behaviour of `mbox.lock()` against a concurrent reader is not observed.
   Neither is what `_sync_flush()` costs: `fsync` timing is a property of the
   filesystem, not of this module.
-* `Maildir.colon` on a filesystem that forbids `':'`. The separator is
-  asserted to reach the filename, but no such filesystem exists on the
-  platforms this suite runs on.
+* `Babyl.add()` of a `BabylMessage` counts its visible set within h, as
+  headers it writes; a visible set built apart from the message and larger
+  than its headers is not measured.
+* `Maildir.colon` left at `':'` on a filesystem that forbids it. The
+  separator is asserted to reach the filename; on Windows the tests set
+  `colon` to `'!'` first, so what the default does there is not observed.
 * Whether `ExternalClashError` from `Maildir.add()` - a name clash in `tmp` -
   can be reached without racing a second writer. It is not provoked here.
 * The measurements hold message shape fixed except where a dimension is the
@@ -237,6 +246,9 @@ import pytest
 # after the 3.11 signatures this file is checked against.
 PAGE = pathlib.Path(__file__).parent.parent / "docs" / "stdlib" / "mailbox.md"
 EXPECTED_BLOCKS = 17
+
+# gh-157880: from 3.14.10 and 3.15.2 Babyl.add() writes a BabylMessage's visible set.
+BABYL_WRITES_VISIBLE = sys.version_info >= (3, 15, 2) or (3, 14, 10) <= sys.version_info < (3, 15)
 
 
 def best_ns(func: Callable[[], Any], repeats: int = 7, inner: int = 1) -> float:
@@ -1562,71 +1574,91 @@ class TestBabylStoresHeadersTwice:
         assert mbox_bytes.count(b"X-Trace-0") == 1
 
     @pytest.mark.parametrize("reader", ["get_message", "get_bytes", "get_file"])
-    def test_a_stored_babyl_message_cannot_be_read_back(
+    def test_a_stored_babyl_message_reads_back_from_3_14_10(
         self, tmp_path: pathlib.Path, reader: str
     ) -> None:
         """The warning on the page, held to all three readers.
 
-        `_install_message()` flattens the visible set into a buffer it never
-        rewinds, so the visible section is written empty; the reader then runs
-        past the message looking for the blank line that should have closed
-        it. The body here holds no blank line, so the search reaches the end
-        of the message and the offset arithmetic fails; a body that does hold
-        one fails differently, which the next test covers. The control is the
-        same message stored as a plain one, which the other branch writes
-        correctly.
+        Before 3.14.10 and 3.15.2, `_install_message()` flattens the visible
+        set into a buffer it never rewinds, so the visible section is written
+        empty; the reader then runs past the message looking for the blank
+        line that should have closed it. The body here holds no blank line,
+        so the search reaches the end of the message and the offset
+        arithmetic fails; a body that does hold one fails differently, which
+        the next test covers. From those releases the reader returns the
+        message. The control is the same message stored as a plain one, which
+        the other branch writes correctly on every version.
         """
         plain = message("hello", body="one paragraph only\n")
 
         readable: Any = mailbox.Babyl(str(tmp_path / "ok.babyl"))
         readable.add(plain)
         readable.close()
-        broken: Any = mailbox.Babyl(str(tmp_path / "broken.babyl"))
-        broken.add(mailbox.BabylMessage(plain))
-        broken.close()
+        stored: Any = mailbox.Babyl(str(tmp_path / "stored.babyl"))
+        stored.add(mailbox.BabylMessage(plain))
+        stored.close()
 
         readable = mailbox.Babyl(str(tmp_path / "ok.babyl"))
         assert len(readable) == 1
         assert getattr(readable, reader)(0) is not None, f"a plain message broke {reader}()"
         readable.close()
 
-        broken = mailbox.Babyl(str(tmp_path / "broken.babyl"))
-        assert len(broken) == 1
-        with pytest.raises(AssertionError):
-            getattr(broken, reader)(0)
-        broken.close()
+        stored = mailbox.Babyl(str(tmp_path / "stored.babyl"))
+        assert len(stored) == 1
+        if BABYL_WRITES_VISIBLE:
+            read = getattr(stored, reader)(0)
+            if reader == "get_message":
+                assert read.get_payload() == "one paragraph only\n"
+            else:
+                text = read if reader == "get_bytes" else read.read()
+                assert b"one paragraph only" in text, f"{reader}() lost the body"
+        else:
+            with pytest.raises(AssertionError):
+                getattr(stored, reader)(0)
+        stored.close()
 
-    def test_a_populated_visible_set_is_dropped(self, tmp_path: pathlib.Path) -> None:
-        """Why the read overshoots: the second header copy is simply absent.
+    def test_the_visible_set_is_written_from_3_14_10(self, tmp_path: pathlib.Path) -> None:
+        """Why the read overshoots before 3.14.10 and 3.15.2: the second
+        header copy is simply absent.
 
         The visible set carries a header of its own, so this separates "the
         visible copy was written empty" from "the visible copy repeated the
-        message's headers", which is what a plain message gets.
+        message's headers", which is what a plain message gets. From those
+        releases the visible set is the second copy: its own header once, the
+        message's header once, and the visible set reads back.
         """
         source = mailbox.BabylMessage(message(headers=1))
         visible = mailbox.Message()
-        visible["X-Visible-Only"] = "should have been written"
+        visible["X-Visible-Only"] = "written as the second copy"
         source.set_visible(visible)
 
-        broken: Any = mailbox.Babyl(str(tmp_path / "broken.babyl"))
-        broken.add(source)
-        broken.close()
+        stored: Any = mailbox.Babyl(str(tmp_path / "stored.babyl"))
+        stored.add(source)
+        stored.close()
 
-        written = (tmp_path / "broken.babyl").read_bytes()
+        written = (tmp_path / "stored.babyl").read_bytes()
 
-        assert b"X-Visible-Only" not in written, "the visible set did reach the file"
         assert written.count(b"X-Trace-0") == 1, "a BabylMessage did write a second header copy"
         assert b"*** EOOH ***" in written
+        if BABYL_WRITES_VISIBLE:
+            assert written.count(b"X-Visible-Only") == 1, "the visible set did not reach the file"
+            stored = mailbox.Babyl(str(tmp_path / "stored.babyl"))
+            visible_back = stored.get_message(0).get_visible()
+            assert visible_back["X-Visible-Only"] == "written as the second copy"
+            stored.close()
+        else:
+            assert b"X-Visible-Only" not in written, "the visible set did reach the file"
 
-    def test_a_blank_line_in_the_body_loses_everything_before_it(
+    def test_a_blank_line_in_the_body_loses_everything_before_it_before_3_14_10(
         self, tmp_path: pathlib.Path
     ) -> None:
         """The silent half of the warning, and the worse one.
 
-        The reader stops its visible-header search at the first blank line it
-        meets. With nothing written between `*** EOOH ***` and the body, that
-        blank line is the one inside the body - so the read succeeds and
-        everything ahead of it is gone.
+        Before 3.14.10 and 3.15.2 the reader stops its visible-header search
+        at the first blank line it meets. With nothing written between
+        `*** EOOH ***` and the body, that blank line is the one inside the
+        body - so the read succeeds and everything ahead of it is gone. From
+        those releases all three readers keep both paragraphs.
         """
         source = message(body="first paragraph\n\nsecond paragraph\n")
 
@@ -1638,15 +1670,20 @@ class TestBabylStoresHeadersTwice:
         assert len(silent) == 1
         recovered = silent.get_message(0)
 
-        assert recovered.get_payload() == "second paragraph\n", (
-            "the read did not lose the first paragraph, so the page's silent case is wrong"
-        )
+        if BABYL_WRITES_VISIBLE:
+            assert recovered.get_payload() == "first paragraph\n\nsecond paragraph\n"
+        else:
+            assert recovered.get_payload() == "second paragraph\n", (
+                "the read did not lose the first paragraph, so the page's silent case is wrong"
+            )
         for name, text in (
             ("get_bytes", silent.get_bytes(0).decode("ascii")),
             ("get_file", silent.get_file(0).read().decode("ascii")),
         ):
             assert "second paragraph" in text, f"{name}() lost the whole body, not just the start"
-            assert "first paragraph" not in text, f"{name}() kept the first paragraph"
+            assert ("first paragraph" in text) is BABYL_WRITES_VISIBLE, (
+                f"{name}() kept or lost the first paragraph against the version boundary"
+            )
         silent.close()
 
     def test_labels_are_unioned_across_the_mailbox(self, tmp_path: pathlib.Path) -> None:

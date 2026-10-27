@@ -158,8 +158,8 @@ One file, like `mbox`, plus a label list per message and a second copy of each m
 |-----------|------|-------|-------|
 | `mailbox.Babyl(path, factory=None, create=True)` | O(1) | O(1) | As `mbox` |
 | First keyed operation on an open mailbox | O(F) | O(n + n·L) retained | The scan collects each message's labels along with its offsets |
-| `Babyl.add(message)` | O(m + h) after the table of contents | O(m) | The headers are written twice, as received and again as the visible set. A `BabylMessage` is the exception, and not a usable one - see the warning below |
-| `Babyl.get_message(key)` | O(m) | O(m) | Reassembles the original headers and body and attaches the labels. On a message stored from a `BabylMessage` it raises `AssertionError`, or silently loses the body up to its first blank line - see the warning below |
+| `Babyl.add(message)` | O(m + h) after the table of contents | O(m) | The headers are written twice, as received and again as the visible set. For a `BabylMessage` the second copy is its own visible set, which before 3.14.10 and 3.15.2 is written empty - see the warning below |
+| `Babyl.get_message(key)` | O(m) | O(m) | Reassembles the original headers and body and attaches the labels. Before 3.14.10 and 3.15.2, on a message stored from a `BabylMessage` it raises `AssertionError`, or silently loses the body up to its first blank line - see the warning below |
 | `Babyl.get_bytes(key)` | O(m) | O(m) | Skips the visible headers |
 | `Babyl.get_file(key)` | O(m) | O(m) | A copy in memory, unlike the window `mbox` and `MMDF` return |
 | `Babyl.get_labels()` | O(n·L) after the table of contents | O(distinct labels) | Unions every message's labels, then drops the seven Babyl reserves |
@@ -667,20 +667,23 @@ if sys.version_info >= (3, 13):
         assert set(maildir.get_flags(key)) == {'S', 'F'}
 ```
 
-### A BabylMessage Cannot Be Read Back
+### Storing a BabylMessage
 
-!!! warning "Store a plain message in a `Babyl` mailbox"
+!!! warning "Before 3.14.10 and 3.15.2, store a plain message in a `Babyl` mailbox"
     `add()` writes each message's headers twice, the second copy being the visible set. Handed a
-    `BabylMessage`, it writes that second copy empty - a visible set you gave it is dropped too -
-    and what lands on disk is malformed. Reading it back searches for the blank line that should
-    have closed the visible headers, and what that search runs into decides the damage. A body
-    with no blank line in it has none to find, so `get_message()`, `get_bytes()` and `get_file()`
-    all raise `AssertionError`. A body that does have one reads back **successfully, with
-    everything before that blank line gone**. The silent case is the dangerous one. Both hold on
-    every Python 3 version this page covers, so hand `Babyl.add()` an `email.message.Message`.
+    `BabylMessage`, releases before 3.14.10 and 3.15.2 - every 3.11, 3.12 and 3.13 release
+    included - write that second copy empty, dropping a visible set you gave it too, and what
+    lands on disk is malformed. Reading it back searches for the blank line that should have
+    closed the visible headers, and what that search runs into decides the damage. A body with no
+    blank line in it has none to find, so `get_message()`, `get_bytes()` and `get_file()` all
+    raise `AssertionError`. A body that does have one reads back **successfully, with everything
+    before that blank line gone**. The silent case is the dangerous one. On those releases, hand
+    `Babyl.add()` an `email.message.Message`. From 3.14.10 and 3.15.2 the visible set is written
+    and the message reads back whole.
 
 ```python
 import mailbox
+import sys
 import tempfile
 from email.message import EmailMessage
 from pathlib import Path
@@ -698,20 +701,23 @@ with tempfile.TemporaryDirectory() as directory:
     assert readable.get_message(0)['Subject'] == 'hello'   # O(m)
     readable.close()
 
-    broken = mailbox.Babyl(str(Path(directory) / 'broken.babyl'))
-    broken.add(mailbox.BabylMessage(plain))  # the visible copy is written empty
-    broken.close()
+    writes_visible = sys.version_info >= (3, 15, 2) or (3, 14, 10) <= sys.version_info < (3, 15)
 
-    broken = mailbox.Babyl(str(Path(directory) / 'broken.babyl'))
+    stored = mailbox.Babyl(str(Path(directory) / 'stored.babyl'))
+    stored.add(mailbox.BabylMessage(plain))  # visible copy empty before 3.14.10 and 3.15.2
+    stored.close()
+
+    stored = mailbox.Babyl(str(Path(directory) / 'stored.babyl'))
     try:
-        broken.get_message(0)                # O(m), and it does not get that far
+        stored.get_message(0)                # O(m); before those releases it raises
     except AssertionError:
-        pass
+        assert not writes_visible
     else:
-        raise AssertionError('a BabylMessage round-tripped')
-    broken.close()
+        assert writes_visible, 'a BabylMessage round-tripped'
+    stored.close()
 
-    # A blank line in the body is worse: the read succeeds and loses the start
+    # Before those releases a blank line in the body is worse: the read succeeds and loses
+    # the start
     two_paragraphs = EmailMessage()
     two_paragraphs['Subject'] = 'hello'
     two_paragraphs.set_content('first paragraph\n\nsecond paragraph\n')
@@ -721,7 +727,11 @@ with tempfile.TemporaryDirectory() as directory:
     silent.close()
 
     silent = mailbox.Babyl(str(Path(directory) / 'silent.babyl'))
-    assert silent.get_message(0).get_payload() == 'second paragraph\n'  # O(m)
+    payload = silent.get_message(0).get_payload()  # O(m)
+    if writes_visible:
+        assert payload == 'first paragraph\n\nsecond paragraph\n'
+    else:
+        assert payload == 'second paragraph\n'
     silent.close()
 ```
 
@@ -932,13 +942,18 @@ with tempfile.TemporaryDirectory() as directory:
 - Removing from a single-file mailbox inside a loop that flushes - every survivor is copied
   again per message
 - Reading a message just to check a Maildir flag; the filename already has it
-- Handing `Babyl.add()` a `BabylMessage` - what it stores comes back raising, or short
+- Handing `Babyl.add()` a `BabylMessage` before 3.14.10 and 3.15.2 - what it stores comes back
+  raising, or short
 - Iterating an `MH` mailbox for the message bodies - every `get_message()` re-reads the
   sequences; walk the keys and call `get_bytes()`
 - Calling `MH.pack()` while you hold keys - a moved message answers to a new one
 
 ## Version Notes
 
+- **Python 3.14.10+ and 3.15.2+**: `Babyl.add()` writes a `BabylMessage`'s visible set, so the
+  message reads back whole; earlier releases, 3.13.18 and the older lines included, write it
+  empty and the stored message reads back raising `AssertionError` or missing the start of its
+  body
 - **Python 3.13+**: `Maildir` can read and write a stored message's flags by key -
   `get_info()`, `set_info()`, `get_flags()`, `set_flags()`, `add_flag()` and `remove_flag()` -
   which renames the file instead of reading the message. On earlier versions the same flags are

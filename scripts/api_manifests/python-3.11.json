@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "python_version": "3.11",
-  "documentation_version": "3.11.17",
+  "documentation_version": "3.11.18",
   "source_url": "https://docs.python.org/3.11/objects.inv",
-  "inventory_sha256": "694994ba08fc17e62c512b2b74ccde866a9f52fb5a2b44f9999a59a5ebb32e80",
+  "inventory_sha256": "373f88bbea95cc9989d5ba58ae8697121276819fa9b89b60f03439a65611bdf4",
   "apis": {
     "__future__._Feature": {
       "kind": "class",

@@ -52,8 +52,8 @@ Measurement scope:
   once per line and once more at the end. Comments and blank lines add
   nothing.
 * On Linux, `read_windows_registry()` adds nothing to either table.
-* `knownfiles` holds `/etc/mime.types`, except on Windows from 3.14.9 and
-  3.15.1, where it is empty.
+* `knownfiles` holds `/etc/mime.types`, except on Windows from 3.11.18,
+  3.12.16, 3.13.18, 3.14.9 and 3.15.1, where it is empty.
 * `guess_type()` is asserted to ignore a URL's query string and fragment.
   The 3.13+ `guess_file_type()` is guarded on `sys.version_info`.
 * Every fenced Python block runs in its own subprocess, and a mutated
@@ -64,8 +64,8 @@ Not settled here:
 * `read_windows_registry()` and the registry term of `init()` on Windows,
   O(r) in the keys under `HKEY_CLASSES_ROOT`, are read from Lib/mimetypes.py
   and Modules/_winapi.c's `_mimetypes_read_windows_registry`, which enumerate
-  every key. No run this project performs is on Windows, so the test that the
-  method adds nothing is skipped there rather than inverted.
+  every key. What the registry holds varies by machine, so the test that the
+  method adds nothing is skipped on Windows rather than inverted.
 * The characters term of `f`: the counts above show one `add_type()` per
   extension read, and that `readfp()` reads one line per `readline()`; that
   splitting a line is linear in its characters is read from Lib/mimetypes.py,
@@ -623,9 +623,14 @@ class TestTheModuleDatabase:
     def test_the_module_data_names(self) -> None:
         assert isinstance(mimetypes.knownfiles, list)
         # gh-159428: the default paths would resolve to the current drive's root on Windows.
-        registry_only = sys.platform == "win32" and (
-            sys.version_info >= (3, 15, 1) or (3, 14, 9) <= sys.version_info < (3, 15)
-        )
+        first_release = {
+            (3, 11): (3, 11, 18),
+            (3, 12): (3, 12, 16),
+            (3, 13): (3, 13, 18),
+            (3, 14): (3, 14, 9),
+            (3, 15): (3, 15, 1),
+        }.get(sys.version_info[:2], (3, 15, 1))
+        registry_only = sys.platform == "win32" and sys.version_info >= first_release
         if registry_only:
             assert mimetypes.knownfiles == []
         else:

@@ -19,6 +19,11 @@ Measurement scope:
   and a second submit after the first result starts none. On 3.14
   `InterpreterPoolExecutor(3)` adds nothing to `interpreters.list_all()` and
   its first submit adds one.
+* On 3.14 `ThreadPoolExecutor.prepare_context(None, ())` starts no thread and
+  returns a resolver that hands back the task's parts, the same objects, and
+  a factory that builds a new context per call. A subclass that records the
+  calls sees one per pool, carrying the constructor's extra keyword argument,
+  and none from a submit.
 * `ThreadPoolExecutor.submit()` is timed with 100 and 30,000 tasks already
   queued behind a blocked single worker; the deeper queue costs under 3x.
   A task returning its argument returns the same object, so arguments pass by
@@ -75,9 +80,9 @@ Not settled here:
 * The `fork` start-method test is skipped where `fork` is unavailable; the
   default-start-method boundary at 3.14 is the multiprocessing module's and
   is read from its documentation, not asserted.
-* The 3.14 extension hooks `ThreadPoolExecutor.prepare_context()` and
-  `thread.WorkerContext` / `interpreter.WorkerContext` are undocumented and
-  not priced; the audit lists them as unclassified runtime discoveries.
+* The 3.14 `thread.WorkerContext` and `interpreter.WorkerContext` classes
+  behind `prepare_context()` are undocumented and not priced; the audit lists
+  them as unclassified runtime discoveries.
 """
 
 from __future__ import annotations
@@ -145,6 +150,33 @@ class TestPoolsStartNothing:
         executor = futures.ProcessPoolExecutor(max_workers=4)
         try:
             assert multiprocessing.active_children() == []
+        finally:
+            executor.shutdown()
+
+    @pytest.mark.skipif(not PY314, reason="prepare_context is 3.14+")
+    def test_prepare_context_runs_once_per_pool_and_starts_nothing(self) -> None:
+        calls: list[tuple[Any, ...]] = []
+
+        class Recording(futures.ThreadPoolExecutor):
+            @classmethod
+            def prepare_context(cls, initializer: Any, initargs: Any, **ctxkwargs: Any) -> Any:
+                calls.append((initializer, initargs, ctxkwargs))
+                return super().prepare_context(initializer, initargs)  # type: ignore[misc]
+
+        before = threading.active_count()
+        create, resolve = futures.ThreadPoolExecutor.prepare_context(None, ())  # type: ignore[attr-defined]
+        assert threading.active_count() == before
+        args, kwargs = (2, 10), {"mod": 7}
+        task = resolve(pow, args, kwargs)
+        assert task[0] is pow and task[1] is args and task[2] is kwargs
+        assert create() is not create()
+
+        executor = Recording(max_workers=2, extra="passed on")  # type: ignore[call-arg]
+        try:
+            assert calls == [(None, (), {"extra": "passed on"})]
+            assert threading.active_count() == before
+            assert executor.submit(pow, 2, 10).result() == 1024
+            assert len(calls) == 1
         finally:
             executor.shutdown()
 

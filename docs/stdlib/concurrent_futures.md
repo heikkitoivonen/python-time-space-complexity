@@ -21,6 +21,7 @@ calls watching one future at a time are treated as O(1).
 | `ThreadPoolExecutor(max_workers=None, thread_name_prefix='', initializer=None, initargs=())` | O(1) | O(1) | Starts no threads; `max_workers` defaults to `min(32, CPUs + 4)` |
 | `ThreadPoolExecutor.submit(fn, /, *args, **kwargs)` | O(1) | O(1) | Queues one work item and starts at most one thread: only when no worker is idle and fewer than w are running. Arguments are passed by reference |
 | `ThreadPoolExecutor.map(fn, *iterables, timeout=None, chunksize=1, buffersize=None)` | O(n) | O(n) | Consumes every input and submits every task before it returns; with `buffersize` (3.14+), O(b) space and b tasks submitted up front, one more as each result is taken. `chunksize` is ignored |
+| `ThreadPoolExecutor.prepare_context(initializer, initargs)` | O(1) | O(1) | Python 3.14+. A class method the constructor calls once, passing on any extra keyword arguments it was given; returns two functions, one to create a worker's context and one to resolve a task, and starts nothing |
 | `ThreadPoolExecutor.shutdown(wait=True, *, cancel_futures=False)` | O(w + q) | O(1) | Joins the threads after the queue drains; `cancel_futures=True` cancels the q queued tasks instead of running them |
 
 ### ProcessPoolExecutor
