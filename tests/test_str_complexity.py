@@ -629,9 +629,10 @@ class TestCharacterWidth:
 
 class TestBuildingWithPlusEquals:
     """`+=` in a loop is O(r²) at worst: with another reference to the partial
-    string held at every step, 2,000 / 6,000 / 18,000 ten-character pieces
-    must cost over x5 per 3x step, where a linear build costs x3 and a
-    quadratic one x9."""
+    string held at every step, 24,000 ten-character pieces must cost over x18
+    what 4,000 do, where a linear build costs x6 and a quadratic one x36.
+    Measured x69 on 3.11.18 and 3.15.2 (aarch64), against x5.4 to x6.0 for the
+    same builds without the reference, best of five."""
 
     @pytest.mark.timing
     def test_another_reference_makes_every_step_copy(self) -> None:
@@ -642,10 +643,9 @@ class TestBuildingWithPlusEquals:
                 result += "0123456789"
             return result
 
-        times = [best_ns(lambda n=n: build(n), repeats=3) for n in (2_000, 6_000, 18_000)]
+        short, long = (best_ns(lambda n=n: build(n), repeats=5) for n in (4_000, 24_000))
 
-        for before, after in pairwise(times):
-            assert after > before * 5, f"a 3x longer build cost x{after / before:.1f}"
+        assert long > short * 18, f"a 6x longer build cost x{long / short:.1f}"
 
 
 class TestIteration:
