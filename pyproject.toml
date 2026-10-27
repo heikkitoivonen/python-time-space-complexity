@@ -1,6 +1,6 @@
 [project]
 name = "python-time-space-complexity"
-version = "1.0.0"
+version = "1.0.1"
 description = "Comprehensive documentation of time and space complexity for Python built-ins and standard library"
 readme = "README.md"
 license = { text = "MIT" }
