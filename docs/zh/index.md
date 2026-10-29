@@ -1,5 +1,5 @@
 ---
-source_sha: 2aacfe616e01553fd9d0e1817b70ce9763b3db9537696602dd1f6a61b9551172
+source_sha: 2dfda38821bd09ed9e6e2e98afb612078bb7b78151bf8380ce4c48cc1c51c6b3
 translated: machine
 ---
 
@@ -53,6 +53,25 @@ translated: machine
 2. **浏览** - 按类型或模块导航
 3. **筛选** - 选择 Python 版本或实现
 4. **查看备注** - 阅读与具体实现相关的注意事项
+
+## 在 AI 智能体中使用
+
+本参考资料也打包为离线智能体技能 `python-complexity`，可用于 Codex、Claude Code 和 GitHub Copilot。从[最新技能发布页面](https://github.com/heikkitoivonen/python-time-space-complexity/releases/latest)下载附件 `python-complexity-<version>.zip`（而非 GitHub 自动生成的 Source code 压缩包），并将其解压到智能体的技能目录：
+
+| 智能体 | 个人技能目录 |
+|--------|--------------|
+| Codex | `~/.agents/skills/` |
+| Claude Code | `~/.claude/skills/` |
+| GitHub Copilot | `~/.copilot/skills/` |
+
+例如，在 Linux 或 macOS 上为 Claude Code 安装时，请在下载目录中运行以下命令，并将 `<version>` 替换为所下载的版本：
+
+```bash
+mkdir -p ~/.claude/skills
+unzip python-complexity-<version>.zip -d ~/.claude/skills
+```
+
+然后开始新的智能体会话，并让它使用 `python-complexity`。校验和、项目级安装、更新和卸载请参阅[安装指南](https://github.com/heikkitoivonen/python-time-space-complexity#install-the-python-complexity-agent-skill)。
 
 ## 覆盖范围
 

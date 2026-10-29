@@ -1,4 +1,4 @@
-<!-- source_sha: b30e329a2515f93e7b5da53ece32352497df5d469fe4dc273e84bd1c58bf6db8 -->
+<!-- source_sha: 941f1b0e90e2f2f84a75107f039b96da474a554b6967e7168788b898115864d5 -->
 <!-- translated: machine -->
 
 [English](README.md) | **简体中文**
@@ -90,11 +90,11 @@ GitHub 自动生成的 **Source code** 压缩包以及源码目录 `skills/pytho
 `manifest.json`、`LICENSE.txt` 和 `references/`。
 读取该技能不需要 Python、`uv`、Node.js 或网络访问。
 
-例如，在 Linux 或 macOS 上，从下载目录为 Codex 安装 1.0.0 版本：
+例如，在 Linux 或 macOS 上，从下载目录为 Codex 安装，并将 `<version>` 替换为所下载的版本：
 
 ```bash
 mkdir -p ~/.agents/skills
-unzip python-complexity-1.0.0.zip -d ~/.agents/skills
+unzip python-complexity-<version>.zip -d ~/.agents/skills
 ```
 
 使用 Linux 上的 `sha256sum`、macOS 上的 `shasum -a 256`，或 PowerShell 中的

@@ -1,5 +1,5 @@
 ---
-source_sha: 2aacfe616e01553fd9d0e1817b70ce9763b3db9537696602dd1f6a61b9551172
+source_sha: 2dfda38821bd09ed9e6e2e98afb612078bb7b78151bf8380ce4c48cc1c51c6b3
 translated: machine
 ---
 
@@ -53,6 +53,25 @@ Python の操作の計算量に関する総合ガイドへようこそ。本サ�
 2. **閲覧** - 型やモジュールからたどる
 3. **絞り込み** - Python のバージョンや実装を選ぶ
 4. **備考を確認** - 実装固有の注意点を読む
+
+## AI エージェントで使う
+
+このリファレンスは、Codex、Claude Code、GitHub Copilot 向けのオフライン Agent Skill `python-complexity` としても提供しています。[最新のスキルリリース](https://github.com/heikkitoivonen/python-time-space-complexity/releases/latest)から添付ファイル `python-complexity-<version>.zip` をダウンロードし（GitHub が自動生成する Source code アーカイブではありません）、エージェントのスキルディレクトリに展開してください。
+
+| エージェント | 個人用スキルディレクトリ |
+|--------------|--------------------------|
+| Codex | `~/.agents/skills/` |
+| Claude Code | `~/.claude/skills/` |
+| GitHub Copilot | `~/.copilot/skills/` |
+
+たとえば Linux または macOS の Claude Code では、ダウンロード先のディレクトリで `<version>` をダウンロードしたバージョンに置き換えて次のように実行します。
+
+```bash
+mkdir -p ~/.claude/skills
+unzip python-complexity-<version>.zip -d ~/.claude/skills
+```
+
+その後、新しいエージェントセッションを開始し、`python-complexity` を使うよう依頼してください。チェックサムの確認、プロジェクト単位のインストール、更新、アンインストールについては[インストールガイド](https://github.com/heikkitoivonen/python-time-space-complexity#install-the-python-complexity-agent-skill)を参照してください。
 
 ## 収録範囲
 

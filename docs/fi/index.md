@@ -1,5 +1,5 @@
 ---
-source_sha: 2aacfe616e01553fd9d0e1817b70ce9763b3db9537696602dd1f6a61b9551172
+source_sha: 2dfda38821bd09ed9e6e2e98afb612078bb7b78151bf8380ce4c48cc1c51c6b3
 translated: machine
 ---
 
@@ -53,6 +53,25 @@ Tarkempi analyysi löytyy osiosta [Listat](builtins/list.md).
 2. **Selaus** - Navigoi tyypin tai moduulin mukaan
 3. **Rajaus** - Valitse Python-versio tai toteutus
 4. **Lue huomiot** - Tutustu toteutuskohtaisiin huomioihin
+
+## Käyttö tekoälyagentin kanssa
+
+Tämä hakuteos on saatavilla myös `python-complexity`-nimisenä, ilman verkkoyhteyttä toimivana agenttitaitona (Agent Skill) Codexille, Claude Codelle ja GitHub Copilotille. Lataa [uusimmasta taitojulkaisusta](https://github.com/heikkitoivonen/python-time-space-complexity/releases/latest) liitetiedosto `python-complexity-<version>.zip`, ei GitHubin automaattisesti luomaa Source code -arkistoa, ja pura se agenttisi taitohakemistoon:
+
+| Agentti | Henkilökohtainen taitohakemisto |
+|---------|---------------------------------|
+| Codex | `~/.agents/skills/` |
+| Claude Code | `~/.claude/skills/` |
+| GitHub Copilot | `~/.copilot/skills/` |
+
+Esimerkiksi Claude Codelle Linuxissa tai macOS:ssä suorita latauskansiossa seuraavat komennot ja korvaa `<version>` lataamallasi versiolla:
+
+```bash
+mkdir -p ~/.claude/skills
+unzip python-complexity-<version>.zip -d ~/.claude/skills
+```
+
+Aloita sitten uusi agentti-istunto ja pyydä agenttia käyttämään `python-complexity`-taitoa. [Asennusohjeessa](https://github.com/heikkitoivonen/python-time-space-complexity#install-the-python-complexity-agent-skill) käsitellään tarkistussummat, projektikohtainen asennus, päivitykset ja asennuksen poistaminen.
 
 ## Kattavuus
 

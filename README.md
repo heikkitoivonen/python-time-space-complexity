@@ -92,12 +92,12 @@ The installed directory must contain `SKILL.md`, `manifest.json`, `LICENSE.txt`,
 and `references/` directly. Reading the skill requires no Python, `uv`, Node.js,
 or network access.
 
-For example, on Linux or macOS, install version 1.0.0 for Codex from your download
-directory:
+For example, on Linux or macOS, install for Codex from your download directory,
+replacing `<version>` with the version you downloaded:
 
 ```bash
 mkdir -p ~/.agents/skills
-unzip python-complexity-1.0.0.zip -d ~/.agents/skills
+unzip python-complexity-<version>.zip -d ~/.agents/skills
 ```
 
 Compare the ZIP's SHA-256 with its entry in `SHA256SUMS` using `sha256sum` on

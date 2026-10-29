@@ -49,6 +49,25 @@ See [Lists](builtins/list.md) for detailed analysis.
 3. **Filter** - Select Python version or implementation
 4. **Check Notes** - Read implementation-specific considerations
 
+## Use It With Your AI Agent
+
+This reference is also packaged as `python-complexity`, an offline Agent Skill for Codex, Claude Code and GitHub Copilot. Download the attached `python-complexity-<version>.zip` from the [latest skill release](https://github.com/heikkitoivonen/python-time-space-complexity/releases/latest), not GitHub's automatic Source code archive, and extract it into your agent's skills directory:
+
+| Agent | Personal skills directory |
+|-------|---------------------------|
+| Codex | `~/.agents/skills/` |
+| Claude Code | `~/.claude/skills/` |
+| GitHub Copilot | `~/.copilot/skills/` |
+
+For example, for Claude Code on Linux or macOS, run these commands from your download directory, replacing `<version>` with the version you downloaded:
+
+```bash
+mkdir -p ~/.claude/skills
+unzip python-complexity-<version>.zip -d ~/.claude/skills
+```
+
+Then start a new agent session and ask it to use `python-complexity`. The [installation guide](https://github.com/heikkitoivonen/python-time-space-complexity#install-the-python-complexity-agent-skill) covers checksums, project-level installs, updates and uninstalling.
+
 ## Coverage
 
 - **Python Versions**: 3.11-3.15
