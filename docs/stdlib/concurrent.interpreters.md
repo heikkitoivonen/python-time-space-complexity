@@ -5,7 +5,7 @@ inside the current process, each with its own modules and its own GIL. Objects a
 value that crosses into an interpreter, or through one of the module's queues, arrives as a copy,
 and a value the fast path cannot copy is pickled. Queues themselves and `memoryview` buffers are
 the exceptions, crossing as handles to the same underlying data. So the costs are creating an
-interpreter, which is large and fixed, and moving data, which is linear in what moves.
+interpreter, which is large, and moving data, which is linear in what moves.
 
 `i` is live interpreters, `s` is the size of the data one call moves across - the bytes or
 characters of shareable values, or the pickled size of anything else - `k` is names passed to
@@ -13,13 +13,19 @@ characters of shareable values, or the pickled size of anything else - `k` is na
 interpreter holds when it is closed. The bounds exclude the work of the code or callable run
 inside the interpreter.
 
+`v` is the memory mappings in the process, the lines of `/proc/self/maps`. On Linux with glibc,
+every call that enters an interpreter from the main thread - `create()`, `close()`,
+`prepare_main()`, `exec()` and `call()` - also scans that list, so a process with more mappings
+pays more for each one. The same calls from any other thread do not, and on other platforms `v`
+drops out of the bounds below.
+
 ## Complexity Reference
 
 ### Module Functions
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
-| `interpreters.create()` | O(1) | O(1) | Fixed but large, far above a small `call()`: a fresh interpreter initialises its own `sys`, builtins and import system, so reuse interpreters |
+| `interpreters.create()` | O(v) | O(1) | Large, far above a small `call()`: a fresh interpreter initialises its own `sys`, builtins and import system, so reuse interpreters |
 | `interpreters.list_all()` | O(i) | O(i) | One `Interpreter` per live interpreter, the main one included |
 | `interpreters.get_current()`, `interpreters.get_main()` | O(1) | O(1) | |
 | `interpreters.is_shareable(obj)` | O(1) | O(1) | Checks the outer type only: a tuple holding a list passes, and sending it still raises `NotShareableError` |
@@ -31,11 +37,11 @@ inside the interpreter.
 |-----------|------|-------|-------|
 | `Interpreter.id`, `Interpreter.whence` | O(1) | O(1) | Stored id; `whence` names what created it |
 | `Interpreter.is_running()` | O(1) | O(1) | Whether an `exec()` or `call()` is running in it now |
-| `Interpreter.prepare_main(ns=None, /, **kwargs)` | O(k + s) | O(k + s) | Copies each value into the interpreter's `__main__`; only shareable values, anything else raises `NotShareableError` |
-| `Interpreter.exec(code, /)` | O(p) | O(p) | Compiles and runs in the interpreter's `__main__`; an uncaught exception comes back as `ExecutionFailed`, not the exception itself |
-| `Interpreter.call(callable, /, *args, **kwargs)` | O(s) | O(s) | Arguments and return value cross by copy, falling back to pickle; blocks the calling thread |
+| `Interpreter.prepare_main(ns=None, /, **kwargs)` | O(k + s + v) | O(k + s) | Copies each value into the interpreter's `__main__`; only shareable values, anything else raises `NotShareableError` |
+| `Interpreter.exec(code, /)` | O(p + v) | O(p) | Compiles and runs in the interpreter's `__main__`; an uncaught exception comes back as `ExecutionFailed`, not the exception itself |
+| `Interpreter.call(callable, /, *args, **kwargs)` | O(s + v) | O(s) | Arguments and return value cross by copy, falling back to pickle; blocks the calling thread |
 | `Interpreter.call_in_thread(callable, /, *args, **kwargs)` | O(1) | O(1) | Starts a thread that makes the `call()` and discards its result; the thread pays the O(s) |
-| `Interpreter.close()` | O(m) | O(1) | Finalises and frees everything the interpreter holds; the object is unusable afterwards |
+| `Interpreter.close()` | O(m + v) | O(1) | Finalises and frees everything the interpreter holds; the object is unusable afterwards |
 
 ### Queue
 
@@ -66,19 +72,19 @@ import sys
 if sys.version_info >= (3, 14):
     from concurrent import interpreters
 
-    interp = interpreters.create()  # O(1), but a whole runtime
+    interp = interpreters.create()  # O(v), and a whole runtime
     assert interp in interpreters.list_all()  # O(i)
     assert interpreters.get_main().whence == 'runtime init'
     assert interpreters.get_current().id == interpreters.get_main().id  # O(1)
 
     for value in range(3):
-        assert interp.call(pow, value, 2) == value * value  # reused, O(s) each
+        assert interp.call(pow, value, 2) == value * value  # reused, O(s + v) each
 
     thread = interp.call_in_thread(pow, 2, 5)  # O(1) here; the result is discarded
     thread.join()
     assert not interp.is_running()  # O(1)
 
-    interp.close()  # O(m)
+    interp.close()  # O(m + v)
     try:
         interp.exec('pass')
     except interpreters.InterpreterNotFoundError:
@@ -102,9 +108,9 @@ if sys.version_info >= (3, 14):
     from concurrent import interpreters
 
     interp = interpreters.create()
-    interp.prepare_main(data=b'x' * 1000, label='run')  # O(k + s)
-    interp.exec('size = len(data)')  # O(p)
-    assert interp.call(len, b'x' * 1000) == 1000  # O(s) each way
+    interp.prepare_main(data=b'x' * 1000, label='run')  # O(k + s + v)
+    interp.exec('size = len(data)')  # O(p + v)
+    assert interp.call(len, b'x' * 1000) == 1000  # O(s + v), s each way
 
     assert interpreters.is_shareable(([],)) is True  # O(1) - the tuple, not its list
     try:
@@ -126,9 +132,9 @@ if sys.version_info >= (3, 14):
 
 ### Queues
 
-A queue is shared by id, so passing one to another interpreter is O(1). The items on it are
-copies, pickled when they are not shareable, so `get()` returns a reconstruction, not the object
-that was put.
+A queue is shared by id, so passing one to another interpreter copies only the id. The items on
+it are copies, pickled when they are not shareable, so `get()` returns a reconstruction, not the
+object that was put.
 
 ```python
 import sys
@@ -174,7 +180,7 @@ if sys.version_info >= (3, 14):
     tasks = interpreters.create_queue()
     results = interpreters.create_queue()
     interp = interpreters.create()
-    interp.prepare_main(tasks=tasks, results=results)  # O(1) per queue: sent by id
+    interp.prepare_main(tasks=tasks, results=results)  # O(k + v): each queue is sent by id
 
     worker = threading.Thread(target=interp.exec, args=('''
 while (item := tasks.get()) is not None:
@@ -199,11 +205,13 @@ while (item := tasks.get()) is not None:
   which keeps one per worker thread
 - Send bytes, strings, numbers and tuples of them: they take the copy path, not pickle
 - Close interpreters you are done with; `close()` is what frees their memory
+- On Linux with glibc, make many small calls from a worker thread rather than the main thread,
+  so that each one does not also scan the process's memory mappings
 
 ❌ **Avoid**:
 
 - An interpreter per task: `create()` costs more than most small tasks
-- Large or deeply nested values sent many times; each crossing is O(s) and makes a new copy
+- Large or deeply nested values sent many times; each crossing copies them again, O(s) each time
 - Relying on `is_shareable()` for containers: it does not look inside a tuple
 - A sub-second `timeout` on a queue's `get()` or `put()`; it is truncated to zero
 

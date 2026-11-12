@@ -1,33 +1,50 @@
 """Tests for docs/stdlib/concurrent.interpreters.md.
 
 The module exists from Python 3.14, so this file skips on older interpreters.
-The page prices creation as a large fixed cost and every crossing as linear in
-the data that crosses, because values arrive as copies. Copying is settled by
-identity and mutation checks, a size-dependent cost by timing the same call on
-payloads more than four orders of magnitude apart, and the fixed rows by
-observation.
+The page prices every crossing as linear in the data that crosses, because
+values arrive as copies, and every call that enters an interpreter from the
+main thread on glibc Linux as linear in the process's memory mappings too.
+Copying is settled by identity and mutation checks, a size-dependent cost by
+timing the same call on payloads more than four orders of magnitude apart, the
+mapping term by timing calls with and without 20,000 extra mappings, and the
+fixed rows by observation.
 
 Measurement scope:
 
 * `prepare_main()`, `call()` and a queue's `put()` + `get()` are timed with a
-  1,000-byte and a 20,000,000-byte `bytes` value; the large one costs more
-  than 5x, where a shared reference would cost the same (x27 to x32 for
-  `prepare_main()` and `call()`, whose fixed cost is about 30us, and x700 for
-  the queue on 3.14). The large value is the fastest of ten runs; the small
-  one is the fastest of twenty, in two windows of ten before and after the
-  large runs. That excludes a
-  constant-cost transfer; that the growth is linear rather than faster is
+  1,000-byte and a 20,000,000-byte `bytes` value, the fastest of ten runs
+  each; the large one costs more than 20x, where a shared reference would
+  cost the same. `prepare_main()` and `call()` are timed from a worker thread,
+  where the mapping term below is absent, and measure x395 to x455 and x136 to
+  x173 on 3.14.10 and 3.15.2 on aarch64; the queue does not enter an
+  interpreter, is timed from the main thread, and measures x749 to x1,623.
+  That excludes a constant-cost transfer; that the growth is linear rather than faster is
   read from the copy paths, not asserted. The returned or received object is
   not the one sent, a dict sent through a queue arrives equal and distinct,
   and a `memoryview` of a `bytearray` sees a later write to the original.
 * `create()` alone, with `close()` outside the timer, is timed against
   `call()` of a trivial function on an existing interpreter and costs more
-  than 20x; it takes no argument whose size could move it.
+  than 20x. No argument of its own moves it; the process's mappings do. Both
+  run on the main thread at the process's ambient mapping count, as does the
+  `close()` comparison below; each side pays the `v` term.
 * `list_all()` gains one entry per `create()` and loses it on `close()`;
   `get_current()` is the main interpreter while one is held.
 * `close()` makes `exec()` raise `InterpreterNotFoundError`; its O(m) is
   timed as an interpreter holding 1,000,000 objects against an empty one,
   more than 1.2x.
+* The `v` term, on glibc Linux only: `prepare_main()` of 1,000 bytes,
+  `exec("pass")` and `call(len, ...)` of 1,000 bytes are timed from the main
+  thread before and while 20,000 extra two-page mappings are held, and from a
+  worker thread before and while they are held, each the fastest of 20 runs.
+  The main thread's cost must grow more than 5x, the worker thread's less
+  than 3x, and with the mappings held the main thread's must exceed the
+  worker thread's by more than 20x. On 3.14.10 and 3.15.2 on aarch64 they
+  measure x291 to x449, x0.92 to x1.09, and x866 to x7,655. `create()` and
+  `close()`, the fastest of three, must grow more than 2x on the main thread
+  and less than 2x on a worker thread, and exceed the worker thread's by more
+  than 2x; they measure x8.5 to x11.9, x0.81 to x1.01, and x10.8 to x15.9.
+  Neighbouring mappings alternate between read-only and read-write so the
+  kernel cannot merge them, and the helper asserts the count rose.
 * `is_shareable()` answers `True` for a tuple holding a list, which
   `prepare_main()` then rejects with `NotShareableError`; it is timed on
   1,000- and 100,000-element tuples, under 3x apart.
@@ -51,12 +68,23 @@ Not settled here:
   audit reports the two documented names as unresolved.
 * Payload shape is not varied beyond flat `bytes` and a small dict; nested
   pickled values are priced by pickle.
+* That `v` drops out on other platforms is source-only: `hardware_stack_limits()`
+  in `Python/ceval.c` (v3.14.10, v3.15.2) reads the stack bounds with
+  `GetCurrentThreadStackLimits()` on Windows and `pthread_get_stackaddr_np()`
+  on macOS, and does not call `pthread_getattr_np()` on musl. The timing job
+  runs on Linux only, so no run here times another platform.
+* The mapping term is varied in count only: the mappings are untouched,
+  anonymous and two pages each, and how many times `create()` and `close()`
+  scan them is not pinned.
 """
 
 from __future__ import annotations
 
+import contextlib
 import importlib
+import mmap
 import pathlib
+import platform
 import queue
 import re
 import subprocess
@@ -65,7 +93,7 @@ import textwrap
 import threading
 import time
 from collections.abc import Callable, Iterator
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -90,21 +118,41 @@ def best_ns(func: Callable[[], Any], repeats: int = 5) -> float:
     return best
 
 
-def best_pair_ns(
-    small: Callable[[], Any], large: Callable[[], Any], repeats: int = 10
-) -> tuple[float, float]:
-    """Fastest runs of each, in nanoseconds, with small timed before and after large.
+def in_worker_thread(func: Callable[[], Any]) -> Any:
+    """Run func on a new thread, not the main one, and return its result."""
+    results: list[Any] = []
+    worker = threading.Thread(target=lambda: results.append(func()))
+    worker.start()
+    worker.join()
+    assert len(results) == 1, "the worker thread raised"
+    return results[0]
 
-    Ten back-to-back runs of a 30us call span about 300us, so one slow stretch
-    of a shared runner can cover all of them; a second window after the large
-    runs gives the small call another chance. The two are not alternated run
-    by run: on an aarch64 machine a small `call()` right after a large one
-    measures 100us to 120us, against 27us after another small one.
+
+def mapping_count() -> int:
+    """Lines of /proc/self/maps: the memory mappings in this process."""
+    with open("/proc/self/maps", encoding="ascii") as maps:
+        return sum(1 for _ in maps)
+
+
+@contextlib.contextmanager
+def extra_mappings(count: int) -> Iterator[None]:
+    """Hold `count` more memory mappings for the duration, then release them.
+
+    Each mapping is two untouched pages, so none of its pages becomes
+    resident. Neighbours alternate between read-only and read-write, so the kernel
+    cannot merge adjacent ones into a single entry.
     """
-    first = best_ns(small, repeats)
-    slow = best_ns(large, repeats)
-    second = best_ns(small, repeats)
-    return min(first, second), slow
+    before = mapping_count()
+    held = [
+        mmap.mmap(-1, 2 * mmap.PAGESIZE, prot=mmap.PROT_READ | (mmap.PROT_WRITE * (n % 2)))
+        for n in range(count)
+    ]
+    try:
+        assert mapping_count() >= before + count * 9 // 10, "the mappings merged"
+        yield
+    finally:
+        for mapping in held:
+            mapping.close()
 
 
 @pytest.fixture
@@ -117,7 +165,7 @@ def interp() -> Iterator[Any]:
 
 
 class TestInterpretersAreCostlyToCreate:
-    """`create()` | O(1): fixed, but the most expensive call on the page."""
+    """`create()` | O(v): the most expensive call on the page."""
 
     def test_list_all_tracks_create_and_close(self) -> None:
         before = len(interpreters.list_all())
@@ -172,17 +220,23 @@ class TestValuesCrossAsCopies:
 
     @pytest.mark.timing
     def test_prepare_main_is_linear_in_the_value(self, interp: Any) -> None:
-        small, large = best_pair_ns(
-            lambda: interp.prepare_main(data=SMALL), lambda: interp.prepare_main(data=LARGE)
+        small, large = in_worker_thread(
+            lambda: (
+                best_ns(lambda: interp.prepare_main(data=SMALL), 10),
+                best_ns(lambda: interp.prepare_main(data=LARGE), 10),
+            )
         )
-        assert large > 5 * small, f"prepare_main: {small:.0f}ns vs {large:.0f}ns"
+        assert large > 20 * small, f"prepare_main: {small:.0f}ns vs {large:.0f}ns"
 
     @pytest.mark.timing
     def test_call_is_linear_in_the_arguments(self, interp: Any) -> None:
-        small, large = best_pair_ns(
-            lambda: interp.call(len, SMALL), lambda: interp.call(len, LARGE)
+        small, large = in_worker_thread(
+            lambda: (
+                best_ns(lambda: interp.call(len, SMALL), 10),
+                best_ns(lambda: interp.call(len, LARGE), 10),
+            )
         )
-        assert large > 5 * small, f"call: {small:.0f}ns vs {large:.0f}ns"
+        assert large > 20 * small, f"call: {small:.0f}ns vs {large:.0f}ns"
 
     @pytest.mark.timing
     def test_a_queue_round_trip_is_linear_in_the_item(self) -> None:
@@ -195,8 +249,9 @@ class TestValuesCrossAsCopies:
 
             return run
 
-        small, large = best_pair_ns(round_trip(SMALL), round_trip(LARGE))
-        assert large > 5 * small, f"queue: {small:.0f}ns vs {large:.0f}ns"
+        small = best_ns(round_trip(SMALL), 10)
+        large = best_ns(round_trip(LARGE), 10)
+        assert large > 20 * small, f"queue: {small:.0f}ns vs {large:.0f}ns"
 
     def test_received_objects_are_new(self, interp: Any) -> None:
         channel = interpreters.create_queue()
@@ -230,6 +285,72 @@ class TestValuesCrossAsCopies:
         small = best_ns(lambda: interpreters.is_shareable(short))
         large = best_ns(lambda: interpreters.is_shareable(long))
         assert large < 3 * small, f"is_shareable: {small:.0f}ns vs {large:.0f}ns"
+
+
+GLIBC_MAIN_THREAD = (
+    "platform: glibc's pthread_getattr_np() reads /proc/self/maps to find the main thread's stack"
+)
+ON_GLIBC = platform.libc_ver()[0] == "glibc"
+EXTRA_MAPPINGS = 20_000
+
+
+@pytest.mark.skipif(not ON_GLIBC, reason=GLIBC_MAIN_THREAD)
+class TestMainThreadCrossingsScanTheMappings:
+    """`create()`, `close()`, `prepare_main()`, `exec()`, `call()` | the `+ v` term.
+
+    Each is timed from the main thread and from a worker thread, with and
+    without 20,000 extra memory mappings. The main thread's cost has to grow
+    with the mappings, the worker thread's has to stay flat, and with the
+    mappings held the main thread's has to stay far above the worker's.
+    """
+
+    CROSSINGS: ClassVar[dict[str, Callable[[Any], Callable[[], Any]]]] = {
+        "prepare_main": lambda interp: lambda: interp.prepare_main(data=SMALL),
+        "exec": lambda interp: lambda: interp.exec("pass"),
+        "call": lambda interp: lambda: interp.call(len, SMALL),
+    }
+
+    @pytest.mark.timing
+    @pytest.mark.parametrize("name", sorted(CROSSINGS))
+    def test_a_main_thread_crossing_pays_for_every_mapping(self, interp: Any, name: str) -> None:
+        crossing = self.CROSSINGS[name](interp)
+        few = best_ns(crossing, 20)
+        worker_few = in_worker_thread(lambda: best_ns(crossing, 20))
+        with extra_mappings(EXTRA_MAPPINGS):
+            many = best_ns(crossing, 20)
+            worker = in_worker_thread(lambda: best_ns(crossing, 20))
+
+        assert many > 5 * few, f"{name}: {few:.0f}ns, {many:.0f}ns with {EXTRA_MAPPINGS} more"
+        assert worker < 3 * worker_few, f"{name}: worker {worker_few:.0f}ns, then {worker:.0f}ns"
+        assert many > 20 * worker, f"{name}: main {many:.0f}ns, worker thread {worker:.0f}ns"
+
+    @pytest.mark.timing
+    def test_create_and_close_pay_for_every_mapping(self) -> None:
+        def costs() -> tuple[float, float]:
+            create = close = float("inf")
+            for _ in range(3):
+                start = time.perf_counter_ns()
+                created = interpreters.create()
+                create = min(create, time.perf_counter_ns() - start)
+                start = time.perf_counter_ns()
+                created.close()
+                close = min(close, time.perf_counter_ns() - start)
+            return create, close
+
+        few = costs()
+        worker_few = in_worker_thread(costs)
+        with extra_mappings(EXTRA_MAPPINGS):
+            many = costs()
+            worker = in_worker_thread(costs)
+
+        for index, name in enumerate(("create", "close")):
+            assert many[index] > 2 * few[index], f"{name}: {few[index]:.0f}ns, {many[index]:.0f}ns"
+            assert worker[index] < 2 * worker_few[index], (
+                f"{name}: worker {worker_few[index]:.0f}ns, then {worker[index]:.0f}ns"
+            )
+            assert many[index] > 2 * worker[index], (
+                f"{name}: main {many[index]:.0f}ns, worker thread {worker[index]:.0f}ns"
+            )
 
 
 class TestExecutionAndThreads:
