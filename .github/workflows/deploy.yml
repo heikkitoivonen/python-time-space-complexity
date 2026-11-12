@@ -14,18 +14,18 @@ env:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 jobs:
   # Everything that does not depend on the operating system runs once, here.
   checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v10.2.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           version: "latest"
           enable-cache: false
@@ -39,6 +39,7 @@ jobs:
         run: |
           uv run ruff check .
           uv run ruff format --check .
+          uv run zizmor --offline --quiet .github
 
       - name: Type check
         run: uv run pyright
@@ -50,7 +51,7 @@ jobs:
         run: uv run python scripts/build_site.py
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v5
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: 'site'
           include-hidden-files: true
@@ -78,10 +79,12 @@ jobs:
       # The curses tests need a terminfo entry, and a job has no TERM.
       TERM: xterm-256color
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v10.2.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           # An older pinned uv resolves against a build index predating the
           # fix releases and cannot fetch the matrix entries.
@@ -139,10 +142,12 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v10.2.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           version: "latest"
           enable-cache: false
@@ -179,10 +184,12 @@ jobs:
       # The curses tests need a terminfo entry, and a job has no TERM.
       TERM: xterm-256color
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v10.2.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           # An older pinned uv resolves against a build index predating the
           # fix releases and cannot fetch the matrix entries.
@@ -208,9 +215,13 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    # Only the job that publishes gets to write Pages and mint an OIDC token.
+    permissions:
+      pages: write
+      id-token: write
     needs: [checks, test-linux, test]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

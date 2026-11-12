@@ -1,4 +1,4 @@
-<!-- source_sha: b96b5e0a955baf3921bc2972e951fd5f351937c0b85df11a78d80efb51e76105 -->
+<!-- source_sha: 9003fb45ff77f49ed9dd16292b19a6f7add113d37f2b42506a339c0ab41a12ba -->
 <!-- translated: machine -->
 
 [English](CONTRIBUTING.md) | **简体中文**
@@ -43,7 +43,7 @@
 
 `make test` 使用自动确定数量的 pytest 工作进程（`-n auto`）运行没有 `timing` 或 `serial` 标记的测试，
 等所有工作进程都结束后，再串行运行带有这些标记的测试。
-`make check` 使用相同的顺序，并另外检查 lint、格式、类型和技能。所有测试都会运行。
+`make check` 使用相同的顺序，并另外检查 lint、格式、工作流审计、类型和技能。所有测试都会运行。
 
 同一文件中的测试会在同一个工作进程中运行。设置 `TEST_WORKERS` 可以选择工作进程数，
 例如 `make test TEST_WORKERS=2`；使用 `TEST_WORKERS=0` 则会让两个阶段都串行运行。

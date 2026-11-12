@@ -25,7 +25,7 @@ help:
 	@echo "                   Override the address with DEV_ADDR=host:port"
 	@echo ""
 	@echo "Quality:"
-	@echo "  make lint        Run ruff linter"
+	@echo "  make lint        Run ruff linter and zizmor workflow audit"
 	@echo "  make format      Format code with ruff"
 	@echo "  make types       Run pyright type checker"
 	@echo "  make check       Run lint, types, skill checks, tests, and the coverage audit"
@@ -76,6 +76,7 @@ build-en:
 lint:
 	uv run ruff check .
 	uv run ruff format --check .
+	uv run zizmor --offline --quiet .github
 
 format:
 	uv run ruff format .

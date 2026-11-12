@@ -1,4 +1,4 @@
-<!-- source_sha: 941f1b0e90e2f2f84a75107f039b96da474a554b6967e7168788b898115864d5 -->
+<!-- source_sha: 3b815caf102c9e19532efb43e9ad1169593f98479f03cf154dc7f2ec229ccd50 -->
 <!-- translated: machine -->
 
 [English](README.md) | **简体中文**
@@ -133,7 +133,7 @@ make serve-one LOCALE=ja  # Serve one locale as it ships
 make build               # Build all locales as separate sites
 make build-en            # Build English documentation only
 make check               # Run lint, types, skill validation, tests, and audit
-make lint                # Check lint and formatting
+make lint                # Check lint, formatting, and GitHub Actions security
 make format              # Format code and apply lint fixes
 make types               # Run type checker
 make test                # Run tests
@@ -249,6 +249,7 @@ git push origin feature/add-missing-complexity
 
 ### 代码检查与格式化
 - **ruff** 用于代码检查（行长度：100 字符，Python 3.11+ 兼容）
+- **zizmor** 用于审计 GitHub Actions 工作流
 - **pyright** 用于静态类型检查
 - **pytest** 用于测试
 

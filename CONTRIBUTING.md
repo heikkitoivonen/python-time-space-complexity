@@ -47,7 +47,7 @@ below and the full guide in [TRANSLATING.md](TRANSLATING.md).
 workers selected automatically (`-n auto`), then runs the marked tests serially
 after all workers finish.
 `make check` uses the same sequence, together
-with lint, formatting, type, and skill checks. Every test remains included.
+with lint, formatting, workflow-audit, type, and skill checks. Every test remains included.
 
 Tests from the same file stay in one worker. Set `TEST_WORKERS` to choose the
 worker count, for example `make test TEST_WORKERS=2`, or use `TEST_WORKERS=0` to

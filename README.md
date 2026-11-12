@@ -139,7 +139,7 @@ make serve-one LOCALE=ja  # Serve one locale as it ships
 make build               # Build all locales as separate sites
 make build-en            # Build English documentation only
 make check               # Run lint, types, skill validation, tests, and audit
-make lint                # Check lint and formatting
+make lint                # Check lint, formatting, and GitHub Actions security
 make format              # Format code and apply lint fixes
 make types               # Run type checker
 make test                # Run tests
@@ -255,6 +255,7 @@ git push origin feature/add-missing-complexity
 
 ### Linting & Formatting
 - **ruff** for linting (line length: 100 chars, Python 3.11+ compatibility)
+- **zizmor** for auditing GitHub Actions workflows
 - **pyright** for static type checking
 - **pytest** for testing
 

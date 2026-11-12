@@ -66,6 +66,7 @@ dev = [
     "pytest-xdist>=3.8.0",
     # Windows has no system time zone database for zoneinfo to read.
     "tzdata; sys_platform == 'win32'",
+    "zizmor>=1.32.0",
 ]
 
 [tool.uv]
