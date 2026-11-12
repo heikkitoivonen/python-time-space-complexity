@@ -3,8 +3,9 @@
 The module exists from Python 3.14, so this file skips on older interpreters.
 The page prices creation as a large fixed cost and every crossing as linear in
 the data that crosses, because values arrive as copies. Copying is settled by
-identity and mutation checks, linearity by timing the same call on payloads
-more than four orders of magnitude apart, and the fixed rows by observation.
+identity and mutation checks, a size-dependent cost by timing the same call on
+payloads more than four orders of magnitude apart, and the fixed rows by
+observation.
 
 Measurement scope:
 
@@ -12,7 +13,9 @@ Measurement scope:
   1,000-byte and a 20,000,000-byte `bytes` value; the large one costs more
   than 5x, where a shared reference would cost the same (x27 to x32 for
   `prepare_main()` and `call()`, whose fixed cost is about 30us, and x700 for
-  the queue on 3.14). That excludes a
+  the queue on 3.14). The large value is the fastest of ten runs; the small
+  one is the fastest of twenty, in two windows of ten before and after the
+  large runs. That excludes a
   constant-cost transfer; that the growth is linear rather than faster is
   read from the copy paths, not asserted. The returned or received object is
   not the one sent, a dict sent through a queue arrives equal and distinct,
@@ -87,6 +90,23 @@ def best_ns(func: Callable[[], Any], repeats: int = 5) -> float:
     return best
 
 
+def best_pair_ns(
+    small: Callable[[], Any], large: Callable[[], Any], repeats: int = 10
+) -> tuple[float, float]:
+    """Fastest runs of each, in nanoseconds, with small timed before and after large.
+
+    Ten back-to-back runs of a 30us call span about 300us, so one slow stretch
+    of a shared runner can cover all of them; a second window after the large
+    runs gives the small call another chance. The two are not alternated run
+    by run: on an aarch64 machine a small `call()` right after a large one
+    measures 100us to 120us, against 27us after another small one.
+    """
+    first = best_ns(small, repeats)
+    slow = best_ns(large, repeats)
+    second = best_ns(small, repeats)
+    return min(first, second), slow
+
+
 @pytest.fixture
 def interp() -> Iterator[Any]:
     created = interpreters.create()
@@ -152,14 +172,16 @@ class TestValuesCrossAsCopies:
 
     @pytest.mark.timing
     def test_prepare_main_is_linear_in_the_value(self, interp: Any) -> None:
-        small = best_ns(lambda: interp.prepare_main(data=SMALL))
-        large = best_ns(lambda: interp.prepare_main(data=LARGE))
+        small, large = best_pair_ns(
+            lambda: interp.prepare_main(data=SMALL), lambda: interp.prepare_main(data=LARGE)
+        )
         assert large > 5 * small, f"prepare_main: {small:.0f}ns vs {large:.0f}ns"
 
     @pytest.mark.timing
     def test_call_is_linear_in_the_arguments(self, interp: Any) -> None:
-        small = best_ns(lambda: interp.call(len, SMALL))
-        large = best_ns(lambda: interp.call(len, LARGE))
+        small, large = best_pair_ns(
+            lambda: interp.call(len, SMALL), lambda: interp.call(len, LARGE)
+        )
         assert large > 5 * small, f"call: {small:.0f}ns vs {large:.0f}ns"
 
     @pytest.mark.timing
@@ -173,8 +195,7 @@ class TestValuesCrossAsCopies:
 
             return run
 
-        small = best_ns(round_trip(SMALL))
-        large = best_ns(round_trip(LARGE))
+        small, large = best_pair_ns(round_trip(SMALL), round_trip(LARGE))
         assert large > 5 * small, f"queue: {small:.0f}ns vs {large:.0f}ns"
 
     def test_received_objects_are_new(self, interp: Any) -> None:
