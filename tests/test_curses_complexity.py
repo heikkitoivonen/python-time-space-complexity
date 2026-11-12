@@ -38,12 +38,14 @@ Measurement scope:
   derived window is readable through its parent. The clock covers the other
   direction, where sixteen times the columns at a fixed row count leaves
   `derwin()` unchanged and would multiply any per-cell allocation by sixteen.
-* `resize()` grows fresh 4-by-4 pads to 16, 512 and 16,384 columns, in batches
-  of 16 with construction and release outside the clock. Four rows hold the
-  per-row allocation overhead small while the column count varies. Each 32x
-  cell-count step must cost between 3x and 256x, against constant's 1x and
-  quadratic's 1,024x; the full 1,024x interval must cost over 64x. The fastest
-  of nine batches is used. Row-count growth is not varied here.
+* `resize()` grows fresh 4-by-4 pads to 16 and 16,384 columns, in batches of
+  16 with construction and release outside the clock. Four rows hold the
+  per-row allocation overhead small while the column count varies. The 1,024x
+  cell-count interval must cost between 16x and 32,768x, against constant's 1x
+  and quadratic's 1,048,576x. A fixed cost of about a microsecond per call
+  dominates at 16 columns, so on CI runners the interval measures 80x to 184x
+  rather than linear's 1,024x. The fastest of nine batches is used. Row-count
+  growth is not varied here.
 * The `instr()` and `getstr()` ceiling is exact, not asymptotic. Asking for
   3000 bytes of a 3000-byte row returns 2047 on 3.14 and 1023 before it, so the
   test reads the boundary off `sys.version_info` and asserts the number. The
@@ -781,7 +783,7 @@ class TestWindowAllocation:
 
     @pytest.mark.timing
     def test_resize_cost_tracks_the_cell_count(self) -> None:
-        columns = (16, 512, 16_384)
+        columns = (16, 16_384)
         batch_size = 16
 
         def measure(stdscr: Any) -> list[float]:
@@ -802,15 +804,11 @@ class TestWindowAllocation:
             return [_best(grow(cols), 9) / batch_size for cols in columns]
 
         (durations, _) = _screen(measure)
-        ratios = [
-            larger / smaller for smaller, larger in zip(durations, durations[1:], strict=False)
-        ]
+        ratio = durations[1] / durations[0]
 
-        assert all(3 < ratio < 256 for ratio in ratios), (
-            f"resize: 32x cells per step cost x{ratios}; {columns=}, {durations=} s"
-        )
-        assert durations[-1] > durations[0] * 64, (
-            f"resize: 1,024x cells must exclude fixed or per-row work; {durations=} s"
+        assert 16 < ratio < 32_768, (
+            f"resize: 1,024x cells cost x{ratio:.1f}; constant is 1x, quadratic 1,048,576x; "
+            f"{columns=}, {durations=} s"
         )
 
     def test_putwin_writes_a_file_that_grows_with_the_area(self, tmp_path: pathlib.Path) -> None:
