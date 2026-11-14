@@ -32,7 +32,7 @@ Measurement scope:
   `home()` is the frames of its `goto()` plus those of its `setheading()`;
   `undo()` of a move is the frames of the move; `RawTurtle()` is one. Under
   `tracer(0)` a move, turn, pen change, circle and dot are 0 frames, `write()`
-  is 0 from 3.11.1 and 1 on 3.11.0, and
+  is 0, and
   `update()` is 1 with no pause; under
   `tracer(2)` two moves of 1000 are one frame with no pause and no hops.
   `delay(0)` leaves the frames and removes the pause. `update()` sets the
@@ -790,9 +790,7 @@ class TestFramesPerCommand:
 
         setup.pen.write("hello")
 
-        fixed = sys.version_info >= (3, 11, 1)
-        expected = 0 if fixed else 1
-        assert setup.canvas.frames() == expected
+        assert setup.canvas.frames() == 0
         assert setup.canvas.texts == ["hello"]
 
     def test_write_with_move_moves_to_the_text_s_right_edge(self) -> None:

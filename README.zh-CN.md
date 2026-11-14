@@ -1,4 +1,4 @@
-<!-- source_sha: 3b815caf102c9e19532efb43e9ad1169593f98479f03cf154dc7f2ec229ccd50 -->
+<!-- source_sha: f2149688bd1f4753f1df1a0905891aae5951776d5da0c77555754a559d247a31 -->
 <!-- translated: machine -->
 
 [English](README.md) | **简体中文**
@@ -39,7 +39,7 @@
 ## 快速开始
 
 ### 环境要求
-- Python 3.11+（推荐 3.15）
+- Python 3.11.5+（推荐 3.15）
 - [uv](https://github.com/astral-sh/uv) - 快速的 Python 包管理器
 - Git
 

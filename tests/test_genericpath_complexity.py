@@ -107,7 +107,12 @@ def peak_bytes(func: Callable[[], Any]) -> int:
 
 
 class StatCounter:
-    """Counts calls to `os.stat`, `os.lstat` and `os.fstat` while installed."""
+    """Counts calls to `os.stat`, `os.lstat` and `os.fstat` while installed.
+
+    Each test calls `reset()` immediately before the call it measures: pytest's
+    output capture calls `os.fstat` on its own temporary files after fixture
+    setup, so counts taken from installation include the harness's calls.
+    """
 
     def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self.calls = {"stat": 0, "lstat": 0, "fstat": 0}
@@ -152,6 +157,7 @@ class TestEachCheckIsOneStat:
     def test_the_function_makes_one_stat_call(
         self, name: str, data_file: pathlib.Path, counter: StatCounter
     ) -> None:
+        counter.reset()
         getattr(genericpath, name)(str(data_file))
 
         assert counter.calls == {"stat": 1, "lstat": 0, "fstat": 0}
@@ -162,6 +168,7 @@ class TestEachCheckIsOneStat:
     ) -> None:
         if not hasattr(genericpath, name):
             pytest.skip(f"version: genericpath.{name} is not defined on this Python")
+        counter.reset()
         getattr(genericpath, name)(str(data_file))
 
         assert counter.calls == {"stat": 0, "lstat": 1, "fstat": 0}
@@ -224,6 +231,7 @@ class TestPlatformStubs:
     def test_the_stub_makes_no_syscall(
         self, name: str, data_file: pathlib.Path, counter: StatCounter
     ) -> None:
+        counter.reset()
         assert getattr(genericpath, name)(str(data_file)) is False
         assert counter.calls == {"stat": 0, "lstat": 0, "fstat": 0}
 
@@ -267,6 +275,7 @@ class TestFileIdentity:
         def fake(ino: int, dev: int) -> os.stat_result:
             return cast("os.stat_result", SimpleNamespace(st_ino=ino, st_dev=dev))
 
+        counter.reset()
         assert genericpath.samestat(fake(7, 3), fake(7, 3))
         assert not genericpath.samestat(fake(7, 3), fake(7, 4))
         assert not genericpath.samestat(fake(7, 3), fake(8, 3))

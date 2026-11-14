@@ -36,7 +36,7 @@ Visit the documentation at: [pythoncomplexity.com](https://pythoncomplexity.com)
 ## Quick Start
 
 ### Prerequisites
-- Python 3.11+ (3.15 recommended)
+- Python 3.11.5+ (3.15 recommended)
 - [uv](https://github.com/astral-sh/uv) - Fast Python package manager
 - Git
 
